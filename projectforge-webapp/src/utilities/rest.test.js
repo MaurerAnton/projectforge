@@ -2,7 +2,7 @@ import { baseURL, createQueryParams, getServiceURL } from './rest';
 
 it('base url', () => {
     expect(baseURL)
-        .toBe('/rs');
+        .toBe('');
 });
 
 describe('create query params', () => {

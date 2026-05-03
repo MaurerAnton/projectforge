@@ -1,8 +1,8 @@
 import PropTypes from 'prop-types';
 import React from 'react';
 import { connect } from 'react-redux';
-import RRuleGenerator, { translations } from 'react-rrule-generator';
-import 'react-rrule-generator/build/styles.css';
+import RRuleGenerator, { translations } from 'react-rrule-generator/src/lib/components/ReactRRuleGenerator';
+import 'react-rrule-generator/src/lib/styles/index.css';
 import { Col, Row } from 'reactstrap';
 import ReactSelect from '../../../../../design/react-select/ReactSelect';
 import { DynamicLayoutContext } from '../../../context';

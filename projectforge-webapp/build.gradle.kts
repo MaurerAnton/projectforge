@@ -60,6 +60,7 @@ tasks {
         from(file("build")) {
             // Exclude the target directory to prevent recursion
             exclude("resources/main/static/**")
+            rename("index.html", "react-app.html")
         }
         from(file("src")) {
             include("index.html")
@@ -71,6 +72,7 @@ tasks {
     }
 
     register<Jar>("webAppJar") {
+        duplicatesStrategy = DuplicatesStrategy.EXCLUDE
         group = "build"
         description = "Package React build output as a JAR"
         archiveBaseName.set("projectforge-webapp")

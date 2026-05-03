@@ -1,5 +1,5 @@
 import React from 'react';
-import 'react-rrule-generator/build/styles.css';
+import 'react-rrule-generator/src/lib/styles/index.css';
 import { Alert, Col, Row } from 'reactstrap';
 import CheckBox from '../../../../../design/input/CheckBox';
 import { DynamicLayoutContext } from '../../../context';

@@ -25,6 +25,7 @@ extensions.configure<JavaPluginExtension> {
 tasks.withType<JavaCompile> {
     options.encoding = "UTF-8"
     options.isIncremental = true
+    options.release.set(17) // Produce JVM 17 bytecode regardless of host JDK version.
 }
 /*
 tasks.withType<KotlinCompile> {

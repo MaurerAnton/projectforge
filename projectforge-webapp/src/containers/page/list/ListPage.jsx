@@ -3,7 +3,7 @@ import React from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeRaw from 'rehype-raw';
-import { connect, useSelector } from 'react-redux';
+import { useDispatch, useSelector } from 'react-redux';
 import { useLocation, useParams } from 'react-router';
 import { callAction, loadList } from '../../../actions';
 import DynamicLayout from '../../../components/base/dynamicLayout';
@@ -11,12 +11,10 @@ import { Card, Container } from '../../../components/design';
 import SearchFilter from './searchFilter/SearchFilter';
 import styles from './ListPage.module.scss';
 
-function ListPage(
-    {
-        onCallAction,
-        onCategoryChange,
-    },
-) {
+function ListPage() {
+    const dispatch = useDispatch();
+    const onCallAction = (...args) => dispatch(callAction(...args));
+    const onCategoryChange = (...args) => dispatch(loadList(...args));
     const { category: paramsCategory } = useParams();
     const location = useLocation();
 
@@ -62,16 +60,6 @@ function ListPage(
     );
 }
 
-ListPage.propTypes = {
-    onCallAction: PropTypes.func.isRequired,
-    onCategoryChange: PropTypes.func.isRequired,
-};
+ListPage.propTypes = {};
 
-const mapStateToProps = () => ({});
-
-const actions = {
-    onCallAction: callAction,
-    onCategoryChange: loadList,
-};
-
-export default connect(mapStateToProps, actions)(ListPage);
+export default ListPage;

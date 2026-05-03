@@ -1,5 +1,5 @@
 import React from 'react';
-import 'react-rrule-generator/build/styles.css';
+import 'react-rrule-generator/src/lib/styles/index.css';
 import { Col, Row, Table } from 'reactstrap';
 import { DynamicLayoutContext } from '../../../../context';
 import style from './Vacation.module.scss';

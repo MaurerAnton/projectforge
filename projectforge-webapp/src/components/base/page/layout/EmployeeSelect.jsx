@@ -2,7 +2,6 @@ import { faSmile, faSmileWink } from '@fortawesome/free-regular-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import PropTypes from 'prop-types';
 import React from 'react';
-import { connect } from 'react-redux';
 import { Button, UncontrolledTooltip } from 'reactstrap';
 import { getServiceURL, handleHTTPErrors } from '../../../../utilities/rest';
 import style from '../../../design/input/Input.module.scss';
@@ -106,13 +105,4 @@ EmployeeSelect.propTypes = {
     }).isRequired,
 };
 
-const mapStateToProps = ({ authentication }) => ({
-    user: {
-        id: authentication.user.userId,
-        username: authentication.user.username,
-        fullname: authentication.user.fullname,
-        employeeId: authentication.employeeId,
-    },
-});
-
-export default connect(mapStateToProps)(EmployeeSelect);
+export default EmployeeSelect;

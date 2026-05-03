@@ -1,8 +1,10 @@
 import React from 'react';
-import { connect } from 'react-redux';
+import { useSelector } from 'react-redux';
 import { DynamicLayoutContext } from '../../../context';
 
 function CostNumberComponent() {
+    const user = useSelector((state) => state.authentication.user);
+    const jsTimestampFormatMinutes = useSelector((state) => state.authentication.user.jsTimestampFormatMinutes);
     const { data, setData } = React.useContext(DynamicLayoutContext);
 
     const handleNummernkreisChange = (event) => {
@@ -73,9 +75,4 @@ function CostNumberComponent() {
     );
 }
 
-const mapStateToProps = ({ authentication }) => ({
-    user: authentication.user,
-    jsTimestampFormatMinutes: authentication.user.jsTimestampFormatMinutes,
-});
-
-export default connect(mapStateToProps)(CostNumberComponent);
+export default CostNumberComponent;

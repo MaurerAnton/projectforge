@@ -1,11 +1,13 @@
 import PropTypes from 'prop-types';
 import React from 'react';
-import { connect } from 'react-redux';
+import { useSelector } from 'react-redux';
 import moment from 'moment';
 import { Button } from '../../../../../design';
 import { DynamicLayoutContext } from '../../../context';
 
-function CustomizedBookLendOutComponent({ user, jsTimestampFormatMinutes }) {
+function CustomizedBookLendOutComponent() {
+    const user = useSelector((state) => state.authentication.user);
+    const jsTimestampFormatMinutes = useSelector((state) => state.authentication.user.jsTimestampFormatMinutes);
     const { data, ui, callAction } = React.useContext(DynamicLayoutContext);
 
     const lendOut = () => callAction({
@@ -49,13 +51,6 @@ function CustomizedBookLendOutComponent({ user, jsTimestampFormatMinutes }) {
     );
 }
 
-CustomizedBookLendOutComponent.propTypes = {
-    user: PropTypes.shape({}).isRequired,
-};
+CustomizedBookLendOutComponent.propTypes = {};
 
-const mapStateToProps = ({ authentication }) => ({
-    user: authentication.user,
-    jsTimestampFormatMinutes: authentication.user.jsTimestampFormatMinutes,
-});
-
-export default connect(mapStateToProps)(CustomizedBookLendOutComponent);
+export default CustomizedBookLendOutComponent;

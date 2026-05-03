@@ -4,7 +4,7 @@ import 'moment/min/locales';
 import PropTypes from 'prop-types';
 import React from 'react';
 import { DayPicker } from 'react-day-picker';
-import { connect } from 'react-redux';
+import { useSelector } from 'react-redux';
 import { Col, Row } from '../..';
 import { getTranslation } from '../../../../utilities/layout';
 import style from './CalendarInput.module.scss';
@@ -12,21 +12,21 @@ import TimeRange from './TimeRange';
 
 function DateTimeRange(
     {
-        firstDayOfWeek = 1,
         from,
         hideTimeInput = false,
         id,
-        locale = 'en',
         onChange,
         selectors,
         setFrom,
         setTo,
-        timeNotation = 'H24',
-        translations = {},
         to,
+        translations = {},
         ...props
     },
 ) {
+    const firstDayOfWeek = useSelector((state) => state.authentication.user.firstDayOfWeekNo) || 1;
+    const locale = useSelector((state) => state.authentication.user.locale) || 'en';
+    const timeNotation = useSelector((state) => state.authentication.user.timeNotation) || 'H24';
     const [quickSelector, setQuickSelector] = React.useState(undefined);
 
     const handleQuickSelectorClick = (interval) => () => {
@@ -259,21 +259,12 @@ DateTimeRange.propTypes = {
     onChange: PropTypes.func.isRequired,
     id: PropTypes.string.isRequired,
     hideTimeInput: PropTypes.bool,
-    firstDayOfWeek: PropTypes.number,
     from: PropTypes.instanceOf(Date),
-    locale: PropTypes.string,
     setFrom: PropTypes.func,
     setTo: PropTypes.func,
     selectors: PropTypes.arrayOf(PropTypes.string),
-    timeNotation: PropTypes.string,
     translations: PropTypes.shape({}),
     to: PropTypes.instanceOf(Date),
 };
 
-const mapStateToProps = ({ authentication }) => ({
-    firstDayOfWeek: authentication.user.firstDayOfWeekNo,
-    locale: authentication.user.locale,
-    timeNotation: authentication.user.timeNotation,
-});
-
-export default connect(mapStateToProps)(DateTimeRange);
+export default DateTimeRange;

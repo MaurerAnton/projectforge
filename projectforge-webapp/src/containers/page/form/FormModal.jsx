@@ -1,12 +1,13 @@
 import PropTypes from 'prop-types';
 import React from 'react';
-import { connect } from 'react-redux';
+import { useDispatch } from 'react-redux';
 import { Modal, ModalBody } from '../../../components/design';
 import FormPage from './FormPage';
 import { callAction } from '../../../actions';
 
 function FormModal(props) {
-    const { onCallAction } = props;
+    const dispatch = useDispatch();
+    const onCallAction = (...args) => dispatch(callAction(...args));
 
     return (
         <Modal
@@ -21,12 +22,6 @@ function FormModal(props) {
     );
 }
 
-FormModal.propTypes = {
-    onCallAction: PropTypes.func.isRequired,
-};
+FormModal.propTypes = {};
 
-const actions = {
-    onCallAction: callAction,
-};
-
-export default connect(() => ({}), actions)(FormModal);
+export default FormModal;

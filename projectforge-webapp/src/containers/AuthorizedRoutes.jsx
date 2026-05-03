@@ -1,6 +1,5 @@
-import PropTypes from 'prop-types';
 import React, { useEffect } from 'react';
-import { connect } from 'react-redux';
+import { useSelector } from 'react-redux';
 import { Route, Routes } from 'react-router';
 import GlobalNavigation from '../components/base/navigation/GlobalNavigation';
 import { Alert, Container } from '../components/design';
@@ -29,12 +28,10 @@ export const publicRoute = (
     />
 );
 
-function AuthorizedRoutes(
-    {
-        alertMessage,
-        locale = 'en',
-    },
-) {
+function AuthorizedRoutes() {
+    const alertMessage = useSelector((state) => state.authentication.alertMessage);
+    const locale = useSelector((state) => state.authentication.user?.locale) || 'en';
+
     useEffect(() => {
         document.documentElement.lang = locale;
     }, [locale]);
@@ -91,14 +88,4 @@ function AuthorizedRoutes(
     );
 }
 
-AuthorizedRoutes.propTypes = {
-    alertMessage: PropTypes.string,
-    locale: PropTypes.string,
-};
-
-const mapStateToProps = ({ authentication }) => ({
-    alertMessage: authentication.alertMessage,
-    locale: authentication.user?.locale,
-});
-
-export default connect(mapStateToProps)(AuthorizedRoutes);
+export default AuthorizedRoutes;

@@ -1,11 +1,12 @@
 import React from 'react';
-import { connect } from 'react-redux';
+import { useSelector } from 'react-redux';
 import { Button, UncontrolledCollapse } from 'reactstrap';
 import { DynamicLayoutContext } from '../../../context';
 
 /* eslint-disable */
 
 function IncomingInvoicePositionsComponent() {
+    const user = useSelector((state) => state.authentication.user);
     const { data, setData, callAction } = React.useContext(DynamicLayoutContext);
 
     const style105 = {
@@ -290,9 +291,4 @@ function IncomingInvoicePositionsComponent() {
     );
 }
 
-const mapStateToProps = ({ authentication }) => ({
-    user: authentication.user,
-});
-
-
-export default connect(mapStateToProps)(IncomingInvoicePositionsComponent);
+export default IncomingInvoicePositionsComponent;

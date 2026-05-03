@@ -1,13 +1,14 @@
 import PropTypes from 'prop-types';
 import React from 'react';
-import { connect } from 'react-redux';
-import RRuleGenerator, { translations } from 'react-rrule-generator';
-import 'react-rrule-generator/build/styles.css';
+import { useSelector } from 'react-redux';
+import RRuleGenerator, { translations } from 'react-rrule-generator/src/lib/components/ReactRRuleGenerator';
+import 'react-rrule-generator/src/lib/styles/index.css';
 import { Col, Row } from 'reactstrap';
 import ReactSelect from '../../../../../design/react-select/ReactSelect';
 import { DynamicLayoutContext } from '../../../context';
 
-function CalendarEventRecurrence({ locale }) {
+function CalendarEventRecurrence() {
+    const locale = useSelector((state) => state.authentication.user.locale);
     const { data, setData, ui } = React.useContext(DynamicLayoutContext);
 
     const options = [
@@ -121,12 +122,6 @@ function CalendarEventRecurrence({ locale }) {
     );
 }
 
-CalendarEventRecurrence.propTypes = {
-    locale: PropTypes.string,
-};
+CalendarEventRecurrence.propTypes = {};
 
-const mapStateToProps = ({ authentication }) => ({
-    locale: authentication.user.locale,
-});
-
-export default connect(mapStateToProps)(CalendarEventRecurrence);
+export default CalendarEventRecurrence;

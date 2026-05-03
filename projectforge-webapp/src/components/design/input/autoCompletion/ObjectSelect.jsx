@@ -1,15 +1,13 @@
 import { faSmile, faSmileWink } from '@fortawesome/free-regular-svg-icons';
 import PropTypes from 'prop-types';
 import React from 'react';
-import { connect } from 'react-redux';
+import { useSelector } from 'react-redux';
 import { UncontrolledTooltip } from '../../index';
 import styles from './AutoCompletion.module.scss';
 import ObjectAutoCompletion from './ObjectAutoCompletion';
 
 function ObjectSelect(
     {
-        // eslint-disable-next-line @typescript-eslint/no-unused-vars
-        dispatch,
         id,
         label,
         onSelect,
@@ -17,11 +15,20 @@ function ObjectSelect(
         type,
         url,
         urlparams,
-        user,
         value,
         ...props
     },
 ) {
+    const user = useSelector((state) => {
+        if (state.authentication.user) {
+            return {
+                id: state.authentication.user.userId,
+                employeeId: state.authentication.user.employeeId,
+                displayName: state.authentication.user.username,
+            };
+        }
+        return undefined;
+    });
     const [selectMeIcon, setSelectMeIcon] = React.useState(faSmile);
 
     const handleSelectMeHoverBegin = () => setSelectMeIcon(faSmileWink);
@@ -80,7 +87,6 @@ function ObjectSelect(
 }
 
 ObjectSelect.propTypes = {
-    dispatch: PropTypes.func.isRequired,
     id: PropTypes.string.isRequired,
     label: PropTypes.string.isRequired,
     onSelect: PropTypes.func.isRequired,
@@ -90,28 +96,9 @@ ObjectSelect.propTypes = {
     }),
     url: PropTypes.string,
     urlparams: PropTypes.shape({}),
-    user: PropTypes.shape({
-        id: PropTypes.number.isRequired,
-        displayName: PropTypes.string.isRequired,
-        employeeId: PropTypes.number,
-    }),
     value: PropTypes.shape({
         id: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
     }),
 };
 
-const mapStateToProps = ({ authentication }) => {
-    if (authentication.user) {
-        return {
-            user: {
-                id: authentication.user.userId,
-                employeeId: authentication.user.employeeId,
-                displayName: authentication.user.username,
-            },
-        };
-    }
-
-    return {};
-};
-
-export default connect(mapStateToProps)(ObjectSelect);
+export default ObjectSelect;

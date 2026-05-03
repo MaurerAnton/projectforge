@@ -1,6 +1,5 @@
-import PropTypes from 'prop-types';
 import React from 'react';
-import { connect } from 'react-redux';
+import { useSelector, useDispatch } from 'react-redux';
 import { Route, Routes } from 'react-router';
 import { loadUserStatus } from '../actions';
 import Footer from '../components/base/footer';
@@ -15,13 +14,12 @@ import FormPage from './page/form/FormPage';
 import { SystemStatusContext, systemStatusContextDefaultValues } from './SystemStatusContext';
 import ModalRoutes from './ModalRoutes';
 
-function ProjectForge(
-    {
-        user,
-        loginInProgress,
-        loadUserStatus: checkAuthentication,
-    },
-) {
+function ProjectForge() {
+    const loginInProgress = useSelector((state) => state.authentication.loading);
+    const user = useSelector((state) => state.authentication.user);
+    const dispatch = useDispatch();
+    const checkAuthentication = () => dispatch(loadUserStatus());
+
     const [systemStatus, setSystemStatus] = React.useState({});
 
     React.useEffect(() => {
@@ -82,19 +80,4 @@ function ProjectForge(
     );
 }
 
-ProjectForge.propTypes = {
-    loadUserStatus: PropTypes.func.isRequired,
-    loginInProgress: PropTypes.bool.isRequired,
-    user: PropTypes.shape({}),
-};
-
-const mapStateToProps = (state) => ({
-    loginInProgress: state.authentication.loading,
-    user: state.authentication.user,
-});
-
-const actions = {
-    loadUserStatus,
-};
-
-export default connect(mapStateToProps, actions)(ProjectForge);
+export default ProjectForge;

@@ -4,7 +4,7 @@ import PropTypes from 'prop-types';
 import React from 'react';
 import { DayPicker } from 'react-day-picker';
 import { de } from 'react-day-picker/locale';
-import { connect } from 'react-redux';
+import { useSelector } from 'react-redux';
 import { colorPropType } from '../../../../utilities/propTypes';
 import AdvancedPopper from '../../popper/AdvancedPopper';
 import AdditionalLabel from '../AdditionalLabel';
@@ -16,16 +16,16 @@ function DateInput(
         additionalLabel,
         color,
         hideDayPicker = false,
-        jsDateFormat,
         label,
-        locale = 'en',
         noInputContainer = false,
         setDate,
         todayButton,
         value,
-        weekStartsOn,
     },
 ) {
+    const jsDateFormat = useSelector((state) => state.authentication.user.jsDateFormat);
+    const locale = useSelector((state) => state.authentication.user.locale) || 'en';
+    const weekStartsOn = useSelector((state) => state.authentication.user.firstDayOfWeekSunday0);
     const [inputValue, setInputValue] = React.useState('');
     const [isActive, setIsActive] = React.useState(false);
     const [isOpen, setIsOpen] = React.useState(false);
@@ -171,23 +171,14 @@ function DateInput(
 }
 
 DateInput.propTypes = {
-    jsDateFormat: PropTypes.string.isRequired,
     setDate: PropTypes.func.isRequired,
     additionalLabel: PropTypes.string,
     color: colorPropType,
     hideDayPicker: PropTypes.bool,
     label: PropTypes.string,
-    locale: PropTypes.string,
     noInputContainer: PropTypes.bool,
     todayButton: PropTypes.string,
     value: PropTypes.instanceOf(Date),
-    weekStartsOn: PropTypes.number,
 };
 
-const mapStateToProps = ({ authentication }) => ({
-    jsDateFormat: authentication.user.jsDateFormat,
-    locale: authentication.user.locale,
-    weekStartsOn: authentication.user.firstDayOfWeekSunday0,
-});
-
-export default connect(mapStateToProps)(DateInput);
+export default DateInput;

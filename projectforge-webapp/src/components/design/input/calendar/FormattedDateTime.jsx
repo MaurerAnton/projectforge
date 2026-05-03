@@ -1,19 +1,17 @@
 import moment from 'moment';
 import PropTypes from 'prop-types';
 import React from 'react';
-import { connect } from 'react-redux';
+import { useSelector } from 'react-redux';
 
 function FormattedDateTime(
     {
         date,
-        // eslint-disable-next-line @typescript-eslint/no-unused-vars
-        dispatch,
-        jsDateFormat,
-        jsTimestampFormatMinutes,
         slot = 'FROM',
         ...props
     },
 ) {
+    const jsDateFormat = useSelector((state) => state.authentication.user.jsDateFormat);
+    const jsTimestampFormatMinutes = useSelector((state) => state.authentication.user.jsTimestampFormatMinutes);
     let format = jsTimestampFormatMinutes;
 
     if (
@@ -32,15 +30,7 @@ function FormattedDateTime(
 
 FormattedDateTime.propTypes = {
     date: PropTypes.instanceOf(Date).isRequired,
-    dispatch: PropTypes.func.isRequired,
-    jsDateFormat: PropTypes.string.isRequired,
-    jsTimestampFormatMinutes: PropTypes.string.isRequired,
     slot: PropTypes.oneOf(['FROM', 'TO']),
 };
 
-const mapStateToProps = ({ authentication }) => ({
-    jsDateFormat: authentication.user.jsDateFormat,
-    jsTimestampFormatMinutes: authentication.user.jsTimestampFormatMinutes,
-});
-
-export default connect(mapStateToProps)(FormattedDateTime);
+export default FormattedDateTime;

@@ -1,7 +1,7 @@
 import moment from 'moment';
 import PropTypes from 'prop-types';
 import React from 'react';
-import { connect } from 'react-redux';
+import { useSelector } from 'react-redux';
 import DateInput from './DateInput';
 import TimeInput, { PrecisionType } from './TimeInput';
 
@@ -9,13 +9,13 @@ function DateTimeInput(
     {
         hideDayPicker = false,
         hideTimeInput = false,
-        jsDateFormat,
         precision = 5,
         setTime,
         showDate = false,
         time,
     },
 ) {
+    const jsDateFormat = useSelector((state) => state.authentication.user.jsDateFormat);
     const hours = time ? time.getHours() : 0;
     const minutes = time ? time.getMinutes() : 0;
 
@@ -68,7 +68,6 @@ function DateTimeInput(
 }
 
 DateTimeInput.propTypes = {
-    jsDateFormat: PropTypes.string.isRequired,
     setTime: PropTypes.func.isRequired,
     hideDayPicker: PropTypes.bool,
     hideTimeInput: PropTypes.bool,
@@ -77,8 +76,4 @@ DateTimeInput.propTypes = {
     time: PropTypes.instanceOf(Date),
 };
 
-const mapStateToProps = ({ authentication }) => ({
-    jsDateFormat: authentication.user.jsDateFormat,
-});
-
-export default connect(mapStateToProps)(DateTimeInput);
+export default DateTimeInput;

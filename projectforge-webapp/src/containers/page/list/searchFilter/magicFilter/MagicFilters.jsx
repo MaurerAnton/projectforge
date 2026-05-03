@@ -3,7 +3,7 @@ import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import classNames from 'classnames';
 import PropTypes from 'prop-types';
 import React from 'react';
-import { connect } from 'react-redux';
+import { useSelector, useDispatch } from 'react-redux';
 import { resetAllFilters } from '../../../../../actions/list/filter';
 import AdvancedPopper from '../../../../../components/design/popper/AdvancedPopper';
 import AdvancedPopperAction from '../../../../../components/design/popper/AdvancedPopperAction';
@@ -13,15 +13,20 @@ import styles from '../../ListPage.module.scss';
 import FilterListEntry from './FilterListEntry';
 import MagicFilterPill from './MagicFilterPill';
 
-function MagicFilters(
-    {
-        filterEntries,
-        onResetAllFilters,
-        searchFilter,
-        searchString,
-        translations,
-    },
-) {
+function MagicFilters() {
+    const reduxState = useSelector((state) => {
+        const listState = state.list;
+        const { ui, filter } = listState.categories[listState.currentCategory];
+        return {
+            translations: ui.translations,
+            searchFilter: getNamedContainer('searchFilter', ui.namedContainers),
+            filterEntries: filter.entries,
+            searchString: filter.searchString,
+        };
+    });
+    const { translations, searchFilter, filterEntries, searchString } = reduxState;
+    const dispatch = useDispatch();
+    const onResetAllFilters = () => dispatch(resetAllFilters());
     const [allFiltersAreOpen, setAllFiltersAreOpen] = React.useState(false);
     const [search, setSearch] = React.useState('');
     const searchRef = React.useRef(null);
@@ -143,38 +148,6 @@ function MagicFilters(
     );
 }
 
-MagicFilters.propTypes = {
-    translations: PropTypes.shape({
-        reset: PropTypes.string,
-        searchFilter: PropTypes.string,
-        search: PropTypes.string,
-        'datatable.no-records-found': PropTypes.string,
-    }).isRequired,
-    filterEntries: PropTypes.arrayOf(PropTypes.shape({})).isRequired,
-    onResetAllFilters: PropTypes.func.isRequired,
-    searchFilter: PropTypes.shape({
-        content: PropTypes.oneOfType([
-            PropTypes.shape({
-                filter: PropTypes.shape({}),
-            }),
-            PropTypes.arrayOf(PropTypes.shape({}))]),
-    }),
-    searchString: PropTypes.string,
-};
+MagicFilters.propTypes = {};
 
-const mapStateToProps = ({ list }) => {
-    const { ui, filter } = list.categories[list.currentCategory];
-
-    return {
-        translations: ui.translations,
-        searchFilter: getNamedContainer('searchFilter', ui.namedContainers),
-        filterEntries: filter.entries,
-        searchString: filter.searchString,
-    };
-};
-
-const actions = (dispatch) => ({
-    onResetAllFilters: () => dispatch(resetAllFilters()),
-});
-
-export default connect(mapStateToProps, actions)(MagicFilters);
+export default MagicFilters;

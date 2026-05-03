@@ -3,7 +3,7 @@ import { faHistory } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import PropTypes from 'prop-types';
 import React from 'react';
-import { connect } from 'react-redux';
+import { useDispatch } from 'react-redux';
 import { useNavigate, useLocation } from 'react-router';
 import { loadUserStatus } from '../../../actions';
 import history from '../../../utilities/history';
@@ -16,12 +16,13 @@ function NavigationAction({
     badgeIsFlying = true,
     entryKey,
     id,
-    loadUserStatus: checkLogin,
     title,
     tooltip,
     type = 'LINK',
     url = '',
 }) {
+    const dispatch = useDispatch();
+    const checkLogin = () => dispatch(loadUserStatus());
     const navigate = useNavigate();
     const location = useLocation();
     const handleClick = (event) => {
@@ -165,7 +166,6 @@ function NavigationAction({
 }
 
 NavigationAction.propTypes = {
-    loadUserStatus: PropTypes.func.isRequired,
     title: PropTypes.string.isRequired,
     badge: PropTypes.shape({
         counter: PropTypes.number,
@@ -185,6 +185,4 @@ NavigationAction.propTypes = {
     url: PropTypes.string,
 };
 
-const actions = { loadUserStatus };
-
-export default connect(undefined, actions)(NavigationAction);
+export default NavigationAction;

@@ -1,5 +1,5 @@
 import React from 'react';
-import 'react-rrule-generator/build/styles.css';
+import 'react-rrule-generator/src/lib/styles/index.css';
 import { Col, Row } from 'reactstrap';
 import { Input } from '../../../../../design';
 import CheckBox from '../../../../../design/input/CheckBox';

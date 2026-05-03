@@ -1,6 +1,6 @@
 import PropTypes from 'prop-types';
 import React from 'react';
-import { connect, useSelector } from 'react-redux';
+import { useDispatch, useSelector } from 'react-redux';
 import { useLocation, useParams, useSearchParams } from 'react-router';
 import {
     callAction,
@@ -21,13 +21,14 @@ import FormHistory from './history';
 function FormPage(
     {
         isPublic = false,
-        onCallAction,
-        onCategorySwitch,
-        onDataChange,
-        onNewFormPage,
-        onVariablesChange,
     },
 ) {
+    const dispatch = useDispatch();
+    const onCallAction = (...args) => dispatch(callAction(...args));
+    const onCategorySwitch = (...args) => dispatch(switchFromCurrentCategory(...args));
+    const onDataChange = (...args) => dispatch(setCurrentData(...args));
+    const onNewFormPage = (...args) => dispatch(loadFormPage(...args));
+    const onVariablesChange = (...args) => dispatch(setCurrentVariables(...args));
     const {
         type,
         category: currentCategory,
@@ -184,22 +185,7 @@ function FormPage(
 }
 
 FormPage.propTypes = {
-    onCallAction: PropTypes.func.isRequired,
-    onCategorySwitch: PropTypes.func.isRequired,
-    onDataChange: PropTypes.func.isRequired,
-    onNewFormPage: PropTypes.func.isRequired,
-    onVariablesChange: PropTypes.func.isRequired,
     isPublic: PropTypes.bool,
 };
 
-const mapStateToProps = () => ({});
-
-const actions = {
-    onCallAction: callAction,
-    onCategorySwitch: switchFromCurrentCategory,
-    onDataChange: setCurrentData,
-    onNewFormPage: loadFormPage,
-    onVariablesChange: setCurrentVariables,
-};
-
-export default connect(mapStateToProps, actions)(FormPage);
+export default FormPage;

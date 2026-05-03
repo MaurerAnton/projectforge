@@ -3,7 +3,7 @@ import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import moment from 'moment';
 import PropTypes from 'prop-types';
 import React from 'react';
-import { connect } from 'react-redux';
+import { useSelector } from 'react-redux';
 import formatterFormat from './FormatterFormat';
 import TreeNavigation from '../../containers/panel/task/TreeNavigation';
 import ConsumptionBar from '../../containers/panel/task/ConsumptionBar';
@@ -15,14 +15,14 @@ function Formatter(
         data,
         id,
         dataType,
-        dateFormat = 'DD/MM/YYYY',
-        timestampFormatSeconds = 'DD.MM.YYYY HH:mm:ss',
-        timestampFormatMinutes = 'DD.MM.YYYY HH:mm',
         valueIconMap,
         locale,
         currency,
     },
 ) {
+    const dateFormat = useSelector((state) => state.authentication.user?.jsDateFormat) || 'DD/MM/YYYY';
+    const timestampFormatSeconds = useSelector((state) => state.authentication.user?.jsTimestampFormatSeconds) || 'DD.MM.YYYY HH:mm:ss';
+    const timestampFormatMinutes = useSelector((state) => state.authentication.user?.jsTimestampFormatMinutes) || 'DD.MM.YYYY HH:mm';
     let useValue = value;
     if (value === undefined) {
         // Can't use value || Object...,
@@ -112,8 +112,6 @@ Formatter.propTypes = {
     dateFormat: PropTypes.string,
     id: PropTypes.string,
     formatter: PropTypes.string,
-    timestampFormatSeconds: PropTypes.string,
-    timestampFormatMinutes: PropTypes.string,
     locale: PropTypes.string,
     currency: PropTypes.string,
     valueIconMap: PropTypes.shape({
@@ -121,10 +119,4 @@ Formatter.propTypes = {
     }),
 };
 
-const mapStateToProps = ({ authentication }) => ({
-    dateFormat: authentication.user.jsDateFormat,
-    timestampFormatSeconds: authentication.user.jsTimestampFormatSeconds,
-    timestampFormatMinutes: authentication.user.jsTimestampFormatMinutes,
-});
-
-export default connect(mapStateToProps)(Formatter);
+export default Formatter;

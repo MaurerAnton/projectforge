@@ -8,7 +8,7 @@ import timeGridPlugin from '@fullcalendar/timegrid';
 import interactionPlugin from '@fullcalendar/interaction';
 import listPlugin from '@fullcalendar/list';
 import bootstrapPlugin from '@fullcalendar/bootstrap';
-import { connect } from 'react-redux'; // a plugin!
+import { useSelector } from 'react-redux'; // a plugin!
 import { createPopper } from '@popperjs/core';
 import { Outlet, useNavigate } from 'react-router';
 import LoadingContainer from '../../../components/design/loading-container';
@@ -25,19 +25,19 @@ function FullCalendarPanel({
     activeCalendars,
     timesheetUserId = null,
     showBreaks = false,
-    locale = 'en',
-    firstDayOfWeek = 0,
     defaultDate = null,
     defaultView = 'timeGridWeek',
     translations,
     gridSize = 30,
     firstHour = 8,
-    timeNotation = 'H24',
     vacationGroups = [],
     vacationUsers = [],
     topHeight = '0px',
     alternateHoursBackground = true,
 }) {
+    const locale = useSelector((state) => state.authentication.user.locale) || 'en';
+    const firstDayOfWeek = useSelector((state) => state.authentication.user.firstDayOfWeekSunday0) || 0;
+    const timeNotation = useSelector((state) => state.authentication.user.timeNotation) || 'H24';
     const [queryString] = useState(window.location.search);
     const [currentHoverEvent, setCurrentHoverEvent] = useState(null);
     const [loading, setLoading] = useState(false);
@@ -518,10 +518,4 @@ FullCalendarPanel.propTypes = {
     alternateHoursBackground: PropTypes.bool,
 };
 
-const mapStateToProps = ({ authentication }) => ({
-    firstDayOfWeek: authentication.user.firstDayOfWeekSunday0,
-    timeNotation: authentication.user.timeNotation,
-    locale: authentication.user.locale,
-});
-
-export default connect(mapStateToProps)(FullCalendarPanel);
+export default FullCalendarPanel;

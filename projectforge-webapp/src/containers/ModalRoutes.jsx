@@ -2,11 +2,12 @@ import React from 'react';
 import PropTypes from 'prop-types';
 import { useLocation } from 'react-router';
 import { Modal, ModalBody } from 'reactstrap';
-import { connect } from 'react-redux';
+import { useDispatch } from 'react-redux';
 import { callAction } from '../actions';
 
-function ModalRoutes(props) {
-    const { getRoutesWithLocation, onCallAction } = props;
+function ModalRoutes({ getRoutesWithLocation }) {
+    const dispatch = useDispatch();
+    const onCallAction = (...args) => dispatch(callAction(...args));
     const location = useLocation();
     const realLocation = location.action ? location.location : location;
     const { background } = realLocation.state || {};
@@ -29,11 +30,6 @@ function ModalRoutes(props) {
 
 ModalRoutes.propTypes = {
     getRoutesWithLocation: PropTypes.func.isRequired,
-    onCallAction: PropTypes.func.isRequired,
 };
 
-const actions = {
-    onCallAction: callAction,
-};
-
-export default connect(() => ({}), actions)(ModalRoutes);
+export default ModalRoutes;

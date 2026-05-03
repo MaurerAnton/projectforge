@@ -1,11 +1,16 @@
 import PropTypes from 'prop-types';
 import React from 'react';
-import { connect } from 'react-redux';
+import { useSelector, useDispatch } from 'react-redux';
 import { clearAllToasts, removeToast } from '../../actions';
 import { colorPropType } from '../../utilities/propTypes';
 import { Toast, ToastBody, ToastHeader } from '../design';
 
-function Toasts({ onClear, onToastRemove, toasts }) {
+function Toasts() {
+    const toasts = useSelector((state) => state.toasts);
+    const dispatch = useDispatch();
+    const onClear = () => dispatch(clearAllToasts());
+    const onToastRemove = (id) => dispatch(removeToast(id));
+
     const handleDismissClick = (id) => (event) => {
         if (event.shiftKey) {
             onClear();
@@ -39,21 +44,4 @@ function Toasts({ onClear, onToastRemove, toasts }) {
     );
 }
 
-Toasts.propTypes = {
-    onClear: PropTypes.func.isRequired,
-    onToastRemove: PropTypes.func.isRequired,
-    toasts: PropTypes.arrayOf(PropTypes.shape({
-        id: PropTypes.string,
-        message: PropTypes.string,
-        color: colorPropType,
-    })).isRequired,
-};
-
-const mapStateToProps = ({ toasts }) => ({ toasts });
-
-const actions = {
-    onToastRemove: removeToast,
-    onClear: clearAllToasts,
-};
-
-export default connect(mapStateToProps, actions)(Toasts);
+export default Toasts;

@@ -3,7 +3,7 @@ import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import classNames from 'classnames';
 import PropTypes from 'prop-types';
 import React from 'react';
-import { connect } from 'react-redux';
+import { useSelector, useDispatch } from 'react-redux';
 import { UncontrolledTooltip } from 'reactstrap';
 import { removeFilter, setFilter } from '../../../../../actions/list/filter';
 import AdvancedPopper from '../../../../../components/design/popper/AdvancedPopper';
@@ -17,15 +17,16 @@ function MagicFilterPill(
         isNew = false,
         isRemovable = false,
         label,
-        onFilterDelete,
-        onFilterSet,
         tooltip,
-        translations,
         filterType,
         value = {},
         ...props
     },
 ) {
+    const translations = useSelector((state) => state.list.categories[state.list.currentCategory].ui.translations);
+    const dispatch = useDispatch();
+    const onFilterDelete = (fieldId) => dispatch(removeFilter(fieldId));
+    const onFilterSet = (fieldId, newValue) => dispatch(setFilter(fieldId, newValue));
     const [isOpen, setIsOpen] = React.useState(isNew);
     const [tempValue, setTempValue] = React.useState({});
 
@@ -135,26 +136,11 @@ function MagicFilterPill(
 MagicFilterPill.propTypes = {
     id: PropTypes.string.isRequired,
     label: PropTypes.string.isRequired,
-    onFilterDelete: PropTypes.func.isRequired,
-    onFilterSet: PropTypes.func.isRequired,
     tooltip: PropTypes.string,
-    translations: PropTypes.shape({
-        delete: PropTypes.string,
-        save: PropTypes.string,
-    }).isRequired,
     isNew: PropTypes.bool,
     isRemovable: PropTypes.bool,
     filterType: PropTypes.string,
     value: PropTypes.shape({}),
 };
 
-const mapStateToProps = ({ list }) => ({
-    translations: list.categories[list.currentCategory].ui.translations,
-});
-
-const actions = (dispatch) => ({
-    onFilterDelete: (fieldId) => dispatch(removeFilter(fieldId)),
-    onFilterSet: (fieldId, newValue) => dispatch(setFilter(fieldId, newValue)),
-});
-
-export default connect(mapStateToProps, actions)(MagicFilterPill);
+export default MagicFilterPill;

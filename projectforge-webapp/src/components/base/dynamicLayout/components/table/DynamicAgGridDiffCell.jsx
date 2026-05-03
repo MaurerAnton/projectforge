@@ -1,7 +1,7 @@
 import React from 'react';
 import PropTypes from 'prop-types';
 import _ from 'lodash';
-import { connect } from 'react-redux';
+import { useSelector } from 'react-redux';
 import DiffText from '../../../../design/DiffText';
 import Formatter from '../../../Formatter';
 import formatterFormat from '../../../FormatterFormat';
@@ -11,12 +11,12 @@ function DynamicAgGridDiffCell(props) {
         value,
         colDef,
         data,
-        locale,
-        currency,
-        dateFormat = 'DD/MM/YYYY',
-        timestampFormatSeconds = 'DD.MM.YYYY HH:mm:ss',
-        timestampFormatMinutes = 'DD.MM.YYYY HH:mm',
     } = props;
+    const locale = useSelector((state) => state.authentication.user.locale);
+    const currency = useSelector((state) => state.authentication.user.currency);
+    const dateFormat = useSelector((state) => state.authentication.user.jsDateFormat) || 'DD/MM/YYYY';
+    const timestampFormatSeconds = useSelector((state) => state.authentication.user.jsTimestampFormatSeconds) || 'DD.MM.YYYY HH:mm:ss';
+    const timestampFormatMinutes = useSelector((state) => state.authentication.user.jsTimestampFormatMinutes) || 'DD.MM.YYYY HH:mm';
     const { field, cellRendererParams } = colDef;
     // Formatter is stored in cellRendererParams.dataType by backend
     const formatter = cellRendererParams?.formatter;
@@ -81,19 +81,6 @@ DynamicAgGridDiffCell.propTypes = {
     value: PropTypes.any, // string, number, boolean, array, ...
     colDef: PropTypes.shape(),
     data: PropTypes.shape(),
-    locale: PropTypes.string,
-    currency: PropTypes.string,
-    dateFormat: PropTypes.string,
-    timestampFormatSeconds: PropTypes.string,
-    timestampFormatMinutes: PropTypes.string,
 };
 
-const mapStateToProps = ({ authentication }) => ({
-    locale: authentication.user.locale,
-    currency: authentication.user.currency,
-    dateFormat: authentication.user.jsDateFormat,
-    timestampFormatSeconds: authentication.user.jsTimestampFormatSeconds,
-    timestampFormatMinutes: authentication.user.jsTimestampFormatMinutes,
-});
-
-export default connect(mapStateToProps)(DynamicAgGridDiffCell);
+export default DynamicAgGridDiffCell;

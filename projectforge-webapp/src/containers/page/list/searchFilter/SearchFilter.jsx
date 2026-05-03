@@ -3,7 +3,7 @@ import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import classNames from 'classnames';
 import PropTypes from 'prop-types';
 import React from 'react';
-import { connect } from 'react-redux';
+import { useSelector, useDispatch } from 'react-redux';
 import { Button, Navbar } from 'reactstrap';
 import { useNavigate, useLocation } from 'react-router';
 import {
@@ -27,22 +27,24 @@ import FavoritesPanel from '../../../panel/favorite/FavoritesPanel';
 import styles from '../ListPage.module.scss';
 import MagicFilters from './magicFilter/MagicFilters';
 
-function SearchFilter(props) {
-    const {
-        category,
-        onErrorDismiss,
-        onFavoriteCreate,
-        onFavoriteDelete,
-        onFavoriteRename,
-        onFavoriteSelect,
-        onFavoriteUpdate,
-        onSearchStringBlur,
-        onSearchStringChange,
-        onSearchStringDelete,
-        onSyncButtonClick,
-        onExportButtonClick,
-        onMultiSelectionButtonClick,
-    } = props;
+function SearchFilter() {
+    const category = useSelector((state) => {
+        const listState = state.list;
+        return listState.categories[listState.currentCategory];
+    });
+    const dispatch = useDispatch();
+    const onErrorDismiss = () => dispatch(dismissCurrentError());
+    const onFavoriteCreate = (name) => dispatch(createListFavorite({ name }));
+    const onFavoriteDelete = (id) => dispatch(deleteListFavorite({ id }));
+    const onFavoriteRename = (id, newName) => dispatch(renameListFavorite({ id, newName }));
+    const onFavoriteSelect = (id) => dispatch(selectListFavorite({ id }));
+    const onFavoriteUpdate = () => dispatch(updateListFavorite());
+    const onSearchStringBlur = () => dispatch(fetchCurrentList());
+    const onSearchStringChange = (completion) => dispatch(changeSearchString(completion));
+    const onSearchStringDelete = () => dispatch(changeSearchString(''));
+    const onSyncButtonClick = () => dispatch(fetchCurrentList(true));
+    const onExportButtonClick = () => dispatch(exportCurrentList());
+    const onMultiSelectionButtonClick = () => dispatch(startMultiSelection());
 
     const {
         error,
@@ -178,69 +180,6 @@ function SearchFilter(props) {
     );
 }
 
-SearchFilter.propTypes = {
-    category: PropTypes.shape({
-        ui: PropTypes.shape({
-            translations: PropTypes.shape({
-                search: PropTypes.string,
-                delete: PropTypes.string,
-                exportAsXls: PropTypes.string,
-            }),
-            title: PropTypes.string,
-            pageMenu: PropTypes.arrayOf(PropTypes.shape({})),
-            excelExportSupported: PropTypes.bool,
-            multiSelectionSupported: PropTypes.bool,
-        }),
-        filter: PropTypes.shape({
-            id: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
-            searchString: PropTypes.string,
-        }),
-        filterFavorites: PropTypes.arrayOf(PropTypes.shape({})),
-        error: PropTypes.string,
-        isFetching: PropTypes.bool,
-        newlySwitched: PropTypes.bool,
-        quickSelectUrl: PropTypes.string,
-        standardEditPage: PropTypes.string,
-        useModalEditDialog: PropTypes.bool,
-    }).isRequired,
-    onErrorDismiss: PropTypes.func.isRequired,
-    onFavoriteCreate: PropTypes.func.isRequired,
-    onFavoriteDelete: PropTypes.func.isRequired,
-    onFavoriteRename: PropTypes.func.isRequired,
-    onFavoriteSelect: PropTypes.func.isRequired,
-    onFavoriteUpdate: PropTypes.func.isRequired,
-    onSearchStringBlur: PropTypes.func.isRequired,
-    onSearchStringChange: PropTypes.func.isRequired,
-    onSearchStringDelete: PropTypes.func.isRequired,
-    onSyncButtonClick: PropTypes.func.isRequired,
-    onExportButtonClick: PropTypes.func.isRequired,
-    onMultiSelectionButtonClick: PropTypes.func.isRequired,
-};
+SearchFilter.propTypes = {};
 
-const mapStateToProps = ({ list }) => {
-    const category = list.categories[list.currentCategory];
-
-    return {
-        category,
-    };
-};
-
-const actions = (dispatch) => ({
-    onErrorDismiss: () => dispatch(dismissCurrentError()),
-    onFavoriteCreate: (name) => dispatch(createListFavorite({ name })),
-    onFavoriteDelete: (id) => dispatch(deleteListFavorite({ id })),
-    onFavoriteRename: (id, newName) => dispatch(renameListFavorite({
-        id,
-        newName,
-    })),
-    onFavoriteSelect: (id) => dispatch(selectListFavorite({ id })),
-    onFavoriteUpdate: () => dispatch(updateListFavorite()),
-    onSearchStringBlur: () => dispatch(fetchCurrentList()),
-    onSearchStringChange: (completion) => dispatch(changeSearchString(completion)),
-    onSearchStringDelete: () => dispatch(changeSearchString('')),
-    onSyncButtonClick: () => dispatch(fetchCurrentList(true)),
-    onExportButtonClick: () => dispatch(exportCurrentList()),
-    onMultiSelectionButtonClick: () => dispatch(startMultiSelection()),
-});
-
-export default connect(mapStateToProps, actions)(SearchFilter);
+export default SearchFilter;

@@ -2,7 +2,7 @@ import { faSmile, faSmileWink } from '@fortawesome/free-regular-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import PropTypes from 'prop-types';
 import React from 'react';
-import { connect } from 'react-redux';
+import { useSelector } from 'react-redux';
 import { Button, UncontrolledTooltip } from 'reactstrap';
 import { getServiceURL, handleHTTPErrors } from '../../../../utilities/rest';
 import style from '../../../design/input/Input.module.scss';
@@ -20,10 +20,14 @@ function UserSelect({
     onChange: handleChange,
     required = false,
     translations,
-    user,
     value,
     ...restProps
 }) {
+    const user = useSelector((state) => ({
+        id: state.authentication.user.userId,
+        username: state.authentication.user.username,
+        fullname: state.authentication.user.fullname,
+    }));
     const [selectMeIcon, setSelectMeIcon] = React.useState(faSmile);
 
     const props = {
@@ -106,20 +110,7 @@ UserSelect.propTypes = {
         fullname: PropTypes.string.isRequired,
         id: PropTypes.number.isRequired,
         username: PropTypes.string.isRequired,
-    }).isRequired,
-    required: PropTypes.bool,
-    value: PropTypes.oneOfType([
-        PropTypes.shape({}),
-        PropTypes.arrayOf(PropTypes.shape({})),
-    ]),
+    }),
 };
 
-const mapStateToProps = ({ authentication }) => ({
-    user: {
-        id: authentication.user.userId,
-        username: authentication.user.username,
-        fullname: authentication.user.fullname,
-    },
-});
-
-export default connect(mapStateToProps)(UserSelect);
+export default UserSelect;

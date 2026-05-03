@@ -4,7 +4,7 @@ import React, { useMemo, useRef, useEffect, useState, lazy, Suspense } from 'rea
 import { AgGridReact } from 'ag-grid-react';
 import { ModuleRegistry, AllCommunityModule, themeBalham } from 'ag-grid-community';
 import { LicenseManager, AllEnterpriseModule } from 'ag-grid-enterprise';
-import { connect } from 'react-redux';
+import { useSelector } from 'react-redux';
 import { useNavigate, useLocation } from 'react-router';
 import { DynamicLayoutContext } from '../../context';
 import Formatter from '../../../Formatter';
@@ -64,17 +64,16 @@ function DynamicAgGrid(props) {
         timestampFormatSeconds = 'YYYY-MM-dd HH:mm:ss',
         timestampFormatMinutes = 'YYYY-MM-dd HH:mm',
         currency = '€',
-        // By authentication object:
-        userLocale,
-        userDateFormat,
-        userThousandSeparator,
-        userDecimalSeparator,
-        userTimestampFormatSeconds,
-        userTimestampFormatMinutes,
-        userCurrency,
         height,
         highlightId,
     } = props;
+    const resolvedUserLocale = useSelector((state) => state.authentication?.user?.locale);
+    const resolvedUserDateFormat = useSelector((state) => state.authentication?.user?.dateFormat);
+    const resolvedUserThousandSeparator = useSelector((state) => state.authentication?.user?.thousandSeparator);
+    const resolvedUserDecimalSeparator = useSelector((state) => state.authentication?.user?.decimalSeparator);
+    const resolvedUserTimestampFormatSeconds = useSelector((state) => state.authentication?.user?.timestampFormatSeconds);
+    const resolvedUserTimestampFormatMinutes = useSelector((state) => state.authentication?.user?.timestampFormatMinutes);
+    const resolvedUserCurrency = useSelector((state) => state.authentication?.user?.currency);
     // eslint-disable-next-line no-new-func
     const getRowClassFunction = Function('params', getRowClass);
     const rowClass = 'ag-row-standard';
@@ -213,14 +212,14 @@ function DynamicAgGrid(props) {
             return dateFormat || AG_GRID_LOCALE_DE[key] || defaultValue;
         }
         if (key === 'thousandSeparator') {
-            return thousandSeparator || userThousandSeparator
+            return thousandSeparator || resolvedUserThousandSeparator
                 || AG_GRID_LOCALE_DE[key] || defaultValue;
         }
         if (key === 'decimalSeparator') {
-            return decimalSeparator || userDecimalSeparator
+            return decimalSeparator || resolvedUserDecimalSeparator
                 || AG_GRID_LOCALE_DE[key] || defaultValue;
         }
-        if ((locale || userLocale) === 'de') return AG_GRID_LOCALE_DE[key] || defaultValue;
+        if ((locale || resolvedUserLocale) === 'de') return AG_GRID_LOCALE_DE[key] || defaultValue;
         return params.defaultValue;
     };
 
@@ -396,11 +395,11 @@ function DynamicAgGrid(props) {
             return formatterFormat(
                 value,
                 cellRendererParams?.dataType,
-                dateFormat || userDateFormat,
-                timestampFormatSeconds || userTimestampFormatSeconds,
-                timestampFormatMinutes || userTimestampFormatMinutes,
-                locale || userLocale,
-                currency || userCurrency,
+                dateFormat || resolvedUserDateFormat,
+                timestampFormatSeconds || resolvedUserTimestampFormatSeconds,
+                timestampFormatMinutes || resolvedUserTimestampFormatMinutes,
+                locale || resolvedUserLocale,
+                currency || resolvedUserCurrency,
             );
         }
         return value;
@@ -613,27 +612,10 @@ DynamicAgGrid.propTypes = {
     timestampFormatMinutes: PropTypes.string,
     currency: PropTypes.string,
     height: PropTypes.number,
-    userLocale: PropTypes.string,
     onCellClicked: PropTypes.func,
     onGridApiReady: PropTypes.func,
-    userDateFormat: PropTypes.string,
-    userThousandSeparator: PropTypes.string,
-    userDecimalSeparator: PropTypes.string,
-    userTimestampFormatSeconds: PropTypes.string,
-    userTimestampFormatMinutes: PropTypes.string,
-    userCurrency: PropTypes.string,
     highlightId: PropTypes.string,
     // visible: PropTypes.bool,
 };
 
-const mapStateToProps = ({ authentication }) => ({
-    userLocale: authentication?.user?.locale,
-    userDateFormat: authentication?.user?.dateFormat,
-    userThousandSeparator: authentication?.user?.thousandSeparator,
-    userDecimalSeparator: authentication?.user?.decimalSeparator,
-    userTimestampFormatSeconds: authentication?.user?.timestampFormatSeconds,
-    userTimestampFormatMinutes: authentication?.user?.timestampFormatMinutes,
-    userCurrency: authentication?.user?.currency,
-});
-
-export default connect(mapStateToProps)(DynamicAgGrid);
+export default DynamicAgGrid;

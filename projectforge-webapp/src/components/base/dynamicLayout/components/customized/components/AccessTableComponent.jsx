@@ -1,11 +1,12 @@
 import React from 'react';
+import { useSelector } from 'react-redux';
 import { Button } from 'reactstrap';
-import { connect } from 'react-redux';
 import { DynamicLayoutContext } from '../../../context';
 
 /* eslint-disable */
 
 function AccessTableComponent() {
+    const user = useSelector((state) => state.authentication.user);
     const { callAction } = React.useContext(DynamicLayoutContext);
 
     const clear = () => callAction({
@@ -195,9 +196,4 @@ function AccessTableComponent() {
     );
 }
 
-const mapStateToProps = ({ authentication }) => ({
-    user: authentication.user,
-});
-
-
-export default connect(mapStateToProps)(AccessTableComponent);
+export default AccessTableComponent;

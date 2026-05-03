@@ -4,7 +4,7 @@ import PropTypes from 'prop-types';
 import 'rc-time-picker/assets/index.css';
 import React from 'react';
 import 'react-day-picker/src/style.css';
-import { connect } from 'react-redux';
+import { useSelector } from 'react-redux';
 import AdditionalLabel from '../../../../../design/input/AdditionalLabel';
 import TimeRange from '../../../../../design/input/calendar/TimeRange';
 import { DynamicLayoutContext } from '../../../context';
@@ -19,6 +19,9 @@ function DayRange(
         values,
     },
 ) {
+    const dateFormat = useSelector((state) => state.authentication.user.jsDateFormat);
+    const locale = useSelector((state) => state.authentication.user.locale);
+    const timeNotation = useSelector((state) => state.authentication.user.timeNotation);
     const { data, setData, ui } = React.useContext(DynamicLayoutContext);
     const { startDateId, endDateId, label } = values;
 
@@ -83,21 +86,13 @@ function DayRange(
 }
 
 DayRange.propTypes = {
-    dateFormat: PropTypes.string.isRequired,
     values: PropTypes.shape({
         startDateId: PropTypes.string,
         endDateId: PropTypes.string,
         label: PropTypes.string,
     }).isRequired,
     additionalLabel: PropTypes.string,
-    locale: PropTypes.string,
-    timeNotation: PropTypes.string,
+    id: PropTypes.string,
 };
 
-const mapStateToProps = ({ authentication }) => ({
-    dateFormat: authentication.user.jsDateFormat,
-    locale: authentication.user.locale,
-    timeNotation: authentication.user.timeNotation,
-});
-
-export default connect(mapStateToProps)(DayRange);
+export default DayRange;

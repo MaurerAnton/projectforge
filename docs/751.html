@@ -1,0 +1,45 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>#751</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333}h2{margin-top:1.5em}h3{margin-top:1.2em}a{color:#0366d6}.meta{font-size:.9em;margin:1em 0}.nav{font-size:.9em;color:#888;margin-bottom:1em}.c{border-left:3px solid #ddd;padding:1em;margin:1em 0;background:#fff}code{background:#f0f0f0;padding:0 .2em}pre{background:#f5f5f5;padding:.5em;margin:.5em 0;border-radius:3px;font-size:.85em;overflow-x:auto}</style></head>
+<body>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="750.html">← Prev</a> · <a href="752.html">Next →</a></div>
+
+<h1>#751: <code>ProjectForgeRootElement.java</code></h1>
+<div class="meta"><strong>Lines:</strong> 98 · <strong>Author:</strong> Kai Reinhard · <strong>Type:</strong> Java abstract class · <strong>Package:</strong> <code>org.projectforge.framework.xmlstream</code></div>
+
+<div class="c"><h2>Что это и зачем</h2>
+<p>Абстрактный базовый класс для <strong>корневых элементов XML</strong> в собственной системе сериализации ProjectForge — <code>XmlStream</code>. Это не JAXB и не XStream, а <strong>свой легковесный XML-фреймворк</strong>, написанный с нуля для конкретных нужд проекта: экспорт/импорт данных между инстансами ProjectForge, сохранение пользовательских настроек, и сериализация конфигурации.</p>
+<p>Javadoc объясняет назначение: <em>"For export and import it's useful to use an instance of this object to define for example the time zone, version etc."</em> — то есть каждый экспортированный XML-файл должен нести метаданные: какой часовой пояс использовался при экспорте, какая версия ProjectForge создала файл, и когда он был создан. Без этой информации импорт на другом сервере может неправильно интерпретировать даты или не суметь применить миграции формата.</p></div>
+
+<div class="c"><h2>Три поля — три аспекта совместимости</h2>
+<ol>
+<li><strong><code>created</code> (Date):</strong> когда XML был создан. Сеттер <code>setCreated()</code> без аргументов автоматически устанавливает текущее время с точностью до <strong>секунд</strong> (миллисекунды обнулены — <code>withPrecision(DatePrecision.SECOND)</code>). Это важно: если в двух XML-файлах одинаковый created, они экспортированы из одного пакета. Импортёр использует эту метку чтобы понять, какие данные новее при конфликтах</li>
+<li><strong><code>timeZone</code> (java.util.TimeZone):</strong> часовой пояс, использованный при экспорте. Критично для дат: если сервер в Берлине экспортирует "2025-05-15 09:00 Europe/Berlin", а импорт происходит в Нью-Йорке, без таймзоны дата будет интерпретирована как 09:00 EST вместо 03:00 EST. Наличие явного <code>timeZone</code> предотвращает сдвиги дат при кроссплатформенном импорте</li>
+<li><strong><code>version</code> (String, аннотирован <code>@XmlField(asAttribute=true)</code>):</strong> версия ProjectForge, создавшая файл. Используется для миграции формата — если импортёр видит <code>version="7.4"</code>, он знает что нужно применить конвертеры для формата 7.4 → 8.0. Аннотация <code>@XmlField(asAttribute=true)</code> (из пакета <code>org.projectforge.framework.xmlstream</code>, не из XStream!) означает что в XML версия будет записана как атрибут корневого элемента: <code>&lt;projectforge version="8.0"&gt;</code>, а не как вложенный тег</li>
+</ol></div>
+
+<div class="c"><h2>Fluent API — все сеттеры возвращают <code>this</code></h2>
+<p>Каждый сеттер возвращает <code>ProjectForgeRootElement</code>, позволяя цепочечную инициализацию:</p>
+<pre>export.setTimeZone(userTZ).setCreated().setVersion("8.0.0");</pre>
+<p>Это удобно при создании экспорта — одной строкой настраиваются все метаданные, и объект готов к сериализации.</p></div>
+
+<div class="c"><h2>Место в иерархии XmlStream</h2>
+<p><code>ProjectForgeRootElement</code> — это абстрактный базовый класс. Конкретные корневые элементы (например, корневой элемент экспорта данных: <code>&lt;projectforgeData&gt;</code>) наследуют его и добавляют свои дочерние поля. Вся система XmlStream состоит из:</p>
+<ul>
+<li><code>@XmlField</code> / <code>@XmlOmitField</code> — аннотации для пометки полей (аналог XStream's <code>@XStreamAlias</code>/<code>@XStreamOmitField</code>)</li>
+<li><code>XmlObject</code> (<a href="772.html">#772</a>) — базовый класс для сериализуемых объектов (с версионированием)</li>
+<li><code>XmlObjectReader</code> / <code>XmlObjectWriter</code> (<a href="773.html">#773</a>, <a href="774.html">#774</a>) — движок чтения/записи</li>
+<li><code>Converter</code> иерархия (<a href="749.html">#749</a>+) — конвертеры типов (Date→ISO, BigDecimal→String и т.д.)</li>
+<li><code>AliasMap</code> (<a href="750.html">#750</a>) — маппинг Class↔XML-tag</li>
+<li><code>XmlRegistry</code> (<a href="776.html">#776</a>) — реестр зарегистрированных XML-объектов</li>
+</ul>
+<p>Этот фреймворк <strong>существует параллельно</strong> с XStream в ProjectForge. XStream используется для пользовательских настроек (сериализация RecentQueue, UserPref), а XmlStream — для экспорта/импорта данных между инстансами (где нужен контроль формата, валидация и версионирование).</p></div>
+
+<div class="c"><h2>Почему не XStream?</h2>
+<p>XStream — отличная библиотека, но у неё есть ограничения для use case'а экспорта данных:</p>
+<ul>
+<li><strong>Версионирование:</strong> XStream не поддерживает миграцию формата. Если формат XML изменился между версиями ProjectForge, XStream просто упадёт с ошибкой при десериализации. XmlStream явно хранит версию и позволяет применять конвертеры при чтении</li>
+<li><strong>Контроль схемы:</strong> XStream генерирует XML "как получится" — имена полей Java класса становятся именами тегов. XmlStream позволяет явно задавать алиасы и структуру через аннотации, что важно для обратной совместимости</li>
+<li><strong>Безопасность:</strong> XStream может десериализовать произвольные Java-объекты (известная уязвимость). XmlStream работает только с зарегистрированными в <code>XmlRegistry</code> типами</li>
+</ul></div>
+
+</body></html>

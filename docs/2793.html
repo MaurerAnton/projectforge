@@ -1,0 +1,198 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>#2793</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}.hist{font-size:.85em;color:#555}</style></head>
+<body><div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="2792.html">← Prev</a> · <a href="2794.html">Next →</a></div>
+<h1>#2793: <code>MicromataFormatter.java</code></h1>
+<div class="meta">Java class, <code>projectforge-wicket/src/main/java/org/projectforge/renderer/custom/MicromataFormatter.java</code></div>
+<div class="c">Java formatter renderer custom.</div>
+<h2>Git History</h2><div class="hist"><pre>868d6abb7 2025 -&gt; 2026
+2cf5332b3 Cost-Search added for Fakturafuexe (for copying cost numbers into DATEV).
+4a5eef570 MicromataFormatter: Fix for Excel-export of time sheets: xml escaping of task titles.
+63081666f Source file headers: 2024-&gt; 2025.
+b71b5073d Migration stuff in progress... (all tests of all packages: OK).
+1204b927b Migration stuff in progress... (all tests of all packages: OK).
+4c04cfd65 MAJOR-CHANGE! Migration of integer id's to Long id's (including fk's etc.)
+77bade6df javax.* -&gt; jakarta.*
+b6092df09 Copyright 2023 -&gt; 2024
+ab45d51fa Copyright 2001-2022 -&gt; 2001-2023.
+5f7ef41b8 Copyright 2021 -&gt; 2022
+ceb63e8a1 Source code header: (C) 2001-2021.
+a6a7aece4 Optimize Imports
+7c79f1922 Copyright of source header -&gt; 2020.
+f979e8a42 MGC-UPDATE: Update auf Version 3.0.0-SNAPSHOT
+fc785c559 PROJECTFORGE-2645 fix access list did not work anymore
+9ebb88522 Initial commit</pre></div>
+<h2>Source</h2><pre>/////////////////////////////////////////////////////////////////////////////
+//
+// Project ProjectForge Community Edition
+//         www.projectforge.org
+//
+// Copyright (C) 2001-2026 Micromata GmbH, Germany (www.micromata.com)
+//
+// ProjectForge is dual-licensed.
+//
+// This community edition is free software; you can redistribute it and/or
+// modify it under the terms of the GNU General Public License as published
+// by the Free Software Foundation; version 3 of the License.
+//
+// This community edition is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General
+// Public License for more details.
+//
+// You should have received a copy of the GNU General Public License along
+// with this program; if not, see http://www.gnu.org/licenses/.
+//
+/////////////////////////////////////////////////////////////////////////////
+
+package org.projectforge.renderer.custom;
+
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
+import org.apache.commons.lang3.StringUtils;
+import org.projectforge.business.common.OutputType;
+import org.projectforge.business.fibu.OldKostFormatter;
+import org.projectforge.business.fibu.kost.Kost2DO;
+import org.projectforge.business.fibu.kost.KostCache;
+import org.projectforge.business.scripting.NullObject;
+import org.projectforge.business.task.formatter.WicketTaskFormatter;
+import org.projectforge.business.timesheet.TimesheetDO;
+import org.projectforge.business.timesheet.TimesheetFilter;
+import org.projectforge.business.user.UserFormatter;
+import org.projectforge.business.utils.HtmlDateTimeFormatter;
+import org.projectforge.business.utils.HtmlHelper;
+import org.projectforge.framework.renderer.CellHolder;
+import org.projectforge.framework.renderer.RenderType;
+import org.projectforge.framework.renderer.RowHolder;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
+
+import java.util.*;
+
+/**
+ * @author Sebastian Hardt (s.hardt@micromata.de)
+ */
+@Service
+public class MicromataFormatter extends Formatter {
+
+    @Autowired
+    private UserFormatter userFormatter;
+
+    @Autowired
+    private HtmlDateTimeFormatter htmlDateTimeFormatter;
+
+    @Autowired
+    private KostCache kostCache;
+
+    @Override
+    public Map&lt;String, Object&gt; getData(final List&lt;TimesheetDO&gt; timeSheets, final Long taskId,
+                                       final HttpServletRequest request,
+                                       final HttpServletResponse response, final TimesheetFilter actionFilter) {
+
+        final Map&lt;String, Object&gt; data = new HashMap&lt;String, Object&gt;();
+
+        long durationSum = 0;
+
+        for (final TimesheetDO timesheet : timeSheets) {
+            durationSum += timesheet.getDuration();
+        }
+
+        final List&lt;RowHolder&gt; list = new ArrayList&lt;RowHolder&gt;();
+        for (final TimesheetDO timesheet : timeSheets) {
+            final RowHolder row = new RowHolder();
+            if (actionFilter.getUserId() != null) {
+                final Kost2DO kost2 = kostCache.getKost2(timesheet.getKost2Id());
+                if (kost2 != null) {
+                    row.addCell(new CellHolder(OldKostFormatter.format(kost2)));
+                } else {
+                    row.addCell(new CellHolder(&quot;&quot;));
+                }
+            } else {
+                row.addCell(new CellHolder(userFormatter.getFormattedUser(timesheet.getUser())));
+            }
+            final String taskPath = WicketTaskFormatter.getTaskPath(timesheet.getTaskId(), taskId, true, OutputType.PLAIN);
+            row.addCell(new CellHolder(HtmlHelper.formatXSLFOText(taskPath, true)));
+            row.addCell(
+                    new CellHolder(
+                            htmlDateTimeFormatter.getFormattedTimePeriod(timesheet.getTimePeriod(), RenderType.FOP, true)));
+            row.addCell(new CellHolder(htmlDateTimeFormatter.getFormattedDuration(timesheet.getTimePeriod())));
+            row.addCell(new CellHolder(HtmlHelper.formatXSLFOText(timesheet.getDescription(), true)));
+            if (StringUtils.isNotBlank(timesheet.getLocation()) == true) {
+                row.addCell(new CellHolder(HtmlHelper.formatXSLFOText(timesheet.getLocation(), true)));
+            } else {
+                row.addCell(new CellHolder(&quot;&quot;));
+            }
+            list.add(row);
+        }
+
+        data.put(&quot;list&quot;, list);
+        data.put(&quot;title&quot;, getLocalizedString(&quot;timesheet.title.list&quot;));
+        data.put(&quot;systemDate&quot;, htmlDateTimeFormatter.getFormattedDateTime(new Date()));
+        data.put(&quot;searchStringLabel&quot;, getLocalizedString(&quot;searchString&quot;));
+
+        if (StringUtils.isNotEmpty(actionFilter.getSearchString()) == true) {
+            data.put(&quot;searchString&quot;, HtmlHelper.formatXSLFOText(actionFilter.getSearchString(), true));
+        } else {
+            data.put(&quot;searchString&quot;, NullObject.instance);
+        }
+
+        data.put(&quot;timePeriodLabel&quot;, getLocalizedString(&quot;timePeriod&quot;));
+
+        data.put(&quot;startTime&quot;, htmlDateTimeFormatter.getFormattedDate(actionFilter.getStartTime()));
+        data.put(&quot;stopTime&quot;, htmlDateTimeFormatter.getFormattedDate(actionFilter.getStopTime()));
+        data.put(&quot;taskLabel&quot;, getLocalizedString(&quot;task&quot;));
+
+        if (taskId != null) {
+            data.put(&quot;task&quot;, HtmlHelper.formatXSLFOText(WicketTaskFormatter.getTaskPath(taskId, true, OutputType.PLAIN), true));
+        } else {
+            data.put(&quot;task&quot;, NullObject.instance);
+        }
+        data.put(&quot;userLabel&quot;, getLocalizedString(&quot;timesheet.user&quot;));
+
+        if (actionFilter.getUserId() != null) {
+            data.put(&quot;user&quot;, userFormatter.getFormattedUser(actionFilter.getUserId()));
+        } else {
+            data.put(&quot;user&quot;, NullObject.instance);
+        }
+        data.put(&quot;totalDurationLabel&quot;, getLocalizedString(&quot;timesheet.totalDuration&quot;));
+
+        final String str1 = htmlDateTimeFormatter.getFormattedDuration(durationSum);
+        final String str2 = htmlDateTimeFormatter.getFormattedDuration(durationSum,
+                htmlDateTimeFormatter.getDurationOfWorkingDay(),
+                -1);
+        data.put(&quot;totalDuration&quot;, str1);
+        if (str1.equals(str2) == false) {
+            data.put(&quot;totalHours&quot;, str2);
+        } else {
+            data.put(&quot;totalHours&quot;, NullObject.instance);
+        }
+
+        data.put(&quot;optionsLabel&quot;, getLocalizedString(&quot;label.options&quot;));
+        data.put(&quot;deletedLabel&quot;, getLocalizedString(&quot;deleted&quot;));
+
+        data.put(&quot;deleted&quot;, actionFilter.getDeleted());
+
+        data.put(&quot;durationLabel&quot;, getLocalizedString(&quot;timesheet.duration&quot;));
+        data.put(&quot;descriptionLabel&quot;, getLocalizedString(&quot;description&quot;));
+        data.put(&quot;locationLabel&quot;, getLocalizedString(&quot;timesheet.location&quot;));
+
+        return data;
+    }
+
+    public HtmlDateTimeFormatter getHtmlDateTimeFormatter() {
+        return htmlDateTimeFormatter;
+    }
+
+    public void setHtmlDateTimeFormatter(HtmlDateTimeFormatter htmlDateTimeFormatter) {
+        this.htmlDateTimeFormatter = htmlDateTimeFormatter;
+    }
+
+    public UserFormatter getUserFormatter() {
+        return userFormatter;
+    }
+
+    public void setUserFormatter(UserFormatter userFormatter) {
+        this.userFormatter = userFormatter;
+    }
+
+}</pre>
+</body></html>

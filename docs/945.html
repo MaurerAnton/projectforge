@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8"><title>#945: Kost2DO.kt</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:2em;color:#444}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}</style></head>
+<body>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="944.html">← Prev</a> · <a href="946.html">Next →</a></div>
+<h1>#945: <code>Kost2DO.kt</code></h1>
+<div class="meta">Type: JPA Entity (DO) · Purpose: Kost2 cost center entity with 8-digit number + cost type · Source: projectforge-business/src/main/kotlin/org/projectforge/business/fibu/kost/Kost2DO.kt</div>
+<div class="c">Represents a Kost2 cost center — the finer-grained cost entity (compared to Kost1). A Kost2 is identified by a combination of 3 numeric components (Nummernkreis, Bereich, Teilbereich = 6 digits) and a Kost2Art (cost type, 2 digits). Each Kost2 belongs to a project and has a specific cost type classification.</div>
+<h2>Entity Design</h2>
+<table>
+<tr><th>Field</th><th>Type</th><th>DB Column</th><th>Description</th></tr>
+<tr><td><code>kostentraegerStatus</code></td><td><code>KostentraegerStatus?</code></td><td>VARCHAR(30)</td><td>ACTIVE, NONACTIVE, or ENDED</td></tr>
+<tr><td><code>nummernkreis</code></td><td><code>Int</code></td><td>INT</td><td>First digit (1-9)</td></tr>
+<tr><td><code>bereich</code></td><td><code>Int</code></td><td>INT</td><td>Digits 2-4; for 5.xxx this is the customer number</td></tr>
+<tr><td><code>teilbereich</code></td><td><code>Int</code></td><td>INT</td><td>Digits 5-6</td></tr>
+<tr><td><code>kost2Art</code></td><td><code>Kost2ArtDO?</code></td><td>FK kost2_art_id</td><td>ManyToOne to cost type (2-digit classification)</td></tr>
+<tr><td><code>workFraction</code></td><td><code>BigDecimal?</code></td><td>PRECISION(10,5)</td><td>Work allocation fraction</td></tr>
+<tr><td><code>description</code></td><td><code>String?</code></td><td>VARCHAR(4000)</td><td>Description</td></tr>
+<tr><td><code>comment</code></td><td><code>String?</code></td><td>VARCHAR(4000)</td><td>Optional comment</td></tr>
+<tr><td><code>projekt</code></td><td><code>ProjektDO?</code></td><td>FK projekt_id</td><td>Associated project (lazy-loaded)</td></tr>
+</table>
+<h3>Computed (Transient) Properties</h3>
+<table>
+<tr><th>Property</th><th>Type</th><th>Description</th></tr>
+<tr><td><code>effectiveKostentraegerStatus</code></td><td><code>KostentraegerStatus?</code></td><td>Inherits ENDED from project if project is ENDED or deleted</td></tr>
+<tr><td><code>nummer</code></td><td><code>Int</code></td><td>Computed 8-digit integer (via KostFormatter.getKostAsInt)</td></tr>
+<tr><td><code>formattedNumber</code></td><td><code>String</code></td><td>Formatted as #.###.##.## (indexed for search)</td></tr>
+<tr><td><code>rawNumberString</code></td><td><code>String</code></td><td>8-digit compact string for search indexing</td></tr>
+<tr><td><code>toolTip</code></td><td><code>String</code></td><td>Formatted tooltip via OldKostFormatter</td></tr>
+</table>
+<h3>Named Queries</h3>
+<table>
+<tr><th>Name</th><th>Purpose</th></tr>
+<tr><td><code>FIND_BY_NK_BEREICH_TEILBEREICH_KOST2ART</code></td><td>Find by all 4 components</td></tr>
+<tr><td><code>FIND_OTHER_BY_NK_BEREICH_TEILBEREICH_KOST2ART</code></td><td>Find duplicate (exclude self) for uniqueness check</td></tr>
+<tr><td><code>FIND_ACTIVES_BY_NK_BEREICH_TEILBEREICH</code></td><td>Find active entries by 6-digit prefix</td></tr>
+</table>
+<h2>Virtual Status Inheritance</h2>
+<p>The <code>effectiveKostentraegerStatus</code> property implements a key design pattern (introduced in commit <code>8239a53ee</code>): if the linked <code>Projekt</code> has status <code>ENDED</code> or is deleted, the Kost2 is treated as ENDED regardless of its own status. This avoids data inconsistency when projects are closed.</p>
+<h2>Persistence Details</h2>
+<ul>
+<li>Mapped to <code>T_FIBU_KOST2</code> with unique constraint on all 4 numeric components</li>
+<li>Indexes on <code>kost2_art_id</code> and <code>projekt_id</code> for join performance</li>
+<li>Extends <code>DefaultBaseDO</code>, implements <code>Comparable&lt;Kost2DO&gt;</code> and <code>DisplayNameCapable</code></li>
+<li>Implements <code>@JsonCreator</code> factory for deserialization from Long ID</li>
+<li>Equals/hashCode uses nummernkreis, bereich, teilbereich, and kost2Art</li>
+<li>All Kotlin properties declared <code>open</code> for Hibernate lazy-loading proxy support</li>
+</ul>
+<h2>Source Code (abridged)</h2>
+<pre>@Entity @Indexed @Table(name = "T_FIBU_KOST2", ...)
+open class Kost2DO : DefaultBaseDO(), Comparable&lt;Kost2DO&gt;, DisplayNameCapable {
+    open var kostentraegerStatus: KostentraegerStatus? = null
+
+    val effectiveKostentraegerStatus: KostentraegerStatus?
+        get() {
+            val projektRef = PfCaches.instance.getProjektIfNotInitialized(projekt) ?: projekt
+            if (projektRef != null &&
+                (projektRef.status == ProjektStatus.ENDED || projektRef.deleted))
+                return KostentraegerStatus.ENDED
+            return kostentraegerStatus
+        }
+
+    open var nummernkreis: Int = 0
+    open var bereich: Int = 0
+    open var teilbereich: Int = 0
+    open var kost2Art: Kost2ArtDO? = null
+    open var projekt: ProjektDO? = null
+    // ... formattedNumber, rawNumberString, toolTip computed properties
+}</pre>
+<h2>Git History</h2>
+<div class="hist"><pre>868d6abb7 2025 -> 2026
+5c652782f AbstractTestBase initializes PfCaches.
+dca4456f7 Fixed for test-cases.
+8239a53ee Kost2: Virtuelle Status-Vererbung von ProjektDO
+38e843800 CostSearch: search for plain number string.
+63081666f Source file headers: 2024-> 2025.
+0237d5eba Json: IdOnlySerializer and IdsOnlySerializer.
+98555d5d8 Bugfix: search for numbers.
+b3782c8a8 Migration stuff...
+c8f8ed935 All entities FetchType.LAZY.
+4c04cfd65 MAJOR-CHANGE! Integer id's to Long id's.
+a1cf6f591 Code Cleanup
+b78b870bd ShortDisplayNameCapable -> DisplayNameCapable
+8675a1dbe Kotlin JPA entities declared open (lazy loading fix)
+252b28955 JsonCreator for deserialization from Int
+d849a79cc JsonCreator for deserialization from Number
+0de418e75 DTO Tenant added to BaseDTO.
+6d1f7a7cd Kost2DO.java -> Kost2DO.kt</pre></div>
+</body>
+</html>

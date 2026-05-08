@@ -1,0 +1,74 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>#701</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:2em;color:#444}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}.warn{background:#fff3cd;border-left:3px solid #ffc107;padding:.5em 1em;margin:1em 0}.tip{background:#d4edda;border-left:3px solid #28a745;padding:.5em 1em;margin:1em 0}</style></head>
+<body><div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="700.html">← Prev</a> · <a href="702.html">Next →</a></div>
+<h1>#701: <code>ReflectionToString.java</code></h1>
+<div class="meta">Java utility — Hibernate-aware reflection-based <code>toString()</code> builder, <code>projectforge-business/src/main/java/org/projectforge/framework/persistence/utils/ReflectionToString.java</code></div>
+<div class="c">Extends Apache Commons Lang3 <code>ReflectionToStringBuilder</code> to produce safe, human-readable <code>toString()</code> output for JPA entities. Handles Hibernate lazy proxies, uninitialized collections, <code>BaseDO</code> IDs, <code>DisplayNameCapable</code> labels, and <code>TimeZone</code> objects without triggering <code>LazyInitializationException</code>. The single static entry point <code>ReflectionToString.asString(obj)</code> is used throughout the codebase wherever debug/log output of domain objects is needed.</div>
+
+<h2>Architecture</h2>
+
+<h3>Class Hierarchy</h3>
+<p><code>ReflectionToString</code> extends <code>org.apache.commons.lang3.builder.ReflectionToStringBuilder</code> (Apache Commons Lang3). Internally, <code>ReflectionToStringBuilder</code> uses Java reflection to walk all declared fields of an object (and its superclasses), appending each field name/value pair into a <code>ToStringBuilder</code>. This class overrides three key methods to inject Hibernate awareness.</p>
+
+<table>
+<tr><th>Method</th><th>Override Purpose</th></tr>
+<tr><td><code>ReflectionToString(Object)</code> (constructor)</td><td>Checks if the root object is initialized via <code>Hibernate.isInitialized()</code>. If not, passes a synthetic string like <code>"Lazy" + className + "@" + identityHash</code> instead of the actual proxy, preventing <code>LazyInitializationException</code> from the very start.</td></tr>
+<tr><td><code>append(String, Object)</code></td><td>The core of the Hibernate-safe logic. Before appending each field value, it checks <code>Hibernate.isInitialized()</code> and applies specialized formatting based on the value's type.</td></tr>
+<tr><td><code>accept(Field)</code></td><td>Filters out fields whose values are uninitialized Hibernate proxies. Rather than skipping silently, it calls <code>append()</code> directly (which will render the proxy info) and returns <code>false</code> so the superclass doesn't double-process the field.</td></tr>
+</table>
+
+<h3>append() Value Handling Decision Tree</h3>
+<p>When <code>append(fieldName, object)</code> is called, the following logic applies in order:</p>
+<ol>
+  <li><strong>Null:</strong> passes through to super (renders <code>&lt;null&gt;</code>).</li>
+  <li><strong>Not Hibernate-initialized:</strong>
+    <ul>
+      <li>If <code>BaseDO</code> — extracts the identifier via <code>HibernateUtils.getIdentifier()</code>; renders the numeric or string ID (or <code>"&lt;id&gt;"</code> if null).</li>
+      <li>Otherwise — renders <code>"LazyCollection"</code> string literal.</li>
+    </ul>
+  </li>
+  <li><strong>Initialized and <code>DisplayNameCapable</code>:</strong> delegates to private <code>myToString()</code> which renders <code>"id:displayName"</code> for <code>BaseDO</code> objects or just the display name for non-DO objects.</li>
+  <li><strong>Initialized and <code>BaseDO</code>:</strong> renders the entity ID alone.</li>
+  <li><strong><code>Collection</code>:</strong> iterates elements, calls <code>myToString()</code> on each, formats as <code>[el1, el2, ...]</code>. Avoids the default collection <code>toString()</code> which would recursively call <code>ReflectionToString</code> on every element and potentially explode output.</li>
+  <li><strong><code>TimeZone</code>:</strong> renders the timezone ID string (e.g. <code>"Europe/Berlin"</code>) instead of the full <code>TimeZone.toString()</code>.</li>
+  <li><strong>Otherwise:</strong> passes through to super.</li>
+</ol>
+
+<h3>private myToString(Object) Logic</h3>
+<p>Special-cases <code>null</code> → <code>"&lt;null&gt;"</code>, then <code>DisplayNameCapable</code> objects (with <code>BaseDO</code> prefixing the ID), <code>BaseDO</code> objects (ID only), and finally falls back to <code>obj.toString()</code> for all other types.</p>
+
+<h3>Javassist Workaround</h3>
+<div class="warn">When <code>append()</code> encounters an uninitialized <code>BaseDO</code> object, it calls <code>HibernateUtils.getIdentifier()</code> rather than using the proxy's own <code>getId()</code>. The comment in the source notes this is a "work around for Jassist bug" — Javassist proxies (used by Hibernate) can produce incorrect behavior when calling methods on uninitialized proxies, so the framework utility is preferred to extract the ID from the proxy metadata directly.</div>
+
+<h2>Integration Points</h2>
+<ul>
+  <li>Used as the default <code>toString()</code> implementation in <code>BaseDO</code> and its subclasses (every domain object in ProjectForge).</li>
+  <li>Consumed by logging statements throughout the business layer — any <code>log.debug("entity: {}", entity)</code> will trigger this formatter via the entity's <code>toString()</code>.</li>
+  <li>Depends on <code>HibernateUtils.getIdentifier()</code> for safe ID extraction from proxies.</li>
+  <li>Relies on Apache Commons Lang3 <code>ReflectionToStringBuilder</code> for the reflection loop skeleton.</li>
+</ul>
+
+<h2>Design Decisions & Gotchas</h2>
+<ul>
+  <li><strong>Performance:</strong> Reflection-based toString is inherently slow. This is acceptable because it is only used for debug/log output, never in hot code paths. The <code>accept()</code> filter prevents it from descending into uninitialized lazy associations which would trigger database queries.</li>
+  <li><strong>Uninitialized collections:</strong> The <code>accept()</code> method calls <code>getValue(field)</code> which forces field access. If the field holds an uninitialized <code>PersistentCollection</code>, <code>Hibernate.isInitialized()</code> returns false and the field is handled inline — no database load occurs.</li>
+  <li><strong>Circular references:</strong> The collection handling in <code>append()</code> uses <code>myToString()</code> (which renders IDs/display names) rather than <code>toString()</code> on collection elements. This prevents infinite recursion when entities have bidirectional <code>@OneToMany</code>/<code>@ManyToOne</code> relationships.</li>
+  <li><strong>TimeZone special-case:</strong> Java's default <code>TimeZone.toString()</code> produces long output with offset details. This override extracts only the ID, keeping output concise.</li>
+</ul>
+
+<h2>Git History</h2><div class="hist"><pre>868d6abb7 2025 -> 2026
+63081666f Source file headers: 2024-> 2025.
+b6092df09 Copyright 2023 -> 2024
+ab45d51fa Copyright 2001-2022 -> 2001-2023.
+5f7ef41b8 Copyright 2021 -> 2022
+ceb63e8a1 Source code header: (C) 2001-2021.
+a6a7aece4 Optimize Imports
+b78b870bd ShortDisplayNameCapable -> DisplayNameCapable.
+7c79f1922 Copyright of source header -> 2020.
+73a9755df More code cleanup: - Collapsed catch blocks that did the exact same things
+32f634b88 Optimize imports
+000ca723d Remove pointless boolean expressions (business)
+dd5ca38ac CopyRight of all java file-header updated or created.
+f979e8a42 MGC-UPDATE: Update auf Version 3.0.0-SNAPSHOT
+9ebb88522 Initial commit</pre></div>
+</body></html>

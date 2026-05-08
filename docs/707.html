@@ -1,0 +1,67 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>#707</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:2em;color:#444}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}.warn{background:#fff3cd;border-left:3px solid #ffc107;padding:.5em 1em;margin:1em 0}.tip{background:#d4edda;border-left:3px solid #28a745;padding:.5em 1em;margin:1em 0}</style></head>
+<body><div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="706.html">← Prev</a> · <a href="708.html">Next →</a></div>
+<h1>#707: <code>HibernateProxyXPathMarshaller.java</code></h1>
+<div class="meta">XStream marshaller — XPath-based reference marshaller that unwraps Hibernate proxies during entity graph traversal, <code>projectforge-business/src/main/java/org/projectforge/framework/persistence/xstream/HibernateProxyXPathMarshaller.java</code></div>
+<div class="c">Extends XStream's <code>ReferenceByXPathMarshaller</code> to intercept the <code>convertAnother()</code> method — the central dispatch point where XStream traverses from one object to another during XML serialization of an entity graph. Before delegating to the parent class for XPath-based reference tracking, it unwraps any <code>HibernateProxy</code> to its real entity implementation. This ensures XStream's reference tracking operates on the real entity identity rather than proxy identity, preventing duplicate serialization of the same entity appearing through both direct and proxy references. This is a critical component for serializing JPA entity graphs that contain bidirectional associations with lazy loading.</div>
+
+<h2>Architecture</h2>
+
+<h3>Class Hierarchy</h3>
+<p><code>HibernateProxyXPathMarshaller</code> extends <code>com.thoughtworks.xstream.core.ReferenceByXPathMarshaller</code>, which itself extends <code>AbstractReferenceMarshaller</code> (which extends <code>TreeMarshaller</code>). The XStream marshalling hierarchy is:</p>
+<pre>TreeMarshaller
+  └── AbstractReferenceMarshaller       (adds object reference tracking)
+       ├── ReferenceByXPathMarshaller   (uses XPath expressions for references)
+       │    └── HibernateProxyXPathMarshaller  (this class — adds proxy unwrapping)
+       └── ReferenceByIdMarshaller      (uses ID/IDREF attributes for references)
+            └── ProxyIdRefMarshaller    (<a href="708.html">#708</a> — alternative ID-based strategy)</pre>
+
+<div class="tip">Both <code>HibernateProxyXPathMarshaller</code> and <a href="708.html">ProxyIdRefMarshaller</a> solve the same problem (proxy-aware marshalling) but use different XStream reference modes: XPath vs. ID/IDREF. The choice between them is made by <a href="710.html">XStreamMarshallingStrategy</a> (uses XPath) and the <a href="709.html">ProxyIdRefMarshallingStrategy</a> (uses ID/IDREF).</div>
+
+<h3>Constructor</h3>
+<p>Takes four parameters matching the <code>ReferenceByXPathMarshaller</code> constructor signature:</p>
+<table>
+<tr><th>Parameter</th><th>Type</th><th>Purpose</th></tr>
+<tr><td><code>writer</code></td><td><code>HierarchicalStreamWriter</code></td><td>XML output writer</td></tr>
+<tr><td><code>converterLookup</code></td><td><code>ConverterLookup</code></td><td>XStream converter registry</td></tr>
+<tr><td><code>mapper</code></td><td><code>Mapper</code></td><td>XStream class name mapper</td></tr>
+<tr><td><code>mode</code></td><td><code>int</code></td><td>XPath reference mode (<code>RELATIVE</code>, <code>ABSOLUTE</code>, etc.)</td></tr>
+</table>
+
+<h3>convertAnother(Object item, Converter converter)</h3>
+<p>This is the only overridden method — the single point where proxy unwrapping is injected into the XPath marshalling flow:</p>
+<ol>
+  <li><strong>Proxy detection:</strong> Checks <code>HibernateProxy.class.isAssignableFrom(item.getClass())</code>. Uses <code>isAssignableFrom</code> rather than <code>instanceof</code> because <code>item</code> may be passed in a non-null context where the static type is broader.</li>
+  <li><strong>Unwrap:</strong> Calls <code>((HibernateProxy) item).getHibernateLazyInitializer().getImplementation()</code> to get the real entity. This triggers lazy loading if the proxy hasn't been initialized.</li>
+  <li><strong>Delegate:</strong> Passes the unwrapped <code>toConvert</code> object to <code>super.convertAnother(toConvert, converter)</code>, which handles XPath reference tracking and XML writing.</li>
+</ol>
+
+<h3>XPath Reference Mode</h3>
+<p>XStream's <code>ReferenceByXPathMarshaller</code> handles circular references by writing XPath expressions (e.g., <code>&lt;task reference="../../../task"&gt;</code>) instead of serializing the same object twice. The <code>mode</code> parameter controls whether these XPath expressions are relative or absolute. Relative paths make the XML more resilient to structural changes and are generally preferred for document-oriented XML.</p>
+
+<h2>Integration Points</h2>
+<ul>
+  <li><strong>Created by:</strong> <a href="710.html">XStreamMarshallingStrategy</a>, which passes <code>RELATIVE</code> mode. This is the <em>only</em> place <code>HibernateProxyXPathMarshaller</code> is instantiated — the strategy acts as a factory.</li>
+  <li><strong>Operates within:</strong> XStream's tree marshalling pipeline. When XStream traverses an object graph, it calls <code>convertAnother()</code> for each object reference it encounters.</li>
+  <li><strong>References JIRA XSTR-226:</strong> The source comment <code>// http://jira.codehaus.org/browse/XSTR-226</code> links to the original Codehaus JIRA issue that motivated this class — a known limitation in XStream where Hibernate proxies broke the reference tracking mechanism. This class is the fix for that issue.</li>
+</ul>
+
+<h2>Design Decisions & Gotchas</h2>
+<ul>
+  <li><strong>Proxy unwrapping vs. proxy-aware reference tracking:</strong> An alternative design would modify the reference tracking itself to be proxy-aware (mapping proxy identity to real object identity). This class takes the simpler approach: unwrap before entering the reference tracker. The consequence is that <code>getImplementation()</code> forces initialization — a database hit for lazy proxies.</li>
+  <li><strong>XPath mode hardcoded at strategy level:</strong> The <code>mode</code> is not configurable per-call — it's fixed at construction time by the strategy. <a href="710.html">XStreamMarshallingStrategy</a> always passes <code>RELATIVE</code>. If absolute XPaths were needed, a new strategy class would be required.</li>
+  <li><strong>Potential for duplicate initialization:</strong> If both <a href="705.html">HibernateProxyConverter</a> and this marshaller are active in the same XStream pipeline, a proxy might get unwrapped twice. However, the second unwrap on an already-initialized proxy is a cheap no-op (Hibernate returns the same implementation instance).</li>
+  <li><strong>Package-level class:</strong> Like most classes in this package, <code>HibernateProxyXPathMarshaller</code> has package visibility (<code>public class</code> but the package is internal). It's exposed publicly only to allow the strategy class to construct it.</li>
+</ul>
+
+<h2>Git History</h2><div class="hist"><pre>868d6abb7 2025 -> 2026
+63081666f Source file headers: 2024-> 2025.
+b6092df09 Copyright 2023 -> 2024
+ab45d51fa Copyright 2001-2022 -> 2001-2023.
+5f7ef41b8 Copyright 2021 -> 2022
+ceb63e8a1 Source code header: (C) 2001-2021.
+7c79f1922 Copyright of source header -> 2020.
+32f634b88 Optimize imports
+dd5ca38ac CopyRight of all java file-header updated or created.
+9ebb88522 Initial commit</pre></div>
+</body></html>

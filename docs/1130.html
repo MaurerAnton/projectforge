@@ -1,0 +1,292 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>1130</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:2em;color:#444}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}</style></head>
+<body><div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="1129.html">← Prev</a> · <a href="1131.html">Next →</a></div>
+<h1>1130: <code>ThreadLocalUserContext.kt</code></h1>
+<div class="meta">Service / Context, projectforge-business/src/main/kotlin/org/projectforge/framework/persistence/user/api/ThreadLocalUserContext.kt</div>
+<div class="c">Thread-local storage for the currently authenticated user context, providing static access to the logged-in user's identity, roles, and locale across request processing.</div>
+
+<h2>Source Code</h2>
+<pre>/////////////////////////////////////////////////////////////////////////////
+//
+// Project ProjectForge Community Edition
+//         www.projectforge.org
+//
+// Copyright (C) 2001-2026 Micromata GmbH, Germany (www.micromata.com)
+//
+// ProjectForge is dual-licensed.
+//
+// This community edition is free software; you can redistribute it and/or
+// modify it under the terms of the GNU General Public License as published
+// by the Free Software Foundation; version 3 of the License.
+//
+// This community edition is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General
+// Public License for more details.
+//
+// You should have received a copy of the GNU General Public License along
+// with this program; if not, see http://www.gnu.org/licenses/.
+//
+/////////////////////////////////////////////////////////////////////////////
+
+package org.projectforge.framework.persistence.user.api
+
+import kotlinx.coroutines.ThreadContextElement
+import kotlinx.coroutines.asContextElement
+import mu.KotlinLogging
+import org.joda.time.DateTimeZone
+import org.projectforge.business.configuration.ConfigurationServiceAccessor
+import org.projectforge.business.user.UserLocale
+import org.projectforge.business.user.UserTimeZone
+import org.projectforge.framework.i18n.I18nHelper
+import org.projectforge.framework.persistence.user.entities.PFUserDO
+import java.text.Collator
+import java.time.DayOfWeek
+import java.time.ZoneId
+import java.util.*
+
+private val log = KotlinLogging.logger {}
+
+/**
+ * ThreadLocal context.
+ *
+ * @author Kai Reinhard (k.reinhard@micromata.de)
+ */
+object ThreadLocalUserContext {
+    private val threadLocalUserContext = ThreadLocal&lt;UserContext?&gt;()
+    private val threadLocalLocale = ThreadLocal&lt;Locale?&gt;()
+
+    val userContextAsContextElement: ThreadContextElement&lt;UserContext?&gt;
+        get() = threadLocalUserContext.asContextElement(threadLocalUserContext.get())
+
+    /*
+    suspend fun getCurrentUser(): UserContext? {
+        return if (kotlin.coroutines.coroutineContext == kotlin.coroutines.EmptyCoroutineContext) {
+            // Not in a Coroutine: access to ThreadLocal
+            threadLocalUserContext.get()
+        } else {
+            // In a Coroutine: access to CoroutineContext
+            kotlin.coroutines.coroutineContext[UserContextElement]?.getUserContext()
+        }
+    }*/
+
+    val localeAsContextElement: ThreadContextElement&lt;Locale?&gt;
+        get() = threadLocalLocale.asContextElement(threadLocalLocale.get())
+
+    /**
+     * @return The user of ThreadLocal if exists.
+     */
+    @JvmStatic
+    val loggedInUser: PFUserDO?
+        get() = userContext?.user
+
+    /**
+     * The logged-in user. If no logged-in user exists, an exception is thrown.
+     */
+    @JvmStatic
+    val requiredLoggedInUser: PFUserDO
+        get() = userContext!!.user!!
+
+    @JvmStatic
+    var userContext: UserContext?
+        get() = threadLocalUserContext.get()
+        set(userContext) {
+            val oldUser = loggedInUser
+            var newUser = userContext?.user
+            if (log.isDebugEnabled) {
+                log.debug(
+                    if (newUser != null) newUser.userDisplayName else if (oldUser != null) oldUser.userDisplayName else &quot;null&quot;
+                )
+            }
+            threadLocalUserContext.set(userContext)
+            threadLocalLocale.set(null)
+            if (log.isDebugEnabled) {
+                newUser = loggedInUser
+                log.debug(if (newUser != null) newUser.userDisplayName else &quot;null&quot;)
+            }
+        }
+
+    @JvmStatic
+    fun clear() {
+        threadLocalUserContext.set(null)
+        threadLocalLocale.set(null)
+    }
+
+    /**
+     * If given user is null, [.clear] is called. Creates a new UserContext object containing the given user.
+     *
+     * @param user
+     * @return UserContext registered or null, if no user given.
+     */
+    @JvmStatic
+    fun setUser(user: PFUserDO?): UserContext? {
+        if (user == null) {
+            clear()
+            return null
+        }
+        val userContext = UserContext(user)
+        ThreadLocalUserContext.userContext = userContext
+        return userContext
+    }
+
+    /**
+     * @return The user id of the ThreadLocal user if exists.
+     * @see .getUser
+     */
+    @JvmStatic
+    val loggedInUserId: Long?
+        get() = loggedInUser?.id
+
+    /**
+     * @return The user id of the ThreadLocal user if exists.
+     * @see .getUser
+     */
+    @JvmStatic
+    val requiredLoggedInUserId: Long
+        get() = requiredLoggedInUser.id!!
+
+
+    /**
+     * For non logged-in users and public pages, the locale could be set.
+     * @return The locale of ThreadLocalLocale or null, if not given.
+     */
+    fun internalGetThreadLocalLocale(): Locale? {
+        return threadLocalLocale.get()
+    }
+    /**
+     * @return The locale of the user if exists, otherwise default locale.
+     * @see .getUser
+     * @see PFUserDO.getLocale
+     */
+    /**
+     * Only for anonymous usage (needed by translations). Will throw an exception, if an user is already attached.
+     *
+     * @param locale
+     */
+    @JvmStatic
+    var locale: Locale
+        get() = getLocale(null)
+        set(locale) {
+            check(loggedInUser == null) { &quot;Can&#x27;t register locale if an user is already registered. setLocale(Locale) should only used for public/anonymous services.&quot; }
+            threadLocalLocale.set(locale)
+        }
+
+    /**
+     * @return The locale as String for external systems: e. g. &#x27;de-DE&#x27; instead of &#x27;de_DE&#x27;.
+     * @see .getLocale
+     */
+    val localeAsString: String
+        get() = getLocale(null).toString().replace(&#x27;_&#x27;, &#x27;-&#x27;)
+
+    /**
+     * If context user&#x27;s locale is null and the given defaultLocale is not null, then the context user&#x27;s client locale
+     * will be set to given defaultLocale.
+     *
+     * @param defaultLocale will be used, if the context user or his user locale does not exist. If given, it&#x27;s the client&#x27;s
+     * locale (browser locale) in common.
+     * @return The locale of the user if exists, otherwise the given default locale or if null the system&#x27;s default
+     * locale.
+     * @see .getUser
+     * @see PFUserDO.getLocale
+     */
+    @JvmStatic
+    fun getLocale(defaultLocale: Locale?): Locale {
+        val user = loggedInUser
+        return UserLocale.determineUserLocale(user, defaultLocale)
+    }
+
+    /**
+     * @return The timeZone of the user if exists, otherwise default timezone of the Configuration
+     * @see .getUser
+     * @see PFUserDO.getTimeZone
+     * @see Configuration.getDefaultTimeZone
+     */
+    @JvmStatic
+    val timeZone: TimeZone
+        get() = UserTimeZone.determineUserTimeZone()
+
+    /**
+     * @return The timeZone of the user if exists, otherwise default timezone of the Configuration
+     * @see .getUser
+     * @see PFUserDO.getTimeZone
+     * @see Configuration.getDefaultTimeZone
+     */
+    val zoneId: ZoneId
+        get() = timeZone.toZoneId()
+
+    @JvmStatic
+    @get:Deprecated(&quot;&quot;)
+    val dateTimeZone: DateTimeZone
+        get() {
+            val timeZone = timeZone
+            return DateTimeZone.forTimeZone(timeZone)
+        }
+
+    /**
+     * The first day of the week, configured at the given user, if not configured [org.projectforge.business.configuration.ConfigurationService.getDefaultFirstDayOfWeek] is
+     * used.
+     */
+    @JvmStatic
+    val firstDayOfWeek: DayOfWeek?
+        get() {
+            val user = loggedInUser
+            if (user != null) {
+                val firstDayOfWeek = user.firstDayOfWeek
+                if (firstDayOfWeek != null) {
+                    return firstDayOfWeek
+                }
+            }
+            return ConfigurationServiceAccessor.get().defaultFirstDayOfWeek
+        }
+
+    /**
+     * @return 1 - Monday, ..., 7 - Sunday
+     */
+    @JvmStatic
+    val firstDayOfWeekValue: Int
+        get() = firstDayOfWeek!!.value
+
+    @JvmStatic
+    fun getLocalizedMessage(messageKey: String?, vararg params: Any?): String {
+        return I18nHelper.getLocalizedMessage(loggedInUser, messageKey, *params)
+    }
+
+    @JvmStatic
+    fun getLocalizedString(key: String?): String {
+        return I18nHelper.getLocalizedMessage(loggedInUser, key)
+    }
+
+    /**
+     * Use this instead of String[String.compareTo], because it uses the user&#x27;s locale for comparison.
+     *
+     * @param a
+     * @param b
+     * @return
+     */
+    fun localeCompare(a: String?, b: String?): Int {
+        return localeComparator.compare(a, b)
+    }
+
+    /**
+     * Use this instead of String[String.compareTo], because it uses the user&#x27;s locale for comparison.
+     *
+     * @return
+     */
+    val localeComparator: Comparator&lt;Any?&gt;
+        get() = Collator.getInstance(locale)
+}</pre>
+<h2>Git History</h2><div class="hist"><pre>868d6abb7 2025 -> 2026
+bbdb5825b Scripts: exception -> log, UserContext.refreshUser() handling changed.
+96e97e738 Nothing real.
+00ec94e68 New version of fr-opensagres-xdocreport-poi-xwpf-converter-pdf = "2.1.0" DataTransferBridge added for more convenient access of datatransfer from other modules (Merlin, business etc.), ThreadLocalUserContext improved for using inside Kotlin coroutines.
+63081666f Source file headers: 2024-> 2025.
+1012e347a Migration stuff in progress... (all tests of all packages: OK).
+67805f2fc ThreadLocalUserContext.user -> ThreadLocalUserContext.loggedInUser (renamed for avoiding mis-understandings in code).
+4c04cfd65 MAJOR-CHANGE! Migration of integer id's to Long id's (including fk's etc.)
+4e5274245 Migration stuff in progress...
+e33c8b9c2 Migration stuff in progress...
+b6092df09 Copyright 2023 -> 2024
+ab45d51fa Copyright 2001-2022 -> 2001-2023.
+7bc51ed17 WIP: Jobs.
+38bec971a ThreadLocal -> Kotlin</pre></div>
+</body></html>

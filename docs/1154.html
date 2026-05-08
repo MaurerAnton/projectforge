@@ -1,0 +1,44 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>1154</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:2em;color:#444}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}</style></head>
+<body><div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="1153.html">← Prev</a> · <a href="1155.html">Next →</a></div>
+<h1>1154: <code>VacationCache.kt</code></h1>
+<div class="meta">Cache, projectforge-business/src/main/kotlin/org/projectforge/business/vacation/VacationCache.kt</div>
+<div class="c">In-memory cache of all active (non-deleted) vacation entries, refreshed on DAO change events and supporting period/user-group filtered queries.</div>
+
+<h2>Architecture</h2>
+<p><code>VacationCache</code> extends <code>AbstractCache</code> and implements <code>BaseDOModifiedListener&lt;VacationDO&gt;</code>. It maintains a thread-safe <code>Map&lt;Long?, VacationDO&gt;</code> and a copy-on-read <code>List&lt;VacationDO&gt;</code> to prevent <code>ConcurrentModificationException</code>.</p>
+
+<h3>Refresh Mechanism</h3>
+<p><code>refresh()</code> is called by the cache framework (synchronized at the framework level). It runs within an isolated read-only transaction via <code>PfPersistenceService.runIsolatedReadOnly</code>, calls <code>VacationDao.selectAll(checkAccess = false)</code>, and filters out deleted entries. After the transaction, the map and list are replaced atomically.</p>
+
+<h3>Real-time Updates</h3>
+<p><code>afterInsertOrModify(obj, operationType)</code> is registered via <code>VacationDao.register(this)</code> in <code>@PostConstruct</code>. When any vacation entry is inserted or modified, the cache updates its internal map and regenerates the list copy under a synchronized block. This keeps the cache current without full refreshes.</p>
+
+<h3>Query: <code>getVacationForPeriodAndUsers</code></h3>
+<p>The primary query method filters cached vacations by start/end date overlap, access control (<code>VacationDao.hasSelectAccess</code>), and group/user membership. It resolves employees through <code>EmployeeCache</code> and checks group membership via <code>UserGroupCache</code>. Null safety is enforced for both <code>groupIds</code> and <code>userIds</code> parameters.</p>
+
+<h2>Design Rationale</h2>
+<p>Vacation entries are read-heavy (calendar views, conflict detection, team overviews) but write-infrequent. Caching all entries avoids repeated database round-trips. The listener-based update keeps the cache hot without polling. Using <code>AbstractCache</code> as a base provides automatic expiration and refresh scheduling through the framework's <code>CacheHelper</code>.</p>
+
+<h2>Git History</h2><div class="hist"><pre>868d6abb7 2025 -> 2026
+600951ee0 2025 -> 2026
+63081666f Source file headers: 2024-> 2025.
+199c26801 Source file headers: 2024-> 2025.
+0ceceb28f All cache refreshs now running in isolated transactions or contexts.
+5476ee525 All cache refreshs now running in isolated transactions or contexts.
+c14b18a48 Migration stuff in progress...
+0af4f0311 Migration stuff in progress...
+87dd5b87c AuftragsCache refactored, migration stuff...
+e51b8eac4 AuftragsCache refactored, migration stuff...
+6f7e0fbc7 Migration stuff in progress...
+a435fdb04 Migration stuff in progress...
+5989b32fd BaseDao: onChangeLister refactored.
+88d487952 BaseDao: onChangeLister refactored.
+1b50060c3 BaseDao: renamed get->find, save->insert, getList->select, load->select
+514533e99 BaseDao: renamed get->find, save->insert, getList->select, load->select
+87aaf6a5a Migration stuff: BaseDao refactored, internal* methods renamed.
+41217b065 Migration stuff: BaseDao refactored, internal* methods renamed.
+3aeda5ef5 Big change: all save/update/...InTrans renamed (InTrans removed).
+1fe45f376 Big change: all save/update/...InTrans renamed (InTrans removed).
+</pre></div>
+</body></html>

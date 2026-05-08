@@ -1,0 +1,623 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>1146</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:2em;color:#444}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}</style></head>
+<body><div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="1145.html">← Prev</a> · <a href="1147.html">Next →</a></div>
+<h1>1146: <code>UserService.java</code></h1>
+<div class="meta">Service, projectforge-business/src/main/java/org/projectforge/business/user/service/UserService.java</div>
+<div class="c">Core service for user management operations: user creation, authentication, password management, account lifecycle (activation/deactivation), and profile updates.</div>
+<h2>Architecture</h2>
+<h3>Service Layer</h3><p>Spring <code>@Service</code> orchestrating user operations: <code>createUser()</code>, <code>updateUser()</code>, <code>changePassword()</code>, <code>activateUser()</code>, <code>deactivateUser()</code>. Delegates persistence to <code>UserDao</code> and rights to <code>UserRightService</code>.</p>
+<h3>Validation Chain</h3><p>Applies: username uniqueness check, password policy compliance, email format validation, required field verification. Business rules enforced before DAO calls.</p>
+<h3>Design Rationale</h3><p>Service layer adds business logic and validation that doesn't belong in the DAO (pure persistence) or controllers (presentation). Enables transactional multi-step operations.</p>
+<h2>Source Code</h2>
+<pre>/////////////////////////////////////////////////////////////////////////////
+//
+// Project ProjectForge Community Edition
+//         www.projectforge.org
+//
+// Copyright (C) 2001-2026 Micromata GmbH, Germany (www.micromata.com)
+//
+// ProjectForge is dual-licensed.
+//
+// This community edition is free software; you can redistribute it and/or
+// modify it under the terms of the GNU General Public License as published
+// by the Free Software Foundation; version 3 of the License.
+//
+// This community edition is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General
+// Public License for more details.
+//
+// You should have received a copy of the GNU General Public License along
+// with this program; if not, see http://www.gnu.org/licenses/.
+//
+/////////////////////////////////////////////////////////////////////////////
+
+package org.projectforge.business.user.service;
+
+import jakarta.annotation.PostConstruct;
+import org.apache.commons.collections4.CollectionUtils;
+import org.apache.commons.lang3.StringUtils;
+import org.apache.commons.lang3.Validate;
+import org.projectforge.business.common.BaseUserGroupRightService;
+import org.projectforge.business.configuration.ConfigurationService;
+import org.projectforge.business.login.Login;
+import org.projectforge.business.login.LoginHandler;
+import org.projectforge.business.login.PasswordCheckResult;
+import org.projectforge.business.password.PasswordQualityService;
+import org.projectforge.business.user.UserDao;
+import org.projectforge.business.user.UserGroupCache;
+import org.projectforge.business.user.UserPasswordDao;
+import org.projectforge.business.user.UsersComparator;
+import org.projectforge.common.StringHelper;
+import org.projectforge.framework.access.AccessChecker;
+import org.projectforge.framework.configuration.SecurityConfig;
+import org.projectforge.framework.i18n.I18nKeyAndParams;
+import org.projectforge.framework.persistence.api.EntityCopyStatus;
+import org.projectforge.framework.persistence.jpa.PfPersistenceService;
+import org.projectforge.framework.persistence.user.api.ThreadLocalUserContext;
+import org.projectforge.framework.persistence.user.entities.PFUserDO;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
+
+import java.io.Serializable;
+import java.util.*;
+import java.util.stream.Collectors;
+
+@Service
+public class UserService {
+    private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(UserService.class);
+
+    private static final String MESSAGE_KEY_OLD_PASSWORD_WRONG = &quot;user.changePassword.error.oldPasswordWrong&quot;;
+
+    private static final String MESSAGE_KEY_LOGIN_PASSWORD_WRONG = &quot;user.changeWlanPassword.error.loginPasswordWrong&quot;;
+
+    private static UserService instance;
+
+    private final UsersComparator usersComparator = new UsersComparator();
+    private UserGroupCache userGroupCache;
+    private ConfigurationService configurationService;
+    private UserDao userDao;
+    private UserPasswordDao userPasswordDao;
+    private AccessChecker accessChecker;
+    private PasswordQualityService passwordQualityService;
+    private PfPersistenceService persistenceService;
+
+    /**
+     * Needed by Wicket for proxying.
+     */
+    public UserService() {
+    }
+
+    @PostConstruct
+    private void postConstruct() {
+        instance = this;
+    }
+
+    @Autowired
+    public UserService(AccessChecker accessChecker, ConfigurationService configurationService, PasswordQualityService passwordQualityService, UserDao userDao, UserPasswordDao userPasswordDao, UserGroupCache userGroupCache, PfPersistenceService persistenceService) {
+        this.accessChecker = accessChecker;
+        this.configurationService = configurationService;
+        this.passwordQualityService = passwordQualityService;
+        this.userDao = userDao;
+        this.userPasswordDao = userPasswordDao;
+        this.userGroupCache = userGroupCache;
+        this.persistenceService = persistenceService;
+    }
+
+    /**
+     * @param userIds
+     */
+    public List&lt;String&gt; getUserNames(final String userIds) {
+        if (StringUtils.isEmpty(userIds)) {
+            return null;
+        }
+        final long[] ids = StringHelper.splitToLongs(userIds, &quot;,&quot;, false);
+        final List&lt;String&gt; list = new ArrayList&lt;&gt;();
+        for (final long id : ids) {
+            final PFUserDO user = userGroupCache.getUser(id);
+            if (user != null) {
+                list.add(user.getFullname());
+            } else {
+                log.warn(&quot;User with id &#x27;&quot; + id + &quot;&#x27; not found in UserGroupCache. userIds string was: &quot; + userIds);
+            }
+        }
+        return list;
+    }
+
+    public String getUserMails(final Collection&lt;PFUserDO&gt; users) {
+        if (CollectionUtils.isEmpty(users)) {
+            return &quot;&quot;;
+        }
+        StringBuilder sb = new StringBuilder();
+        boolean first = true;
+        for (PFUserDO user : users) {
+            String mail = user.getEmail();
+            if (StringUtils.isNotBlank(mail)) {
+                if (first) {
+                    first = false;
+                } else {
+                    sb.append(&quot;, &quot;);
+                }
+                sb.append(mail);
+            }
+        }
+        return sb.toString();
+    }
+
+    /**
+     * @return Sorted list of not deleted and not deactivated users.
+     */
+    public Collection&lt;PFUserDO&gt; getSortedUsers() {
+        TreeSet&lt;PFUserDO&gt; sortedUsers = new TreeSet&lt;&gt;(usersComparator);
+        final Collection&lt;PFUserDO&gt; allusers = userGroupCache.getAllUsers();
+        final PFUserDO loggedInUser = ThreadLocalUserContext.getRequiredLoggedInUser();
+        for (final PFUserDO user : allusers) {
+            if (!user.getDeleted() &amp;&amp; !user.getDeactivated() &amp;&amp; userDao.hasUserSelectAccess(loggedInUser, user, false)) {
+                sortedUsers.add(user);
+            }
+        }
+        return sortedUsers;
+    }
+
+    public Collection&lt;PFUserDO&gt; getSortedUsers(final String userIds) {
+        if (StringUtils.isEmpty(userIds)) {
+            return null;
+        }
+        TreeSet&lt;PFUserDO&gt; sortedUsers = new TreeSet&lt;&gt;(usersComparator);
+        final long[] ids = StringHelper.splitToLongs(userIds, &quot;,&quot;, false);
+        for (final long id : ids) {
+            final PFUserDO user = userGroupCache.getUser(id);
+            if (user != null) {
+                sortedUsers.add(user);
+            } else {
+                log.warn(&quot;Group with id &#x27;&quot; + id + &quot;&#x27; not found in UserGroupCache. groupIds string was: &quot; + userIds);
+            }
+        }
+        return sortedUsers;
+    }
+
+    public String getUserIds(final Collection&lt;PFUserDO&gt; users) {
+        return BaseUserGroupRightService.asSortedIdStrings(users);
+    }
+
+    public List&lt;PFUserDO&gt; getAllUsers() {
+        try {
+            return userDao.selectAll(false);
+        } catch (final Exception ex) {
+            log.error(&quot;******* Exception while getting users from data-base (OK only in case of migration from older versions): &quot; + ex.getMessage(), ex);
+            return new ArrayList&lt;&gt;();
+        }
+    }
+
+    public List&lt;PFUserDO&gt; getAllActiveUsers() {
+        return getAllUsers().stream().filter(u -&gt; !u.getDeactivated() &amp;&amp; !u.getDeleted()).collect(Collectors.toList());
+    }
+
+    /**
+     * @return The user from UserGroupCache.
+     */
+    public PFUserDO getUser(Long userId) {
+        return userGroupCache.getUser(userId);
+    }
+
+    /**
+     * Encrypts the password with a new generated salt string and the pepper string if configured any.
+     *
+     * @param user              The user to user.
+     * @param clearTextPassword as clear text.
+     * @see UserPasswordDao#encryptAndSavePassword(long, char[])
+     */
+    public void encryptAndSavePassword(final PFUserDO user, final char[] clearTextPassword) {
+        encryptAndSavePassword(user, clearTextPassword, true);
+    }
+
+    /**
+     * Encrypts the password with a new generated salt string and the pepper string if configured any.
+     *
+     * @param user              The user to user.
+     * @param clearTextPassword as clear text.
+     */
+    public void encryptAndSavePassword(final PFUserDO user, final char[] clearTextPassword, final boolean checkAccess) {
+        userPasswordDao.encryptAndSavePassword(user.getId(), clearTextPassword, checkAccess);
+    }
+
+    /**
+     * Changes the user&#x27;s password. Checks the password quality and the correct authentication for the old password
+     * before. Also the stay-logged-in-key will be renewed, so any existing stay-logged-in cookie will be invalid.
+     *
+     * @param userId
+     * @param oldPassword Will be cleared at the end of this method due to security reasons.
+     * @param newPassword Will be cleared at the end of this method due to security reasons.
+     * @return Error message key if any check failed or null, if successfully changed.
+     */
+    public List&lt;I18nKeyAndParams&gt; changePassword(final Long userId, final char[] oldPassword, final char[] newPassword) {
+        try {
+            return persistenceService.runInTransaction(context -&gt; {
+                Objects.requireNonNull(userId);
+                Validate.isTrue(oldPassword.length &gt; 0);
+                Validate.isTrue(Objects.equals(userId, ThreadLocalUserContext.getLoggedInUserId()), &quot;User is only allowed to change his own password-&quot;);
+                final PFUserDO user = userDao.find(userId, false);
+                final PFUserDO userCheck = getUser(user.getUsername(), oldPassword, false);
+                if (userCheck == null) {
+                    return Collections.singletonList(new I18nKeyAndParams(MESSAGE_KEY_OLD_PASSWORD_WRONG));
+                }
+                return doPasswordChange(user, oldPassword, newPassword);
+            });
+        } finally {
+            LoginHandler.clearPassword(newPassword);
+            LoginHandler.clearPassword(oldPassword);
+        }
+    }
+
+    /**
+     * Changes the user&#x27;s password. Checks the password quality.
+     * Also the stay-logged-in-key will be renewed, so any existing stay-logged-in cookie will be invalid.
+     *
+     * @param userId
+     * @param newPassword Will be cleared at the end of this method due to security reasons.
+     * @return Error message key if any check failed or null, if successfully changed.
+     */
+    public List&lt;I18nKeyAndParams&gt; changePasswordByAdmin(final Long userId, final char[] newPassword) {
+        try {
+            return persistenceService.runInTransaction(context -&gt; {
+                Objects.requireNonNull(userId);
+                Validate.isTrue(!Objects.equals(userId, ThreadLocalUserContext.getLoggedInUserId()), &quot;Admin user is not allowed to change his own password without entering his login password-&quot;);
+                accessChecker.checkIsLoggedInUserMemberOfAdminGroup();
+                final PFUserDO user = userDao.find(userId, false);
+                return doPasswordChange(user, null, newPassword);
+            });
+        } finally {
+            LoginHandler.clearPassword(newPassword);
+        }
+    }
+
+    private List&lt;I18nKeyAndParams&gt; doPasswordChange(final PFUserDO user, final char[] oldPassword, final char[] newPassword) {
+        Objects.requireNonNull(user);
+        Validate.isTrue(newPassword.length &gt; 0);
+        final List&lt;I18nKeyAndParams&gt; errorMsgKeys = passwordQualityService.checkPasswordQuality(oldPassword, newPassword);
+        if (!errorMsgKeys.isEmpty()) {
+            return errorMsgKeys;
+        }
+        encryptAndSavePassword(user, newPassword);
+        onPasswordChange(user);
+        userDao.update(user, false);
+        Login.getInstance().passwordChanged(user, newPassword);
+        log.info(&quot;Password changed for user: &quot; + user.getId() + &quot; - &quot; + user.getUsername());
+        return Collections.emptyList();
+    }
+
+    /**
+     * Should be called only by password reset (authentication via 2FA.
+     * Changes the user&#x27;s password. Checks the password quality before.
+     * Also the stay-logged-in-key will be renewed, so any existing stay-logged-in cookie will be invalid.
+     *
+     * @param userId
+     * @param newPassword Will be cleared at the end of this method due to security reasons.
+     * @return Error message key if any check failed or null, if successfully changed.
+     */
+    public List&lt;I18nKeyAndParams&gt; internalChangePasswordAfterPasswordReset(final Long userId, final char[] newPassword) {
+        try {
+            Objects.requireNonNull(userId);
+            Validate.isTrue(newPassword.length &gt; 0);
+            Validate.isTrue(ThreadLocalUserContext.getLoggedInUser() == null, &quot;ThreadLocalUser mustn&#x27;t be given on password reset.&quot;);
+
+            final List&lt;I18nKeyAndParams&gt; errorMsgKeys = passwordQualityService.checkPasswordQuality(newPassword);
+            if (!errorMsgKeys.isEmpty()) {
+                return errorMsgKeys;
+            }
+            persistenceService.runInTransaction(context -&gt; {
+                final PFUserDO user = userDao.find(userId, false);
+                ThreadLocalUserContext.setUser(user);
+                encryptAndSavePassword(user, newPassword);
+                onPasswordChange(user);
+                userDao.update(user, false);
+                Login.getInstance().passwordChanged(user, newPassword);
+                log.info(&quot;Password changed for user: &quot; + user.getId() + &quot; - &quot; + user.getUsername());
+                return null;
+            });
+            return Collections.emptyList();
+        } finally {
+            ThreadLocalUserContext.setUserContext(null);
+            LoginHandler.clearPassword(newPassword);
+        }
+    }
+
+    /**
+     * Changes the user&#x27;s WLAN password. Checks the password quality and the correct authentication for the login password before.
+     *
+     * @param userId
+     * @param loginPassword   Will be cleared at the end of this method due to security reasons
+     * @param newWlanPassword Will be cleared at the end of this method due to security reasons
+     * @return Error message key if any check failed or null, if successfully changed.
+     */
+    public List&lt;I18nKeyAndParams&gt; changeWlanPassword(final Long userId, final char[] loginPassword, final char[] newWlanPassword) {
+        try {
+            Objects.requireNonNull(userId);
+            Validate.isTrue(loginPassword.length &gt; 0);
+            Validate.isTrue(Objects.equals(userId, ThreadLocalUserContext.getLoggedInUserId()), &quot;User is only allowed to change his own Wlan/Samba password-&quot;);
+            final PFUserDO user = userDao.find(userId, false);
+            Objects.requireNonNull(user);
+            final PFUserDO userCheck = getUser(user.getUsername(), loginPassword, false); // get user from DB to persist the change of the wlan password time
+            if (userCheck == null) {
+                return Collections.singletonList(new I18nKeyAndParams(MESSAGE_KEY_LOGIN_PASSWORD_WRONG));
+            }
+            return doWlanPasswordChange(user, newWlanPassword);
+        } finally {
+            LoginHandler.clearPassword(loginPassword);
+            LoginHandler.clearPassword(newWlanPassword);
+        }
+    }
+
+    /**
+     * Changes the user&#x27;s password. Checks the password quality.
+     * Also the stay-logged-in-key will be renewed, so any existing stay-logged-in cookie will be invalid.
+     *
+     * @param userId
+     * @param newWlanPassword Will be cleared at the end of this method due to security reasons.
+     * @return Error message key if any check failed or null, if successfully changed.
+     */
+    public List&lt;I18nKeyAndParams&gt; changeWlanPasswordByAdmin(final Long userId, final char[] newWlanPassword) {
+        try {
+            Objects.requireNonNull(userId);
+            Validate.isTrue(!Objects.equals(userId, ThreadLocalUserContext.getLoggedInUserId()), &quot;Admin user is not allowed to change his own password without entering his login password-&quot;);
+            accessChecker.checkIsLoggedInUserMemberOfAdminGroup();
+            final PFUserDO user = userDao.find(userId, false);
+            return doWlanPasswordChange(user, newWlanPassword);
+        } finally {
+            LoginHandler.clearPassword(newWlanPassword);
+        }
+    }
+
+    private List&lt;I18nKeyAndParams&gt; doWlanPasswordChange(final PFUserDO user, final char[] newWlanPassword) {
+        Login.getInstance().wlanPasswordChanged(user, newWlanPassword); // change the wlan password
+        user.setLastWlanPasswordChange(new Date());
+        userDao.update(user, false);
+        log.info(&quot;WLAN Password changed for user: &quot; + user.getId() + &quot; - &quot; + user.getUsername());
+        return Collections.emptyList();
+    }
+
+
+    public void onPasswordChange(final PFUserDO user) {
+        userPasswordDao.onPasswordChange(user);
+    }
+
+    /**
+     * @param username
+     * @param password
+     * @param updateSaltAndPepperIfNeeded
+     * @return
+     */
+    @SuppressWarnings(&quot;unchecked&quot;)
+    protected PFUserDO getUser(final String username, final char[] password, final boolean updateSaltAndPepperIfNeeded) {
+        final List&lt;PFUserDO&gt; list = userDao.findByUsername(username);
+        if (list == null || list.isEmpty() || list.get(0) == null) {
+            return null;
+        }
+        final PFUserDO user = list.get(0);
+        final PasswordCheckResult passwordCheckResult = userPasswordDao.checkPassword(user, password);
+        if (!passwordCheckResult.isOK()) {
+            return null;
+        }
+        if (updateSaltAndPepperIfNeeded &amp;&amp; passwordCheckResult.isPasswordUpdateNeeded()) {
+            log.info(&quot;Giving salt and/or pepper to the password of the user &quot; + user.getId() + &quot;.&quot;);
+            encryptAndSavePassword(user, password, false);
+            userDao.update(user, false);
+        }
+        return user;
+    }
+
+    /**
+     * Ohne Zugangsbegrenzung. Wird bei Anmeldung benötigt.
+     *
+     * @param username
+     * @param password
+     */
+    public PFUserDO authenticateUser(final String username, final char[] password) {
+        Objects.requireNonNull(username);
+        Validate.isTrue(password.length &gt; 0);
+
+        PFUserDO user = getUser(username, password, true);
+        if (user != null) {
+
+            final int loginFailures = user.getLoginFailures();
+            final Date lastLogin = user.getLastLogin();
+            userDao.updateUserAfterLoginSuccess(user);
+            if (!user.hasSystemAccess()) {
+                log.warn(&quot;Deleted/deactivated user tried to login: &quot; + user);
+                return null;
+            }
+            user.setLoginFailures(loginFailures); // Restore loginFailures for current user session.
+            user.setLastLogin(lastLogin); // Restore lastLogin for current user session.
+            return user;
+        }
+        userDao.updateIncrementLoginFailure(username);
+        return null;
+    }
+
+    private String getPepperString() {
+        final SecurityConfig securityConfig = configurationService.getSecurityConfig();
+        if (securityConfig != null) {
+            return securityConfig.getPasswordPepper();
+        }
+        return &quot;&quot;;
+    }
+
+    public PFUserDO getInternalByUsername(String username) {
+        return userDao.getInternalByName(username);
+    }
+
+    /**
+     * @param id
+     * @return the user from db (UserDao).
+     */
+    public PFUserDO find(Serializable id) {
+        return find(id, true);
+    }
+
+    public PFUserDO find(Serializable id, boolean checkAccess) {
+        return userDao.find(id, checkAccess);
+    }
+
+    public Long insert(PFUserDO user) {
+        return userDao.insert(user, true);
+    }
+
+    public Long insert(PFUserDO user, boolean checkAccess) {
+        return userDao.insert(user, checkAccess);
+    }
+
+    public void markAsDeleted(PFUserDO user, boolean checkAccess) {
+        userDao.markAsDeleted(user, checkAccess);
+    }
+
+    public boolean doesUsernameAlreadyExist(PFUserDO user) {
+        return userDao.doesUsernameAlreadyExist(user);
+    }
+
+    public EntityCopyStatus update(PFUserDO user) {
+        return userDao.update(user);
+    }
+
+    /**
+     * Without access checking!!! Secret fields are cleared.
+     *
+     * @see UserDao#selectAll()
+     */
+    public List&lt;PFUserDO&gt; selectAll(boolean checkAccess) {
+        return userDao.selectAll(checkAccess);
+    }
+
+    public UserDao getUserDao() {
+        return userDao;
+    }
+
+    public void updateMyAccount(PFUserDO data) {
+        userDao.updateMyAccount(data);
+    }
+
+    public void undelete(PFUserDO dbUser) {
+        userDao.undelete(dbUser);
+    }
+
+    public List&lt;PFUserDO&gt; findUserByMail(String email) {
+        List&lt;PFUserDO&gt; userList = new ArrayList&lt;&gt;();
+        for (PFUserDO user : userGroupCache.getAllUsers()) {
+            if (user.getEmail() != null &amp;&amp; user.getEmail().toLowerCase().equals(email.toLowerCase())) {
+                userList.add(user);
+            }
+        }
+        return userList;
+    }
+
+    /**
+     * Encrypts the given data with the user&#x27;s password hash. If the user changes his password, decryption isn&#x27;t possible
+     * anymore.
+     *
+     * @param data The data to encrypt.
+     * @return The encrypted data.
+     * @see UserDao#encrypt(String)
+     */
+    public String encrypt(String data) {
+        return userDao.encrypt(data);
+    }
+
+    /**
+     * Decrypts the given data with the user&#x27;s password hash. If the user changes his password, decryption isn&#x27;t possible
+     * anymore.
+     *
+     * @param encrypted The data to encrypt.
+     * @return The decrypted data.
+     * @see UserDao#decrypt(String)
+     */
+    public String decrypt(String encrypted) {
+        return userDao.decrypt(encrypted);
+    }
+
+    /**
+     * Decrypts the given data with the user&#x27;s password hash. If the user changes his password, decryption isn&#x27;t possible
+     * anymore.
+     *
+     * @param encrypted The data to encrypt.
+     * @param userId    Use the password of the given user (used by CookieService, because user isn&#x27;t yet logged-in).
+     * @return The decrypted data.
+     * @see UserDao#decrypt(String)
+     */
+    public String decrypt(String encrypted, Long userId) {
+        return userDao.decrypt(encrypted, userId);
+    }
+
+    public static UserService getInstance() {
+        return instance;
+    }
+}</pre>
+<h2>Git History</h2><div class="hist"><pre>868d6abb7 2025 -> 2026
+7893cea1e Selection of User/Employee improved (without autocompletion), see vacation editing... EmployeeService.selectAllActive returns now sorted list of employees.
+63081666f Source file headers: 2024-> 2025.
+3c42485eb Migration stuff in progress... (all tests of all packages: OK).
+a33f8f203 Migration stuff in progress... (all tests of all packages: OK).
+87dd5b87c AuftragsCache refactored, migration stuff... (all tests OK)
+1b50060c3 BaseDao: renamed: get -> find, save -> insert, getList -> select, load -> select
+87aaf6a5a Migration stuff in progress... BaseDao refactored (not yet finished) internal* methods renamed.
+a72903e36 *.java, *.kt: StringBuffer -> StringBuilder.
+3aeda5ef5 Big change: all save|update|...InTrans renamed (InTrans removed). PfPesistenceContext as param not needed anymore (ThreadLocal is used instead). (all tests of all packages: OK).
+67805f2fc ThreadLocalUserContext.user -> ThreadLocalUserContext.loggedInUser (renamed for avoiding mis-understandings in code).
+1135ccbca Persistence: functions renamed: *NewTrans -> *InTrans
+b095e6f7d !!!!! Big change of Transaction handling: Re-uses PfPersistenceContext as much as possible (not yet finished). Tests doesn't yet run.
+4c04cfd65 MAJOR-CHANGE! Migration of integer id's to Long id's (including fk's etc.)
+e33c8b9c2 Migration stuff in progress...
+06828f490 Migration stuff in progress...
+b6092df09 Copyright 2023 -> 2024
+22b8d9d6f WIP: phone calls for Sipgate
+612cd1dca UserService: WLAN-PW change: fix of timestamp?
+01dca2941 UserService: WLAN-PW change: fix of timestamp?
+2a8575c7f Bugfix (to be tested): handle last wlan password change.
+ab45d51fa Copyright 2001-2022 -> 2001-2023.
+73b0be50b org.apache.commons.collections -> org.apache.commons.collections4
+ca5249851 Change of WLAN-Password fixed.
+18a7481a5 Finalization of UserPagesRest (SetupPage)
+3256dc079 (WLAN)-Password changing refactored (is now used for changing own passwords and other's passwords by admins).
+6be8efa1b Show time of last password change (my account and user edit)
+ea7ec2556 Refactored (due to security reasons): PFUserDO.password -> UserPasswordDO.passwordHash
+c2128f052 GroupEditForm: Add list of e-mails of assigned users (e. g. for mailing).
+d62d71d06 ChangePassword modified: UserService, ChangePasswordPageRest
+5f7ef41b8 Copyright 2021 -> 2022
+8641d51bc CookieService: refactored (format of stayLoggedInCookie changed, old format is supported). WIP: 2FA
+6ab17aeea DataTransferAreaDao searches now also for personal boxes by user name (if search string is given).
+02128a8fb Ldap works
+87a1c4cfc Passwords (char[]) will be cleared in most backend methods due to security reasons.
+0050a24d9 String password -> char[] password. Not yet tested: LDAP client/master and change of Wlan-Password.
+c0f2b9de0 Tenants functionality removed everywhere (untested).
+ceb63e8a1 Source code header: (C) 2001-2021.
+2b542af96 wip: MyAccountPageRest
+d8da31ee3 UserService: changePassword fixed.
+dcee9262d NPE fix in UserService.onPasswordChange
+6b26a60f6 NumberHelper.getSecureRandomUrlSaveString and getSecureRandomBas64String -> getSecureRandomAlphanumeric
+89324beda User Authentication: encryption and UserAuthenticationsService added.
+6d99ca8ed WIP: UserTokenType's...
+cf5c5fa66 UserService: update passwort with salt and pepper in data base.
+7c1c48782 Replacing more instance of java.sql.Date with java.time.LocalDate Replacing instances of java sql.Timestamp with java.util.Date
+7c79f1922 Copyright of source header -> 2020.
+2d2a11210 BaseDao: bulk update runs now in one transaction, HistoryAdapter ops are now part of update/insert transaction. DatevImportDao works now.
+8f96c5a56 Heavy WIP: Remove @Transaction annotations....
+3a2f340f4 UserDao warning fixed regarding overriding hasSelect methods: BaseDao.hasSelectAccess(PFUserDO, boolean) -> hasUserSelectAccess, hasSelectAccess(PFUserDO, O, boolean) -> hasUserSelectAccess.
+73a9755df More code cleanup: - Collapsed catch blocks that did the exact same things - Replaced ArrayList<Class> with ArrayList<> - Replaced StringBuffer with StringBuilder - Removed a few usages of deprecated classes (mainly HSSFColors in Excel) - Replace Collections.sort with List.sort
+000ca723d Remove pointless boolean expressions (business)
+bd38598cc UserService: java doc.
+2b5524e65 Wicket needs default constructor in UserService for creating proxy object.
+dd5ca38ac CopyRight of all java file-header updated or created.
+10c2bed49 !!!UserDao, UserService: More protection of PFUserDO's secret fields. Elements after loading must be evicted (otherwise the db is modified by ereasing the secret fields)
+e772507cb !!!UserDao, UserService: More protection of PFUserDO's secret fields.
+c7ed4cdc2 UserService: Don't copy secret fields for context user.
+614328623 PFUserDO.java -> PFUserDO.kt
+9a6362462 UserServiceImpl and UserPreferencesServiceImpl and their interface merged. Impl class will be added, if really needed. I don't like interfaces with only one impl class if no other implementations are planned.
+1d135db42 PROJECTFORGE-3287 First draw
+d590fdcb7 PROJECTFORGE-2967 fix bug with singleton in PasswordQualityService, refactorings
+10286895a PROJECTFORGE-2967 Set up set for I18n messages password change
+8b5fd79dd PROJECTFORGE-2967 check for same password in password change
+8caa56314 refactor Password Quality Check + setup multiple i18n as return messages
+7ea3d5932 PROJECTFORGE-3048 use configured min password length, fix findbugs issues
+91eab214a PROJECTFORGE-2579 create history entry for the last wlan password change, set the LDAP field “sambaPwdLastSet” only if the wlan password is changed
+383ad7cd6 PROJECTFORGE-2577 add button to change WLAN password on my account page
+438b8e464 PROJECTFORGE-2304 Add user, if email match
+9ebb88522 Initial commit</pre></div>
+</body></html>

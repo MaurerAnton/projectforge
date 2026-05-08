@@ -1,0 +1,116 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>#2242</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}.hist{font-size:.85em;color:#555}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}</style></head>
+<body><div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="2241.html">← Prev</a> · <a href="2243.html">Next →</a></div>
+<h1>#2242: <code>TextFieldModification.kt</code></h1>
+<div class="meta">Data Class, <code>projectforge-rest/src/main/kotlin/org/projectforge/rest/multiselect/TextFieldModification.kt</code> (99 lines)</div>
+<div class="c">Source file: TextFieldModification.kt - data class in ProjectForge REST module.</div>
+<h2>Source Code</h2><pre>/////////////////////////////////////////////////////////////////////////////
+//
+// Project ProjectForge Community Edition
+//         www.projectforge.org
+//
+// Copyright (C) 2001-2026 Micromata GmbH, Germany (www.micromata.com)
+//
+// ProjectForge is dual-licensed.
+//
+// This community edition is free software; you can redistribute it and/or
+// modify it under the terms of the GNU General Public License as published
+// by the Free Software Foundation; version 3 of the License.
+//
+// This community edition is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General
+// Public License for more details.
+//
+// You should have received a copy of the GNU General Public License along
+// with this program; if not, see http://www.gnu.org/licenses/.
+//
+/////////////////////////////////////////////////////////////////////////////
+
+package org.projectforge.rest.multiselect
+
+import org.projectforge.common.BeanHelper
+
+object TextFieldModification {
+  fun processTextParameter(
+    data: Any,
+    property: String,
+    params: Map&lt;String, MassUpdateParameter&gt;,
+  ) {
+    val param = params[property] ?: return
+    if (param.delete == true &amp;&amp; param.append == true) {
+      // Can't append AND delete text.
+      return
+    }
+    val oldValue = BeanHelper.getProperty(data, property) as String?
+    getNewTextValue(oldValue, param)?.let { newValue -&gt;
+      BeanHelper.setProperty(data, property, newValue)
+    }
+  }
+
+  /**
+   * @param param If append value is true, the given textValue of param will be appended to the oldValue (if textValue isn't already
+   * contained in oldValue, otherwise null is returned).
+   * @return The new Value to set or null, if no modification should done..
+   */
+  fun getNewTextValue(oldValue: String?, param: MassUpdateParameter?): String? {
+    param ?: return null
+    val replaceText = param.replaceText
+    if (param.hasError) {
+      // Don't proceed on errors
+      return oldValue
+    }
+    if (param.delete == true) {
+      return if (param.textValue.isNullOrBlank()) {
+        // Whole field should be empty:
+        ""
+      } else {
+        // Only occurrence of textValue should be deleted:
+        // Delete full line:
+        oldValue?.replace("""\n\s*${param.textValue}\s*\n""".toRegex(RegexOption.IGNORE_CASE), "\n")
+          // Delete occurrence including leading spaces:
+          ?.replace("""\s*${param.textValue}""".toRegex(RegexOption.IGNORE_CASE), "")
+      }
+    }
+    param.textValue.let { newValue -&gt;
+      if (newValue.isNullOrBlank()) {
+        return null // Nothing to do.
+      }
+      if (!replaceText.isNullOrEmpty()) {
+        // Replace text
+        return if (oldValue.isNullOrEmpty()) {
+          oldValue
+        } else {
+          oldValue.replace(newValue, replaceText, ignoreCase = true)
+        }
+      }
+
+      if (param.append != true || oldValue.isNullOrBlank()) {
+        return param.textValue // replace oldValue by this value.
+      }
+      return appendText(oldValue, newValue)
+    }
+  }
+
+  fun appendText(oldValue: String?, appendText: String): String? {
+    if (oldValue.isNullOrBlank()) {
+      return appendText // replace oldValue by this value.
+    }
+    return if (!oldValue.contains(appendText.trim(), true)) {
+      "${oldValue.trimEnd()}\n$appendText" // Append new value.
+    } else {
+      null // Leave it untouched, because the new value is already contained in old value.
+    }
+  }
+}</pre>
+<h2>Git History</h2><div class="hist"><pre>868d6abb7 2025 -&gt; 2026
+63081666f Source file headers: 2024-&gt; 2025.
+a73905c14 Fix typos in projectforge*/ directories Found via codespell See c3b0602a893
+b6092df09 Copyright 2023 -&gt; 2024
+ab45d51fa Copyright 2001-2022 -&gt; 2001-2023.
+f55d191f4 MassUpdate: Parameter validation fixed. Excel-Download works now.
+a286007ee Mass update of creditor invoices: handling of discount implemented.
+1588f54fc WIP: mass update
+f0cf77e96 WIP: mass update
+e0c017b94 WIP: mass update</pre></div>
+</body></html>

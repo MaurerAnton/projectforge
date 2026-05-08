@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Source walkthrough: src/actions/authentication.js</title>
+<style>
+  body { font-family: system-ui, -apple-system, sans-serif; max-width: 960px; margin: 2em auto; padding: 0 1em; background: #fafafa; color: #222; line-height: 1.6; }
+  h1 { border-bottom: 2px solid #333; padding-bottom: 0.3em; }
+  h2 { margin-top: 2.5em; border-bottom: 1px solid #ddd; padding-bottom: 0.2em; }
+  h3 { margin-top: 2em; }
+  .meta { background: #f0f0f0; border-radius: 6px; padding: 1em; margin: 1em 0; font-size: 0.9em; }
+  .meta code { background: #e0e0e0; padding: 0.1em 0.3em; border-radius: 3px; }
+  .commentary { margin: 1em 0; line-height: 1.7; background: #fff; padding: 0.5em 1em; border-radius: 6px; border-left: 4px solid #ddd; }
+  .commentary p { margin: 0.6em 0; }
+  a { color: #0366d6; text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  .code-block { background: #f8f8f8; border: 1px solid #ddd; border-radius: 4px; padding: 0.5em; margin: 0.5em 0; overflow-x: auto; }
+  .code-block pre { margin: 0; font-family: 'SF Mono', 'Consolas', monospace; font-size: 0.85em; line-height: 1.5; }
+  .inline-code { background: #e8e8e8; border-radius: 3px; padding: 0.1em 0.3em; font-family: monospace; font-size: 0.9em; }
+  table { border-collapse: collapse; width: 100%; margin: 1em 0; font-size: 0.9em; }
+  th, td { border: 1px solid #ddd; padding: 0.5em; text-align: left; }
+  th { background: #f0f0f0; }
+  tr:nth-child(even) { background: #f8f8f8; }
+  .fn { font-size: 0.85em; color: #666; }
+</style>
+</head>
+<body>
+
+<div style="background:#fff3cd;border:2px solid #ffc107;padding:0.7em 1em;margin:1em 0;border-radius:4px"><strong style="font-size:1.1em">⚠️ Draft documentation</strong><br><span style="font-size:0.85em;color:#856404">Work in progress — some sections may be incomplete, typos possible. Last updated: 2026-05-10.</span></div>
+
+<div style="text-align:right;font-size:0.85em;margin:0.3em 0"><span style="font-weight:bold;text-decoration:underline;margin:0 0.3em">EN</span> | <a href="auth-source-walkthrough-de.html" style="margin:0 0.3em">DE</a> | <a href="auth-source-walkthrough-ru.html" style="margin:0 0.3em">RU</a> | <a href="auth-source-walkthrough-fr.html" style="margin:0 0.3em">FR</a> | <a href="auth-source-walkthrough-es.html" style="margin:0 0.3em">ES</a></div>
+
+
+
+<div style="text-align:right;font-size:0.85em;margin:0.3em 0">
+  <span style="font-weight:bold;text-decoration:underline;margin:0 0.3em">EN</span>
+</div>
+
+<h1>Source walkthrough: <code>src/actions/authentication.js</code></h1>
+
+<div class="meta">
+  <p><strong>File:</strong> <a href="https://github.com/micromata/projectforge/blob/9ed5fbe0f/projectforge-webapp/src/actions/authentication.js">authentication.js on develop</a> (85 lines)</p>
+  <p><strong>Status:</strong> unchanged between <a href="https://github.com/MaurerAnton/projectforge/compare/9ed5fbe0f...e67067aa7">develop → branch <a href="https://github.com/MaurerAnton/projectforge/tree/draft43npm">draft43npm</a></a></p>
+  <p><strong>Tested by:</strong> <a href="diff-authentication-test-commentary-en.html"><code>actions/authentication.test.js</code></a></p>
+  <p><strong>Related:</strong> <a href="diff-reducer-test-commentary-en.html"><code>reducers/authentication.js</code></a> — processes the actions dispatched here</p>
+</div>
+
+<!-- ======================================================================= -->
+<h2>1. Imports (line 1)</h2>
+
+<div class="code-block"><pre>import { getServiceURL, handleHTTPErrors } from '../utilities/rest';</pre></div>
+
+<div class="commentary">
+  <p>Two utilities from <a href="https://github.com/micromata/projectforge/blob/9ed5fbe0f/projectforge-webapp/src/utilities/rest.js">rest.js</a>:</p>
+  <ul>
+    <li><a href="https://github.com/micromata/projectforge/blob/9ed5fbe0f/projectforge-webapp/src/utilities/rest.js#L26"><code>getServiceURL(path)</code></a> — builds the full URL: prepends <code>http://localhost:8080</code> (dev) or <code>""</code> (prod). <code>'/rsPublic/login'</code> → dev <code>http://localhost:8080/rsPublic/login</code>.</li>
+    <li><a href="https://github.com/micromata/projectforge/blob/9ed5fbe0f/projectforge-webapp/src/utilities/rest.js#L32"><code>handleHTTPErrors(response)</code></a> — throws <code>Error('Fetch failed: Error {status}')</code> if <code>!response.ok</code>.</li>
+  </ul>
+  <p>No other dependencies. The file is self-contained except for these two helpers.</p>
+</div>
+
+<!-- ======================================================================= -->
+<h2>2. Action type constants (lines 3–5)</h2>
+
+<div class="code-block"><pre>export const USER_LOGIN_BEGIN   = 'USER_LOGIN_BEGIN';
+export const USER_LOGIN_SUCCESS = 'USER_LOGIN_SUCCESS';
+export const USER_LOGIN_FAILURE = 'USER_LOGIN_FAILURE';</pre></div>
+
+<div class="commentary">
+  <p>Three string constants exported for use by the reducer (<a href="https://github.com/micromata/projectforge/blob/9ed5fbe0f/projectforge-webapp/src/reducers/authentication.js">reducers/authentication.js</a>). The reducer's <code>switch(type)</code> matches against these exact strings.</p>
+  <p><strong>Why strings, not symbols?</strong> Redux convention — strings are serialisable, debuggable in Redux DevTools, and work across module boundaries without shared references.</p>
+  <p><strong>Note:</strong> <code>USER_LOGOUT</code> used to be here — removed in <a href="https://github.com/micromata/projectforge/commit/7c60c2fbb">commit 7c60c2fbb (Jul 2019)</a> when logout was simplified to just dispatch <code>USER_LOGIN_BEGIN</code> (resets state).</p>
+</div>
+
+<!-- ======================================================================= -->
+<h2>3. Action creators (lines 7–26)</h2>
+
+<div class="code-block"><pre>export const userLoginBegin = () => ({
+    type: USER_LOGIN_BEGIN,
+});
+
+export const userLoginSuccess = (user, version, buildTimestamp, alertMessage) => ({
+    type: USER_LOGIN_SUCCESS,
+    payload: { user, version, buildTimestamp, alertMessage },
+});
+
+export const userLoginFailure = (error) => ({
+    type: USER_LOGIN_FAILURE,
+    payload: { error },
+});</pre></div>
+
+<div class="commentary">
+  <p><strong>Action creators</strong> — pure functions returning plain objects. The synchronous "messages" sent to the reducer.</p>
+  <table>
+    <tr><th>Creator</th><th>Signature</th><th>What the reducer does with it</th></tr>
+    <tr>
+      <td><code>userLoginBegin()</code></td>
+      <td><code>() → { type: BEGIN }</code></td>
+      <td>Resets to <code>{ loading: true, error: null, user: null }</code> — spinner on, old data cleared</td>
+    </tr>
+    <tr>
+      <td><code>userLoginSuccess(user, version, buildTimestamp, alertMessage)</code></td>
+      <td><code>(obj, str, str, str?) → { type, payload }</code></td>
+      <td>Writes all four fields to state — <code>user</code>, <code>version</code>, <code>buildTimestamp</code>, <code>alertMessage</code>. <code>loading → false</code></td>
+    </tr>
+    <tr>
+      <td><code>userLoginFailure(error)</code></td>
+      <td><code>(str) → { type, payload: { error } }</code></td>
+      <td>Stores error message, clears <code>user</code>, <code>loading → false</code></td>
+    </tr>
+  </table>
+  <p>These are called from the <strong>thunks</strong> below — never dispatched directly by components.</p>
+</div>
+
+<!-- ======================================================================= -->
+<h2>4. catchError helper (line 28)</h2>
+
+<div class="code-block"><pre>const catchError = (dispatch) => (error) => dispatch(userLoginFailure(error.message));</pre></div>
+
+<div class="commentary">
+  <p>Curried function: <code>catchError(dispatch)(error)</code>.</p>
+  <ul>
+    <li>First call captures <code>dispatch</code> — the Redux store's dispatch function, injected by the thunk middleware.</li>
+    <li>Second call receives the <code>error</code> object — its <code>.message</code> property becomes the payload.</li>
+  </ul>
+  <p>Used in <code>.catch()</code> chains of both <code>login()</code> and <code>loadUserStatus()</code>:</p>
+  <ul>
+    <li><code>login()</code> at <a href="https://github.com/micromata/projectforge/blob/9ed5fbe0f/projectforge-webapp/src/actions/authentication.js#L84">line 84</a>: <code>.catch(catchError(dispatch))</code></li>
+    <li><code>loadUserStatus()</code> at <a href="https://github.com/micromata/projectforge/blob/9ed5fbe0f/projectforge-webapp/src/actions/authentication.js#L61">line 61</a>: <code>catchError(dispatch)({ message: undefined })</code> — passes <code>{ message: undefined }</code> because <code>loadUserStatus</code> handles the error differently (redirects to login page, doesn't need an error message).</li>
+  </ul>
+</div>
+
+<!-- ======================================================================= -->
+<h2>5. loadUserStatus — session check (lines 30–63)</h2>
+
+<div class="code-block"><pre>export const loadUserStatus = () => (dispatch) => {
+    dispatch(userLoginBegin());                                    // (a)
+
+    return fetch(                                                   // (b)
+        getServiceURL('userStatus'),
+        { method: 'GET', credentials: 'include' },
+    )
+        .then(handleHTTPErrors)                                    // (c)
+        .then((response) => response.json())                       // (d)
+        .then(({ userData, systemData, alertMessage }) => {        // (e)
+            dispatch(userLoginSuccess(
+                userData,
+                systemData.version,
+                systemData.buildTimestamp,
+                alertMessage,
+            ));
+        })
+        .catch(() => {                                             // (f)
+            const { pathname, search } = window.location;
+            const href = pathname + search;
+            if (!pathname.startsWith('/react/public/login')
+                && !pathname.startsWith('/react/public/datatransfer/')) {
+                window.location.href =
+                    `/react/public/login?url=${encodeURIComponent(href)}`;
+            }
+            catchError(dispatch)({ message: undefined });
+        });
+};</pre></div>
+
+<div class="commentary">
+  <p><strong>Purpose:</strong> "Who am I?" — called on app startup and after login to check if the user has a valid session.</p>
+
+  <p><strong>(a)</strong> Dispatches <code>USER_LOGIN_BEGIN</code> — spinner on, old state cleared.</p>
+
+  <p><strong>(b)</strong> <code>GET /rs/userStatus</code> — sends the session cookie (<code>credentials: 'include'</code>). This hits <a href="https://github.com/micromata/projectforge/blob/9ed5fbe0f/projectforge-rest/src/main/kotlin/org/projectforge/rest/UserStatusRest.kt#L111">UserStatusRest.kt:111</a>.</p>
+
+  <p><strong>(c)</strong> <code>handleHTTPErrors</code> — if status ≠ 2xx, throws <code>Error('Fetch failed: Error {status}')</code>. Falls through to <code>.catch()</code>.</p>
+
+  <p><strong>(d)</strong> Parse JSON response. Expected shape: <code>{ userData: {...}, systemData: {version, buildTimestamp}, alertMessage?: string }</code>.</p>
+
+  <p><strong>(e)</strong> Destructure and dispatch <code>USER_LOGIN_SUCCESS</code> with all fields. The reducer writes them to state.</p>
+
+  <p><strong>(f)</strong> Session invalid or expired. Two cases:</p>
+  <ul>
+    <li><strong>401 from server</strong> (session expired): <code>handleHTTPErrors</code> throws → we redirect to login page, preserving the current URL as <code>?url=</code> parameter so the user returns where they were.</li>
+    <li><strong>Already on login/datatransfer page</strong>: don't redirect (would loop).</li>
+  </ul>
+  <p><strong>Dispatch:</strong> <code>catchError(dispatch)({ message: undefined })</code> — <code>error.message</code> will be <code>undefined</code>. The reducer stores <code>{ error: undefined }</code> — effectively clearing any previous error.</p>
+
+  <p><strong>This is called:</strong></p>
+  <ul>
+    <li>On application startup — <a href="https://github.com/micromata/projectforge/blob/9ed5fbe0f/projectforge-webapp/src/containers/ProjectForge.jsx">ProjectForge.jsx</a>: <code>useEffect(() => dispatch(loadUserStatus()), [])</code></li>
+    <li>After successful login — <code>login()</code> calls <code>loadUserStatus()(dispatch)</code> at <a href="https://github.com/micromata/projectforge/blob/9ed5fbe0f/projectforge-webapp/src/actions/authentication.js#L83">line 83</a></li>
+  </ul>
+</div>
+
+<!-- ======================================================================= -->
+<h2>6. login — authenticate (lines 65–85)</h2>
+
+<div class="code-block"><pre>export const login = (username, password, keepSignedIn) => (dispatch) => {
+    dispatch(userLoginBegin());                                    // (a)
+
+    return fetch(                                                   // (b)
+        getServiceURL('/rsPublic/login'),
+        {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                username,
+                password,
+                stayLoggedIn: keepSignedIn,                        // (c)
+            }),
+            credentials: 'include',
+        },
+    )
+        .then(handleHTTPErrors)                                    // (d)
+        .then(() => loadUserStatus()(dispatch))                    // (e)
+        .catch(catchError(dispatch));                              // (f)
+};</pre></div>
+
+<div class="commentary">
+  <p><strong>Purpose:</strong> Send credentials to the server. If successful, query the session to get user data.</p>
+
+  <p><strong>(a)</strong> Dispatch <code>USER_LOGIN_BEGIN</code> — spinner on.</p>
+
+  <p><strong>(b)</strong> <code>POST /rsPublic/login</code> with JSON body. Hits <a href="https://github.com/micromata/projectforge/blob/9ed5fbe0f/projectforge-rest/src/main/kotlin/org/projectforge/rest/pub/LoginPageRest.kt#L93">LoginPageRest.kt:93</a> → <a href="https://github.com/micromata/projectforge/blob/9ed5fbe0f/projectforge-business/src/main/kotlin/org/projectforge/login/LoginService.kt#L163">LoginService.authenticate()</a>. The server sets <code>JSESSIONID</code> cookie on success.</p>
+
+  <p><strong>(c)</strong> <code>stayLoggedIn: keepSignedIn</code> — the "remember me" flag. When <code>true</code>, the server additionally sets a <code>stayLoggedIn</code> cookie (<a href="https://github.com/micromata/projectforge/blob/9ed5fbe0f/projectforge-business/src/main/kotlin/org/projectforge/business/user/filter/CookieService.kt#L201">CookieService.kt:201</a>) valid for 30 days. On next visit, this cookie auto-renews the session without password.</p>
+
+  <p><strong>(d)</strong> <code>handleHTTPErrors</code> — if login fails (401, 403, etc.), throws and falls to <code>.catch()</code>.</p>
+
+  <p><strong>(e)</strong> On success (200): <strong>chain</strong> into <code>loadUserStatus()</code>. Login only authenticates — we still need to know <em>who</em> logged in. <code>loadUserStatus()(dispatch)</code> invokes the thunk manually (it returns <code>(dispatch) => {...}</code>, so we call it with <code>dispatch</code>). This is why the test expects <strong>3 actions</strong>: <code>BEGIN</code> (login) + <code>BEGIN</code> (loadUserStatus) + <code>SUCCESS</code> (loadUserStatus).</p>
+
+  <p><strong>(f)</strong> On failure: <code>catchError(dispatch)</code> dispatches <code>USER_LOGIN_FAILURE</code> with the error message — e.g. <code>'Fetch failed: Error 401'</code> for wrong password.</p>
+</div>
+
+<!-- ======================================================================= -->
+<h2>Summary: action flow</h2>
+
+<pre style="background:#f8f8f8;border:1px solid #ddd;padding:1em;font-size:0.85em;line-height:1.6;border-radius:4px">
+APP STARTUP:
+  ProjectForge.jsx → dispatch(loadUserStatus())
+    └─ GET /rs/userStatus
+         ├─ 200 → SUCCESS(userData, systemData, alertMessage)
+         └─ 401 → redirect to /react/public/login
+
+LOGIN:
+  login(username, password, keepSignedIn)
+    ├─ dispatch(BEGIN)
+    ├─ POST /rsPublic/login
+    ├─ server sets JSESSIONID (+ stayLoggedIn cookie if keepSignedIn)
+    ├─ 200 → loadUserStatus()(dispatch)
+    │   └─ GET /rs/userStatus → BEGIN → SUCCESS
+    └─ 401/error → catchError → FAILURE
+
+AFTER LOGIN:
+  User returns to original page. ProjectForge.jsx re-mounts.
+  loadUserStatus() runs again — this time JSESSIONID is valid → SUCCESS
+</pre>
+
+<div class="fn">
+  <p><strong>Related docs:</strong> <a href="diff-authentication-test-commentary-en.html">authentication.test.js diff commentary</a> | <a href="diff-reducer-test-commentary-en.html">reducers/authentication.js diff commentary</a></p>
+</div>
+
+</body>
+</html>

@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>#969: AuftragPagesRest</title>
+<style>
+body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:2em;color:#444}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}
+</style>
+</head>
+<body>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="968.html">← Prev</a> · <a href="970.html">Next →</a></div>
+<h1>#969: <code>AuftragPagesRest</code></h1>
+<div class="meta">
+<strong>Type:</strong> REST Controller (Spring) &nbsp;|&nbsp; <strong>Purpose:</strong> Order (Auftrag) list and attachment management<br>
+<strong>Source:</strong> <code>projectforge-rest/src/main/kotlin/org/projectforge/rest/fibu/AuftragPagesRest.kt</code><br>
+<strong>Extends:</strong> <code>AbstractDTOPagesRest&lt;AuftragDO, Auftrag, AuftragDao&gt;</code><br>
+<strong>Endpoint:</strong> <code>/rs/order</code>
+</div>
+<div class="c">
+<p>REST controller for <strong>Auftrag</strong> (order/project order) management. Provides a list page with financial summaries and filtering, and an edit page primarily for <strong>attachment management</strong>. The full order edit form is still under construction (the <code>_createEditLayoutUnderConstruction</code> method shows planned layout). JCR (content repository) is enabled for file attachments.</p>
+</div>
+
+<h2>Architecture &amp; Design</h2>
+
+<h3>List Layout</h3>
+<p>Uses <code>UITable.createUIResultSetTable()</code> (classic table, not AG-Grid) with columns:</p>
+<table>
+<tr><th>Column</th><th>Field</th><th>Formatter</th></tr>
+<tr><td>Number</td><td><code>nummer</code></td><td>—</td></tr>
+<tr><td>Customer</td><td><code>kunde.displayName</code></td><td>—</td></tr>
+<tr><td>Project</td><td><code>projekt.displayName</code></td><td>—</td></tr>
+<tr><td>Title</td><td><code>titel</code></td><td>—</td></tr>
+<tr><td>Position count</td><td><code>pos</code></td><td>—</td></tr>
+<tr><td>Attachments</td><td><code>attachmentsSizeFormatted</code></td><td>Paper-clip icon</td></tr>
+<tr><td>Person days</td><td><code>personDays</code></td><td>DECIMAL</td></tr>
+<tr><td>Reference</td><td><code>referenz</code></td><td>—</td></tr>
+<tr><td>Assigned persons</td><td><code>assignedPersons</code></td><td>—</td></tr>
+<tr><td>Entry date</td><td><code>erfassungsDatum</code></td><td>DATE</td></tr>
+<tr><td>Decision date</td><td><code>entscheidungsDatum</code></td><td>DATE</td></tr>
+<tr><td>Net sum</td><td><code>formattedNettoSumme</code></td><td>DECIMAL</td></tr>
+<tr><td>Commissioned net</td><td><code>formattedBeauftragtNettoSumme</code></td><td>DECIMAL</td></tr>
+<tr><td>Invoiced</td><td><code>formattedFakturiertSum</code></td><td>—</td></tr>
+<tr><td>To be invoiced</td><td><code>formattedZuFakturierenSum</code></td><td>—</td></tr>
+<tr><td>Period begin/end</td><td><code>periodOfPerformanceBegin/End</code></td><td>DATE</td></tr>
+<tr><td>Probability</td><td><code>probabilityOfOccurrence</code></td><td>—</td></tr>
+<tr><td>Status</td><td><code>status</code></td><td>—</td></tr>
+</table>
+
+<h3>Magic Filters</h3>
+<p>Implements sophisticated custom result filtering using synthetic filter entries:</p>
+<ul>
+<li><code>positionsArt</code> → <code>AuftragsPositionsArtFilter</code></li>
+<li><code>positionsStatus</code> → <code>AuftragsPositionsStatusFilter</code></li>
+<li><code>positionsPaymentType</code> → <code>AuftragsPositionsPaymentTypeFilter</code></li>
+<li><code>fakturiert</code> → <code>AuftragFakturiertFilter</code></li>
+<li><code>status</code> (default filter) → Standard enum filter</li>
+</ul>
+<p>All position-based filters are marked as <code>synthetic = true</code> so they bypass Hibernate query generation and are applied in-memory via <code>CustomResultFilter</code> implementations.</p>
+
+<h3>Edit Layout</h3>
+<p>The current edit page is <strong>attachment-only</strong>: shows order summary (number, customer, project, net sum) as read-only fields and an attachment upload/list component. Delete/update/cancel are disabled. This is a deliberate simplification — the full order editing features are planned in <code>_createEditLayoutUnderConstruction()</code> which defines a comprehensive layout with customer, project, managers, dates, positions list, and payment schedules.</p>
+
+<h3>DTO Conversion</h3>
+<p>Uses straightforward <code>copyTo()</code>/<code>copyFrom()</code> between <code>AuftragDO</code> and <code>Auftrag</code> DTO. The <code>@PostConstruct</code> enables JCR attachment support via <code>enableJcr()</code>.</p>
+
+<h2>Git History</h2>
+<div class="hist"><pre>
+868d6abb7 2025 -> 2026
+63081666f Source file headers: 2024-> 2025.
+ae2c04ee0 Migration stuff in progress... (all tests of all packages: OK).
+3f25c773a Migration stuff in progress...
+77bade6df javax.* -> jakarta.*
+b6092df09 Copyright 2023 -> 2024
+ab45d51fa Copyright 2001-2022 -> 2001-2023.
+44dcb895b AbstractPagesRest.createListLayout(...) refactored.
+e8ebaa7a4 WIP: multi upload
+46898f84b Formatter -> UITableColumn.Formatter
+4a8ee9d9c WIP: AG-Grid, multi-selection
+... 2020-2025: attachments, order React migration, DTO refactoring
+7c79f1922 Copyright of source header -> 2020.
+</pre></div>
+</body>
+</html>

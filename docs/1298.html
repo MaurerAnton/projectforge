@@ -1,0 +1,106 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>1298</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:2em;color:#444}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}</style></head>
+<body><div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="1297.html">← Prev</a> · <a href="1299.html">Next →</a></div>
+<h1>1298: <code>ConfigurationService.kt</code></h1>
+<div class="meta">Core Bootstrap Service, projectforge-business/.../configuration/ConfigurationService.kt</div>
+<div class="c">Central configuration bootstrap and runtime facade. Initializes directories, SSL keystores, the <code>Configuration</code> cache, and exposes all system properties (from <code>application.properties</code>) plus DB-backed parameters through typed accessors.</div>
+
+<h2>Architecture &amp; Role</h2>
+<p><code>ConfigurationService</code> is a Spring <code>@Service</code> that acts as the bridge between Spring's property injection (<code>@Value</code>) and the database-backed <code>Configuration</code> cache. It is bootstrapped via <code>@PostConstruct init()</code> and is accessible globally through <code>ConfigurationServiceAccessor</code>.</p>
+
+<h3>Bootstrap Sequence (<code>init()</code>)</h3>
+<ol>
+<li>Registers itself in <code>ConfigurationServiceAccessor</code></li>
+<li>Loads <code>ConfigXml</code> from the application home directory (contract types, etc.)</li>
+<li>Creates the resources directory, fonts directory, and plugins directory</li>
+<li>Creates <code>environment.sh</code> for Docker installations</li>
+<li>Initializes SSL keystore if configured</li>
+<li>Instantiates the <code>Configuration</code> cache singleton</li>
+</ol>
+
+<h3>Property Injection (<code>@Value</code>)</h3>
+<p>Reads from <code>application.properties</code>:</p>
+<table>
+<tr><th>Property</th><th>Field</th><th>Description</th></tr>
+<tr><td><code>projectforge.base.dir</code></td><td><code>applicationHomeDir</code></td><td>Root directory of the ProjectForge installation</td></tr>
+<tr><td><code>projectforge.resourcesDirectory</code></td><td><code>resourceDirName</code></td><td>Resource directory (default "resources")</td></tr>
+<tr><td><code>projectforge.support.mail</code></td><td><code>pfSupportMailAddress</code></td><td>Support email address</td></tr>
+<tr><td><code>projectforge.logSessionIds</code></td><td><code>logSessionIds</code></td><td>Log HTTP/SSL session IDs</td></tr>
+<tr><td><code>projectforge.keystoreFile</code></td><td><code>keystoreFileName</code></td><td>Custom SSL keystore path</td></tr>
+<tr><td><code>projectforge.keystorePassphrase</code></td><td><code>keystorePassphrase</code></td><td>Keystore passphrase</td></tr>
+<tr><td><code>projectforge.fontsDirectory</code></td><td><code>fontsDir</code></td><td>Fonts directory (default "resources/fonts")</td></tr>
+<tr><td><code>projectforge.telephoneSystemNumber</code></td><td><code>telephoneSystemNumber</code></td><td>Phone system prefix for direct calling</td></tr>
+<tr><td><code>projectforge.phoneLookupKey</code></td><td><code>phoneLookupKey</code></td><td>Reverse phone lookup API key</td></tr>
+<tr><td><code>projectforge.accessLogConfig</code></td><td><code>accessLogConfiguration</code></td><td>Access log verbosity: ALL/NONE/suspicious</td></tr>
+<tr><td><code>projectforge.logoFile</code></td><td><code>logoFileName</code></td><td>Custom logo filename</td></tr>
+<tr><td><code>projectforge.currencySymbol</code></td><td><code>currencySymbol</code></td><td>Currency symbol (default €)</td></tr>
+<tr><td><code>projectforge.currency</code></td><td><code>currency</code></td><td>Currency code (default EUR)</td></tr>
+<tr><td><code>projectforge.defaultLocale</code></td><td><code>defaultLocale</code></td><td>Default application locale</td></tr>
+<tr><td><code>projectforge.defaultTimeNotation</code></td><td><code>defaultTimeNotation</code></td><td>Time notation (12h/24h)</td></tr>
+<tr><td><code>projectforge.defaultFirstDayOfWeek</code></td><td><code>defaultFirstDayOfWeek</code></td><td>First day of week</td></tr>
+<tr><td><code>projectforge.minimalDaysInFirstWeek</code></td><td><code>minimalDaysInFirstWeek</code></td><td>Calendar week threshold</td></tr>
+<tr><td><code>projectforge.excelPaperSize</code></td><td><code>excelPaperSize</code></td><td>Excel paper format</td></tr>
+<tr><td><code>projectforge.wicket.developmentMode</code></td><td><code>developmentMode</code></td><td>Wicket development mode flag</td></tr>
+<tr><td><code>pf.config.security.teamCalCryptPassword</code></td><td><code>teamCalCryptPassword</code></td><td>TeamCal encryption password</td></tr>
+<tr><td><code>pf.config.compileCss</code></td><td><code>compileCss</code></td><td>CSS compilation toggle</td></tr>
+<tr><td><code>projectforge.login.handlerClass</code></td><td><code>loginHandlerClass</code></td><td>Custom login handler class</td></tr>
+</table>
+
+<h3>Database-Backed Accessors</h3>
+<p>DB parameters accessed via the <code>ConfigurationDao</code> cache:</p>
+<table>
+<tr><th>Accessor</th><th>Return Type</th><th>Description</th></tr>
+<tr><td><code>timezone</code></td><td>TimeZone?</td><td>Configured timezone from <code>DEFAULT_TIMEZONE</code></td></tr>
+<tr><td><code>minPasswordLength</code></td><td>Int</td><td>Minimum password length (default from enum)</td></tr>
+<tr><td><code>flagCheckPasswordChange</code></td><td>Boolean</td><td>Whether password change is required</td></tr>
+<tr><td><code>getEndOfCarryVacationOfPreviousYear(year)</code></td><td>LocalDate</td><td>Vacation carryover deadline (default March 31)</td></tr>
+<tr><td><code>hREmailadress</code></td><td>String?</td><td>HR department email address</td></tr>
+<tr><td><code>timesheetNoteSavingsByAI</code></td><td>String?</td><td>AI timesheet savings note</td></tr>
+</table>
+
+<h3>Resource &amp; Template Resolution</h3>
+<ul>
+<li><code>getResourceContentAsString(filename)</code> — loads a file from the resource directory (file system first, then classpath fallback) as UTF-8 String.</li>
+<li><code>getResourceAsInputStream(filename)</code> — returns InputStream + URL pair, with logging of whether the file was found.</li>
+<li><code>getTemplateFile(dir, filename, resourceFilename)</code> — resolves template files from file system or classpath <code>officeTemplates</code>.</li>
+<li><code>getOfficeTemplateFile(filename)</code> — convenience for office template resolution.</li>
+</ul>
+
+<h3>SSL Keystore Setup</h3>
+<p><code>setupKeyStores()</code> loads a custom certificate keystore and builds an <code>SSLSocketFactory</code> via <code>createSSLSocketFactory()</code>, stored as <code>usersSSLSocketFactory</code> for external HTTPS connections.</p>
+
+<h2>Git History</h2><div class="hist"><pre>868d6abb7 2025 -> 2026
+2b601ac08 Deprecated code fixed.
+1449f4859 WIP: timesavings by AI in timesheets, config param for note added.
+63081666f Source file headers: 2024-> 2025.
+0e449b8f1 Fix leftover typos Found via codespell
+5f9bbfbd3 Fix typos in projectforge-business directory
+27dd47d30 ConfigurationService: sqlConsole isn't available anymore.
+98b618a26 WIP: Setup of ProjectForge...
+7f2c255ae WIP: CardDav
+66ec668f6 Migration stuff in progress...
+1b50060c3 BaseDao: renamed get->find, save->insert, getList->select, load->select.
+87aaf6a5a BaseDao refactored, internal* methods renamed.
+4c04cfd65 MAJOR-CHANGE! Migration of integer id's to Long id's.
+e7128d28c Migration stuff in progress...
+77bade6df javax.* -> jakarta.*
+b6092df09 Copyright 2023 -> 2024
+a25c868cb SendMail refactored (Genome part removed).
+522866720 BirthdayTemplate/InvoiceTemplate use new Configuration.getOfficeTemplateFile.
+9cee83a03 WIP: phone calls for Sipgate
+df7482f20 WIP: phone calls for Sipgate
+be898d835 projectforge.logSessionIds config param added.
+ab45d51fa Copyright 2001-2022 -> 2001-2023.
+72a042463 WIP: Banking plugin (and new import module).
+d38c01233 WIP: Banking plugin (and new import module).
+2dc192b7a AG grid: auto-format of currency.
+50c3d4b46 MEB functionality and SmsReceiverServlet removed.
+f1a12e2e5 MEB functionality and SmsReceiverServlet removed.
+5f7ef41b8 Copyright 2021 -> 2022
+77d22d685 LoggingFilter logs suspicious urls in logs/access.log.
+da00c084e ConfigurationService.kt: open declarations for Java usage.
+28f8db075 WIP entrypoint.sh for docker-compose
+1ea2e5714 ConfigurationService: open fun required by SendMailTest for mocking.
+86f2d5f99 ConfigurationService.kt creates environment.sh file for docker.
+867476f85 ConfigurationService -> Kotlin (not yet tested).</pre></div>
+</body></html>

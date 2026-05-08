@@ -1,0 +1,55 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>1299</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:2em;color:#444}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}</style></head>
+<body><div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="1298.html">← Prev</a> · <a href="1300.html">Next →</a></div>
+<h1>1299: <code>DatabaseService.kt</code></h1>
+<div class="meta">Core Bootstrap Service, projectforge-business/.../persistence/database/DatabaseService.kt</div>
+<div class="c">Database initialization, schema management, and administrative utility service. Handles first-run data seeding (admin user, root task, groups, global addressbook), index creation, schema updates, and database shutdown. Access-restricted to admin users.</div>
+
+<h2>Architecture &amp; Role</h2>
+<p><code>DatabaseService</code> is a Spring <code>@Service</code> that serves as the administrative gateway for database-level operations. It integrates <code>UserDao</code>, <code>GroupDao</code>, <code>UserRightDao</code>, <code>TaskTree</code>, <code>AddressbookDao</code>, <code>UserGroupCache</code>, and <code>HibernateSearchReindexer</code> for initialization. All public methods call <code>accessCheck()</code>, which requires admin group membership.</p>
+
+<h3>Database Engine Support</h3>
+<p>Wraps a <code>DatabaseSupport</code> instance keyed by the Hibernate <code>databaseDialect</code> (PostgreSQL, HSQLDB, etc.) and a <code>DatabaseExecutor</code> (JDBC) for raw SQL execution.</p>
+
+<h3>Key Methods</h3>
+<table>
+<tr><th>Method</th><th>Description</th></tr>
+<tr><td><code>initializeDefaultData(adminUser, timezone)</code></td><td>First-run initialization: creates root task, inserts admin user with all rights, creates all ProjectForge groups (Admin, Controlling, Finance, Marketing, Orga, HR, Project Manager, Project Assistant). Also runs <code>insertGlobalAddressbook()</code>. Checks <code>databaseTablesWithEntriesExist()</code> first.</td></tr>
+<tr><td><code>insertGlobalAddressbook(user?)</code></td><td>Creates the global addressbook row (ID=1) via native SQL insert if it doesn't exist.</td></tr>
+<tr><td><code>updateAdminUser(user, timezone)</code></td><td>Updates the default admin user with setup-page credentials and reloads <code>UserGroupCache</code>.</td></tr>
+<tr><td><code>updateSchema()</code></td><td>Runs Hibernate's <code>hbm2ddl.auto=update</code> to create/update database tables from JPA entities.</td></tr>
+<tr><td><code>afterCreatedTestDb(blocking)</code></td><td>Post-seed operations: reindexes Hibernate Search (in background thread; blocking optional), expires <code>TaskTree</code> and <code>UserGroupCache</code>.</td></tr>
+<tr><td><code>databaseTablesWithEntriesExist()</code></td><td>Checks if <code>T_PF_USER</code> exists and has rows — gate for setup vs. login flow.</td></tr>
+<tr><td><code>doesTableExist(table) / isTableEmpty(table)</code></td><td>Table existence and row-count checks.</td></tr>
+<tr><td><code>createMissingIndices()</code></td><td>Creates FK indices on all <code>t_*</code> tables by iterating metadata cross-references.</td></tr>
+<tr><td><code>createIndex(name, table, attributes)</code></td><td>DDL index creation, silently ignoring duplicate-index errors.</td></tr>
+<tr><td><code>execute(jdbcString, ignoreErrors?)</code></td><td>Raw JDBC execution with optional error suppression.</td></tr>
+<tr><td><code>queryForInt(jdbcQuery) / query(sql, vararg args)</code></td><td>JDBC query wrappers returning int or <code>List&lt;DatabaseResultRow&gt;</code>.</td></tr>
+<tr><td><code>shutdownDatabase()</code></td><td>Issues the dialect-specific shutdown statement (e.g., for embedded HSQLDB).</td></tr>
+</table>
+
+<h3>Admin User Initialization</h3>
+<p>The seeded admin user (<code>admin</code>) gets full read-write rights on all major modules: financial accounting (FIBU), HR, organization, project management, and order book. Groups are created as local (non-synchronized) and assigned to the admin. The <code>ThreadLocalUserContext</code> is set to the admin user during initialization to avoid access exceptions.</p>
+
+<h3>Access Control</h3>
+<p><code>accessCheck()</code> allows the <code>SYSTEM_ADMIN_PSEUDO_USER</code> (internal system user) to bypass checks. For real users, it verifies admin group membership via <code>Login.isAdminUser()</code> and also checks <code>AccessChecker.checkRestrictedOrDemoUser()</code> to prevent operations on demo/restricted installations.</p>
+
+<h3>Internal Facilities</h3>
+<p>Methods with <code>internal</code> prefix (<code>internalDoesTableExist</code>, <code>internalIsTableEmpty</code>) skip <code>accessCheck()</code> and are used during initialization before the user system is available.</p>
+
+<h2>Git History</h2><div class="hist"><pre>868d6abb7 2025 -> 2026
+bd69407de Initial revision with Claude Code.
+63081666f Source file headers: 2024-> 2025.
+5f9bbfbd3 Fix typos in projectforge-business directory
+9330ebba2 WIP: gradle...
+b810d1c78 Migration stuff in progress... (all tests OK).
+567ca70cd Migration: spring.datasource.hikari.auto-commit=false
+b3293f0cc PersistenceService/Context: stats handling improved.
+1b50060c3 BaseDao: renamed get->find, save->insert, getList->select, load->select.
+87aaf6a5a BaseDao refactored, internal* methods renamed.
+3aeda5ef5 All save|update|...InTrans renamed (InTrans removed).
+67805f2fc ThreadLocalUserContext.user -> loggedInUser (renamed).
+9013a5208 Migration stuff in progress...
+1135ccbca Persistence: functions renamed *NewTrans -> *InTrans
+b095e6f7d Big change of Transaction handling: PfPersistenceContext.</pre></div>
+</body></html>

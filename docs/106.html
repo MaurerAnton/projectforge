@@ -1,0 +1,38 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>#106</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333}a{color:#0366d6}.meta{font-size:.9em;margin:1em 0}.nav{font-size:.9em;color:#888;margin-bottom:1em}.commentary{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}code{background:#f0f0f0;padding:0 .2em;border-radius:2px}</style></head>
+<body>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="105.html">← Prev</a> · <a href="107.html">Next →</a></div>
+
+<h1>#106: <code>V1.0.2__V1.0.2-RELEASE-Auditlog.sql</code></h1>
+<div class="meta"><strong>Path:</strong> <code>plugins/...datatransfer/src/main/resources/flyway/datatransfer/migrate/common/V1.0.2__...Auditlog.sql</code> · <strong>Lines:</strong> 21 · <strong>Type:</strong> Flyway migration — database-agnostic (common)</div>
+
+<div class="commentary">
+<p><strong>Creates the audit log table</strong> <code>t_plugin_datatransfer_audit</code> — adds activity tracking and email notification support to the DataTransfer plugin. Located in <code>migrate/common/</code> meaning it runs on all database vendors without dialect-specific variants.</p>
+</div>
+
+<div class="commentary">
+<h3>Table <code>t_plugin_datatransfer_audit</code> — 13 columns</h3>
+<p>Design: records every file operation (upload, download, rename, delete) on a data transfer area. Distinguishes between <strong>internal</strong> (<code>by_user_fk</code> → <code>t_pf_user</code>) and <strong>external</strong> (<code>by_external_user VARCHAR(4000)</code> — stores free-text name/email/IP) users.</p>
+<table>
+<tr><td><code>pk</code></td><td>INTEGER PK</td><td>Primary key</td></tr>
+<tr><td><code>timestamp</code></td><td>TIMESTAMP</td><td>When the event occurred</td></tr>
+<tr><td><code>area_fk</code></td><td>INTEGER (indexed)</td><td>FK → <code>t_plugin_datatransfer_area</code></td></tr>
+<tr><td><code>upload_by_user_fk</code></td><td>INTEGER</td><td>Original uploader FK — persists when file is later downloaded by another user</td></tr>
+<tr><td><code>by_user_fk</code></td><td>INTEGER</td><td>Who performed this action (internal user)</td></tr>
+<tr><td><code>by_external_user</code></td><td>VARCHAR(4000)</td><td>External user info (IP + optional name/email from <a href="101.html">login screen</a>)</td></tr>
+<tr><td><code>filename</code> / <code>filename_old</code></td><td>VARCHAR(1000)</td><td>New and old filename (for rename tracking)</td></tr>
+<tr><td><code>event_type</code></td><td>VARCHAR(20)</td><td>Action type (UPLOAD, DOWNLOAD, DELETE, RENAME etc.)</td></tr>
+<tr><td><code>description</code> / <code>description_old</code></td><td>VARCHAR(4000)</td><td>New and old description (for edit tracking)</td></tr>
+<tr><td><code>notified</code></td><td>BOOLEAN NOT NULL</td><td>Whether observers have been emailed about this event — prevents duplicate notifications</td></tr>
+</table>
+</div>
+
+<div class="commentary">
+<h3>Indexes</h3>
+<ul>
+<li><code>idx_t_plugin_datatransfer_audit</code> — on <code>area_fk</code> — optimizes "show all events for area X" queries used by the <em>Display activities</em> UI and the observer notification job</li>
+</ul>
+<p>The audit log is consumed by: the activity display dialog (<a href="100.html">DataTransferPublicServicesRest</a>), the observer email notification scheduled job (queries events with <code>notified=false</code>), and the 30-day rolling display (old entries are pruned).</p>
+</div>
+
+</body></html>

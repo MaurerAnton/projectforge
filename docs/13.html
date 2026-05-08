@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>File #13: docker/compose/nginx/nginx.conf</title>
+<style>
+  body { font-family: system-ui, sans-serif; max-width: 960px; margin: 2em auto; padding: 0 1em; background: #fafafa; color: #222; line-height: 1.6; }
+  h1 { border-bottom: 2px solid #333; }
+  h2 { margin-top: 2.5em; border-bottom: 1px solid #ddd; padding-bottom: 0.2em; }
+  a { color: #0366d6; text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  .meta { background: #f0f0f0; border-radius: 6px; padding: 1em; margin: 1em 0; font-size: 0.9em; }
+  .code-block { background: #f8f8f8; border: 1px solid #ddd; border-radius: 4px; padding: 0.5em; margin: 0.5em 0; overflow-x: auto; }
+  .code-block pre { margin: 0; font-family: 'Consolas', monospace; font-size: 0.85em; line-height: 1.5; }
+  .commentary { margin: 1em 0; line-height: 1.7; background: #fff; padding: 0.5em 1em; border-radius: 6px; border-left: 4px solid #ddd; }
+  table { border-collapse: collapse; width: 100%; margin: 1em 0; font-size: 0.9em; }
+  th, td { border: 1px solid #ddd; padding: 0.5em; text-align: left; }
+  th { background: #f0f0f0; }
+  code { background: #e8e8e8; border-radius: 3px; padding: 0.1em 0.3em; font-size: 0.9em; }
+  .nav { font-size: 0.9em; color: #888; margin-bottom: 1em; }
+  .warn { background: #fff3cd; border: 1px solid #ffc107; border-radius: 4px; padding: 0.5em 1em; margin: 0.5em 0; }
+  .diagram { background: #f8f8f8; border: 1px solid #ddd; border-radius: 4px; padding: 0.8em; font-family: 'Consolas', monospace; font-size: 0.85em; white-space: pre; }
+</style>
+</head>
+<body>
+<div class="nav">
+  <a href="https://maureranton.github.io/projectforge/">← Documentation index</a> ·
+  <a href="file-index.html">← File index</a> ·
+  <a href="12.html">← Prev</a> · Next →
+</div>
+<h1>File #13: <code>docker/compose/nginx/nginx.conf</code></h1>
+<div class="meta">
+  <p><strong>Path:</strong> <code>./docker/compose/nginx/nginx.conf</code> · <strong>Type:</strong> <a href="https://nginx.org/en/docs/">nginx</a> configuration · <strong>Lines:</strong> 21 · <strong>Source:</strong> <a href="https://github.com/micromata/projectforge/blob/9ed5fbe0f/docker/compose/nginx/nginx.conf">GitHub</a></p>
+</div>
+
+<h2>What it does</h2>
+<div class="commentary">
+  <p>Two <code>server</code> blocks: the first redirects HTTP→HTTPS, the second terminates TLS and proxies to the app. Together they enforce HTTPS-only access.</p>
+  <div class="diagram">Browser
+  │
+  ├── http://domain.com ──→ <strong>server #1</strong> (port 80)
+  │                         └→ 301 → https://domain.com
+  │
+  └── https://domain.com ─→ <strong>server #2</strong> (port 443, TLS)
+                             └→ proxy_pass → app:8000</div>
+</div>
+
+<h2>Server block #1: HTTP→HTTPS redirect (lines 1–5)</h2>
+<div class="code-block"><pre><span style="color:#999">1</span> server {
+<span style="color:#999">2</span>     listen 80;
+<span style="color:#999">3</span>     server_name ${DOMAIN};
+<span style="color:#999">4</span>     return 301 https://$host$request_uri;
+<span style="color:#999">5</span> }</pre></div>
+<div class="commentary">
+  <p><strong>Line 2:</strong> Listens on port 80 (HTTP).</p>
+  <p><strong>Line 3:</strong> <code>${DOMAIN}</code> — substituted from <a href="12.html">.env</a> at container start. Defaults to <code>mydomain.com</code>.</p>
+  <p><strong>Line 4:</strong> <code>return 301 https://$host$request_uri</code> — permanent redirect. <code>$host</code> preserves the original domain, <code>$request_uri</code> preserves the path. Request to <code>http://example.com/login</code> → <code>https://example.com/login</code>.</p>
+</div>
+
+<h2>Server block #2: TLS termination + proxy (lines 7–21)</h2>
+<div class="code-block"><pre><span style="color:#999"> 7</span> server {
+<span style="color:#999"> 8</span>     listen 443 ssl;
+<span style="color:#999"> 9</span>     server_name ${DOMAIN};
+<span style="color:#999">10</span> 
+<span style="color:#999">11</span>     ssl_certificate /etc/ssl/certs/fullchain.pem;
+<span style="color:#999">12</span>     ssl_certificate_key /etc/ssl/private/privkey.pem;
+<span style="color:#999">13</span> 
+<span style="color:#999">14</span>     location / {
+<span style="color:#999">15</span>         proxy_pass http://app:8000;
+<span style="color:#999">16</span>         proxy_set_header Host $host;
+<span style="color:#999">17</span>         proxy_set_header X-Real-IP $remote_addr;
+<span style="color:#999">18</span>         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+<span style="color:#999">19</span>         proxy_set_header X-Forwarded-Proto $scheme;
+<span style="color:#999">20</span>     }
+<span style="color:#999">21</span> }</pre></div>
+
+<div class="commentary">
+  <p><strong>Lines 11–12:</strong> TLS certificate and private key — mounted from host as Docker volumes (<a href="11.html#L44">compose lines 44–45</a>). Expects Let's Encrypt-standard filenames (<code>fullchain.pem</code>, <code>privkey.pem</code>).</p>
+
+  <p><strong>Line 15:</strong> <code>proxy_pass http://app:8000</code> — proxies to the <code>app</code> Docker service on port 8000. <code>app</code> resolves via Docker's internal DNS.</p>
+
+  <div class="warn"><strong>⚠️ Port mismatch?</strong> The compose file exposes port <strong>8080</strong> (<a href="11.html#L17">docker-compose.yml:17</a>), but nginx proxies to port <strong>8000</strong>. This either means the app runs on 8000 inside the container (not the default 8080 exposed port), or this configuration has a bug. The <code>DOCKER_OPTS</code> environment variable (<a href="11.html#L9">line 9 of compose</a>) may reconfigure the internal port.</div>
+
+  <p><strong>Lines 16–19:</strong> Four <a href="https://nginx.org/en/docs/http/ngx_http_proxy_module.html">proxy headers</a> — essential for the app to know the client's real IP and that the connection is HTTPS:</p>
+  <table>
+    <tr><th>Header</th><th>Value</th><th>What the app sees</th></tr>
+    <tr><td><code>Host</code></td><td><code>$host</code></td><td>Original domain (not <code>app:8000</code>)</td></tr>
+    <tr><td><code>X-Real-IP</code></td><td><code>$remote_addr</code></td><td>Client's real IP (not nginx's Docker IP)</td></tr>
+    <tr><td><code>X-Forwarded-For</code></td><td>Chain of IPs</td><td>Full proxy chain (for audit logs)</td></tr>
+    <tr><td><code>X-Forwarded-Proto</code></td><td><code>$scheme</code> (https)</td><td>App knows client used HTTPS (for redirects)</td></tr>
+  </table>
+</div>
+
+<h2>Key takeaways</h2>
+<div class="commentary">
+  <ul>
+    <li><strong>21 lines, two jobs:</strong> HTTP→HTTPS redirect + TLS termination.</li>
+    <li><strong>TLS at the edge:</strong> Traffic between nginx and app is plain HTTP (internal Docker network).</li>
+    <li><strong>Domain from .env:</strong> <code>${DOMAIN}</code> — must match the TLS certificate.</li>
+    <li><strong>Port 8000 vs 8080:</strong> Possible mismatch with the compose file — the app's internal port needs verification.</li>
+  </ul>
+</div>
+
+<div class="nav" style="margin-top:2em; padding-top:1em; border-top:1px solid #ddd">
+  <a href="12.html">← #12: docker/compose/.env</a> · Next: <a href="file-index.html">File index</a>
+</div>
+</body>
+</html>

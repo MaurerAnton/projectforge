@@ -1,0 +1,150 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>#2209</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}.hist{font-size:.85em;color:#555}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}</style></head>
+<body><div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="2208.html">← Prev</a> · <a href="2210.html">Next →</a></div>
+<h1>#2209: <code>HistoryEntryUserCommentModalRest.kt</code></h1>
+<div class="meta">REST Controller, <code>projectforge-rest/src/main/kotlin/org/projectforge/rest/HistoryEntryUserCommentModalRest.kt</code> (139 lines)</div>
+<div class="c">Source file: HistoryEntryUserCommentModalRest.kt - rest controller in ProjectForge REST module.</div>
+<h2>Source Code</h2><pre>/////////////////////////////////////////////////////////////////////////////
+//
+// Project ProjectForge Community Edition
+//         www.projectforge.org
+//
+// Copyright (C) 2001-2026 Micromata GmbH, Germany (www.micromata.com)
+//
+// ProjectForge is dual-licensed.
+//
+// This community edition is free software; you can redistribute it and/or
+// modify it under the terms of the GNU General Public License as published
+// by the Free Software Foundation; version 3 of the License.
+//
+// This community edition is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General
+// Public License for more details.
+//
+// You should have received a copy of the GNU General Public License along
+// with this program; if not, see http://www.gnu.org/licenses/.
+//
+/////////////////////////////////////////////////////////////////////////////
+
+package org.projectforge.rest
+
+import jakarta.servlet.http.HttpServletRequest
+import jakarta.validation.Valid
+import mu.KotlinLogging
+import org.projectforge.framework.persistence.history.DisplayHistoryEntry
+import org.projectforge.framework.persistence.history.HistoryFormatService
+import org.projectforge.framework.persistence.history.HistoryLoadContext
+import org.projectforge.framework.persistence.history.HistoryService
+import org.projectforge.model.rest.RestPaths
+import org.projectforge.rest.config.Rest
+import org.projectforge.rest.core.RestResolver
+import org.projectforge.rest.core.SessionCsrfService
+import org.projectforge.rest.dto.FormLayoutData
+import org.projectforge.rest.dto.PostData
+import org.projectforge.ui.*
+import org.springframework.beans.factory.annotation.Autowired
+import org.springframework.http.HttpStatus
+import org.springframework.http.ResponseEntity
+import org.springframework.web.bind.annotation.*
+
+private val log = KotlinLogging.logger {}
+
+/**
+ * For editing user comments in history entries. This is a modal dialog.
+ */
+@RestController
+@RequestMapping("${Rest.URL}/historyEntries")
+class HistoryEntryUserCommentModalRest {
+    class HistoryData(entry: DisplayHistoryEntry? = null) {
+        var id: Long? = entry?.id
+        var userComment: String? = entry?.userComment
+        var timeAgo: String? = entry?.timeAgo
+        var modifiedByUser: String? = entry?.modifiedByUser
+        var appendComment: String? = null
+    }
+
+    @Autowired
+    private lateinit var sessionCsrfService: SessionCsrfService
+
+    @Autowired
+    private lateinit var historyService: HistoryService
+
+    @Autowired
+    private lateinit var historyFormatService: HistoryFormatService
+
+    @GetMapping("{id}")
+    fun getItem(@PathVariable("id") id: Long?): ResponseEntity&lt;Any&gt; {
+        val item = historyService.findEntryAndEntityById(id) ?: return ResponseEntity(HttpStatus.NOT_FOUND)
+        return ResponseEntity(item, HttpStatus.OK)
+    }
+
+    /**
+     * Use this service for adding new items as well as updating existing items (id isn't null).
+     */
+    @PutMapping("append")
+    fun append(
+        request: HttpServletRequest,
+        @Valid @RequestBody postData: PostData&lt;HistoryData&gt;,
+    ): ResponseEntity&lt;ResponseAction&gt; {
+        sessionCsrfService.validateCsrfToken(request, postData, "Upsert")?.let { return it }
+        val dto = postData.data
+        if (dto.userComment.isNullOrBlank()) {
+            return ResponseEntity.ok().body(ResponseAction(targetType = TargetType.CLOSE_MODAL, merge = true))
+        }
+        val id = dto.id ?: return ResponseEntity(HttpStatus.NOT_FOUND)
+        historyService.appendUserComment(id, dto.appendComment)
+        return ResponseEntity.ok().body(ResponseAction(targetType = TargetType.CLOSE_MODAL, merge = true))
+    }
+
+    /**
+     * Use this service for adding new items as well as updating existing items (id isn't null).
+     */
+    @PostMapping("cancel")
+    fun cancel(): ResponseEntity&lt;ResponseAction&gt; {
+        return ResponseEntity.ok().body(ResponseAction(targetType = TargetType.CLOSE_MODAL, merge = true))
+    }
+
+    @GetMapping(RestPaths.EDIT)
+    fun getItemAndLayout(
+        request: HttpServletRequest,
+        @RequestParam("id") id: String?,
+    ): ResponseEntity&lt;FormLayoutData&gt; {
+        val item = historyService.findEntryAndEntityById(id) ?: return ResponseEntity(HttpStatus.NOT_FOUND)
+        val entity = item.entity ?: return ResponseEntity(HttpStatus.NOT_FOUND)
+        val historyEntry = item.entry ?: return ResponseEntity(HttpStatus.NOT_FOUND)
+        val dto = HistoryData(historyFormatService.convert(entity, historyEntry, HistoryLoadContext(item.baseDao)))
+        val titleKey = "history.entry"
+        val ui = UILayout(titleKey)
+        ui.userAccess.update = item.writeAccess
+        ui.userAccess.history = item.readAccess
+        ui.add(UIReadOnlyField("timeAgo", label = "modified"))
+        ui.add(UIReadOnlyField("userComment", label = "history.userComment"))
+        ui.add(UIReadOnlyField("modifiedByUser", label = "user"))
+        ui.add(UITextArea("appendComment", label = "history.userComment"))
+        ui
+            .addAction(
+                UIButton.createCancelButton(
+                    responseAction = ResponseAction(
+                        RestResolver.getRestUrl(this::class.java, "cancel"), targetType = TargetType.POST
+                    )
+                )
+            )
+            .addAction(
+                UIButton.createDefaultButton(
+                    "append", title = "append", responseAction = ResponseAction(
+                        RestResolver.getRestUrl(this::class.java, "append"), targetType = TargetType.PUT
+                    )
+                )
+            )
+        LayoutUtils.process(ui)
+        val serverData = sessionCsrfService.createServerData(request)
+        val result = FormLayoutData(dto, ui, serverData)
+        return ResponseEntity(result, HttpStatus.OK)
+    }
+}</pre>
+<h2>Git History</h2><div class="hist"><pre>868d6abb7 2025 -&gt; 2026
+b8c7cc6df Date and numeric filter in AG grid.
+3808112aa t_pf_history.user_comment varchar(2000) -&gt; varchar(10000) HistoryService: appendUserComment adds now time stamp to the appended comment and the user (if different from modified-by-user).
+749bdd1cd HistoryEntry: the user is now able to append user comments to the history entries.</pre></div>
+</body></html>

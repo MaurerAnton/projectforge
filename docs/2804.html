@@ -1,0 +1,327 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>#2804</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}.hist{font-size:.85em;color:#555}</style></head>
+<body><div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="2803.html">← Prev</a> · <a href="2805.html">Next →</a></div>
+<h1>#2804: <code>PhoneCallForm.java</code></h1>
+<div class="meta">Java class, <code>projectforge-wicket/src/main/java/org/projectforge/web/address/PhoneCallForm.java</code></div>
+<div class="c">Java Wicket form web address.</div>
+<h2>Git History</h2><div class="hist"><pre>868d6abb7 2025 -&gt; 2026
+63081666f Source file headers: 2024-&gt; 2025.
+b71b5073d Migration stuff in progress... (all tests of all packages: OK).
+1b50060c3 BaseDao: renamed: get -&gt; find, save -&gt; insert, getList -&gt; select, load -&gt; select
+a72903e36 *.java, *.kt: StringBuffer -&gt; StringBuilder.
+67805f2fc ThreadLocalUserContext.user -&gt; ThreadLocalUserContext.loggedInUser (renamed for avoiding mis-understandings in code).
+b095e6f7d !!!!! Big change of Transaction handling: Re-uses PfPersistenceContext as much as possible (not yet finished). Tests doesn't yet run.
+d6d3d176f Migration stuff in progress...
+b6092df09 Copyright 2023 -&gt; 2024
+f6eb7fd7f WIP: phone calls for Sipgate
+cea10d852 WIP: phone calls for Sipgate
+9cee83a03 WIP: phone calls for Sipgate
+22b8d9d6f WIP: phone calls for Sipgate
+ab45d51fa Copyright 2001-2022 -&gt; 2001-2023.
+42775ab15 AbstractTestBase: plugins and i18 initialized, Datatransfer: notification finished: classical version of AddressView and AddressEdit removed.
+5f7ef41b8 Copyright 2021 -&gt; 2022
+ceb63e8a1 Source code header: (C) 2001-2021.
+75c780fee Renamed: recents -&gt; recentList
+7c79f1922 Copyright of source header -&gt; 2020.
+06f61b5a7 AddressDO is now much smarter in Kotlin...</pre></div>
+<h2>Source</h2><pre>/////////////////////////////////////////////////////////////////////////////
+//
+// Project ProjectForge Community Edition
+//         www.projectforge.org
+//
+// Copyright (C) 2001-2026 Micromata GmbH, Germany (www.micromata.com)
+//
+// ProjectForge is dual-licensed.
+//
+// This community edition is free software; you can redistribute it and/or
+// modify it under the terms of the GNU General Public License as published
+// by the Free Software Foundation; version 3 of the License.
+//
+// This community edition is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General
+// Public License for more details.
+//
+// You should have received a copy of the GNU General Public License along
+// with this program; if not, see http://www.gnu.org/licenses/.
+//
+/////////////////////////////////////////////////////////////////////////////
+
+package org.projectforge.web.address;
+
+import org.apache.commons.collections4.CollectionUtils;
+import org.apache.commons.lang3.StringUtils;
+import org.apache.wicket.Component;
+import org.apache.wicket.markup.html.form.Button;
+import org.apache.wicket.markup.html.form.DropDownChoice;
+import org.apache.wicket.markup.html.form.SubmitLink;
+import org.apache.wicket.markup.html.link.Link;
+import org.apache.wicket.model.Model;
+import org.apache.wicket.model.PropertyModel;
+import org.apache.wicket.model.ResourceModel;
+import org.apache.wicket.request.flow.RedirectToUrlException;
+import org.apache.wicket.util.convert.IConverter;
+import org.projectforge.business.address.AddressDO;
+import org.projectforge.business.address.AddressDao;
+import org.projectforge.business.address.AddressFilter;
+import org.projectforge.business.address.PhoneType;
+import org.projectforge.business.utils.HtmlHelper;
+import org.projectforge.common.BeanHelper;
+import org.projectforge.common.StringHelper;
+import org.projectforge.framework.persistence.user.api.ThreadLocalUserContext;
+import org.projectforge.framework.utils.NumberHelper;
+import org.projectforge.framework.utils.RecentQueue;
+import org.projectforge.rest.AddressViewPageRest;
+import org.projectforge.rest.sipgate.SipgateDirectCallService;
+import org.projectforge.web.WicketSupport;
+import org.projectforge.web.wicket.AbstractStandardForm;
+import org.projectforge.web.wicket.autocompletion.PFAutoCompleteTextField;
+import org.projectforge.web.wicket.bootstrap.GridSize;
+import org.projectforge.web.wicket.components.LabelValueChoiceRenderer;
+import org.projectforge.web.wicket.components.SingleButtonPanel;
+import org.projectforge.web.wicket.flowlayout.*;
+
+import java.io.Serializable;
+import java.util.Date;
+import java.util.List;
+import java.util.Locale;
+
+public class PhoneCallForm extends AbstractStandardForm&lt;Object, PhoneCallPage&gt; {
+    private static final long serialVersionUID = -2138017238114715368L;
+
+    private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(PhoneCallForm.class);
+
+    private static final String USER_PREF_KEY_RECENTS = &quot;phoneCalls&quot;;
+
+    private static final String[] SEARCH_FIELDS = {&quot;name&quot;, &quot;firstName&quot;, &quot;organization&quot;};
+
+    protected AddressDO address;
+
+    protected PFAutoCompleteTextField&lt;AddressDO&gt; numberTextField;
+
+    private DivPanel addressPanel;
+
+    protected String phoneNumber;
+
+    protected String callerPage;
+
+    private String myCurrentPhoneId;
+
+    private String myCurrentCallerId;
+
+    Date lastSuccessfulPhoneCall;
+
+    private RecentQueue&lt;String&gt; recentSearchTermsQueue;
+
+    public PhoneCallForm(final PhoneCallPage parentPage) {
+        super(parentPage);
+    }
+
+    public String getPhoneNumber() {
+        return phoneNumber;
+    }
+
+    public void setPhoneNumber(final String phoneNumber) {
+        this.phoneNumber = phoneNumber;
+    }
+
+    public String getCallerPage() {
+        return callerPage;
+    }
+
+    public void setCallerPage(String callerPage) {
+        this.callerPage = callerPage;
+    }
+
+    public String getMyCurrentPhoneId() {
+        if (myCurrentPhoneId == null) {
+            myCurrentPhoneId = parentPage.getRecentMyPhoneId();
+        }
+        return myCurrentPhoneId;
+    }
+
+    public void setMyCurrentPhoneId(final String myCurrentPhoneId) {
+        this.myCurrentPhoneId = myCurrentPhoneId;
+        if (this.myCurrentPhoneId != null) {
+            parentPage.setRecentMyPhoneId(this.myCurrentPhoneId);
+        }
+    }
+
+    public String getMyCurrentCallerId() {
+        if (myCurrentCallerId == null) {
+            myCurrentCallerId = parentPage.getRecentMyCallerId();
+        }
+        return myCurrentCallerId;
+    }
+
+    public void setMyCurrentCallerId(final String myCurrentCallerId) {
+        this.myCurrentCallerId = myCurrentCallerId;
+        if (this.myCurrentCallerId != null) {
+            parentPage.setRecentMyCallerId(this.myCurrentCallerId);
+        }
+    }
+
+
+    public AddressDO getAddress() {
+        return address;
+    }
+
+    public void setAddress(final AddressDO address) {
+        this.address = address;
+    }
+
+    /**
+     * @see org.projectforge.web.wicket.AbstractStandardForm#createMessageComponent()
+     */
+    @SuppressWarnings(&quot;serial&quot;)
+    @Override
+    protected Component createMessageComponent() {
+        final DivPanel messagePanel = new DivPanel(&quot;message&quot;) {
+            /**
+             * @see org.apache.wicket.Component#isVisible()
+             */
+            @Override
+            public boolean isVisible() {
+                return StringUtils.isNotBlank(parentPage.result);
+            }
+
+            @Override
+            public void onAfterRender() {
+                super.onAfterRender();
+                parentPage.result = null;
+            }
+        };
+        messagePanel.add(new TextPanel(messagePanel.newChildId(), new Model&lt;String&gt;() {
+            @Override
+            public String getObject() {
+                return parentPage.result;
+            }
+        }));
+        return messagePanel;
+    }
+
+    @Override
+    @SuppressWarnings({&quot;serial&quot;, &quot;unchecked&quot;, &quot;rawtypes&quot;})
+    protected void init() {
+        super.init();
+        gridBuilder.newSplitPanel(GridSize.COL50);
+        FieldsetPanel fs = gridBuilder.newFieldset(getString(&quot;address.phoneCall.number.label&quot;),
+                getString(&quot;address.phoneCall.number.labeldescription&quot;));
+        numberTextField = new PFAutoCompleteTextField&lt;AddressDO&gt;(InputPanel.WICKET_ID, new Model() {
+            @Override
+            public Serializable getObject() {
+                // Pseudo object for storing search string (title field is used for this foreign purpose).
+                AddressDO addr = new AddressDO();
+                addr.setName(phoneNumber);
+                return addr;
+            }
+
+            @Override
+            public void setObject(final Serializable object) {
+                if (object != null) {
+                    if (object instanceof String) {
+                        phoneNumber = (String) object;
+                    }
+                } else {
+                    phoneNumber = &quot;&quot;;
+                }
+            }
+        }) {
+            @Override
+            protected List&lt;AddressDO&gt; getChoices(final String input) {
+                final AddressFilter addressFilter = new AddressFilter();
+                addressFilter.setSearchString(input);
+                addressFilter.setSearchFields(SEARCH_FIELDS);
+                return WicketSupport.get(AddressDao.class).select(addressFilter);
+            }
+
+            @Override
+            protected List&lt;String&gt; getRecentUserInputs() {
+                return getRecentSearchTermsQueue().getRecentList();
+            }
+
+            @Override
+            protected String formatLabel(final AddressDO address) {
+                return StringHelper.listToString(&quot;, &quot;, address.getName(), address.getFirstName(), address.getOrganization());
+            }
+
+            @Override
+            protected String formatValue(final AddressDO address) {
+                return &quot;id:&quot; + address.getId();
+            }
+
+            /**
+             * @see org.apache.wicket.Component#getConverter(java.lang.Class)
+             */
+            @Override
+            public &lt;C&gt; IConverter&lt;C&gt; getConverter(final Class&lt;C&gt; type) {
+                return new IConverter() {
+                    @Override
+                    public Object convertToObject(final String value, final Locale locale) {
+                        phoneNumber = value;
+                        AddressDO addr = new AddressDO();
+                        addr.setName(phoneNumber);
+                        return addr;
+                    }
+
+                    @Override
+                    public String convertToString(final Object value, final Locale locale) {
+                        return phoneNumber;
+                    }
+                };
+            }
+        };
+        numberTextField.withLabelValue(true).withMatchContains(true).withMinChars(2).withFocus(true).withAutoSubmit(true);
+        if (StringUtils.isBlank(phoneNumber)) {
+            if (address != null) {
+                final String no = parentPage.getFirstPhoneNumber();
+                if (StringUtils.isNotBlank(no)) {
+                    phoneNumber = parentPage.extractPhonenumber(no);
+                }
+            } else {
+                final String recentNumber = getRecentSearchTermsQueue().get(0);
+                if (StringUtils.isNotBlank(recentNumber)) {
+                    phoneNumber = recentNumber;
+                }
+            }
+        }
+        fs.add(numberTextField);
+        fs.addKeyboardHelpIcon(new ResourceModel(&quot;tooltip.autocompletion.title&quot;),
+                new ResourceModel(&quot;address.directCall.number.tooltip&quot;));
+
+        var sipgateDirectCallService = WicketSupport.get(SipgateDirectCallService.class);
+        if (sipgateDirectCallService.isAvailable()) {
+            // DropDownChoice myCurrentPhoneId
+            fs = gridBuilder.newFieldset(getString(&quot;address.myCurrentPhoneId&quot;));
+            final LabelValueChoiceRenderer&lt;String&gt; myCurrentPhoneIdChoiceRenderer = new LabelValueChoiceRenderer&lt;String&gt;();
+            List&lt;String&gt; ids = sipgateDirectCallService.getCallerNumbers(ThreadLocalUserContext.getLoggedInUser());
+            if (CollectionUtils.isEmpty(ids)) {
+                myCurrentPhoneIdChoiceRenderer.addValue(&quot;--&quot;, getString(&quot;user.personalPhoneIdentifiers.pleaseDefine&quot;));
+            } else {
+                for (final String id : ids) {
+                    myCurrentPhoneIdChoiceRenderer.addValue(id, id);
+                }
+            }
+            final DropDownChoice myCurrentPhoneIdChoice = new DropDownChoice(fs.getDropDownChoiceId(),
+                    new PropertyModel(this, &quot;myCurrentPhoneId&quot;), myCurrentPhoneIdChoiceRenderer.getValues(),
+                    myCurrentPhoneIdChoiceRenderer);
+            myCurrentPhoneIdChoice.setNullValid(false).setRequired(true);
+            fs.add(myCurrentPhoneIdChoice);
+            fs.addHelpIcon(new ResourceModel(&quot;address.myCurrentPhoneId.tooltip.title&quot;),
+                    new ResourceModel(&quot;address.myCurrentPhoneId.tooltip.content&quot;));
+
+            // DropDownChoice myCurrentCallerId
+            fs = gridBuilder.newFieldset(getString(&quot;address.myCurrentCallerId&quot;));
+            final LabelValueChoiceRenderer&lt;String&gt; myCurrentCalerIdChoiceRenderer = new LabelValueChoiceRenderer&lt;String&gt;();
+            ids = sipgateDirectCallService.getCallerIds(ThreadLocalUserContext.getLoggedInUser());
+            for (final String id : ids) {
+                myCurrentCalerIdChoiceRenderer.addValue(id, id);
+            }
+            final DropDownChoice myCurrentCallerIdChoice = new DropDownChoice(fs.getDropDownChoiceId(),
+                    new PropertyModel(this, &quot;myCurrentCallerId&quot;), myCurrentCalerIdChoiceRenderer.getValues(),
+                    myCurrentCalerIdChoiceRenderer);
+            myCurrentCallerIdChoice.setNullValid(false).setRequired(true);
+            fs.add(myCurrentCallerIdChoice);
+            fs.addHelpIcon(new ResourceModel(&quot;address.myCurrentCallerId.tooltip.title&quot;),
+                    new ResourceModel(&quot;address.myCurrentCallerId.tooltip.content&quot;));</pre>
+</body></html>

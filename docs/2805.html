@@ -1,0 +1,327 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>#2805</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}.hist{font-size:.85em;color:#555}</style></head>
+<body><div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="2804.html">← Prev</a> · <a href="2806.html">Next →</a></div>
+<h1>#2805: <code>PhoneCallPage.java</code></h1>
+<div class="meta">Java class, <code>projectforge-wicket/src/main/java/org/projectforge/web/address/PhoneCallPage.java</code></div>
+<div class="c">Java Wicket page web address.</div>
+<h2>Git History</h2><div class="hist"><pre>868d6abb7 2025 -&gt; 2026
+63081666f Source file headers: 2024-&gt; 2025.
+cb5cd5d3d Migration stuff in progress...
+1b50060c3 BaseDao: renamed: get -&gt; find, save -&gt; insert, getList -&gt; select, load -&gt; select
+a72903e36 *.java, *.kt: StringBuffer -&gt; StringBuilder.
+b095e6f7d !!!!! Big change of Transaction handling: Re-uses PfPersistenceContext as much as possible (not yet finished). Tests doesn't yet run.
+4c04cfd65 MAJOR-CHANGE! Migration of integer id's to Long id's (including fk's etc.)
+fb11a504a Migration stuff in progress...
+b6092df09 Copyright 2023 -&gt; 2024
+f6eb7fd7f WIP: phone calls for Sipgate
+9cee83a03 WIP: phone calls for Sipgate
+c2701613a Apache httpclient 5.2 (TeamEventSubscription, SmsSender, PhoneCallpage)
+ab45d51fa Copyright 2001-2022 -&gt; 2001-2023.
+c06db1dab Nearly all jars updated (code changes required).
+5f7ef41b8 Copyright 2021 -&gt; 2022
+ceb63e8a1 Source code header: (C) 2001-2021.
+96eec8ef0 PhoneCallPage: log urlProtected (not full called phone number).
+7c79f1922 Copyright of source header -&gt; 2020.
+e1c8b4f33 Removes now all non digits and non-letters.
+a5bbdca6a Change logger to slf4j</pre></div>
+<h2>Source</h2><pre>/////////////////////////////////////////////////////////////////////////////
+//
+// Project ProjectForge Community Edition
+//         www.projectforge.org
+//
+// Copyright (C) 2001-2026 Micromata GmbH, Germany (www.micromata.com)
+//
+// ProjectForge is dual-licensed.
+//
+// This community edition is free software; you can redistribute it and/or
+// modify it under the terms of the GNU General Public License as published
+// by the Free Software Foundation; version 3 of the License.
+//
+// This community edition is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General
+// Public License for more details.
+//
+// You should have received a copy of the GNU General Public License along
+// with this program; if not, see http://www.gnu.org/licenses/.
+//
+/////////////////////////////////////////////////////////////////////////////
+
+package org.projectforge.web.address;
+
+import org.apache.commons.lang3.StringUtils;
+import org.apache.wicket.request.flow.RedirectToUrlException;
+import org.apache.wicket.request.mapper.parameter.PageParameters;
+import org.projectforge.business.address.AddressDO;
+import org.projectforge.business.address.AddressDao;
+import org.projectforge.business.configuration.ConfigurationService;
+import org.projectforge.business.sipgate.SipgateConfiguration;
+import org.projectforge.common.StringHelper;
+import org.projectforge.framework.configuration.Configuration;
+import org.projectforge.framework.configuration.ConfigurationParam;
+import org.projectforge.framework.time.DateTimeFormatter;
+import org.projectforge.framework.utils.NumberHelper;
+import org.projectforge.rest.AddressPagesRest;
+import org.projectforge.rest.AddressViewPageRest;
+import org.projectforge.rest.core.PagesResolver;
+import org.projectforge.rest.sipgate.SipgateDirectCallService;
+import org.projectforge.web.WicketSupport;
+import org.projectforge.web.wicket.AbstractStandardFormPage;
+
+import java.util.Date;
+
+public class PhoneCallPage extends AbstractStandardFormPage {
+  private static final long serialVersionUID = -5040319693295350276L;
+
+  public final static String PARAMETER_KEY_ADDRESS_ID = &quot;addressId&quot;;
+
+  public final static String PARAMETER_KEY_NUMBER = &quot;number&quot;;
+
+  protected static final String[] BOOKMARKABLE_SELECT_PROPERTIES = new String[]{PARAMETER_KEY_ADDRESS_ID + &quot;|address&quot;,
+      PARAMETER_KEY_NUMBER + &quot;|no&quot;, &quot;callerPage|cp&quot;};
+
+  private static final String SEPARATOR = &quot; | &quot;;
+
+  private static final String USER_PREF_KEY_MY_RECENT_PHONE_ID = &quot;PhoneCall:recentPhoneId&quot;;
+
+  private static final String USER_PREF_KEY_MY_RECENT_CALLER_ID = &quot;PhoneCall:recentCallerId&quot;;
+
+  private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(PhoneCallPage.class);
+
+  private final PhoneCallForm form;
+
+  String result;
+
+  public PhoneCallPage(final PageParameters parameters) {
+    super(parameters);
+    form = new PhoneCallForm(this);
+    body.add(form);
+    evaluateInitialPageParameters(getPageParameters());
+    form.init();
+  }
+
+  public Long getAddressId() {
+    return form.address != null ? form.address.getId() : null;
+  }
+
+  public void setAddressId(final Integer addressId) {
+    if (addressId != null) {
+      final AddressDO address = WicketSupport.get(AddressDao.class).find(addressId);
+      form.address = address;
+    }
+  }
+
+  public String getNumber() {
+    return form.phoneNumber;
+  }
+
+  public void setNumber(final String number) {
+    if (StringUtils.isNotBlank(number) == true) {
+      form.setPhoneNumber(extractPhonenumber(number));
+    }
+  }
+
+  public String getCallerPage() {
+    return form.callerPage;
+  }
+
+  public void setCallerPage(final String callerPage) {
+    form.setCallerPage(callerPage);
+  }
+
+  /**
+   * Find a phone number, search order is business, mobile, private mobile and private.
+   *
+   * @return Number if found, otherwise empty string.
+   */
+  protected String getFirstPhoneNumber() {
+    if (form.address == null) {
+      return &quot;&quot;;
+    }
+    if (StringUtils.isNotEmpty(form.address.getBusinessPhone()) == true) {
+      return form.address.getBusinessPhone();
+    } else if (StringUtils.isNotEmpty(form.address.getMobilePhone()) == true) {
+      return form.address.getMobilePhone();
+    } else if (StringUtils.isNotEmpty(form.address.getPrivateMobilePhone()) == true) {
+      return form.address.getPrivateMobilePhone();
+    } else if (StringUtils.isNotEmpty(form.address.getPrivatePhone()) == true) {
+      return form.address.getPrivatePhone();
+    }
+    return &quot;&quot;;
+  }
+
+  /**
+   * For special phone numbers: id:# or # | name.
+   *
+   * @return true, if the phone number was successfully processed.
+   */
+  private boolean processPhoneNumber() {
+    AddressDao addressDao = WicketSupport.get(AddressDao.class);
+    final String phoneNumber = form.getPhoneNumber();
+    if (StringUtils.isNotEmpty(phoneNumber) == true) {
+      if (phoneNumber.startsWith(&quot;id:&quot;) == true &amp;&amp; phoneNumber.length() &gt; 3) {
+        final Integer id = NumberHelper.parseInteger(phoneNumber.substring(3));
+        if (id != null) {
+          form.setPhoneNumber(&quot;&quot;);
+          final AddressDO address = addressDao.find(id);
+          if (address != null) {
+            form.setAddress(address);
+            final String no = getFirstPhoneNumber();
+            if (StringUtils.isNotEmpty(no) == true) {
+              setPhoneNumber(no, true);
+            }
+          }
+        }
+        return true;
+      } else if (phoneNumber.indexOf(SEPARATOR) &gt;= 0) {
+        final int pos = phoneNumber.indexOf(SEPARATOR);
+        final String rest = phoneNumber.substring(pos + SEPARATOR.length());
+        final int numberPos = rest.indexOf('#');
+        form.setPhoneNumber(phoneNumber.substring(0, pos));
+        if (numberPos &gt; 0) {
+          final Integer id = NumberHelper.parseInteger(rest.substring(numberPos + 1));
+          if (id != null) {
+            final AddressDO address = addressDao.find(id);
+            if (address != null) {
+              form.setAddress(address);
+            }
+          } else {
+            form.setAddress(null);
+          }
+        } else {
+          form.setAddress(null);
+        }
+        return true;
+      }
+    }
+    return false;
+  }
+
+  public void setPhoneNumber(String phoneNumber, final boolean extract) {
+    if (extract == true) {
+      phoneNumber = extractPhonenumber(phoneNumber);
+    }
+    form.setPhoneNumber(phoneNumber);
+  }
+
+  String extractPhonenumber(final String number) {
+    ConfigurationService configurationService = WicketSupport.get(ConfigurationService.class);
+    final String result = NumberHelper.extractPhonenumber(number,
+        Configuration.getInstance().getStringValue(ConfigurationParam.DEFAULT_COUNTRY_PHONE_PREFIX));
+    if (StringUtils.isNotEmpty(result) == true
+        &amp;&amp; StringUtils.isNotEmpty(configurationService.getTelephoneSystemNumber()) == true
+        &amp;&amp; result.startsWith(configurationService.getTelephoneSystemNumber()) == true) {
+      return result.substring(configurationService.getTelephoneSystemNumber().length());
+    }
+    return result;
+  }
+
+  @Override
+  protected void onBeforeRender() {
+    super.onBeforeRender();
+    final String rawInput = form.numberTextField.getRawInput();
+    if (StringUtils.isNotEmpty(rawInput) == true) {
+      form.setPhoneNumber(rawInput);
+    }
+    processPhoneNumber();
+    form.numberTextField.modelChanged();
+  }
+
+  void backToCaller() {
+    String callerPage = form.getCallerPage();
+    if (&quot;addressView&quot;.equals(callerPage)) {
+      throw new RedirectToUrlException(PagesResolver.getDynamicPageUrl(AddressViewPageRest.class, null, getAddressId(), true));
+    } else {
+      throw new RedirectToUrlException(PagesResolver.getListPageUrl(AddressPagesRest.class, null, true));
+    }
+  }
+
+  void call() {
+    final boolean extracted = processPhoneNumber();
+    if (extracted == true) {
+      return;
+    }
+    String number = NumberHelper.extractPhonenumber(form.getPhoneNumber());
+    if (number.length() == 0 || StringUtils.containsOnly(number, &quot;0123456789+-/() &quot;) == false) {
+      form.addError(&quot;address.phoneCall.number.invalid&quot;);
+      return;
+    }
+    form.setPhoneNumber(extractPhonenumber(form.getPhoneNumber()));
+    callNow();
+  }
+
+  private void callNow() {
+    SipgateConfiguration sipgateConfiguration = WicketSupport.get(SipgateConfiguration.class);
+    SipgateDirectCallService sipgateDirectCallService = WicketSupport.get(SipgateDirectCallService.class);
+    if (!sipgateConfiguration.isConfigured()) {
+      log.error(&quot;Sipgate isn't configured. Phone calls not supported.&quot;);
+      return;
+    }
+    log.info(&quot;User initiates direct call from phone with id '&quot;
+        + form.getMyCurrentPhoneId()
+        + &quot;' with caller-id '&quot;
+        + form.getMyCurrentCallerId()
+        + &quot;' to destination number: &quot;
+        + StringHelper.hideStringEnding(form.getPhoneNumber(), 'x', 3));
+    result = null;
+    final StringBuilder buf = new StringBuilder();
+    buf.append(form.getPhoneNumber()).append(SEPARATOR);
+    final AddressDO address = form.getAddress();
+    if (address != null
+        &amp;&amp; StringHelper.isIn(form.getPhoneNumber(), extractPhonenumber(address.getBusinessPhone()),
+        extractPhonenumber(address.getMobilePhone()), extractPhonenumber(address.getPrivatePhone()),
+        extractPhonenumber(address.getPrivateMobilePhone())) == true) {
+      buf.append(address.getFirstName()).append(&quot; &quot;).append(address.getName());
+      if (form.getPhoneNumber().equals(extractPhonenumber(address.getMobilePhone())) == true) {
+        buf.append(&quot;, &quot;).append(getString(&quot;address.phoneType.mobile&quot;));
+      } else if (form.getPhoneNumber().equals(extractPhonenumber(address.getPrivatePhone())) == true) {
+        buf.append(&quot;, &quot;).append(getString(&quot;address.phoneType.private&quot;));
+      }
+      buf.append(&quot; #&quot;).append(address.getId());
+    } else {
+      buf.append(&quot;???&quot;);
+    }
+    if (sipgateDirectCallService.initCall(getUser(), form.getMyCurrentPhoneId(), form.getMyCurrentCallerId(), form.getPhoneNumber())) {
+      result = DateTimeFormatter.instance().getFormattedDateTime(new Date()) + &quot;: &quot;
+          + getString(&quot;address.phoneCall.result.successful&quot;);
+      form.getRecentSearchTermsQueue().append(buf.toString());
+    } else {
+      form.addError(&quot;address.phoneCall.result.callingError&quot;);
+    }
+  }
+
+  protected String getRecentMyPhoneId() {
+    return (String) getUserPrefEntry(USER_PREF_KEY_MY_RECENT_PHONE_ID);
+  }
+
+  protected void setRecentMyPhoneId(final String myPhoneId) {
+    putUserPrefEntry(USER_PREF_KEY_MY_RECENT_PHONE_ID, myPhoneId, true);
+  }
+
+  protected String getRecentMyCallerId() {
+    return (String) getUserPrefEntry(USER_PREF_KEY_MY_RECENT_CALLER_ID);
+  }
+
+  protected void setRecentMyCallerId(final String myCallerId) {
+    putUserPrefEntry(USER_PREF_KEY_MY_RECENT_CALLER_ID, myCallerId, true);
+  }
+
+  @Override
+  protected void onAfterRender() {
+    super.onAfterRender();
+    result = null;
+  }
+
+  /**
+   * @return This page as link with the page parameters of this page.
+   */
+  @Override
+  public String getPageAsLink() {
+    return getPageAsLink(new PageParameters());
+  }
+
+  @Override
+  protected String[] getBookmarkableInitialProperties() {
+    return BOOKMARKABLE_SELECT_PROPERTIES;
+  }</pre>
+</body></html>

@@ -1,0 +1,27 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>#739</title><style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333}h2{margin-top:1.5em}a{color:#0366d6}.meta{font-size:.9em;margin:1em 0}.nav{font-size:.9em;color:#888;margin-bottom:1em}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}code{background:#f0f0f0;padding:0 .2em}</style></head>
+<body>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="738.html">← Prev</a> · <a href="740.html">Next →</a></div>
+<h1>#739: <code>LabelValueBean.java</code></h1>
+<div class="meta"><strong>Lines:</strong> 89 · <strong>Author:</strong> Kai Reinhard · <strong>Type:</strong> Java generic POJO — implements <a href="734.html">ILabelValueBean</a></div>
+<div class="c"><h2>Purpose</h2>
+<p><strong>Concrete implementation of the Label/Value pattern.</strong> 89 lines. This is the most commonly used DTO in ProjectForge's UI layer — every dropdown, every autocomplete, every selection list is built from a <code>List&lt;LabelValueBean&gt;</code>. The "Label" is what the user sees (typically localized text); the "Value" is what the system stores (typically a Long ID or enum constant).</p>
+<p><strong>Class hierarchy:</strong> <code>ILabelValueBean&lt;L, V&gt;</code> (interface) → <code>LabelValueBean&lt;L extends Comparable&lt;L&gt;, V&gt;</code> (this class). Note the additional constraint vs the interface — <code>L</code> must be <code>Comparable</code> because the bean compares by label.</p></div>
+
+<div class="c"><h2>Comparison strategy: sorted by LABEL</h2>
+<p><strong>Key insight:</strong> <code>LabelValueBean</code> <strong>compares by label</strong> (<code>this.label.compareTo(o.label)</code>), while <a href="736.html">KeyValueBean</a> compares by <strong>value</strong>. This is the fundamental semantic difference:</p>
+<ul><li><strong>LabelValueBean:</strong> the label is the primary sort key — "sort this dropdown alphabetically by display name." The value (ID) is secondary — it's just the payload</li>
+<li><strong>KeyValueBean:</strong> the value is the primary sort key — "sort these config parameters by their numeric value." The key (name) is the identifier</li></ul>
+<p>This means the <strong>type constraint</strong> is also on the label: <code>L extends Comparable&lt;L&gt;</code>. The value type <code>V</code> is unconstrained — it doesn't need to be comparable because the bean never compares values.</p></div>
+
+<div class="c"><h2>Bean mutability</h2>
+<p>Unlike <code>KeyValueBean</code> (which is effectively immutable — no setters), <code>LabelValueBean</code> has a <code>setValue(V)</code> setter. The label has no setter but the field is <code>protected</code> — subclasses can modify it. This mutability matters because Wicket's form binding framework (<code>PropertyModel</code>) often needs to <strong>write back</strong> selected values into the bean — the dropdown selection sets the value via <code>setValue()</code>. KeyValueBean doesn't need this because it's used in read-only contexts (config display, chart labels).</p></div>
+
+<div class="c"><h2>toString()</h2>
+<p>Uses <code>ToStringBuilder</code> but with <strong>swapped field names</strong> (a minor bug): it prints <code>key={value}</code> and <code>value={label}</code> — the names "key" and "value" are from a copy-paste of <code>KeyValueBean</code>'s toString. The actual data is correct (label and value are in the right positions), but the labels are misleading. This has zero functional impact — <code>toString()</code> is only used for debugging.</p></div>
+
+<div class="c"><h2>Constructors</h2>
+<ul><li><code>LabelValueBean()</code> — empty for Wicket/XStream deserialization</li>
+<li><code>LabelValueBean(V value)</code> — value-only (label defaults to null). Used when the label will be computed later or when value-is-also-label</li>
+<li><code>LabelValueBean(L label, V value)</code> — full constructor. Most commonly used: <code>new LabelValueBean&lt;&gt;("John Doe", 42L)</code></li></ul></div>
+
+</body></html>

@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>#827: AddressTextParser.kt</title>
+<style>
+  body { font-family: system-ui, sans-serif; max-width: 960px; margin: 2em auto; padding: 0 1em; background: #fafafa; color: #222; line-height: 1.6; }
+  h1 { border-bottom: 2px solid #333; padding-bottom: 0.3em; }
+  h2 { margin-top: 2.5em; border-bottom: 1px solid #ddd; padding-bottom: 0.2em; color: #333; }
+  h3 { margin-top: 2em; color: #444; }
+  a { color: #0366d6; }
+  .c { border-left: 3px solid #ddd; padding: .5em 1em; margin: 1em 0; background: #fff; }
+  .nav { font-size: .9em; color: #888; margin-bottom: 1em; }
+  .meta { font-size: .9em; margin: 1em 0; color: #555; }
+  code { background: #f0f0f0; padding: 0 .2em; font-size: .93em; }
+  pre { background: #f5f5f5; padding: .8em 1em; border: 1px solid #ddd; border-radius: 4px; overflow-x: auto; font-size: .88em; line-height: 1.4; }
+  table { border-collapse: collapse; width: 100%; margin: 1em 0; }
+  th, td { border: 1px solid #ddd; padding: .5em .8em; text-align: left; font-size: .9em; }
+  th { background: #f5f5f5; font-weight: 600; }
+  .hist { font-size: .85em; color: #555; }
+  .warn { background: #fff3cd; border-left: 3px solid #ffc107; padding: .5em 1em; margin: 1em 0; }
+  .tip { background: #d4edda; border-left: 3px solid #28a745; padding: .5em 1em; margin: 1em 0; }
+</style>
+</head>
+<body>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="826.html">← Prev</a> · <a href="828.html">Next →</a></div>
+
+<h1>#827: <code>AddressTextParser.kt</code></h1>
+<div class="meta"><strong>Kotlin object (singleton)</strong> — free-text address extractor. Parses unstructured text blocks (email signatures, clipboard pastes) into structured <code>ParsedAddressData</code>. Location: <code>projectforge-business/src/main/kotlin/org/projectforge/business/address/AddressTextParser.kt</code></div>
+
+<div class="c">
+<strong>Purpose:</strong> Users frequently paste email signatures or clipboard text into the address form. This parser auto-populates fields by recognizing names, titles, phone numbers, emails, websites, street addresses, ZIP+city combinations, company names, and countries from raw text — reducing manual data entry. It powers both the web UI address import dialog and the <code>AddressTextImportService</code> batch importer.
+</div>
+
+<h2>Architecture</h2>
+
+<h3>Two-Pass Parsing Strategy</h3>
+<div class="c">
+The parser uses a <strong>two-pass</strong> approach:<br><br>
+<strong>Pass 1 (line-by-line scanning):</strong> Extract easily-recognizable patterns — email, website, phone numbers (labeled and bare), ZIP+city, and country — using dedicated regex patterns. Lines that contain extracted data are marked as "processed" and removed from further consideration.<br><br>
+<strong>Pass 2 (contextual interpretation):</strong> Remaining unprocessed lines are interpreted based on position and content heuristics. The first line is assumed to be a name (unless it looks like a street address or company). Subsequent lines are classified as position/title, organization, or street address based on pattern matching and order.<br><br>
+This two-pass design mirrors how human readers scan contact information: first spot the obvious structured elements (email format, phone format), then make sense of the remaining prose.
+</div>
+
+<h3>Class Structure</h3>
+<div class="c">
+<code>AddressTextParser</code> is a Kotlin <strong>object</strong> (singleton) — it has no mutable state and all methods are pure functions of the input text. This makes it inherently thread-safe and testable. It delegates name parsing to <a href="831.html">PersonNameParser</a> and phone normalization to <code>PhoneNumberUtils.normalizePhoneNumber()</code>.
+</div>
+
+<h2>Regex Patterns</h2>
+
+<table>
+<tr><th>Pattern</th><th>Purpose</th><th>Examples matched</th></tr>
+<tr><td><code>EMAIL_REGEX</code></td><td>Email addresses</td><td><code>user@example.com</code>, <code>first.last@company.co.uk</code></td></tr>
+<tr><td><code>WEBSITE_REGEX</code></td><td>URLs with ~80 known TLDs</td><td><code>www.company.com</code>, <code>https://example.de/page</code></td></tr>
+<tr><td><code>PHONE_REGEX</code></td><td>Labeled phone numbers</td><td><code>Tel: +49 89 123456</code>, <code>Mobil: 0171/1234567</code>, <code>Fax: 089-12345-67</code></td></tr>
+<tr><td><code>BARE_PHONE_REGEX</code></td><td>Phone numbers without label (≥8 digits)</td><td><code>+49 89 12345678</code>, <code>030 123456789</code></td></tr>
+<tr><td><code>ZIP_CITY_REGEX</code></td><td>Postal code + city name</td><td><code>80331 München</code>, <code>D-80331 München</code>, <code>CH-8000 Zürich</code></td></tr>
+<tr><td><code>STREET_REGEX</code></td><td>Street name + house number</td><td><code>Hauptstr. 42</code>, <code>Karl-Marx-Allee 123a</code>, <code>Am Markt 1-3</code></td></tr>
+<tr><td><code>COUNTRY_REGEX</code></td><td>Country names (multi-lingual)</td><td><code>Deutschland</code>, <code>Switzerland</code>, <code>Österreich</code>, <code>Italy</code></td></tr>
+</table>
+
+<h3>Edge Cases Handled</h3>
+<ul>
+<li><strong>Website vs. title ambiguity:</strong> <code>Dipl.Phys</code> would match a naive website regex due to the <code>.Phys</code> dot. The parser checks if 2+ words follow the match — if so, it assumes a title rather than a website.</li>
+<li><strong>TLD ordering:</strong> The website regex lists longer TLDs (<code>solutions</code>, <code>company</code>) before shorter ones (<code>com</code>, <code>co</code>) to prevent false partial matches.</li>
+<li><strong>Bare phone threshold:</strong> Requires ≥8 digits to avoid misclassifying short numbers (house numbers, years, etc.) as phone numbers.</li>
+<li><strong>Phone type disambiguation:</strong> Labels like <code>Mobil</code>, <code>Mobile</code> route to <code>mobilePhone</code> field; <code>Fax</code> to <code>fax</code>; others to <code>businessPhone</code>.</li>
+<li><strong>"i. A." prefix:</strong> German convention "im Auftrag" (on behalf of) is stripped from the beginning of name lines before name parsing.</li>
+<li><strong>Comma-separated name/position:</strong> Lines like <code>Dr. Max Mustermann, Geschäftsführer</code> are split at the comma — the first part parsed as name, the second as position.</li>
+<li><strong>Multi-country notation:</strong> <code>Schweiz/Switzerland</code> extracts only the first country name before the slash.</li>
+<li><strong>Company suffix detection:</strong> Recognizes GmbH, AG, e.V., KG, OHG, UG, SE, Ltd., Inc., Corp., LLC, PLC as organization indicators.</li>
+</ul>
+
+<h2>Data Flow</h2>
+<pre>
+Input: raw text string
+  ↓
+parseAddressText(text)
+  ├── Normalize: split into lines, trim, filter blanks
+  ├── Pass 1: per-line pattern matching
+  │     ├── EMAIL_REGEX.find()       → result.email
+  │     ├── WEBSITE_REGEX.find()     → result.website  (with title disambiguation)
+  │     ├── PHONE_REGEX.find()       → result.businessPhone/mobilePhone/fax  (by label)
+  │     ├── BARE_PHONE_REGEX.matches() → businessPhone/mobilePhone/fax  (by priority)
+  │     ├── ZIP_CITY_REGEX.find()    → result.zipCode, result.city  (+ inline street)
+  │     └── COUNTRY_REGEX.find()     → result.country
+  └── Pass 2: remaining lines (contextual)
+        ├── Line 0 → parseName() via PersonNameParser → title, form, firstName, name
+        │     └── (skip if line looks like street address or company)
+        ├── containsCompanySuffix()? → result.organization
+        ├── STREET_REGEX.find()?     → result.addressText
+        └── fallback heuristics      → positionText, organization, addressText
+  ↓
+Output: ParsedAddressData
+</pre>
+
+<h2>Git History</h2>
+<div class="hist">
+<pre>868d6abb7 2025 → 2026 (copyright year update)
+30ec0db73 AddressImportReconciler
+cab29b70b WIP: AddressTextParser: PersonNameParser introduced for improved parsing of titles, form-of-address etc.
+48e37a4c9 AddressTextParser: PersonNameParser introduced for improved parsing of titles, form-of-address etc.
+0b1ab35a7 AddressTextParser: PersonNameParser introduced for improved parsing of titles, form-of-address etc.
+8d2032c12 AddressTextParser... (initial commit)
+2d0a47b79 AddressTextParser... (early iteration)
+c624d79b8 PhoneNumberUtils.formatPhoneNumber and AddressTextParser (earliest commit)
+</pre>
+The parser evolved from a simple phone/email extractor into a multi-pass parser with dedicated <code>PersonNameParser</code> for title/form-of-address handling.
+</div>
+
+<h2>Design Decisions</h2>
+<div class="c">
+<strong>Why a Kotlin <code>object</code> rather than a Spring bean?</strong> The parser has no dependencies on Spring services or configuration. It's a pure function operating on string input. Making it a singleton object avoids DI overhead, simplifies testing, and allows use from non-Spring contexts (like batch/cli tools).<br><br>
+<strong>Why two passes instead of one?</strong> A single-pass parser would need to maintain complex state about what's been found so far and make premature classification decisions. Two passes let the first pass purely extract facts (email, phone, etc.) without worrying about semantics, and the second pass interpret only the remaining unclassified text with full context of what was already found.<br><br>
+<strong>Why regex-based rather than ML/NLP?</strong> Contact information follows highly structured patterns (email RFC format, phone number conventions, postal code + city name adjacency). Regex is both more efficient and more predictable than ML for this specific domain. The localized patterns (German street names, "GmbH", "i. A.") reflect that ProjectForge primarily serves DACH-region companies.<br><br>
+<strong>Why separate <code>PersonNameParser</code>?</strong> Name parsing was originally inline but grew complex as support for titles (Prof. Dr. med., Dipl.-Ing.), international forms of address (Herr/Frau/Mr/Mrs/Sr/Sra/Señor/etc.), and academic suffixes accumulated. Extracting it into a dedicated parser follows the Single Responsibility Principle and enables independent testing and reuse.
+</div>
+
+<h2>Comparison with Alternatives</h2>
+<table>
+<tr><th>Feature</th><th>AddressTextParser</th><th>libpostal</th><th>Google Address Validation API</th></tr>
+<tr><td>License</td><td>GPL v3 (open source)</td><td>MIT</td><td>Proprietary (paid)</td></tr>
+<tr><td>Scope</td><td>Full contact extraction (name, phone, email, etc.)</td><td>Street address parsing only</td><td>Address normalization + verification</td></tr>
+<tr><td>Language support</td><td>DE-focused, extends to EN/IT/ES/FR</td><td>Multilingual (statistical)</td><td>Global</td></tr>
+<tr><td>Deployment</td><td>In-process JVM (Kotlin)</td><td>C library (requires native binding)</td><td>HTTP API (network dependency)</td></tr>
+<tr><td>Title/name handling</td><td>Yes (via PersonNameParser)</td><td>No</td><td>No</td></tr>
+<tr><td>DACH-specific</td><td>Extensive (GmbH, e.V., "i. A.", D- prefix)</td><td>Partial</td><td>Partial</td></tr>
+</table>
+<div class="c">
+libpostal would be overkill for the primary use case (parsing email signatures) since it focuses on street addresses only and requires native C bindings. The Google API adds network latency and cost for a feature that's purely a UX convenience. The custom parser balances correctness with simplicity for the DACH market.
+</div>
+
+<h2>Testing</h2>
+<div class="c">
+Tested by <code>AddressTextParserTest.kt</code> (<a href="1673.html">#1673</a>) which covers:<br>
+• Basic name extraction (with/without titles)<br>
+• Phone number formats: <code>Tel: +49 89 123456</code>, <code>Mobil: 0171/1234567</code>, <code>Fax: 089-12345</code><br>
+• Bare phone numbers (without label prefix)<br>
+• ZIP+city extraction with optional D- prefix<br>
+• Street address with house numbers and ranges<br>
+• Company name detection via GmbH/AG suffixes<br>
+• Multi-line email signatures<br>
+• "i. A." prefix stripping<br>
+• Comma-separated name + position
+</div>
+
+<div class="warn"><strong>Gotcha — Website false positives:</strong> Email signatures often contain titles like <code>Dipl.-Phys.</code> or <code>Dipl.-Ing.</code> after the name. The dot notation matches naive URL regex. The parser's heuristic (checking for 2+ words after the match) prevents this but may accidentally reject legitimate short-form URLs like <code>example.com</code> followed by a single word. Test edge cases carefully.</div>
+
+<div class="tip"><strong>Integration point:</strong> Used by <code>AddressTextImportService</code> for batch CSV/Excel address import and by the Wicket web form's paste-to-import feature. The output <code>ParsedAddressData</code> feeds directly into <code>AddressDO</code> field setters.</div>
+
+</body>
+</html>

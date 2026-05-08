@@ -1,0 +1,103 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>#1325</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:2em;color:#444}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}</style></head>
+<body><div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="1324.html">← Prev</a> · <a href="1326.html">Next →</a></div>
+<h1>#1325: <code>MagicFilter.kt</code></h1>
+<div class="meta">Data class / Filter — Persistence Search, <code>projectforge-business/src/main/kotlin/org/projectforge/framework/persistence/api/MagicFilter.kt</code></div>
+<div class="c">The central filter model for ProjectForge list pages and search. Represents user-defined search criteria as a collection of typed <code>MagicFilterEntry</code> objects, supporting field search, range search, full-text search, history search, sorting, pagination, and soft-delete filtering. Extends <code>AbstractFavorite</code> for user preference persistence via <code>UserPrefDao</code>.</div>
+
+<h2>Architecture</h2>
+
+<h3>Class Hierarchy</h3>
+<pre>AbstractFavorite (name, id)
+  └── MagicFilter</pre>
+<p>As an <code>AbstractFavorite</code>, MagicFilter can be saved/loaded as a named filter preference for each user and each entity type. The Jackson JSON serialization is configured via <code>@JsonTypeInfo</code> for polymorphic deserialization.</p>
+
+<h3>Core Fields</h3>
+<table>
+<tr><th>Field</th><th>Type</th><th>Default</th><th>Purpose</th></tr>
+<tr><td><code>entries</code></td><td><code>MutableList&lt;MagicFilterEntry&gt;</code></td><td>empty</td><td>Typed search criteria: field search, range search, history search, full-text search</td></tr>
+<tr><td><code>sortProperties</code></td><td><code>MutableList&lt;SortProperty&gt;</code></td><td>empty</td><td>Sort order specification</td></tr>
+<tr><td><code>sortAndLimitMaxRowsWhileSelect</code></td><td><code>Boolean</code></td><td><code>true</code></td><td>Whether to apply sorting and row limiting during DB select or post-query</td></tr>
+<tr><td><code>maxRows</code></td><td><code>Int</code></td><td><code>QUERY_FILTER_MAX_ROWS</code> (50,000)</td><td>Maximum number of results</td></tr>
+<tr><td><code>deleted</code></td><td><code>Boolean?</code></td><td><code>false</code></td><td>Soft-delete filter: null=all, true=deleted only, false=active only</td></tr>
+<tr><td><code>searchString</code></td><td><code>String?</code></td><td><code>null</code></td><td>Full-text search on all indexed fields</td></tr>
+<tr><td><code>searchHistory</code></td><td><code>String?</code></td><td><code>null</code></td><td>Comma-separated list of history entry types to search</td></tr>
+<tr><td><code>autoWildcardSearch</code></td><td><code>Boolean</code></td><td><code>false</code></td><td>If true, appends wildcard to alphanumeric search strings</td></tr>
+<tr><td><code>extended</code></td><td><code>MutableMap&lt;String, Any&gt;</code></td><td>empty</td><td>Extension map for custom filter variables</td></tr>
+<tr><td><code>multiSelection</code></td><td><code>Boolean?</code></td><td><code>null</code></td><td>Multi-select mode flag (hides filter UI when active)</td></tr>
+</table>
+
+<h3>Key Operations</h3>
+<table>
+<tr><th>Method</th><th>Purpose</th></tr>
+<tr><td><code>init()</code></td><td>Post-deserialization rebuild. Converts user IDs to display names, cleans empty entries. Must be called after loading from UserPrefDao.</td></tr>
+<tr><td><code>reset()</code></td><td>Clears all entries, sort properties, and extended map; resets deleted and searchHistory to defaults</td></tr>
+<tr><td><code>isModified(other: MagicFilter): Boolean</code></td><td>Deep comparison of entries, name, and ID to detect filter changes (for dirty-checking favorites)</td></tr>
+<tr><td><code>clone(): MagicFilter</code></td><td>Deep clone via Jackson serialize/deserialize round-trip</td></tr>
+<tr><td><code>paginationPageSize: Int?</code></td><td>Extracts the <code>PAGINATION_PAGE_SIZE</code> value from entries if present</td></tr>
+</table>
+
+<h3>MagicFilterEntry Structure</h3>
+<p>Each entry has:
+<code>field</code> — the entity property name (or special value for history search),
+<code>value</code> — a <code>Value</code> object with <code>value</code> (exact), <code>fromValue</code>/<code>toValue</code> (range), <code>values</code> (multi-select list), <code>id</code>, <code>label</code>, <code>displayName</code>,
+<code>synthetic</code> — whether the entry is auto-generated (not user-created).</p>
+
+<h3>Special Entry Fields</h3>
+<ul>
+<li><code>"deleted"</code> — treated as the deleted flag rather than a regular field filter</li>
+<li><code>MODIFIED_HISTORY_VALUE</code> / <code>MODIFIED_INTERVAL</code> / <code>MODIFIED_BY_USER</code> — Hibernate Envers history search</li>
+<li><code>"pageSize"</code> — legacy name, auto-renamed to <code>paginationPageSize</code> in MagicFilterProcessor</li>
+</ul>
+
+<h3>Serialization &amp; Persistence</h3>
+<p><code>UserPrefDao</code> stores MagicFilter instances as JSON. The <code>clone()</code> method uses the same ObjectMapper for deep cloning. After deserialization, <code>init()</code> must be called because certain fields (like user display names) are not serialized.</p>
+
+<h2>Git History</h2><div class="hist"><pre>868d6abb7 2025 -> 2026
+63081666f Source file headers: 2024-> 2025.
+0237d5eba Json serialization refactored: IdOnlySerializer and IdsOnlySerializer introduced.
+7957637da Migration stuff in progress... (all tests of all packages: OK).
+4c04cfd65 MAJOR-CHANGE! Migration of integer id's to Long id's (including fk's etc.)
+b6092df09 Copyright 2023 -> 2024
+ab45d51fa Copyright 2001-2022 -> 2001-2023.
+267283973 PROJECTFORGE-3730: Show validation message for list pages if result list was truncated due to max rows in QueryFilter.
+9c4cc0ae3 WIP: Use AGGrid in list pages.
+4a8ee9d9c WIP: AG-Grid, multi-selection
+5f7ef41b8 Copyright 2021 -> 2022
+d5dda1711 Bugfix in list search: search for keywords and modified-by-user is now supported in history search.
+c0f2b9de0 Tenants functionality removed everywhere (untested).
+ceb63e8a1 Source code header: (C) 2001-2021.
+c24251ff3 EmployeeSelect.
+1f0ceacca MagicFilter: modify searchString automatically as str*
+243613fe9 MagicFilter.searchString re-added, translation added.
+7c79f1922 Copyright of source header -> 2020.
+96c77adec Jackson's ObjectMapper is thread-safe, re-use instances instead of creating new ones on every call.
+dc60c1487 MagicFilter.autoWildcardSearch
+031b5b380 MagicFilter.autostartWithSearch
+f49bf10fc MagicFilter.init implemented for setting e. g. username as label for user entries (first test).
+ebf676abd Code warnings fixed.
+507854213 WIP: MagicFilter...
+715c606d5 MagicFilter.reset resets now sort properties and other fields.
+1ead8c5fc removed sortEntries (duplicated)
+e5da9d15f MagicFilter.sortEntries added.
+080a49c05 WIP: MagicFilter refactored....
+98c37568e WIP: MagicFilter: extended checkboxes (AddressRest).
+b46e659aa WIP: MagicFilter
+07394ee16 WIP: MagicFilter
+0649cacbe BaseDao reoganized: QueryFilter is now moved to BaseDaoLegacyQueryBuilder, MagicFilter queries WIP.
+f6e36c350 WIP: MagicFilter and REST services don't support BaseSearchFilter anymore.
+c1d561619 MagicFilter: Set filter.searchString to null if no entries are given (resetting the search string wasn't possible before).
+a29a8008c Kotlin: code warnings fixed.
+10e2ddd1c MagicFilter: filterFavorites, isCurrentFilterModified.
+8872c5094 MagicFilter{Entry}.isModified.
+79c46553c MagicFilter: AND search and value as String is now interpreted as normal string.
+692f3488e MagicFilter ignores now search string of BasesearchFilter. MagicFilter should be used instead.
+ef0b4f83c WIP: MagicFilter.
+faec5af58 MagicFilter: Json serialization fixed by @JsonTypeInfo annotation.
+fadbfeb2c WIP: MagicFilter, currentFilter, favorites, UserPrefCache/Dao...
+6035ac70a WIP: favorites and magic filter.
+05244ff19 CopyRight of all Kotlin file-header updated or created.
+bd3a3e824 Module projectforge-jax-rs renamed to projectforge-rest.
+9034a4bc0 Compiler warnings fixed...
+fffe8bf6d WIP: Magic Filter.</pre></div>
+</body></html>

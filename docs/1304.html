@@ -1,0 +1,97 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>#1304</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:2em;color:#444}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}</style></head>
+<body><div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="1303.html">← Prev</a> · <a href="1305.html">Next →</a></div>
+<h1>#1304: <code>ImportStorage.kt</code></h1>
+<div class="meta">Abstract entity — REST Importer Layer, <code>projectforge-rest/src/main/kotlin/org/projectforge/rest/importer/ImportStorage.kt</code></div>
+<div class="c">Abstract base class for all import storage implementations. Manages import reconciliation between uploaded data and database entities, column mapping/detection, pair entry lifecycle with error/warning tracking, and display filtering for import UIs. Parameterized by the modified entity type <code>O</code> (extending <code>ImportPairEntry.Modified&lt;O&gt;</code>).</div>
+
+<h2>Architecture</h2>
+<h3>Class Hierarchy</h3>
+<p><code>ImportStorage&lt;O : ImportPairEntry.Modified&lt;O&gt;&gt;</code> is the core abstract class in the import subsystem. Concrete importers extend this to define how uploaded data maps to domain entities. It operates alongside <code>ImportSettings</code>, <code>ImportPairEntry</code>, <code>AbstractImportJob</code>, and <code>AbstractImportPageRest</code>.</p>
+
+<h3>Key Components</h3>
+<table>
+<tr><th>Component</th><th>Type</th><th>Purpose</th></tr>
+<tr><td><code>importSettings</code></td><td>Constructor param</td><td>Immutable import configuration (delimiter, encoding, etc.)</td></tr>
+<tr><td><code>pairEntries</code></td><td><code>MutableList&lt;ImportPairEntry&lt;O&gt;&gt;</code></td><td>All import entries pairing read (uploaded) and stored (database) entities</td></tr>
+<tr><td><code>detectedColumns</code></td><td><code>MutableMap&lt;String, ImportFieldSettings&gt;</code></td><td>Columns detected from the uploaded file headers</td></tr>
+<tr><td><code>unknownColumns</code></td><td><code>MutableList&lt;String&gt;</code></td><td>Columns found in the file but not mapped</td></tr>
+<tr><td><code>columnMapping</code></td><td><code>MutableMap&lt;Int, ImportFieldSettings&gt;</code></td><td>Position-to-field mapping for parsing</td></tr>
+<tr><td><code>errors / warnings</code></td><td>Thread-safe lists</td><td>Global error and warning messages with synchronized access</td></tr>
+<tr><td><code>displayOptions</code></td><td><code>DisplayOptions</code> (inner class)</td><td>Toggle visibility of new/modified/unmodified/imported/deleted/faulty/unknown entries</td></tr>
+<tr><td><code>targetEntity / targetEntityTitle</code></td><td>Optional fields</td><td>For multi-entity imports, identifies the current target and its display title</td></tr>
+</table>
+
+<h3>Reconciliation Flow</h3>
+<p>The core reconciliation mechanism is a template method pattern:</p>
+<ol>
+<li><code>reconcileImportStorage(rereadDatabaseEntries)</code> — final method, sets <code>hasBeenReconciled = true</code>, calls hook, marks all entries reconciled</li>
+<li><code>doReconcileImportStorage(rereadDatabaseEntries)</code> — protected open hook for subclass implementation (default no-op)</li>
+<li>After reconciliation, <code>pairEntries</code> show status per entry: NEW, MODIFIED, UNMODIFIED, IMPORTED, DELETED, FAULTY</li>
+</ol>
+
+<h3>Entry Lifecycle</h3>
+<table>
+<tr><th>Method</th><th>Purpose</th></tr>
+<tr><td><code>prepareEntity(): O</code></td><td>Abstract — creates a new blank entity for population</td></tr>
+<tr><td><code>prepareImportPairEntry(): ImportPairEntry&lt;O&gt;</code></td><td>Creates a pair entry with a prepared entity, ready for parsing with error tracking</td></tr>
+<tr><td><code>addEntry(entry)</code></td><td>Adds to pairEntries with auto-incrementing ID</td></tr>
+<tr><td><code>setProperty(obj, fieldSettings, value): Boolean</code></td><td>Open — custom property setting; returns true if handled, false for auto-setting</td></tr>
+<tr><td><code>commitEntity(obj: O)</code></td><td>Abstract — stores/skips the entity after all properties are set</td></tr>
+<tr><td><code>commitEntity(pairEntry)</code></td><td>Open — preferred commit method using pair entry (calls commitEntity with read entity)</td></tr>
+<tr><td><code>createEntries(displayOptions)</code></td><td>Converts pair entries to display entries, applying display filter and transferring errors</td></tr>
+</table>
+
+<h3>Thread Safety</h3>
+<p>The <code>errors</code> and <code>warnings</code> lists are protected by <code>synchronized</code> blocks. Public read access returns defensive copies. The <code>pairEntries</code> list is also synchronized during ID assignment.</p>
+
+<h3>Info Export</h3>
+<p><code>ImportStorageInfo</code> is generated on-the-fly via the <code>info</code> property, providing a snapshot of counts (new, modified, unmodified, imported, deleted, faulty, unknown) for UI rendering.</p>
+
+<h2>Subclasses (on this branch)</h2>
+<ul>
+<li><code>BankingImportStorage</code> — banking transaction imports (Banking plugin)</li>
+<li><code>AddressImportStorage</code> — address/contact CSV/Excel imports</li>
+<li><code>EingangsrechnungImportStorage</code> — incoming invoice imports</li>
+<li><code>ImportStorage</code> in <code>rest/importer/</code> package</li>
+</ul>
+
+<h2>Git History</h2><div class="hist"><pre>868d6abb7 2025 -> 2026
+76f216b0f AbstractPagesRest: param request added to open functions, WIP. address vcf upload
+16ab7c6ef AbstractImportPage fix: Long - Integer comparison
+45479d226 WIP: Import of creditor invoices
+8717a58b8 WIP: Import of creditor invoices
+f4540acfa WIP: Import of creditor invoices
+fdd683ca7 WIP: Import of creditor invoices
+c9dff4cb8 WIP: Import of creditor invoices
+ffc71ab7e WIP: Import of creditor invoices
+95363546e WIP: Import of creditor invoices.
+f9f42dae1 WIP: ImportStorage
+63081666f Source file headers: 2024-> 2025.
+61f05ce90 Migration stuff in progress...
+b6092df09 Copyright 2023 -> 2024
+ab45d51fa Copyright 2001-2022 -> 2001-2023.
+1ea8d4062 WIP: Jobs and Bank account records.
+18cf43df0 WIP: Jobs and Bank account records.
+163492453 WIP: Jobs and Bank account records.
+09b3f0df7 WIP: Jobmonitor. ListStatisticsSupport -> MarkdownBuilder
+a1646e91a WIP: Banking plugin (and new import module).
+9ba1738ea WIP: Banking plugin (and new import module).
+c3331c88e WIP: Banking plugin (and new import module). DynamicDropArea: copy&paste bug fixed (function renamed)
+1b6b960a9 WIP: Banking plugin (and new import module).
+72a042463 WIP: Banking plugin (and new import module).
+6ec22a30d WIP: Banking plugin (and new import module).
+d38c01233 WIP: Banking plugin (and new import module).
+67333b119 WIP: Banking plugin (and new import module).
+750e60742 WIP: Banking plugin (and new import module).
+0936be3ed WIP: Banking plugin (and new import module).
+03796e3c6 WIP: Banking plugin (and new import module).
+e118c101d WIP: Banking plugin (and new import module).
+9ccbfdfc2 WIP: Banking plugin (and new import module).
+5f7ef41b8 Copyright 2021 -> 2022
+ceb63e8a1 Source code header: (C) 2001-2021.
+7c79f1922 Copyright of source header -> 2020.
+45cad02e9 IHK-Plugin added ( Will replace "Ihk-Export"-Plugin in the long run )
+dd5ca38ac CopyRight of all java file-header updated or created.
+9ebb88522 Initial commit</pre></div>
+</body></html>

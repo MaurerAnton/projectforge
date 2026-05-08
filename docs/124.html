@@ -1,0 +1,51 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>#124</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333}a{color:#0366d6}.meta{font-size:.9em;margin:1em 0}.nav{font-size:.9em;color:#888;margin-bottom:1em}.commentary{border-left:3px solid #ddd;padding:1em;margin:1em 0;background:#fff}code{background:#f0f0f0;padding:0 .2em;border-radius:2px}</style></head>
+<body>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="123.html">← Prev</a> · <a href="125.html">Next →</a></div>
+
+<h1>#124: <code>IHKExporter.java</code></h1>
+<div class="meta"><strong>Path:</strong> <code>plugins/...ihk/src/main/java/.../IHKExporter.java</code> · <strong>Lines:</strong> 292 · <strong>Type:</strong> Java Excel export engine</div>
+
+<div class="commentary">
+<p><strong>Excel report generator for IHK apprenticeship weekly reports.</strong> The core logic of the plugin — takes a week's timesheet entries, the trainee's configuration (<a href="123.html">IHKCommentObject</a>), and a <a href="https://github.com/micromata/merlin">Merlin</a> Excel template, and produces a formatted IHK-compliant <code>.xlsx</code> file. 292 lines of Java.</p>
+
+<h3>Architecture</h3>
+<p>Uses <strong>Merlin</strong> (Micromata's Excel templating engine, see <a href="221.html">#221+</a>) — loads an <code>.xlsx</code> template from the classpath (<code>ClassPathResource("merlin/ihk/ihk.xlsx")</code>), fills in data programmatically, and returns a <code>ByteArrayOutputStream</code> for download.</p>
+
+<h3>Key data flows</h3>
+<ol>
+<li><strong>Training year calculation:</strong> <code>Period.between(ausbildungsbeginn, now).getYears()</code> → auto-calculates the training year unless <code>ausbildungsjahr</code> is manually set</li>
+<li><strong>Timesheet filtering:</strong> queries <code>TimesheetDO</code> for the trainee's entries in the selected week, grouped by day</li>
+<li><strong>Hours aggregation:</strong> sums work hours per day, formats with <code>DecimalFormat("0.00")</code></li>
+<li><strong>Excel population via Merlin:</strong>
+  <ul>
+    <li>Reads template workbook from <code>merlin/ihk/ihk.xlsx</code></li>
+    <li>Fills header: trainee name, department (<code>teamname</code>), training year, calendar week, date range</li>
+    <li>Fills daily rows: day of week, date, topic/activity description from timesheet, hours worked, signature placeholders</li>
+    <li>Applies cell formatting: borders, font sizes, merged cells for header block</li>
+  </ul></li>
+<li><strong>Output:</strong> writes the populated workbook to a <code>ByteArrayOutputStream</code>, returns the byte array for HTTP download with filename <code>Berichtsheft_KW{week}_{name}.xlsx</code></li>
+</ol>
+
+<h3>Excel template structure</h3>
+<p>The IHK requires a specific report format containing:</p>
+<ul>
+<li>Header: company name, trainee name, training year, calendar week, date range</li>
+<li>Department/supervisor section</li>
+<li>Daily rows: topics/activities performed, work hours, signature fields</li>
+<li>Weekly summary row with total hours</li>
+<li>Signature sections for trainee and supervisor</li>
+</ul>
+<p>The Merlin template (<code>ihk.xlsx</code>) contains these structural elements; the exporter fills in the dynamic data.</p>
+
+<h3>Dependencies</h3>
+<ul>
+<li><code>de.micromata.merlin.excel.*</code> — Merlin Excel API for template-based Excel generation</li>
+<li><code>TimesheetDO</code> — timesheet entries with description, start/stop time, date</li>
+<li><code>PFDateTime</code>, <code>PFDay</code>, <code>LocalDate</code> — date/time handling for week boundaries</li>
+<li><code>JsonUtils</code> — deserializes <a href="123.html">IHKCommentObject</a> from address comment</li>
+<li><code>AddressDO</code> / <code>ThreadLocalUserContext.getLoggedInUser()</code> — fetches trainee contact for config</li>
+</ul>
+</div>
+
+</body></html>

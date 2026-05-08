@@ -1,0 +1,33 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>1272</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:2em;color:#444}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}</style></head>
+<body><div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="1271.html">← Prev</a> · <a href="1273.html">Next →</a></div>
+<h1>1272: <code>AbstractCache.kt</code></h1>
+<div class="meta">Abstract Cache Base Class, projectforge-business/.../cache/AbstractCache.kt</div>
+<div class="c">Thread-safe base class implementing a time-based expiry cache with listener callbacks. Subclasses override <code>refresh()</code> to reload data; callers invoke <code>checkRefresh()</code> to ensure fresh data on each access.</div>
+
+<h2>Architecture &amp; Role</h2>
+<p><code>AbstractCache</code> provides the framework for all in-memory caches in ProjectForge (e.g., <code>Configuration</code>, <code>UserGroupCache</code>, <code>TaskTree</code>). It uses a double-checked locking pattern with a <code>synchronized</code> block plus an <code>isRefreshInProgress</code> flag to prevent concurrent refreshes.</p>
+
+<h3>Expiry Mechanism</h3>
+<ul>
+<li>Default expire time: 60 minutes (configurable via constructor or setter methods in seconds/minutes/hours).</li>
+<li>Time constants: <code>TICKS_PER_SECOND = 1000</code>, <code>TICKS_PER_MINUTE = 60_000</code>, <code>TICKS_PER_HOUR = 3_600_000</code>, <code>TICKS_PER_DAY = 86_400_000</code></li>
+<li><code>isExpired</code> boolean is set to <code>true</code> on expiry; also markable manually via <code>setExpired()</code>.</li>
+<li><code>forceReload()</code> = <code>setExpired()</code> + <code>checkRefresh()</code>, used when the underlying data is known to have changed.</li>
+</ul>
+
+<h3>Listener System</h3>
+<p>Uses <code>CopyOnWriteArrayList&lt;CacheListener&gt;</code> to avoid deadlocks during concurrent refresh cycles. Two callbacks:</p>
+<ul>
+<li><code>onBeforeCacheRefresh()</code> — invoked before <code>refresh()</code></li>
+<li><code>onAfterCacheRefresh()</code> — invoked after <code>refresh()</code> completes, even on error</li>
+</ul>
+
+<h3>Thread Safety</h3>
+<p>The <code>checkRefresh()</code> method uses <code>synchronized(this)</code> with a re-check pattern. If a refresh is already in progress (<code>isRefreshInProgress == true</code>), the calling thread returns immediately without blocking. This prevents stack-overflow from nested <code>checkRefresh()</code> calls (e.g., cache A depends on cache B, which triggers cache A).</p>
+
+<h2>Git History</h2><div class="hist"><pre>868d6abb7 2025 -> 2026
+527249005 AbstractCache: deadlock resolved by using CopyOnWriteArrayList
+51d352133 AuftragsCache / AuftragsRechnungsCache handling refactored (cyclic usage resolved)
+</pre></div>
+</body></html>

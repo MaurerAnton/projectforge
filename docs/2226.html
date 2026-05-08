@@ -1,0 +1,257 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>#2226</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}.hist{font-size:.85em;color:#555}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}</style></head>
+<body><div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="2225.html">← Prev</a> · <a href="2227.html">Next →</a></div>
+<h1>#2226: <code>ImportStorage.kt</code></h1>
+<div class="meta">Data Class, <code>projectforge-rest/src/main/kotlin/org/projectforge/rest/importer/ImportStorage.kt</code> (240 lines)</div>
+<div class="c">Source file: ImportStorage.kt - data class in ProjectForge REST module.</div>
+<h2>Source Code</h2><pre>/////////////////////////////////////////////////////////////////////////////
+//
+// Project ProjectForge Community Edition
+//         www.projectforge.org
+//
+// Copyright (C) 2001-2026 Micromata GmbH, Germany (www.micromata.com)
+//
+// ProjectForge is dual-licensed.
+//
+// This community edition is free software; you can redistribute it and/or
+// modify it under the terms of the GNU General Public License as published
+// by the Free Software Foundation; version 3 of the License.
+//
+// This community edition is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General
+// Public License for more details.
+//
+// You should have received a copy of the GNU General Public License along
+// with this program; if not, see http://www.gnu.org/licenses/.
+//
+/////////////////////////////////////////////////////////////////////////////
+
+package org.projectforge.rest.importer
+
+import org.projectforge.framework.i18n.translate
+
+abstract class ImportStorage&lt;O : ImportPairEntry.Modified&lt;O&gt;&gt;(
+  val importSettings: ImportSettings
+) {
+  private var idCounter = 0L
+
+  /**
+   * Indicates whether reconcileImportStorage has been called at least once.
+   * Used to control UI elements like the import button.
+   */
+  var hasBeenReconciled: Boolean = false
+
+  var lastJobRun: AbstractImportJob? = null
+    protected set
+
+  class DisplayOptions(
+    var new: Boolean? = true,
+    var modified: Boolean? = true,
+    var unmodified: Boolean? = null,
+    var imported: Boolean? = null,
+    var deleted: Boolean? = true,
+    var faulty: Boolean? = true,
+    var unknown: Boolean? = true,
+  )
+
+  /**
+   * If the user is able to import data for different target entities, please set the targetEntity here.
+   */
+  var targetEntity: Any? = null
+
+  /**
+   * If the user is able to import data for different target entities, this title is displayed
+   * in the import tool for clarification.
+   */
+  open val targetEntityTitle: String? = null
+
+  /**
+   * The filename of the uploaded import file.
+   */
+  var filename: String? = null
+
+  val title: String
+    get() {
+      targetEntityTitle?.let {
+        if (it.isNotBlank()) {
+          return "${translate("import.title")}: $it"
+        }
+      }
+      return translate("import.title")
+    }
+
+  val detectedColumns = mutableMapOf&lt;String, ImportFieldSettings&gt;()
+  val unknownColumns = mutableListOf&lt;String&gt;()
+
+  /**
+   * Mapping of columns to properties.
+   */
+  val columnMapping = mutableMapOf&lt;Int, ImportFieldSettings&gt;()
+
+  var pairEntries = mutableListOf&lt;ImportPairEntry&lt;O&gt;&gt;()
+
+  private val errors =  mutableListOf&lt;String&gt;()
+  private val warnings = mutableListOf&lt;String&gt;()
+
+  val errorList: List&lt;String&gt;
+    get() {
+      synchronized(errors) {
+        return errors.toList()
+      }
+    }
+
+  val warningList: List&lt;String&gt;
+    get() {
+      synchronized(warnings) {
+        return warnings.toList()
+      }
+    }
+
+  /**
+   * Reconciles imported data with database entries.
+   * This method is final to ensure hasBeenReconciled flag is always set.
+   * Subclasses should override doReconcileImportStorage() instead.
+   */
+  fun reconcileImportStorage(rereadDatabaseEntries: Boolean = true) {
+    hasBeenReconciled = true
+    doReconcileImportStorage(rereadDatabaseEntries)
+    // Mark all entries as reconciled so their status can be properly determined
+    pairEntries.forEach { it.reconciled = true }
+  }
+
+  /**
+   * Template method hook for subclasses to implement reconciliation logic.
+   * Override this method in subclasses instead of reconcileImportStorage().
+   */
+  protected open fun doReconcileImportStorage(rereadDatabaseEntries: Boolean) {
+    // Default implementation does nothing
+  }
+
+  fun clearErrors() {
+    synchronized(errors) {
+      errors.clear()
+    }
+  }
+
+  fun addError(error: String) {
+    synchronized(errors) {
+      errors.add(error)
+    }
+  }
+
+  fun clearWarnings() {
+    synchronized(warnings) {
+      warnings.clear()
+    }
+  }
+
+  fun addWarning(warning: String) {
+    synchronized(warnings) {
+      warnings.add(warning)
+    }
+  }
+
+  /**
+   * @return [pairEntries], but with ensured id's.
+   */
+  val ensurePairEntriesIds: MutableList&lt;ImportPairEntry&lt;O&gt;&gt;
+    get() {
+      synchronized(pairEntries) {
+        pairEntries.forEach { entry -&gt;
+          if (entry.id &lt; 0) {
+            entry.id = idCounter++
+          }
+        }
+        return pairEntries
+      }
+    }
+
+  /**
+   * @return created list of ImportEntry (not ImportPairEntry) with ensured id's.
+   */
+  fun createEntries(displayOptions: DisplayOptions?): MutableList&lt;ImportEntry&lt;O&gt;&gt; {
+    val result = mutableListOf&lt;ImportEntry&lt;O&gt;&gt;()
+    ensurePairEntriesIds.forEach { pair -&gt;
+      if (displayOptions == null || pair.match(displayOptions)) {
+        val entry = ImportEntry(pair.read ?: pair.stored)
+        entry.status = pair.status
+        entry.oldDiffValues = pair.oldDiffValues
+        entry.id = pair.id
+        pair.getErrors().forEach { entry.addError(it) }
+        result.add(entry)
+      }
+    }
+    return result
+  }
+
+  fun addEntry(entry: ImportPairEntry&lt;O&gt;) {
+    entry.id = idCounter++
+    synchronized(pairEntries) {
+      pairEntries.add(entry)
+    }
+  }
+
+  fun clearEntries() {
+    synchronized(pairEntries) {
+      pairEntries.clear()
+    }
+  }
+
+  var displayOptions = DisplayOptions()
+
+
+  val info: ImportStorageInfo
+    get() = ImportStorageInfo(this)
+
+  /**
+   * Prepares an entity (normally only by return new object).
+   */
+  abstract fun prepareEntity(): O
+
+  /**
+   * Set the property of the prepared entity on your own.
+   * @return true if the property is set by the implementation. If false (default), then the property will be set automatically
+   * by the importer tool (if possible).
+   */
+  open fun setProperty(obj: O, fieldSettings: ImportFieldSettings, value: String): Boolean {
+    return false
+  }
+
+  /**
+   * Creates a new ImportPairEntry with a prepared entity ready for parsing.
+   * This allows parsers to directly access and set error messages during parsing.
+   *
+   * @return ImportPairEntry containing the prepared entity
+   */
+  fun prepareImportPairEntry(): ImportPairEntry&lt;O&gt; {
+    val dto = prepareEntity()
+    return ImportPairEntry(read = dto)
+  }
+
+  /**
+   * Store or skip this entity after the setting of all properties.
+   */
+  abstract fun commitEntity(obj: O)
+
+  /**
+   * Store or skip this ImportPairEntry after parsing and validation.
+   * This is the preferred method when using prepareImportPairEntry().
+   *
+   * @param pairEntry The ImportPairEntry to commit
+   */
+  open fun commitEntity(pairEntry: ImportPairEntry&lt;O&gt;) {
+    pairEntry.read?.let { commitEntity(it) }
+  }
+}</pre>
+<h2>Git History</h2><div class="hist"><pre>868d6abb7 2025 -&gt; 2026
+76f216b0f AbstractPagesRest: param request added to open functions, WIP. address vcf upload
+16ab7c6ef AbstractImportPage fix: Long - Integer comparison
+45479d226 WIP: Import of creditor invoices
+8717a58b8 WIP: Import of creditor invoices
+f4540acfa WIP: Import of creditor invoices
+fdd683ca7 WIP: Import of creditor invoices
+c9dff4cb8 WIP: Import of creditor invoices
+ffc71ab7e WIP: Import of creditor invoices
+95363546e WIP: Import of creditor invoices.</pre></div>
+</body></html>

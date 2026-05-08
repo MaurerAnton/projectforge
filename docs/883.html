@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>#883: AuftragAndRechnungDaoHelper.kt</title>
+<style>
+body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}
+h1{border-bottom:2px solid #333;padding-bottom:.3em}
+h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}
+h3{margin-top:2em;color:#444}
+a{color:#0366d6}
+.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}
+.nav{font-size:.9em;color:#888;margin-bottom:1em}
+.meta{font-size:.9em;margin:1em 0;color:#555}
+code{background:#f0f0f0;padding:0 .2em;font-size:.93em}
+pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}
+table{border-collapse:collapse;width:100%;margin:1em 0}
+th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}
+th{background:#f5f5f5;font-weight:600}
+.hist{font-size:.85em;color:#555}
+</style>
+</head>
+<body>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="882.html">← Prev</a> · <a href="884.html">Next →</a></div>
+
+<h1>#883: <code>AuftragAndRechnungDaoHelper.kt</code></h1>
+
+<div class="meta">
+<p><strong>Type:</strong> Utility object (Kotlin <code>object</code>)</p>
+<p><strong>Package:</strong> <code>org.projectforge.business.fibu</code></p>
+<p><strong>Full path:</strong> <code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/AuftragAndRechnungDaoHelper.kt</code></p>
+</div>
+
+<div class="c">
+<p>Shared utility object providing database filter criteria builders and validation logic used by both <code>AuftragDao</code> (orders) and <code>RechnungDao</code> (invoices). Centralizes common patterns like period-of-performance filtering, date range query construction, and invoice save-time validation (maturity calculation, payment date/amount consistency).</p>
+</div>
+
+<h2>Public Methods</h2>
+
+<h3><code>createCriterionForPeriodOfPerformance(myFilter)</code></h3>
+<p><strong>Returns:</strong> <code>Optional&lt;DBPredicate&gt;</code></p>
+<p>Builds a predicate for filtering by period of performance overlap. Uses the filter's <code>periodOfPerformanceStartDate</code> and <code>periodOfPerformanceEndDate</code>. The logic checks for overlapping date ranges:</p>
+<ul>
+<li>Both dates given → <code>popEnd >= startDate AND popBegin <= endDate</code></li>
+<li>Only startDate → <code>popEnd >= startDate</code></li>
+<li>Only endDate → <code>popBegin <= endDate</code></li>
+<li>Neither → empty</li>
+</ul>
+
+<h3><code>createQueryFilterWithDateRestriction(myFilter)</code></h3>
+<p><strong>Returns:</strong> <code>QueryFilter</code></p>
+<p>Creates a <code>QueryFilter</code> from a <code>RechnungFilter</code>, adding date range constraints on the <code>"datum"</code> field (invoice date). Supports from-date, to-date, or both-range using <code>between</code>, <code>ge</code>, and <code>le</code> operators.</p>
+
+<h3><code>onSaveOrModify(rechnung)</code></h3>
+<p><strong>Parameter:</strong> <code>AbstractRechnungDO</code></p>
+<p>Master validation method called before persisting any invoice. Delegates to three private helpers:</p>
+<ul>
+<li><code>checkAndCalculateFaelligkeit()</code> — Auto-calculates <code>faelligkeit</code> (due date) from <code>rechnungsDatum + zahlungsZielInTagen</code>, but only if due date is null and payment term is set</li>
+<li><code>checkAndCalculateDiscountMaturity()</code> — Auto-calculates <code>discountMaturity</code> from <code>rechnungsDatum + discountZahlungsZielInTagen</code>, only when discount percent is non-null/non-zero and discount maturity is null</li>
+<li><code>validateBezahlDatumAndZahlBetrag()</code> — Enforces mutual consistency: if <code>bezahlDatum</code> is set, <code>zahlBetrag</code> must be set (and non-zero), and vice versa. Throws <code>UserException</code> with specific i18n keys on violations</li>
+</ul>
+
+<h2>Design Notes</h2>
+<ul>
+<li>All methods are <code>@JvmStatic</code> for seamless Java interop</li>
+<li>Uses <code>SearchFilterWithPeriodOfPerformance</code> interface for polymorphic filter handling</li>
+<li>Maturity dates are computed using <code>PFDateTime</code> (for due date) and <code>PFDay</code> (for discount maturity)</li>
+<li>Discount maturity is only calculated when <code>discountPercent</code> is non-zero; if zero, no discount maturity is set</li>
+</ul>
+
+<h2>Git History</h2>
+<div class="hist"><pre>868d6abb7 2025 -> 2026
+f4540acfa WIP: Import of creditor invoices
+63081666f Source file headers: 2024-> 2025.
+cec9dd314 Invoices: discountMaturity fixed
+b6092df09 Copyright 2023 -> 2024
+ab45d51fa Copyright 2001-2022 -> 2001-2023.
+5f7ef41b8 Copyright 2021 -> 2022
+a7fceb731 Some compiler warnings fixed.
+db3b02da7 UserException moved from business to common package
+ceb63e8a1 Source code header: (C) 2001-2021.
+a0232cdba Code warnings.
+b209e00ba PFDay.from -> from, fromOrNow, fromOrNull, PFDateTime.from -> from, fromOrNow, fromOrNull
+611b20d4e WIP: java.sql.Date -> LocalDate.
+7c1c48782 Replacing more instance of java.sql.Date with java.time.LocalDate
+78b436d9e Replace instances of java.util.date and java.sql.Date with java.time.LocalDate
+7c79f1922 Copyright of source header -> 2020.
+a1c287b49 Week of year is now globally the same (independant from user's locale)
+61b23c3fd DateHelper methods removed (replaced by PFDay/PFDateTime).</pre></div>
+</body>
+</html>

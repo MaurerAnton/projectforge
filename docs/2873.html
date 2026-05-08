@@ -1,0 +1,327 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>#2873</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}.hist{font-size:.85em;color:#555}</style></head>
+<body><div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="2872.html">← Prev</a> · <a href="2874.html">Next →</a></div>
+<h1>#2873: <code>NavTopPanel.java</code></h1>
+<div class="meta">Java class, <code>projectforge-wicket/src/main/java/org/projectforge/web/core/NavTopPanel.java</code></div>
+<div class="c">Java Wicket panel web core.</div>
+<h2>Git History</h2><div class="hist"><pre>863c83d3f Fix Wicket session user mismatch: detect, log, alert, and force re-login
+868d6abb7 2025 -&gt; 2026
+3cee247bd Menu-customization: Wicket menu customization removed (by Claude Code).
+b474d5fe2 Wicket's NavTopPanel uses now new menu customizer.
+8a2ea847f MyMenuPagesRest: New Excel functionality for customizing the personal menu.
+63081666f Source file headers: 2024-&gt; 2025.
+67805f2fc ThreadLocalUserContext.user -&gt; ThreadLocalUserContext.loggedInUser (renamed for avoiding mis-understandings in code).
+b095e6f7d !!!!! Big change of Transaction handling: Re-uses PfPersistenceContext as much as possible (not yet finished). Tests doesn't yet run.
+4efcbd0fb Migration stuff in progress...
+b6092df09 Copyright 2023 -&gt; 2024
+ab45d51fa Copyright 2001-2022 -&gt; 2001-2023.
+dbf480924 WIP: WebAuthn. 2FA rest stuff moved to own sub package.
+8e1979201 WIP: Refactoring of login handling...
+5ffff18f8 WIP: Refactoring of login handling...
+5f7ef41b8 Copyright 2021 -&gt; 2022
+4cc805b1e WIP: 2FA
+7999deebe 2FA: initial revision.
+c5495102d TutorialPage and Documentation removed from web app.
+2ed340398 DataTransfer: personal box as menu entry in personal menu (top right).
+87c801f02 DataTransfer: personal box as menu entry in personal menu (top right).</pre></div>
+<h2>Source</h2><pre>/////////////////////////////////////////////////////////////////////////////
+//
+// Project ProjectForge Community Edition
+//         www.projectforge.org
+//
+// Copyright (C) 2001-2026 Micromata GmbH, Germany (www.micromata.com)
+//
+// ProjectForge is dual-licensed.
+//
+// This community edition is free software; you can redistribute it and/or
+// modify it under the terms of the GNU General Public License as published
+// by the Free Software Foundation; version 3 of the License.
+//
+// This community edition is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General
+// Public License for more details.
+//
+// You should have received a copy of the GNU General Public License along
+// with this program; if not, see http://www.gnu.org/licenses/.
+//
+/////////////////////////////////////////////////////////////////////////////
+
+package org.projectforge.web.core;
+
+import org.apache.wicket.AttributeModifier;
+import org.apache.wicket.ajax.AjaxRequestTarget;
+import org.apache.wicket.ajax.markup.html.AjaxLink;
+import org.apache.wicket.markup.html.WebMarkupContainer;
+import org.apache.wicket.markup.html.basic.Label;
+import org.apache.wicket.markup.html.form.Form;
+import org.apache.wicket.markup.html.form.TextArea;
+import org.apache.wicket.markup.html.link.AbstractLink;
+import org.apache.wicket.markup.html.link.BookmarkablePageLink;
+import org.apache.wicket.markup.html.link.ExternalLink;
+import org.apache.wicket.markup.html.link.Link;
+import org.apache.wicket.markup.repeater.RepeatingView;
+import org.apache.wicket.model.Model;
+import org.apache.wicket.request.http.WebRequest;
+import org.apache.wicket.request.http.WebResponse;
+import org.apache.wicket.request.mapper.parameter.PageParameters;
+import org.projectforge.business.vacation.service.VacationService;
+import org.projectforge.framework.access.AccessChecker;
+import org.projectforge.framework.persistence.user.api.ThreadLocalUserContext;
+import org.projectforge.framework.persistence.user.entities.PFUserDO;
+import org.projectforge.menu.builder.MenuCreator;
+import org.projectforge.menu.builder.MenuItemDef;
+import org.projectforge.menu.builder.MenuItemDefId;
+import org.projectforge.rest.ChangePasswordPageRest;
+import org.projectforge.rest.MyMenuPageRest;
+import org.projectforge.rest.my2fa.My2FASetupPageRest;
+import org.projectforge.rest.MyAccountPageRest;
+import org.projectforge.rest.core.PagesResolver;
+import org.projectforge.web.WicketLoginService;
+import org.projectforge.web.WicketMenuBuilder;
+import org.projectforge.web.WicketMenuEntry;
+import org.projectforge.web.WicketSupport;
+import org.projectforge.web.dialog.ModalDialog;
+import org.projectforge.web.session.MySession;
+import org.projectforge.web.wicket.AbstractSecuredPage;
+import org.projectforge.web.wicket.CsrfTokenHandler;
+import org.projectforge.web.wicket.FeedbackPage;
+import org.projectforge.web.wicket.WicketUtils;
+import org.projectforge.web.wicket.flowlayout.FieldsetPanel;
+
+import java.util.Collection;
+import java.util.Optional;
+
+/**
+ * Displays the favorite menu.
+ *
+ * @author Kai Reinhard (k.reinhard@micromata.de)
+ */
+public class NavTopPanel extends NavAbstractPanel {
+  private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(NavTopPanel.class);
+
+  private static final long serialVersionUID = -7858806882044188339L;
+
+  private BookmarkDialog bookmarkDialog;
+
+  /**
+   * Cross site request forgery token.
+   */
+  private CsrfTokenHandler csrfTokenHandler;
+  private RepeatingView menuRepeater;
+
+  public NavTopPanel(final String id) {
+    super(id);
+  }
+
+  @SuppressWarnings(&quot;serial&quot;)
+  public void init(final AbstractSecuredPage page) {
+    getMenu();
+    favoritesMenu = WicketSupport.get(WicketMenuBuilder.class).getFavoriteMenu();
+    add(new BookmarkablePageLink&lt;Void&gt;(&quot;feedbackLink&quot;, FeedbackPage.class));
+    {
+      final AjaxLink&lt;Void&gt; showBookmarkLink = new AjaxLink&lt;Void&gt;(&quot;showBookmarkLink&quot;) {
+        /**
+         * @see org.apache.wicket.ajax.markup.html.AjaxLink#onClick(org.apache.wicket.ajax.AjaxRequestTarget)
+         */
+        @Override
+        public void onClick(final AjaxRequestTarget target) {
+          bookmarkDialog.open(target);
+          // Redraw the content:
+          bookmarkDialog.redraw().addContent(target);
+        }
+      };
+      add(showBookmarkLink);
+      addBookmarkDialog();
+    }
+    {
+      // Use a dynamic model to always reflect the current session user, not a stale serialized value.
+      // This prevents showing a wrong username if a serialized page is restored from disk (DiskPageStore).
+      add(new Label(&quot;user&quot;, new Model&lt;String&gt;() {
+        @Override
+        public String getObject() {
+          final PFUserDO user = MySession.get().getUser();
+          return user != null ? user.getFullname() : &quot;???&quot;;
+        }
+      }));
+
+      final RepeatingView pluginPersonalMenuEntriesRepeater = new RepeatingView(&quot;pluginPersonalMenuEntriesRepeater&quot;);
+      add(pluginPersonalMenuEntriesRepeater);
+      if (WicketSupport.get(AccessChecker.class).isRestrictedUser() == true) {
+        // Show ChangePasswordPage as my account for restricted users.
+        final ExternalLink changePasswordLink = new ExternalLink(&quot;myAccountLink&quot;, PagesResolver.getDynamicPageUrl(ChangePasswordPageRest.class));
+        add(changePasswordLink);
+        addVacationViewLink().setVisible(false);
+        pluginPersonalMenuEntriesRepeater.setVisible(false);
+      } else {
+        final ExternalLink myAccountLink = new ExternalLink(&quot;myAccountLink&quot;, PagesResolver.getDynamicPageUrl(MyAccountPageRest.class, null, null, true));
+        add(myAccountLink);
+        final ExternalLink customizeMenuLink = new ExternalLink(&quot;customizeMenuLink&quot;, &quot;/&quot; + PagesResolver.REACT_PATH + &quot;/customizeMenu&quot;);
+        add(customizeMenuLink);
+        final ExternalLink my2FactorAuthentificationLink = new ExternalLink(&quot;my2FactorAuthentificationLink&quot;, PagesResolver.getDynamicPageUrl(My2FASetupPageRest.class, null, null, true));
+        add(my2FactorAuthentificationLink);
+        addVacationViewLink();
+        for (MenuItemDef menu : WicketSupport.get(MenuCreator.class).getPersonalMenuPluginEntries()) {
+          // Now we add a new menu area (title with sub menus):
+          final WebMarkupContainer linkContainer = new WebMarkupContainer(pluginPersonalMenuEntriesRepeater.newChildId());
+          pluginPersonalMenuEntriesRepeater.add(linkContainer);
+          String link = menu.getUrl();
+          if (link != null &amp;&amp; !link.startsWith(&quot;/&quot;)) {
+            link = &quot;/&quot; + link;
+          }
+          String title = getString(menu.getI18nKey());
+          final ExternalLink menuLink = new ExternalLink(&quot;menuLink&quot;, link);
+          linkContainer.add(menuLink);
+          menuLink.add(new Label(&quot;menuLabel&quot;, title));
+        }
+      }
+      final Link&lt;Void&gt; logoutLink = new Link&lt;Void&gt;(&quot;logoutLink&quot;) {
+        @Override
+        public void onClick() {
+          WicketSupport.get(WicketLoginService.class).logout((MySession) getSession(), (WebRequest) getRequest(), (WebResponse) getResponse());
+          WicketUtils.redirectToLogin(this);
+        }
+      };
+      logoutLink.setMarkupId(&quot;logout&quot;).setOutputMarkupId(true);
+      add(logoutLink);
+    }
+    addCompleteMenu();
+  }
+
+  private ExternalLink addVacationViewLink() {
+    final ExternalLink vacationViewLink = new ExternalLink(&quot;vacationViewLink&quot;, &quot;/&quot; + MenuItemDefId.VACATION_ACCOUNT.getUrl()) {
+      @Override
+      public boolean isVisible() {
+        return WicketSupport.get(VacationService.class).hasAccessToVacationService(ThreadLocalUserContext.getLoggedInUser(), false);
+      }
+    };
+    add(vacationViewLink);
+    return vacationViewLink;
+  }
+
+  @SuppressWarnings(&quot;serial&quot;)
+  private void addCompleteMenu() {
+    final Label totalMenuSuffixLabel = new MenuSuffixLabel(&quot;totalMenuCounter&quot;, new Model&lt;Integer&gt;() {
+      @Override
+      public Integer getObject() {
+        return menu.getTotalBadgeCounter();
+      }
+
+    });
+    add(totalMenuSuffixLabel);
+
+    final RepeatingView completeMenuCategoryRepeater = new RepeatingView(&quot;completeMenuCategoryRepeater&quot;);
+    add(completeMenuCategoryRepeater);
+    if (menu.getMenuEntries() != null) {
+      for (final WicketMenuEntry menuEntry : menu.getMenuEntries()) {
+        if (menuEntry.getSubMenuEntries() == null) {
+          continue;
+        }
+        // Now we add a new menu area (title with sub menus):
+        final WebMarkupContainer categoryContainer = new WebMarkupContainer(completeMenuCategoryRepeater.newChildId());
+        completeMenuCategoryRepeater.add(categoryContainer);
+        categoryContainer.add(new Label(&quot;menuCategoryLabel&quot;, getString(menuEntry.getI18nKey())));
+        final Label areaSuffixLabel = getSuffixLabel(menuEntry);
+        categoryContainer.add(areaSuffixLabel);
+
+        // final WebMarkupContainer subMenuContainer = new WebMarkupContainer(&quot;subMenu&quot;);
+        // categoryContainer.add(subMenuContainer);
+        if (menuEntry.hasSubMenuEntries() == false) {
+          // subMenuContainer.setVisible(false);
+          continue;
+        }
+
+        final RepeatingView completeSubMenuRepeater = new RepeatingView(&quot;completeSubMenuRepeater&quot;);
+        categoryContainer.add(completeSubMenuRepeater);
+        for (final WicketMenuEntry subMenuEntry : menuEntry.getSubMenuEntries()) {
+          if (subMenuEntry.getSubMenuEntries() != null) {
+            log.error(
+                &quot;Oups: sub sub menus not supported: &quot; + menuEntry.getId() + &quot; has child menus which are ignored.&quot;);
+          }
+          // Now we add the next menu entry to the area:
+          final WebMarkupContainer subMenuItem = new WebMarkupContainer(completeSubMenuRepeater.newChildId());
+          completeSubMenuRepeater.add(subMenuItem);
+          final AbstractLink link = getMenuEntryLink(subMenuEntry, true);
+          if (link != null) {
+            subMenuItem.add(link);
+          } else {
+            subMenuItem.setVisible(false);
+          }
+        }
+      }
+    }
+
+  }
+
+  private void addFavoriteMenu() {
+    // Favorite menu:
+    menuRepeater = new RepeatingView(&quot;menuRepeater&quot;);
+    add(menuRepeater);
+    final Collection&lt;WicketMenuEntry&gt; menuEntries = favoritesMenu.getMenuEntries();
+    if (menuEntries != null) {
+      for (final WicketMenuEntry menuEntry : menuEntries) {
+        // Now we add a new menu area (title with sub menus):
+        final WebMarkupContainer menuItem = new WebMarkupContainer(menuRepeater.newChildId());
+        menuRepeater.add(menuItem);
+        final AbstractLink link = getMenuEntryLink(menuEntry, true);
+        if (link == null) {
+          menuItem.setVisible(false);
+          continue;
+        }
+        menuItem.add(link);
+
+        final WebMarkupContainer subMenuContainer = new WebMarkupContainer(&quot;subMenu&quot;);
+        menuItem.add(subMenuContainer);
+        final WebMarkupContainer caret = new WebMarkupContainer(&quot;caret&quot;);
+        link.add(caret);
+        if (menuEntry.hasSubMenuEntries() == false) {
+          subMenuContainer.setVisible(false);
+          caret.setVisible(false);
+          continue;
+        }
+        menuItem.add(AttributeModifier.append(&quot;class&quot;, &quot;dropdown&quot;));
+        link.add(AttributeModifier.append(&quot;class&quot;, &quot;dropdown-toggle&quot;));
+        link.add(AttributeModifier.append(&quot;data-toggle&quot;, &quot;dropdown&quot;));
+        final RepeatingView subMenuRepeater = new RepeatingView(&quot;subMenuRepeater&quot;);
+        subMenuContainer.add(subMenuRepeater);
+        for (final WicketMenuEntry subMenuEntry : menuEntry.getSubMenuEntries()) {
+          // Now we add the next menu entry to the area:
+          if (subMenuEntry.hasSubMenuEntries() == false) {
+            final WebMarkupContainer subMenuItem = new WebMarkupContainer(subMenuRepeater.newChildId());
+            subMenuRepeater.add(subMenuItem);
+            // Subsubmenu entries aren't yet supported, show only the sub entries without children, otherwise only the children are
+            // displayed.
+            final AbstractLink subLink = getMenuEntryLink(subMenuEntry, true);
+            if (subLink == null) {
+              subMenuItem.setVisible(false);
+              continue;
+            }
+            subMenuItem.add(subLink);
+            continue;
+          }
+
+          // final WebMarkupContainer subsubMenuContainer = new WebMarkupContainer(&quot;subsubMenu&quot;);
+          // subMenuItem.add(subsubMenuContainer);
+          // if (subMenuEntry.hasSubMenuEntries() == false) {
+          // subsubMenuContainer.setVisible(false);
+          // continue;
+          // }
+          // final RepeatingView subsubMenuRepeater = new RepeatingView(&quot;subsubMenuRepeater&quot;);
+          // subsubMenuContainer.add(subsubMenuRepeater);
+          for (final WicketMenuEntry subsubMenuEntry : subMenuEntry.getSubMenuEntries()) {
+            // Now we add the next menu entry to the sub menu:
+            final WebMarkupContainer subMenuItem = new WebMarkupContainer(subMenuRepeater.newChildId());
+            subMenuRepeater.add(subMenuItem);
+            // Subsubmenu entries aren't yet supported, show only the sub entries without children, otherwise only the children are
+            // displayed.
+            final AbstractLink subLink = getMenuEntryLink(subsubMenuEntry, true);
+            if (subLink == null) {
+              subMenuItem.setVisible(false);
+              continue;
+            }
+            subMenuItem.add(subLink);
+            // final WebMarkupContainer subsubMenuItem = new WebMarkupContainer(subsubMenuRepeater.newChildId());
+            // subsubMenuRepeater.add(subsubMenuItem);
+            // final AbstractLink subsubLink = getMenuEntryLink(subsubMenuEntry, subsubMenuItem);
+            // subsubMenuItem.add(subsubLink);</pre>
+</body></html>

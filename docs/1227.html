@@ -1,0 +1,115 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>1227</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:2em;color:#444}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}</style></head>
+<body><div class="nav"><a href="https://maureranton.github.io/projectforge/">&#8592; Index</a> &#183; <a href="file-index.html">&#8592; File index</a> &#183; <a href="1226.html">&#8592; Prev</a> &#183; <a href="1228.html">Next &#8594;</a></div>
+<h1>1227: <code>QueryFilter.kt</code></h1>
+<div class="meta">Query Builder, projectforge-business/src/main/kotlin/org/projectforge/framework/persistence/api/QueryFilter.kt</div>
+<div class="c">Builder-style API for constructing database queries with abstract predicates. Automatically selects the appropriate query engine (criteria, full-text search via Hibernate Search, or in-memory filtering). Extends from <code>BaseSearchFilter</code> for legacy compatibility. Provides static factory methods for all predicate types (eq, ne, like, between, ge, le, isIn, isNull, and, or, not).</div>
+
+<h2>Architecture</h2>
+<h3>Query Engine Selection</h3>
+<ul>
+  <li><strong>Criteria queries</strong>: <code>DBQueryBuilderByCriteria</code> — for structured predicates</li>
+  <li><strong>Full-text search</strong>: Hibernate Search — when <code>fullTextSearchFields</code> are provided</li>
+  <li><strong>In-memory filtering</strong>: Applied on result sets when both strategies are combined</li>
+</ul>
+
+<h3>Predicate Types (Static Factory Methods)</h3>
+<table>
+  <tr><th>Factory Method</th><th>Returns</th><th>Description</th></tr>
+  <tr><td><code>eq(field, value)</code></td><td><code>DBPredicate.Equal</code></td><td>Equality check; supports ignoreCase</td></tr>
+  <tr><td><code>ne(field, value)</code></td><td><code>DBPredicate.NotEqual</code></td><td>Not-equal check</td></tr>
+  <tr><td><code>like(field, value)</code></td><td><code>DBPredicate.Like</code></td><td>Pattern matching; supports autoWildcardSearch</td></tr>
+  <tr><td><code>between(field, from, to)</code></td><td><code>DBPredicate.Between</code></td><td>Range check</td></tr>
+  <tr><td><code>ge(field, value)</code></td><td><code>DBPredicate.GreaterEqual</code></td><td>Greater-or-equal</td></tr>
+  <tr><td><code>le(field, value)</code></td><td><code>DBPredicate.LessEqual</code></td><td>Less-or-equal</td></tr>
+  <tr><td><code>interval(field, from, to)</code></td><td><code>DBPredicate</code></td><td>Open-ended range; builds between/ge/le</td></tr>
+  <tr><td><code>isIn(field, values)</code></td><td><code>DBPredicate.IsIn</code></td><td>Set membership</td></tr>
+  <tr><td><code>isNull/ isNotNull(field)</code></td><td><code>DBPredicate</code></td><td>Null checks</td></tr>
+  <tr><td><code>and(*matchers)</code></td><td><code>DBPredicate.And</code></td><td>Conjunction</td></tr>
+  <tr><td><code>or(*matchers)</code></td><td><code>DBPredicate.Or</code></td><td>Disjunction</td></tr>
+  <tr><td><code>taskSearch(field, taskId, recursive)</code></td><td><code>DBPredicate</code></td><td>Task hierarchy search using TaskTree</td></tr>
+</table>
+
+<h3>Key Configuration Properties</h3>
+<table>
+  <tr><th>Property</th><th>Type</th><th>Default</th><th>Description</th></tr>
+  <tr><td><code>maxRows</code></td><td>Int</td><td>50,000</td><td>Maximum result set size</td></tr>
+  <tr><td><code>limitResultSize</code></td><td>Int</td><td>Int.MAX_VALUE</td><td>Workaround for non-AgGrid pages (AddressPagesRest)</td></tr>
+  <tr><td><code>autoWildcardSearch</code></td><td>Boolean</td><td>false</td><td>Auto-appends wildcard to search strings</td></tr>
+  <tr><td><code>deleted</code></td><td>Boolean?</td><td>null</td><td>Filter for deleted/non-deleted entries (null = all)</td></tr>
+  <tr><td><code>sortAndLimitMaxRowsWhileSelect</code></td><td>Boolean</td><td>true</td><td>Whether to apply sort+limit during DB select</td></tr>
+  <tr><td><code>searchHistory</code></td><td>String?</td><td>null</td><td>Search string for history entries</td></tr>
+  <tr><td><code>modifiedFrom/To</code></td><td>PFDateTime?</td><td>null</td><td>History modification time range</td></tr>
+</table>
+
+<h3>Integration with BaseSearchFilter</h3>
+<p>Constructor accepts <code>BaseSearchFilter?</code> and copies: <code>searchFields</code>, <code>searchString</code> (via <code>addFullTextSearch</code>), <code>deleted</code> flag, <code>modifiedSince</code>/<code>startTimeOfModification</code>/<code>stopTimeOfModification</code>, and <code>maxRows</code>.</p>
+
+<h3>Join Management</h3>
+<ul>
+  <li><code>createJoin(attr, joinType, fetch, parent)</code> — adds a <code>DBJoin</code> for criteria queries</li>
+  <li>Supports nested properties via dot-notation (e.g., <code>order.positions</code>)</li>
+</ul>
+
+<h3>Time-based Filtering</h3>
+<ul>
+  <li><code>setYearAndMonth(dateField, year, month)</code> — generates a between predicate using <code>PFDay</code> for begin/end-of-month or begin/end-of-year boundaries</li>
+</ul>
+
+<h2>Git History</h2><div class="hist"><pre>
+868d6abb7 2025 -> 2026
+7ff207016 AddressPagesRest: Warning of duplicate entries on adding new addresses.
+bb42bd659 QueryFilter.like: fix of param autoWildcardSearch (was ignored)
+fc0d7f60e DBFullTextResultIterator: block size 100 -> 10_000, QueryFilter limit now 50_000
+63081666f Source file headers: 2024-> 2025.
+2d324f2bb Finance: incoming invoices fixed.
+d9c9b6184 WIP: workaround for address pages rest without pagination.
+04c38072b AddressDao: select optimized, WIP: pagination.
+b71b5073d Migration stuff in progress... (all tests OK).
+3264694a8 Migration stuff in progress... (all tests OK).
+314408ee0 Migration stuff in progress... (all tests OK).
+4000abf4e Migration stuff in progress...
+e66d5f5f7 Migration stuff in progress... TaskTree -> Kotlin, isolated entity manager
+4c04cfd65 MAJOR-CHANGE! Migration of integer id's to Long id's.
+06828f490 Migration stuff in progress...
+b6092df09 Copyright 2023 -> 2024
+ab45d51fa Copyright 2001-2022 -> 2001-2023.
+267283973 PROJECTFORGE-3730: Show validation for truncated result list.
+5f7ef41b8 Copyright 2021 -> 2022
+351392830 DataTransfer: search for personal boxes in list page.
+c0f2b9de0 Tenants functionality removed everywhere.
+ceb63e8a1 Source code header: (C) 2001-2021.
+ac71ed08d AbstractListForm: maxRows/pageSize fixed.
+4ac8f0f48 BaseSearchFilter/QueryFilter/AbstractListForm: pageSize vs. maxRows.
+ae7140482 React: MagicCheckboxInput, deleted entries decorated with line-through.
+611b20d4e WIP: java.sql.Date -> LocalDate.
+7c79f1922 Copyright of source header -> 2020.
+3ce3f701e CalendarUtils removed.
+967cc1cbc months are now 1-based: 1-January, ..., 12-December.
+d5742e60c Hotfix QueryFilter.
+00d48b950 BuchungssatzDao, QueryFilter: max rows extended to 100,000.
+b7bdea161 Support of filter.searchFields added.
+34357d266 QueryFilter: NPE fix.
+73895b7df WIP: CustomResultFilter...
+1165d1557 WIP Addresses and CustomResultFilter introduced.
+c50c528ce QueryFilter.toString()
+b0a4e8463 tidy up
+d36fe6ad9 Heavy WIP: refactoring
+9896ea5c5 WIP: Session -> EntityManager...
+a5206d947 WIP: DBJoin
+14af0e09e DBAlias -> DBJoin.
+66d9e3a30 WiP: DBQuery* and QueryFilter: aliases....
+efb8e0b16 WiP: DBQuery* and QueryFilter: aliases....
+a9f7fb127 WiP: DBQuery* and QueryFilter...
+7998890ea WiP: DBQuery* and QueryFilter...
+351bde48b WiP: DBQuery* and QueryFilter...
+d32649da3 WIP: DBQuery*, QueryFilter and Predicates refactored....
+3d1a2711a WiP: DBQuery* and QueryFilter...
+20d64abbb WiP: DBQuery* and QueryFilter...
+7959dc2e0 WiP: DBQuery* and QueryFilter...
+a59e59eb1 WiP: DBQuery* and QueryFilter...
+5e65f6b22 WiP: DBQuery*
+a48f5a193 WIP: JPA...
+76a8fb69d Hibernate.Restrictions -> PF.QueryFilter
+</pre></div>
+</body></html>

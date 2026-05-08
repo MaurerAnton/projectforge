@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>File #15: docker/entrypoint.sh</title>
+<style>
+  body { font-family: system-ui, sans-serif; max-width: 960px; margin: 2em auto; padding: 0 1em; background: #fafafa; color: #222; line-height: 1.6; }
+  h1 { border-bottom: 2px solid #333; }
+  h2 { margin-top: 2.5em; border-bottom: 1px solid #ddd; padding-bottom: 0.2em; }
+  a { color: #0366d6; text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  .meta { background: #f0f0f0; border-radius: 6px; padding: 1em; margin: 1em 0; font-size: 0.9em; }
+  .code-block { background: #f8f8f8; border: 1px solid #ddd; border-radius: 4px; padding: 0.5em; margin: 0.5em 0; overflow-x: auto; }
+  .code-block pre { margin: 0; font-family: 'Consolas', monospace; font-size: 0.85em; line-height: 1.5; }
+  .commentary { margin: 1em 0; line-height: 1.7; background: #fff; padding: 0.5em 1em; border-radius: 6px; border-left: 4px solid #ddd; }
+  table { border-collapse: collapse; width: 100%; margin: 1em 0; font-size: 0.9em; }
+  th, td { border: 1px solid #ddd; padding: 0.5em; text-align: left; }
+  th { background: #f0f0f0; }
+  code { background: #e8e8e8; border-radius: 3px; padding: 0.1em 0.3em; font-size: 0.9em; }
+  .nav { font-size: 0.9em; color: #888; margin-bottom: 1em; }
+  .diagram { background: #f8f8f8; border: 1px solid #ddd; border-radius: 4px; padding: 0.8em; font-family: 'Consolas', monospace; font-size: 0.85em; white-space: pre; }
+  .warn { background: #fff3cd; border: 1px solid #ffc107; border-radius: 4px; padding: 0.5em 1em; margin: 0.5em 0; }
+</style>
+</head>
+<body>
+<div class="nav">
+  <a href="https://maureranton.github.io/projectforge/">← Documentation index</a> · <a href="file-index.html">← File index</a> · <a href="14.html">← Prev</a> · Next →
+</div>
+<h1>File #15: <code>docker/entrypoint.sh</code></h1>
+<div class="meta">
+  <p><strong>Path:</strong> <code>./docker/entrypoint.sh</code> · <strong>Type:</strong> Bash shell script · <strong>Lines:</strong> 98 · <strong>Source:</strong> <a href="https://github.com/micromata/projectforge/blob/9ed5fbe0f/docker/entrypoint.sh">GitHub</a></p>
+</div>
+
+<h2>What it does</h2>
+<div class="commentary">
+  <p>This is the <a href="https://docs.docker.com/engine/reference/builder/#entrypoint">Docker ENTRYPOINT</a> — the first process that runs when the container starts. It handles <strong>graceful shutdown</strong> (SIGTERM trap), <strong>two startup modes</strong> (normal vs initial setup), and <strong>external configuration</strong> via environment variables and a sourced shell script.</p>
+  <div class="diagram">Container starts
+  │
+  ├─ Check: java exists?
+  ├─ Source: /ProjectForge/environment.sh (if exists)
+  ├─ Print: JAVA_OPTS, JAVA_ARGS (if set)
+  ├─ Trap: SIGTERM → cleanup()
+  ├─ Default: DOCKER_OPTS="-Ddocker=single" (if not set)
+  │
+  ├─ Is /ProjectForge/projectforge.properties present?
+  │   ├─ YES → <strong>normal start</strong>: java -jar ... & (background + wait)
+  │   └─ NO  → <strong>initial start</strong>: java -jar ...   (foreground, console wizard)
+  │
+  └─ wait $CHILD → exit</div>
+</div>
+
+<h2>Section-by-section</h2>
+
+<h3>Lines 1–11: Setup</h3>
+<div class="code-block"><pre><span style="color:#999">1</span> #!/bin/bash
+<span style="color:#999">5</span> APP_NAME="ProjectForge"
+<span style="color:#999">6</span> JAR_FILE="/app/application.jar"
+<span style="color:#999">8</span> if ! command -v java &> /dev/null; then exit 1; fi</pre></div>
+<div class="commentary">
+  <p><strong>Line 8:</strong> Fails fast if Java isn't available. The container image should have it, but this is a safety check against misconfigured images.</p>
+</div>
+
+<h3>Lines 13–46: The <code>cleanup()</code> function</h3>
+<div class="code-block"><pre><span style="color:#999">13</span> checkStopped() { ... }         <span style="color:#888">← helper: is PID still alive?</span>
+<span style="color:#999">25</span> cleanup() {
+<span style="color:#999">26</span>     echo "Container stopped, performing cleanup..."
+<span style="color:#999">30</span>     echo "Sending shutdown signal to $APP_NAME..."
+<span style="color:#999">31</span>     kill $pid                    <span style="color:#888">← SIGTERM (polite shutdown)</span>
+<span style="color:#999">33</span>     for run in {1..20}; do
+<span style="color:#999">35</span>         sleep 3
+<span style="color:#999">36</span>         checkStopped ...
+<span style="color:#999">38</span>     done
+<span style="color:#999">40</span>     echo "${APP_NAME} not stopped, sending sigkill now..."
+<span style="color:#999">41</span>     kill -9 $pid                 <span style="color:#888">← SIGKILL (force kill)</span>
+<span style="color:#999">46</span> }</pre></div>
+<div class="commentary">
+  <p>The shutdown sequence: polite SIGTERM → wait up to 60 seconds (20 × 3s) → SIGKILL. This is the standard Docker pattern: <code>docker stop</code> sends SIGTERM, waits 10s (default), then SIGKILL. The 60s loop here is longer than Docker's default — giving ProjectForge extra time for graceful shutdown (closing DB connections, flushing logs).</p>
+</div>
+
+<h3>Lines 50–64: External configuration</h3>
+<div class="code-block"><pre><span style="color:#999">50</span> ENVIRONMENT_FILE=/ProjectForge/environment.sh
+<span style="color:#999">51</span> if [ -f "$ENVIRONMENT_FILE" ]; then
+<span style="color:#999">53</span>     . $ENVIRONMENT_FILE          <span style="color:#888">← source external script</span>
+<span style="color:#999">56</span> if [ -n "$JAVA_OPTS" ]; then echo "JAVA_OPTS=${JAVA_OPTS}"; fi
+<span style="color:#999">61</span> if [ -n "$JAVA_ARGS" ]; then echo "JAVA_ARGS=${JAVA_ARGS}"; fi</pre></div>
+<div class="commentary">
+  <p>Supports the <code>-Ddocker=stack</code> override from the <a href="11.html">compose file</a> line 9. Three JVM tuning variables:</p>
+  <table>
+    <tr><th>Variable</th><th>Purpose</th><th>Example</th></tr>
+    <tr><td><code>JAVA_OPTS</code></td><td>JVM flags</td><td><code>-Xmx2g -Xms512m</code></td></tr>
+    <tr><td><code>DOCKER_OPTS</code></td><td>ProjectForge-specific system properties</td><td><code>-Ddocker=stack</code> (hides embedded DB in setup)</td></tr>
+    <tr><td><code>JAVA_ARGS</code></td><td>Application arguments</td><td><code>--server.port=9090</code></td></tr>
+  </table>
+</div>
+
+<h3>Lines 69–93: Two startup modes</h3>
+<div class="code-block"><pre><span style="color:#999">69</span> if [ -z "$DOCKER_OPTS" ]; then
+<span style="color:#999">71</span>     DOCKER_OPTS="-Ddocker=single"    <span style="color:#888">← default: embedded DB mode</span>
+<span style="color:#999">74</span> START="${JAVA_OPTS} ${DOCKER_OPTS} -jar $JAR_FILE ${JAVA_ARGS}"
+<span style="color:#999">79</span> CONFIG_FILE=/ProjectForge/projectforge.properties
+<span style="color:#999">80</span> if [ -f "$CONFIG_FILE" ]; then
+<span style="color:#999">83</span>     java $START &                   <span style="color:#888">← normal: background + wait</span>
+<span style="color:#999">85</span> else
+<span style="color:#999">88</span>     java $START                     <span style="color:#888">← initial: foreground, console wizard</span>
+<span style="color:#999">92</span> CHILD=$!
+<span style="color:#999">93</span> wait $CHILD</pre></div>
+
+<div class="commentary">
+  <div class="warn"><strong>Key design decision:</strong> On first run (no config file), Java runs in the <strong>foreground</strong> so the admin can interact with the console setup wizard. On subsequent runs, it runs in the <strong>background</strong> (with <code>&</code> and <code>wait</code>) so the SIGTERM trap can forward the signal — background processes receive traps differently from foreground ones.</div>
+</div>
+
+<h2>Key takeaways</h2>
+<div class="commentary">
+  <ul>
+    <li><strong>98 lines, one purpose:</strong> Start ProjectForge gracefully in Docker.</li>
+    <li><strong>Two modes:</strong> Setup wizard (foreground) vs normal operation (background + signals).</li>
+    <li><strong>60-second grace period:</strong> Spring Boot apps with Hibernate and Flyway need time for orderly shutdown.</li>
+    <li><strong><code>-Ddocker=single</code> vs <code>-Ddocker=stack</code>:</strong> Controls whether the embedded HSQLDB option appears in setup (single=yes, stack=no).</li>
+    <li><strong>Environment sourcing:</strong> <code>/ProjectForge/environment.sh</code> is a Docker volume mount — admins can drop JVM tuning variables there without rebuilding the image.</li>
+  </ul>
+</div>
+
+<div class="nav" style="margin-top:2em; padding-top:1em; border-top:1px solid #ddd">
+  <a href="14.html">← #14: docker/compose/README.TXT</a> · Next: <a href="file-index.html">File index</a>
+</div>
+</body>
+</html>

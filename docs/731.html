@@ -1,0 +1,66 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>#731</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333}h2{margin-top:1.5em}a{color:#0366d6}.meta{font-size:.9em;margin:1em 0}.nav{font-size:.9em;color:#888;margin-bottom:1em}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}code{background:#f0f0f0;padding:0 .2em}pre{background:#f5f5f5;padding:.5em;margin:.5em 0;border-radius:3px;font-size:.85em;overflow-x:auto}</style></head>
+<body>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="730.html">← Prev</a> · <a href="732.html">Next →</a></div>
+
+<h1>#731: <code>ExceptionStackTracePrinter.kt</code></h1>
+<div class="meta"><strong>Lines:</strong> 76 · <strong>Author:</strong> Kai Reinhard · <strong>Type:</strong> Kotlin <code>object</code> (singleton) — <code>org.projectforge.framework.utils</code></div>
+
+<div class="c"><h2>Purpose</h2>
+<p>Produces <strong>compact, readable stack traces</strong> focused on ProjectForge's own code. Standard Java stack traces (from <code>ex.printStackTrace()</code> or <code>log.error(ex.message, ex)</code>) include <strong>hundreds of framework-level frames</strong> — Spring internals, Hibernate proxy generation, Tomcat request processing — that are irrelevant to diagnosing ProjectForge bugs. This utility filters those out and shows only <code>org.projectforge.*</code> frames, with a configurable depth limit.</p>
+<p>The Javadoc explains the motivation clearly: <em>"Prints stack-trace without foreign packages in much shorter form than log.error(ex.message, ex) does."</em> This is critical for production log readability — when an exception occurs, the log shows 10 lines of relevant ProjectForge code instead of 200 lines of framework noise.</p></div>
+
+<div class="c"><h2>Architecture: Kotlin <code>object</code> singleton</h2>
+<p>Uses Kotlin's <code>object</code> keyword — this creates a thread-safe singleton at class-load time. All methods are <code>@JvmStatic</code> + <code>@JvmOverloads</code>, making them callable from Java as static methods. The <code>@JvmOverloads</code> annotation generates overloaded Java-compatible methods for each default parameter combination — this means Java callers can write <code>ExceptionStackTracePrinter.toString(ex)</code> (using all defaults) or <code>ExceptionStackTracePrinter.toString(ex, true, true, 20)</code> (overriding depth).</p></div>
+
+<div class="c"><h2>The <code>toString()</code> method — 4 parameters</h2>
+<pre>fun toString(
+    ex: Throwable,
+    showExceptionMessage: Boolean = true,
+    stopBeforeForeignPackages: Boolean = true,
+    depth: Int = 10,
+    vararg showPackagesOnly: String
+): String</pre>
+<ul>
+<li><code>ex</code> — the exception to format</li>
+<li><code>showExceptionMessage</code> — prepend the exception class name + message? Example: <code>"NullPointerException: user was null\n"</code> followed by stack frames. Default <code>true</code></li>
+<li><code>stopBeforeForeignPackages</code> — if <code>true</code> (default), stops the trace entirely at the first non-ProjectForge frame. If <code>false</code>, skips foreign frames but continues showing ProjectForge frames further up. The difference matters for exceptions thrown <em>from</em> ProjectForge code but whose stack includes Spring/Hibernate layers in the middle</li>
+<li><code>depth</code> — maximum number of stack frames to show. Default <strong>10</strong>. This prevents the output from growing too large — even with only ProjectForge frames, a deep call chain could produce dozens of lines</li>
+<li><code>showPackagesOnly</code> — varargs override for which packages count as "own". Default: <code>arrayOf("org.projectforge.")</code>. When left empty, uses the built-in constant. Used when a plugin wants to show its own package too (e.g. <code>"org.projectforge.", "com.mycompany."</code>)</li></ul></div>
+
+<div class="c"><h2>Algorithm walkthrough</h2>
+<ol>
+<li><strong>Header:</strong> If <code>showExceptionMessage=true</code>, writes <code>"ClassName:message\n"</code> — uses Kotlin's <code>::class.java.name</code> (the full qualified Java name) and <code>ex.message</code> (may be null)</li>
+<li><strong>Package resolution:</strong> Uses <code>PROJECTFORGE_PACKAGES</code> constant if no <code>showPackagesOnly</code> provided — currently just <code>{"org.projectforge."}</code></li>
+<li><strong>Frame iteration:</strong> loops through <code>ex.stackTrace</code> (which returns <code>StackTraceElement[]</code> — the JVM's standard representation)
+<ol>
+<li><strong>Foreign package:</strong> if the frame's class name doesn't start with any of the <code>showPackages</code> prefixes, it's a "foreign" frame
+<ul><li>If <code>stopBeforeForeignPackages=true</code> and we've already seen at least one own frame, prints <code>"...following foreign packages are hidden..."</code> and <strong>breaks</strong> the loop entirely — no further frames shown</li>
+<li>If <code>stopBeforeForeignPackages=false</code>, prints a placeholder <code>"...(foreign packages are hidden)..."</code> (only once, guarded by <code>placeHolderPrinted</code>) and <strong>continues</strong> — later ProjectForge frames will still be shown</li></ul></li>
+<li><strong>Own package:</strong> sets <code>ownStackelementsPrinted=true</code> (so the <code>after</code> logic knows own frames were found), then formats the frame: <code>"at ClassName.methodName (FileName:lineNumber)\n"</code></li>
+<li><strong>Depth limit:</strong> increments counter on each <strong>printed</strong> frame (not on skipped foreign frames). When <code>counter >= depth</code>, breaks</li></ol></li></ol></div>
+
+<div class="c"><h2>Key design decisions</h2>
+<ul>
+<li><strong>Placeholder printing only once:</strong> The <code>placeHolderPrinted</code> flag prevents spamming <code>"...(foreign packages are hidden)..."</code> multiple times when <code>stopBeforeForeignPackages=false</code> — the placeholder appears once at the boundary between own and foreign frames</li>
+<li><strong>Hardcoded package prefix:</strong> <code>"org.projectforge."</code> is the only default. Extensions like <code>"de.micromata."</code> (Merlin library) are not included by default — callers can pass them via <code>showPackagesOnly</code> if they're relevant to the error being investigated</li>
+<li><strong>No output for empty exception:</strong> If <code>showExceptionMessage=false</code> and there are no ProjectForge frames, the method returns an empty string — the caller must handle this (typically "No stack trace available" is shown)</li></ul></div>
+
+<div class="c"><h2>Usage in the codebase</h2>
+<p>Primarily used by <strong>Groovy scripting</strong> (<a href="533.html">GroovyExecutor</a>) — when a user's Groovy script throws an exception, the script output pane shows a cleaned stack trace via this utility so the user can see where <em>in their script</em> the problem occurred, rather than being buried in Groovy runtime internals. Also used by the <strong>LogViewerPageRest</strong> (admin log viewer) to format exception details in a compact form, and by <strong>email templates</strong> that include stack traces in error notification emails.</p></div>
+
+<div class="c"><h2>Example output</h2>
+<p>Standard Java (truncated for brevity):</p>
+<pre>java.lang.NullPointerException: user was null
+    at org.projectforge.business.user.UserService.getUser(UserService.java:150)
+    at org.projectforge.web.wicket.UserEditPage.onSubmit(UserEditPage.java:45)
+    at org.apache.wicket.markup.html.form.Form.delegateSubmit(Form.java:1312)
+    at org.apache.wicket.markup.html.form.Form.process(Form.java:978)
+    ... (200 more Wicket/Spring/Tomcat frames) ...</pre>
+<p>This utility's output (<code>depth=3</code>):</p>
+<pre>java.lang.NullPointerException: user was null
+at org.projectforge.business.user.UserService.getUser(UserService.java:150)
+at org.projectforge.web.wicket.UserEditPage.onSubmit(UserEditPage.java:45)
+...following foreign packages are hidden...</pre></div>
+
+</body></html>

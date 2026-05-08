@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>#909: DatevImportService.kt</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:2em;color:#444}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}</style>
+</head>
+<body>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="908.html">← Prev</a> · <a href="910.html">Next →</a></div>
+
+<h1>#909: <code>DatevImportService.kt</code></h1>
+
+<div class="meta">
+  <strong>Type:</strong> Spring Service<br>
+  <strong>Package:</strong> <code>org.projectforge.business.fibu.datev</code><br>
+  <strong>Actual Path:</strong> <code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/datev/DatevImportService.kt</code><br>
+  <strong>Note:</strong> The file does <strong>not</strong> exist at the requested path (<code>.../excelimport/...</code>). It resides in the <code>datev</code> sub-package. The documentation below reflects the actual source.
+</div>
+
+<div class="c">
+  <p>The <strong>orchestration service</strong> for DATEV-style Excel imports. Coordinates the import pipeline for both <strong>Kontenplan</strong> (chart of accounts) and <strong>Buchungssätze</strong> (accounting records). Manages the import lifecycle: parse (import), validate (reconcile), and persist (commit). All operations require the <code>FIBU_DATEV_IMPORT</code> user right.</p>
+</div>
+
+<h2>Architecture</h2>
+
+<h3>Dependencies</h3>
+<table>
+  <tr><th>Dependency</th><th>Role</th></tr>
+  <tr><td><code>PfPersistenceService</code></td><td>Persistence context management</td></tr>
+  <tr><td><code>AccessChecker</code></td><td>User right verification</td></tr>
+  <tr><td><code>KontoDao</code></td><td>Commit kontenplan entries; resolve account numbers</td></tr>
+  <tr><td><code>Kost1Dao</code></td><td>Passed to <code>BuchungssatzExcelImporter</code></td></tr>
+  <tr><td><code>Kost2Dao</code></td><td>Passed to <code>BuchungssatzExcelImporter</code></td></tr>
+  <tr><td><code>BuchungssatzDao</code></td><td>Commit buchungssatz entries; lookup existing records</td></tr>
+</table>
+
+<h2>Import Lifecycle</h2>
+
+<h3>Phase 1: Import (Parse Excel)</h3>
+<table>
+  <tr><th>Method</th><th>Input</th><th>Output</th></tr>
+  <tr><td><code>importKontenplan(inputStream, filename)</code></td><td>Excel InputStream</td><td><code>ImportStorage&lt;KontoDO&gt;</code></td></tr>
+  <tr><td><code>importBuchungsdaten(inputStream, filename)</code></td><td>Excel InputStream</td><td><code>ImportStorage&lt;BuchungssatzDO&gt;</code></td></tr>
+</table>
+<p>Both methods open an <code>ExcelWorkbook</code> from the input stream, create an <code>ImportStorage</code> with logging configuration, delegate to the respective importer class (<code>KontenplanExcelImporter</code> / <code>BuchungssatzExcelImporter</code>), and return the populated storage.</p>
+
+<h3>Phase 2: Reconcile (Validate & Diff)</h3>
+<table>
+  <tr><th>Method</th><th>Description</th></tr>
+  <tr><td><code>reconcile(storage, sheetName)</code></td><td>Dispatches to <code>reconcileKontenplan()</code> or <code>reconcileBuchungsdaten()</code> based on storage type. Sets <code>numberOfCommittedElements</code> to -1.</td></tr>
+</table>
+<p>Reconciliation matches imported elements with existing database entries:</p>
+<ul>
+  <li><strong>Kontenplan:</strong> looks up each imported <code>KontoDO</code> by account number. Found entries are stored as <code>oldValue</code> on the import element and their <code>created</code> timestamp is copied to the import (needed by BaseDao to determine insert vs update).</li>
+  <li><strong>Buchungssätze:</strong> looks up by (<code>year</code>, <code>month</code>, <code>satznr</code>) using <code>buchungssatzDao.getBuchungssatz()</code>.</li>
+</ul>
+
+<h3>Phase 3: Commit (Persist)</h3>
+<table>
+  <tr><th>Method</th><th>Description</th></tr>
+  <tr><td><code>commit(storage, sheetName)</code></td><td>Requires <code>RECONCILED</code> status. Dispatches to <code>commitKontenplan()</code> or <code>commitBuchungsdaten()</code>. Sets status to <code>IMPORTED</code>.</td></tr>
+</table>
+<p>Commit collects selected elements, sets the database id from <code>oldValue</code> if the entry already exists, and bulk-inserts via the DAO in blocks of 50.</p>
+
+<h2>Import Type Enum</h2>
+<p><code>DatevImportService.Type</code>: <code>KONTENPLAN</code>, <code>BUCHUNGSSAETZE</code>. Used as a discriminator in <code>ImportStorage</code>.</p>
+
+<h2>Diff Properties</h2>
+<table>
+  <tr><th>Constant</th><th>Properties</th></tr>
+  <tr><td><code>KONTO_DIFF_PROPERTIES</code></td><td><code>nummer</code>, <code>bezeichnung</code></td></tr>
+  <tr><td><code>BUCHUNGSSATZ_DIFF_PROPERTIES</code></td><td><code>satznr</code>, <code>betrag</code>, <code>sh</code>, <code>konto</code>, <code>kost2</code>, <code>menge</code>, <code>beleg</code>, <code>datum</code>, <code>gegenKonto</code>, <code>text</code>, <code>kost1</code>, <code>comment</code></td></tr>
+</table>
+
+<h2>Access Control</h2>
+<p>All public methods call <code>checkLoggedinUserRight()</code> which verifies <code>UserRightId.FIBU_DATEV_IMPORT</code> with value <code>TRUE</code>. The companion object provides static helper methods for use in Wicket pages (pre-service decoupling).</p>
+
+<h2>Git History</h2>
+<div class="hist"><pre>
+868d6abb7 2025 -> 2026
+312d5e61c Clean-up
+63081666f Source file headers: 2024-> 2025.
+1012e347a Migration stuff in progress... (all tests of all packages: OK).
+bbc198d03 Migration stuff in progress... (all tests of all packages: OK).
+4bc37b3a1 Migration stuff in progress...
+d67bce18b Migration stuff in progress...
+1b50060c3 BaseDao: renamed: get -> find, save -> insert, getList -> select, load -> select
+87aaf6a5a Migration stuff in progress... BaseDao refactored (not yet finished)
+3aeda5ef5 Big change: all save|update|...InTrans renamed (InTrans removed).
+</pre></div>
+
+</body>
+</html>

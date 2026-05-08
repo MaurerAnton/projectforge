@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>File #23: doc/misc/nginx_sites-available_projectforge</title>
+<style>
+  body { font-family: system-ui, sans-serif; max-width: 960px; margin: 2em auto; padding: 0 1em; background: #fafafa; color: #222; line-height: 1.6; }
+  h1 { border-bottom: 2px solid #333; }
+  h2 { margin-top: 2.5em; border-bottom: 1px solid #ddd; padding-bottom: 0.2em; }
+  a { color: #0366d6; text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  .meta { background: #f0f0f0; border-radius: 6px; padding: 1em; margin: 1em 0; font-size: 0.9em; }
+  .code-block { background: #f8f8f8; border: 1px solid #ddd; border-radius: 4px; padding: 0.5em; margin: 0.5em 0; overflow-x: auto; }
+  .code-block pre { margin: 0; font-family: 'Consolas', monospace; font-size: 0.85em; line-height: 1.5; }
+  .commentary { margin: 1em 0; line-height: 1.7; background: #fff; padding: 0.5em 1em; border-radius: 6px; border-left: 4px solid #ddd; }
+  code { background: #e8e8e8; border-radius: 3px; padding: 0.1em 0.3em; font-size: 0.9em; }
+  .nav { font-size: 0.9em; color: #888; margin-bottom: 1em; }
+  ins { background: #d4edda; text-decoration: none; color: #155724; }
+  table { border-collapse: collapse; width: 100%; margin: 1em 0; font-size: 0.9em; }
+  th, td { border: 1px solid #ddd; padding: 0.5em; text-align: left; }
+  th { background: #f0f0f0; }
+</style>
+</head>
+<body>
+<div class="nav">
+  <a href="https://maureranton.github.io/projectforge/">← Documentation index</a> · <a href="file-index.html">← File index</a> · <a href="22.html">← Prev</a> · <a href="24.html">Next →</a>
+</div>
+<h1>File #23: <code>doc/misc/nginx_sites-available_projectforge</code></h1>
+<div class="meta">
+  <p><strong>Path:</strong> <code>./doc/misc/nginx_sites-available_projectforge</code> · <strong>Type:</strong> nginx site configuration · <strong>Lines:</strong> 42 · <strong>Source:</strong> <a href="https://github.com/micromata/projectforge/blob/9ed5fbe0f/doc/misc/nginx_sites-available_projectforge">GitHub</a></p>
+</div>
+
+<h2>What it does</h2>
+<div class="commentary">
+  <p>A production-grade <a href="https://nginx.org/en/docs/">nginx</a> reverse-proxy configuration for ProjectForge. Handles <strong>HTTP→HTTPS redirect</strong> and <strong>TLS termination</strong> with hardened SSL settings (Mozilla Intermediate compatibility). This is a more complete version of the compose nginx.conf (<a href="13.html">#13</a>) — adds OCSP stapling, <a href="https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Strict-Transport-Security">HSTS</a> (commented out), security headers, and basic auth support. Designed for bare-metal deployment (unlike the compose version).</p>
+</div>
+
+<h2>Section-by-section</h2>
+
+<h3>Lines 1–4: HTTP → HTTPS redirect</h3>
+<div class="code-block"><pre>1  server {
+2    listen 80;
+3    listen [::]:80;                               <span style="color:#888">← IPv6</span>
+4    server_name projectforge.example.com;
+5    location / { return 301 https://$host$request_uri; }
+6  }</pre></div>
+<div class="commentary">
+  <p>Standard permanent redirect (301) for all HTTP traffic → HTTPS. Includes IPv6 binding (<code>[::]:80</code>). The hostname <code>projectforge.example.com</code> is a placeholder — real deployments replace this with the actual FQDN.</p>
+</div>
+
+<h3>Lines 8–32: HTTPS server with hardened SSL</h3>
+<div class="code-block"><pre>8  server {
+9    listen              443 ssl;
+10   listen              [::]:443 ssl;
+11   server_name         projectforge.example.com;
+12   ssl_certificate     /etc/ssl/projectforge.crt;
+13   ssl_certificate_key /etc/ssl/projectforge.key;
+15   ssl_protocols TLSv1.2;                        <span style="color:#888">← TLS 1.2 only (no 1.0/1.1)</span>
+16   ssl_prefer_server_ciphers on;
+17   ssl_dhparam /etc/nginx/dhparam.pem;           <span style="color:#888">← custom DH params</span>
+18   ssl_ciphers EECDH+AESGCM:EDH+AESGCM;          <span style="color:#888">← only AEAD ciphers</span>
+19   ssl_ecdh_curve secp384r1;
+20   ssl_session_timeout  10m;
+21   ssl_session_cache shared:SSL:10m;
+22   ssl_session_tickets off;                      <span style="color:#888">← disable session tickets (PFS)</span>
+23   ssl_stapling on;                              <span style="color:#888">← OCSP stapling</span>
+24   ssl_stapling_verify on;
+25   add_header X-Frame-Options DENY;              <span style="color:#888">← prevent clickjacking</span>
+26   add_header X-Content-Type-Options nosniff;    <span style="color:#888">← prevent MIME sniffing</span>
+27   add_header X-XSS-Protection "1; mode=block";  <span style="color:#888">← XSS filter</span></pre></div>
+
+<div class="commentary">
+<p>SSL/TLS settings follow <a href="https://wiki.mozilla.org/Security/Server_Side_TLS">Mozilla's Intermediate compatibility</a> recommendations. Key security decisions:</p>
+<table>
+  <tr><th>Directive</th><th>Value</th><th>Why</th></tr>
+  <tr><td><code>ssl_protocols</code></td><td><code>TLSv1.2</code></td><td>Disables TLS 1.0/1.1 (vulnerable to BEAST/POODLE)</td></tr>
+  <tr><td><code>ssl_ciphers</code></td><td><code>EECDH+AESGCM:EDH+AESGCM</code></td><td>Only AEAD ciphers — forward secrecy + authenticated encryption</td></tr>
+  <tr><td><code>ssl_session_tickets</code></td><td><code>off</code></td><td>Disables session tickets for <a href="https://en.wikipedia.org/wiki/Forward_secrecy">perfect forward secrecy</a></td></tr>
+  <tr><td><code>ssl_stapling</code></td><td><code>on</code></td><td><a href="https://en.wikipedia.org/wiki/OCSP_stapling">OCSP stapling</a> — reduces latency, improves privacy</td></tr>
+</table>
+</div>
+
+<h3>Lines 33–43: Proxy configuration</h3>
+<div class="code-block"><pre>33 location / {
+34   proxy_set_header        Host $host;
+35   proxy_set_header        X-Real-IP $remote_addr;
+36   proxy_set_header        X-Forwarded-For $proxy_add_x_forwarded_for;
+37   proxy_set_header        X-Forwarded-Proto $scheme;
+39   proxy_pass              http://localhost:8080;  <span style="color:#888">← upstream (ProjectForge)</span>
+40   proxy_read_timeout      90;
+41   proxy_redirect          http://localhost:8080 https://projectforge.example.com;
+43   # auth_basic            "Username and Password Required";
+44   # auth_basic_user_file  /etc/nginx/.htpasswd;
+45 }</pre></div>
+
+<div class="commentary">
+<p>Reverse proxy to ProjectForge running on localhost:8080. <code>proxy_redirect</code> rewrites HTTP Location headers from the upstream (http://localhost:8080) to the public HTTPS URL — critical for redirect-after-login flows. Basic auth (lines 43–44) is commented out — uncomment to add an nginx-level authentication layer before traffic reaches ProjectForge.</p>
+</div>
+
+<h2>Comparison with compose nginx.conf (#13)</h2>
+<div class="commentary">
+<table>
+  <tr><th>Aspect</th><th>#23 (bare-metal)</th><th><a href="13.html">#13 (compose)</a></th></tr>
+  <tr><td>SSL certs</td><td>Explicit paths (<code>/etc/ssl/projectforge.crt</code>)</td><td>Not included (just proxy)</td></tr>
+  <tr><td>TLS hardening</td><td>Full: stapling, DH params, session tickets off</td><td>None</td></tr>
+  <tr><td>Security headers</td><td>X-Frame, X-Content-Type, XSS</td><td>None</td></tr>
+  <tr><td>Basic auth</td><td>Commented-out support</td><td>None</td></tr>
+  <tr><td>IPv6</td><td>Yes (<code>[::]:80</code>, <code>[::]:443</code>)</td><td>No</td></tr>
+  <tr><td>Purpose</td><td>Production bare-metal deployment</td><td>Local Docker dev stack</td></tr>
+</table>
+</div>
+
+<h2>Key takeaways</h2>
+<div class="commentary">
+  <ul>
+    <li><strong>Production-grade TLS:</strong> OCSP stapling, session tickets disabled, custom DH parameters — ready for security audits.</li>
+    <li><strong>Mozilla Intermediate baseline:</strong> Follows well-established server TLS recommendations.</li>
+    <li><strong>IPv6 dual-stack:</strong> Binds on both IPv4 and IPv6.</li>
+    <li><strong>HSTS commented out:</strong> Line 29 has HSTS preloaded — intentionally disabled until DNS/SSL are proven stable.</li>
+    <li><strong>More complete than compose version:</strong> The Docker compose nginx.conf (#13) is a minimal proxy; this is a full production config.</li>
+  </ul>
+</div>
+
+<div class="nav" style="margin-top:2em; padding-top:1em; border-top:1px solid #ddd">
+  <a href="22.html">← #22: ForecastExportProbabilities.xlsx</a> · <a href="24.html">#24: startProjectForge.sh →</a>
+</div>
+</body>
+</html>

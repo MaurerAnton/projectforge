@@ -1,0 +1,49 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>#737</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333}h2{margin-top:1.5em}a{color:#0366d6}.meta{font-size:.9em;margin:1em 0}.nav{font-size:.9em;color:#888;margin-bottom:1em}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}code{background:#f0f0f0;padding:0 .2em}pre{background:#f5f5f5;padding:.5em;margin:.5em 0;border-radius:3px;font-size:.85em;overflow-x:auto}</style></head>
+<body>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="736.html">← Prev</a> · <a href="738.html">Next →</a></div>
+
+<h1>#737: <code>KeyValuePairParser.java</code></h1>
+<div class="meta"><strong>Lines:</strong> 301 · <strong>Author:</strong> Kai Reinhard · <strong>Type:</strong> Java hand-written lexer/parser — zero dependencies</div>
+
+<div class="c"><h2>Purpose</h2>
+<p>A <strong>hand-written stream parser</strong> that reads <code>key=value</code> pairs from a <code>java.io.Reader</code>, one character at a time. No regex, no third-party parsing library — just pure character-by-character stateful parsing with a 5-element pushback buffer. This is the kind of code that existed before libraries like <a href="https://commons.apache.org/proper/commons-csv/">Apache Commons CSV</a> became standard — or written because the author wanted exact control over error messages and edge cases without dependency overhead.</p>
+<p>The parser supports: <strong>quoted values</strong> (with <code>"</code>), <strong>escaped quotes</strong> inside quoted strings (<code>""</code> → a literal <code>"</code>), <strong>configurable separator char</strong> (default from <code>KeyValuePairWriter.DEFAULT_SEPARATOR_CHAR</code>), <strong>line/column tracking</strong> for error messages, and <strong>whitespace skipping</strong>. Input format: <code>key1=value1,key2="quoted value, with comma",key3=123</code>.</p></div>
+
+<div class="c"><h2>Architecture: a miniature lexer</h2>
+<p>301 lines. The parser is structured as a classical <strong>two-phase lexer</strong>:</p>
+<ol><li><strong>Character reader (<code>read()</code> / <code>nextToken()</code> / <code>unread()</code>):</strong> reads one character from the <code>Reader</code>, tracks line/column numbers, handles <code>\r\n</code> (Windows) and <code>\n</code> (Unix) newlines, and classifies the token as <code>EOF</code>, <code>EOL</code>, or <code>CHAR</code>. The <code>nextToken()</code> method is the tokenizer</li>
+<li><strong>Parser (<code>parseKey()</code> / <code>parseValue()</code>):</strong> consumes tokens to build key and value strings. <code>parse()</code> is the entry point that calls parseKey+parseValue in a loop until EOF/EOL</li></ol>
+<p>This is the same architecture as a <strong>compiler front-end</strong> — tokenizer + parser — just for key=value data instead of programming languages.</p></div>
+
+<div class="c"><h2>Pushback buffer</h2>
+<p>A 5-element <code>int[] pushbackBuffer</code> with index <code>pushbackIndex</code>. When the parser reads one character too far (e.g. in <code>skipWhitespaces()</code>), it <strong>pushes the character back</strong> via <code>unread(int b)</code>. The buffer updates line/column counters when pushing back newlines — critical for accurate error messages. 5 elements is enough for any lookahead needed by this parser (maximum lookahead is 1-2 characters). This is the standard implementation of <strong>1-character lookahead</strong> — the simplest form of backtracking.</p></div>
+
+<div class="c"><h2>Quoted value handling — the most complex logic</h2>
+<p><code>parseValue()</code> (lines 141-189) implements a full <strong>CSV-style quoted field parser</strong>:</p>
+<ol><li>Skips whitespace, reads first character</li>
+<li>If the first char is <code>"</code>, enters <strong>quoted mode</strong> (<code>quoted=true</code>)</li>
+<li>In quoted mode:
+<ul><li><code>""</code> → escaped quote (appends one <code>"</code> to the value)</li>
+<li><code>"</code> followed by separator or whitespace+separator → end of value</li>
+<li><code>"</code> followed by anything else → error (<code>UNEXPECTED_CHARACTER_AFTER_QUOTATION_MARK</code>)</li>
+<li>Any other char → appended to value buffer</li></ul></li>
+<li>In unquoted mode:
+<ul><li>Separator char → end of value</li>
+<li><code>"</code> → error (<code>UNEXPECTED_QUOTATIONMARK</code> — quotes only allowed in quoted mode)</li>
+<li>Any other char → appended</li></ul></li>
+<li>If EOF/EOL reached while quoted → error (<code>QUOTATIONMARK_MISSED_AT_END_OF_CELL</code>)</li></ol>
+<p>This follows the <a href="https://datatracker.ietf.org/doc/html/rfc4180">RFC 4180 CSV specification</a> for quoted fields, but simplified — no multi-line quoted fields, no header detection, no type inference.</p></div>
+
+<div class="c"><h2>Error handling — precise location info</h2>
+<p>Every error message includes <strong>line number and column number</strong> — e.g. <code>"Unexpected quotation mark... Error in line: 3 (14)"</code>. This is critical for debugging config files. The <code>createMessage()</code> static method formats errors with the pattern: <code>msg + " Error in line: " + line + " (" + col + ")" + (s != null ? ": " + s : "")</code>. The <code>lineno</code> and <code>colno</code> counters are maintained by <code>read()</code> (increments line on <code>\n</code>) and <code>nextToken()</code> (increments column on each char).</p></div>
+
+<div class="c"><h2>Usage context</h2>
+<p>This parser is used to read <strong>configuration files</strong> and <strong>script parameter inputs</strong> — places where users or admins write key=value data in simple text files. Example file parsed by this:</p>
+<pre>name=ProjectForge
+version="8.0.0"
+description="ERP system with timesheet, calendar, and fibu"
+maxUsers=100</pre>
+<p>The parser reads line by line (<code>EOL</code> stops each <code>parse()</code> call), producing a <code>Map&lt;String, String&gt;</code>. The companion class <a href="738.html">KeyValuePairWriter</a> does the reverse — writes maps to key=value text format.</p></div>
+
+</body></html>

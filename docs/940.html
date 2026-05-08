@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8"><title>#940: Kost1DO.kt</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:2em;color:#444}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}</style></head>
+<body>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="939.html">← Prev</a> · <a href="941.html">Next →</a></div>
+<h1>#940: <code>Kost1DO.kt</code></h1>
+<div class="meta">Type: JPA Entity (DO) · Purpose: Kost1 cost center master data entity · Source: projectforge-business/src/main/kotlin/org/projectforge/business/fibu/kost/Kost1DO.kt</div>
+<div class="c">Represents a Kost1 cost center — the 8-digit cost carrier used in ProjectForge's financial accounting system. Kost1 is the coarser cost granularity (compared to Kost2), identified by a 4-part numeric code: Nummernkreis (1 digit), Bereich (3 digits), Teilbereich (2 digits), Endziffer (2 digits).</div>
+<h2>Entity Design</h2>
+<table>
+<tr><th>Field</th><th>Type</th><th>DB Column</th><th>Description</th></tr>
+<tr><td><code>kostentraegerStatus</code></td><td><code>KostentraegerStatus?</code></td><td>VARCHAR(30)</td><td>ACTIVE, NONACTIVE, or ENDED</td></tr>
+<tr><td><code>nummernkreis</code></td><td><code>Int</code></td><td>INT(1)</td><td>First digit of the cost number</td></tr>
+<tr><td><code>bereich</code></td><td><code>Int</code></td><td>INT(3)</td><td>Digits 2-4 of the cost number</td></tr>
+<tr><td><code>teilbereich</code></td><td><code>Int</code></td><td>INT(2)</td><td>Digits 5-6 of the cost number</td></tr>
+<tr><td><code>endziffer</code></td><td><code>Int</code></td><td>INT(2)</td><td>Digits 7-8 (last two digits)</td></tr>
+<tr><td><code>description</code></td><td><code>String?</code></td><td>VARCHAR(4000)</td><td>Free-text description</td></tr>
+</table>
+<h3>Computed (Transient) Properties</h3>
+<table>
+<tr><th>Property</th><th>Format</th><th>Purpose</th></tr>
+<tr><td><code>formattedNumber</code></td><td><code>#.###.##.##</code></td><td>Human-readable display via KostFormatter</td></tr>
+<tr><td><code>rawNumberString</code></td><td><code>########</code></td><td>Compact 8-digit string for Hibernate Search indexing</td></tr>
+<tr><td><code>nummer</code></td><td><code>Int</code></td><td>Computed integer representation for comparison</td></tr>
+<tr><td><code>displayName</code></td><td>—</td><td>Implements DisplayNameCapable for UI lists</td></tr>
+</table>
+<h3>Named Queries</h3>
+<table>
+<tr><th>Name</th><th>Description</th></tr>
+<tr><td><code>FIND_BY_NK_BEREICH_TEILBEREICH_ENDZIFFER</code></td><td>Find by all 4 numeric components</td></tr>
+<tr><td><code>FIND_OTHER_BY_NK_BEREICH_TEILBEREICH_ENDZIFFER</code></td><td>Find duplicate (exclude given ID) for uniqueness validation</td></tr>
+</table>
+<h2>Persistence Details</h2>
+<ul>
+<li>Mapped to table <code>T_FIBU_KOST1</code> with a 4-column unique constraint on (nummernkreis, bereich, teilbereich, endziffer)</li>
+<li>Extends <code>DefaultBaseDO</code> — inherits id, created, lastUpdate, deleted</li>
+<li>Implements <code>DisplayNameCapable</code> — provides automatic display name for lists</li>
+<li>Hibernate Search indexed via <code>@Indexed</code> with <code>@FullTextField</code> on description</li>
+<li>Equals/hashCode based on the 4 numeric components (business key)</li>
+</ul>
+<h2>Caching Integration</h2>
+<p>Kost1DO instances are cached in <code>KostCache</code> (keyed by ID in <code>kost1Map</code>). The cache is updated via <code>KostCache.updateKost1()</code> after insert/modify operations. Lookup methods support finding Kost1 by numeric string or by index components.</p>
+<h2>Source Code (abridged)</h2>
+<pre>@Entity @Indexed
+@Table(name = "T_FIBU_KOST1",
+    uniqueConstraints = [UniqueConstraint(
+        columnNames = ["nummernkreis","bereich","teilbereich","endziffer"])])
+open class Kost1DO : DefaultBaseDO(), DisplayNameCapable {
+    open var kostentraegerStatus: KostentraegerStatus? = null
+    open var nummernkreis: Int = 0
+    open var bereich: Int = 0
+    open var teilbereich: Int = 0
+    open var endziffer: Int = 0
+    open var description: String? = null
+
+    val formattedNumber: String get() =
+        KostFormatter.instance.formatKost1(this, FORMATTED_NUMBER)
+    // ... equals/hashCode based on 4 numerical components
+}</pre>
+<h2>Git History</h2>
+<div class="hist"><pre>868d6abb7 2025 -> 2026
+38e843800 CostSearch supports now search for plain number string.
+10131de6a Kost1DO: Search for nummer fixed.
+63081666f Source file headers: 2024-> 2025.
+b3782c8a8 Migration stuff in progress...
+cba940301 Migration stuff in progress...
+1204b927b Migration stuff (all tests OK).
+c4950ae12 Migration stuff in progress...
+f5c09f87f Migration stuff in progress...
+4f5a458c9 Migration stuff in progress...
+c04fb0d51 Migration stuff in progress...
+06828f490 Migration stuff in progress...
+b6092df09 Copyright 2023 -> 2024
+ab45d51fa Copyright 2001-2022 -> 2001-2023.
+5f7ef41b8 Copyright 2021 -> 2022
+c0f2b9de0 Tenants functionality removed everywhere.
+ceb63e8a1 Source code header: (C) 2001-2021.
+b78b870bd ShortDisplayNameCapable -> DisplayNameCapable.
+7c79f1922 Copyright 2020.
+8241700f0 DisplayNameCapable Kotlin conversion.
+8675a1dbe Declared Kotlin JPA entities as open (lazy loading fix).
+fe5a7c982 Heavy WIP: NamedQueries everywhere.
+05244ff19 CopyRight Kotlin headers.
+9034a4bc0 Compiler warnings fixed.
+4e3d53973 Kost1DO.java -> Kost1DO.kt</pre></div>
+</body>
+</html>

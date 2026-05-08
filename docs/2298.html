@@ -1,0 +1,517 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>#2298</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}.hist{font-size:.85em;color:#555}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}</style></head>
+<body><div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="2297.html">← Prev</a> · <a href="2299.html">Next →</a></div>
+<h1>#2298: <code>SipgateContactSyncService.kt</code></h1>
+<div class="meta">REST Service, <code>projectforge-rest/src/main/kotlin/org/projectforge/rest/sipgate/SipgateContactSyncService.kt</code> (1008 lines)</div>
+<div class="c">Source file: SipgateContactSyncService.kt - rest service in ProjectForge REST module.</div>
+<h2>Source Code</h2><pre>/////////////////////////////////////////////////////////////////////////////
+//
+// Project ProjectForge Community Edition
+//         www.projectforge.org
+//
+// Copyright (C) 2001-2026 Micromata GmbH, Germany (www.micromata.com)
+//
+// ProjectForge is dual-licensed.
+//
+// This community edition is free software; you can redistribute it and/or
+// modify it under the terms of the GNU General Public License as published
+// by the Free Software Foundation; version 3 of the License.
+//
+// This community edition is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General
+// Public License for more details.
+//
+// You should have received a copy of the GNU General Public License along
+// with this program; if not, see http://www.gnu.org/licenses/.
+//
+/////////////////////////////////////////////////////////////////////////////
+
+package org.projectforge.rest.sipgate
+
+import jakarta.annotation.PostConstruct
+import jakarta.persistence.EntityManager
+import mu.KotlinLogging
+import org.projectforge.business.address.*
+import org.projectforge.business.sipgate.SipgateConfiguration
+import org.projectforge.business.sipgate.SipgateContact
+import org.projectforge.business.sipgate.SipgateContactSyncDO
+import org.projectforge.framework.access.OperationType
+import org.projectforge.framework.persistence.api.BaseDOModifiedListener
+import org.projectforge.framework.persistence.jpa.PfPersistenceService
+import org.projectforge.framework.utils.NumberHelper
+import org.springframework.beans.factory.annotation.Autowired
+import org.springframework.scheduling.TaskScheduler
+import org.springframework.scheduling.annotation.Scheduled
+import org.springframework.stereotype.Service
+import java.time.Instant
+import java.util.*
+import java.util.concurrent.ScheduledFuture
+import kotlin.reflect.KMutableProperty
+
+private val log = KotlinLogging.logger {}
+
+/**
+ * Fragen sipgate:
+ *   - Warum werden Felder, wie firstName, family, notizen etc. nicht übertragen?
+ *   - Warum fehlt der Typ bei Adresse?
+ *   - Hilfreich wäre eine Reference-ID (String oder Zahl) zum Verknüpfen von Sipgate und Fremdsystemadressen.
+ *   - Hilfreich wäre ansonsten als Antwort nach einem Insert die Contact-id.
+ *   - Typ von Nummern in Kontakten werden nicht immer korrekt zurückgegeben (Beispiele heraussuchen, wie cell-home, fax, ...)
+ * @author K. Reinhard (k.reinhard@micromata.de)
+ */
+@Service
+open class SipgateContactSyncService : BaseDOModifiedListener&lt;AddressDO&gt; {
+    /**
+     * Holds result of comparison of local address and remote contact.
+     */
+    class SyncResult {
+        var addressDOOutdated = false // true, if the address has to be updated in ProjectForge.
+        var contactOutdated = false   // true, if the contact has to be updated in Sipgate.
+        var outdatedAddressFields = mutableListOf&lt;String&gt;()
+        var outdatedContactFields = mutableListOf&lt;String&gt;()
+
+        fun addOutdatedAddressField(field: String, oldValue: String?, newValue: String?) {
+            outdatedAddressFields.add("$field: '$oldValue'-&gt;'$newValue'")
+        }
+
+        fun addOutdatedContactField(field: String, oldValue: String?, newValue: Any?) {
+            outdatedContactFields.add("$field: '$oldValue'-&gt;'$newValue'")
+        }
+
+        override fun toString(): String {
+            val sb = StringBuilder()
+            sb.append("addressOutdated=$addressDOOutdated")
+            if (outdatedAddressFields.isNotEmpty()) {
+                sb.append(outdatedAddressFields.joinToString(prefix = " fields=[", postfix = "]"))
+            }
+            sb.append(", contactOutdated=$contactOutdated")
+            if (outdatedContactFields.isNotEmpty()) {
+                sb.append(outdatedContactFields.joinToString(prefix = " fields=[", postfix = "]"))
+            }
+            return sb.toString()
+        }
+    }
+
+    /**
+     * Modification counter for local and remote objects.
+     */
+    class Counter(
+        var inserted: Int = 0,
+        var updated: Int = 0,
+        var deleted: Int = 0,
+        var failed: Int = 0,
+        var ignored: Int = 0,
+        var total: Int = 0,
+    ) {
+        override fun toString(): String {
+            return "total=$total, inserted=$inserted, updated=$updated, deleted=$deleted, failed=$failed, ignored=$ignored"
+        }
+    }
+
+    /**
+     * This context is used by sync and holds all used data.
+     */
+    class SyncContext {
+        var remoteContacts = mutableListOf&lt;SipgateContact&gt;()
+        var addressList = listOf&lt;AddressDO&gt;()
+        var syncDOList = mutableListOf&lt;SipgateContactSyncDO&gt;()
+        var localCounter = Counter()
+        var remoteCounter = Counter()
+
+        override fun toString(): String {
+            return "${remoteContacts.size} remote contacts, ${addressList.size} local addresses, ${syncDOList.size} sync objects, localCounter=$localCounter, remoteCounter=$remoteCounter"
+        }
+    }
+
+    /**
+     * Match score of contact and address to find the best matching pairs.
+     */
+    class MatchScore(val contactId: String, val addressId: Long, val score: Int) {
+        var synced = false
+    }
+
+    @Autowired
+    internal lateinit var sipgateContactService: SipgateContactService
+
+    @Autowired
+    internal lateinit var configuration: SipgateConfiguration
+
+    @Autowired
+    internal lateinit var addressDao: AddressDao
+
+    @Autowired
+    internal lateinit var persistenceService: PfPersistenceService
+
+    @Autowired
+    private lateinit var taskScheduler: TaskScheduler
+
+    private var lastSyncInEpochMillis: Long? = null
+
+    /**
+     * Debouncing mechanism to prevent expensive sync operations on every address modification.
+     *
+     * Problem: During mass updates (e.g., 100 addresses), afterInsertOrModify() is called 100 times,
+     * which would trigger 100 expensive sync() operations.
+     *
+     * Solution: Intelligent debouncing with automatic batch detection:
+     * - Detects batch updates when modifications occur less than 1 second apart
+     * - For batch updates: Waits 5 seconds after the LAST modification before syncing
+     * - For single updates: Waits 10 seconds before syncing
+     * - Each new modification CANCELS the previous scheduled sync and reschedules
+     *
+     * Example with 10 address updates within 1 second:
+     * - Update 1 (t=0ms):    Schedule sync in 10s
+     * - Update 2 (t=100ms):  Cancel previous, schedule sync in 5s (batch detected!)
+     * - Update 3 (t=200ms):  Cancel previous, schedule sync in 5s
+     * - ...
+     * - Update 10 (t=900ms): Cancel previous, schedule sync in 5s
+     * - Result: sync() is called ONCE at t=5900ms (5s after last update)
+     *
+     * Benefits: 100 address updates → 1 sync call instead of 100!
+     */
+    private var scheduledSyncFuture: ScheduledFuture&lt;*&gt;? = null
+    private var lastUpdateTimestamp = 0L
+    private val batchDetectionThresholdMillis = 1000L // Updates within 1 second are considered batch
+    private val batchSyncDelayMillis = 5000L // Wait 5 seconds after last update in batch
+    private val singleSyncDelayMillis = 10000L // Wait 10 seconds for isolated single updates
+
+    @PostConstruct
+    private fun postConstruct() {
+        addressDao.register(this)
+    }
+
+    companion object {
+        internal var countryPrefixForTestcases: String? = null
+
+        /**
+         * Create new contact from given address.
+         */
+        internal fun from(address: AddressDO): SipgateContact {
+            val contact = SipgateContact()
+            // contact.id
+            contact.name = SipgateContactSyncDO.getName(address)
+            contact.family = address.name
+            contact.given = address.firstName
+            // var picture: String? = null
+            address.email?.let { contact.email = it }
+            address.privateEmail?.let { contact.privateEmail = it }
+            val numbers = mutableListOf&lt;SipgateContact.Number&gt;()
+            address.businessPhone?.let { numbers.add(SipgateContact.Number(it).setWorkType()) }
+            address.mobilePhone?.let { numbers.add(SipgateContact.Number(it).setCellType()) }
+            address.privatePhone?.let { numbers.add(SipgateContact.Number(it).setHomeType()) }
+            address.privateMobilePhone?.let { numbers.add(SipgateContact.Number(it).setCellHomeType()) }
+            address.fax?.let { numbers.add(SipgateContact.Number(it).setFaxWorkType()) }
+            contact.numbers = numbers
+            /* Ignore addresses (synchronize will be pain, because not type of addresses will be given by Sipgate.
+              val addresses = mutableListOf&lt;SipgateAddress&gt;()
+              createAddress(
+                addressText = address.addressText,
+                addressText2 = address.addressText2,
+                zipCode = address.zipCode,
+                city = address.city,
+                state = address.state,
+                country = address.country,
+              )?.let { addresses.add(it) }
+              createAddress(
+                addressText = address.privateAddressText,
+                addressText2 = address.privateAddressText2,
+                zipCode = address.privateZipCode,
+                city = address.privateCity,
+                state = address.privateState,
+                country = address.privateCountry,
+              )?.let { addresses.add(it) }
+              if (addresses.isNotEmpty()) {
+                contact.addresses = addresses.toTypedArray()
+              }
+          */
+
+            contact.organization = address.organization
+            contact.division = address.division
+            contact.scope = SipgateContact.Scope.SHARED
+            return contact
+        }
+
+        /**
+         * Create new address from given contact.
+         */
+        internal fun from(contact: SipgateContact): AddressDO {
+            val address = extractName(contact.name)
+            address.form = FormOfAddress.UNKNOWN
+            copyFrom(address, contact)
+            return address
+        }
+
+        /**
+         * Copies all fields of the srcContact into the destAddress.
+         * @param destAddress The address to modify.
+         * @param srcContact The contact as source.
+         */
+        internal fun copyFrom(destAddress: AddressDO, srcContact: SipgateContact) {
+            val address = extractName(srcContact.name)
+            destAddress.name = address.name
+            destAddress.firstName = address.firstName
+            // contact.id
+            // var picture: String? = null
+            destAddress.email = srcContact.email
+            destAddress.privateEmail = srcContact.privateEmail
+
+            destAddress.businessPhone = srcContact.work
+            destAddress.mobilePhone = srcContact.cell
+            destAddress.privatePhone = srcContact.home
+            destAddress.privateMobilePhone = srcContact.cellHome
+            destAddress.fax = srcContact.faxWork
+
+            /* Ignore addresses (synchronize will be pain, because not type of addresses will be given by Sipgate.
+          val addresses = mutableListOf&lt;SipgateAddress&gt;()
+          createAddress(
+            addressText = address.addressText,
+            addressText2 = address.addressText2,
+            zipCode = address.zipCode,
+            city = address.city,
+            state = address.state,
+            country = address.country,
+          )?.let { addresses.add(it) }
+          createAddress(
+            addressText = address.privateAddressText,
+            addressText2 = address.privateAddressText2,
+            zipCode = address.privateZipCode,
+            city = address.privateCity,
+            state = address.privateState,
+            country = address.privateCountry,
+          )?.let { addresses.add(it) }
+           */
+
+            destAddress.organization = srcContact.organization
+            destAddress.division = srcContact.division
+        }
+
+        /**
+         * Detects modifications (if any) by comparing given contact and address. Any modification of the contact itself is
+         * detected by comparing the hash codes of every field with the hash codes built at the last synchronisation: If
+         * any modification was done remote, the hash code of the modified fields would differ?
+         * @param contact given by Sipgate (will be modified, if to be modified).
+         * @param address given by ProjectForge (will be modified, if to be modified).
+         * @return result with info whether the objects have to be updated or not.
+         */
+        internal fun sync(
+            contact: SipgateContact,
+            address: AddressDO,
+            syncInfo: SipgateContactSyncDO.SyncInfo?,
+        ): SyncResult {
+            SipgateContactService.fixNumbers(contact, address, syncInfo)
+            SipgateContactService.fixEmails(contact, address, syncInfo)
+            contact.fixEmails()
+            val result = SyncResult()
+            if (contact.name != SipgateContactSyncDO.getName(address)) {
+                if (syncInfo != null &amp;&amp; syncInfo.fieldsInfo["name"] != SipgateContactSyncDO.SyncInfo.hash(contact.name)) {
+                    // address to be updated
+                    val adr = extractName(contact.name)
+                    result.addOutdatedAddressField("name", contact.name, SipgateContactSyncDO.getName(address))
+                    address.name = adr.name
+                    address.firstName = adr.firstName
+                    result.addressDOOutdated = true
+                } else {
+                    contact.name = SipgateContactSyncDO.getName(address)
+                    result.contactOutdated = true
+                }
+            }
+            if (contact.organization != null &amp;&amp; contact.division == null &amp;&amp;
+                address.organization.isNullOrBlank() &amp;&amp; !address.division.isNullOrBlank() &amp;&amp;
+                contact.organization?.trim() == address.division?.trim()
+            ) {
+                // organization: 'PEV'-&gt;'null', division: 'null'-&gt;'PEV'
+                contact.division = address.division
+                contact.organization = null
+            }
+            sync(contact, SipgateContact::organization, address, AddressDO::organization, syncInfo, result)
+            sync(contact, SipgateContact::division, address, AddressDO::division, syncInfo, result)
+
+            sync(contact, SipgateContact::email, address, AddressDO::email, syncInfo, result)
+            sync(contact, SipgateContact::privateEmail, address, AddressDO::privateEmail, syncInfo, result)
+
+            sync(contact, SipgateContact::work, address, AddressDO::businessPhone, syncInfo, result, true)
+            sync(contact, SipgateContact::home, address, AddressDO::privatePhone, syncInfo, result, true)
+            sync(contact, SipgateContact::cell, address, AddressDO::mobilePhone, syncInfo, result, true)
+            sync(contact, SipgateContact::cellHome, address, AddressDO::privateMobilePhone, syncInfo, result, true)
+            sync(contact, SipgateContact::faxWork, address, AddressDO::fax, syncInfo, result, true)
+            return result
+        }
+
+        /**
+         * Used by sync method above for checking one single field of contact and address.
+         */
+        internal fun sync(
+            contact: SipgateContact,
+            contactField: KMutableProperty&lt;*&gt;,
+            address: AddressDO,
+            addressField: KMutableProperty&lt;*&gt;,
+            syncInfo: SipgateContactSyncDO.SyncInfo?,
+            result: SyncResult,
+            isPhoneNumber: Boolean = false,
+        ) {
+            var contactValue = contactField.getter.call(contact) as String?
+            val addressValue = addressField.getter.call(address) as String?
+            var contactValue2Compare = contactValue ?: ""
+            var addressValue2Compare = addressValue ?: ""
+            if (isPhoneNumber) {
+                contactValue2Compare = NumberHelper.extractPhonenumber(contactValue) ?: ""
+                addressValue2Compare = NumberHelper.extractPhonenumber(addressValue) ?: ""
+                contactValue = NumberHelper.formatPhonenumber(contactValue)
+            }
+            if (contactValue2Compare != addressValue2Compare) {
+                if (syncInfo != null
+                    &amp;&amp; syncInfo.fieldsInfo[addressField.name] != SipgateContactSyncDO.SyncInfo.hash(contactValue)
+                ) {
+                    result.addOutdatedAddressField(addressField.name, addressValue, contactValue)
+                    // remote contact was modified, so local address is outdated.
+                    addressField.setter.call(address, contactValue)
+                    contactField.setter.call(contact, contactValue)
+                    result.addressDOOutdated = true
+                } else {
+                    result.addOutdatedContactField(contactField.name, contactValue, addressValue)
+                    // local address was modified, so remote contact is outdated.
+                    contactField.setter.call(contact, addressValue)
+                    result.contactOutdated = true
+                }
+            } else {
+                // Restore address value, because Sipgate removes country prefix by default.
+                contactField.setter.call(
+                    contact,
+                    addressValue
+                ) // Only needed, if contact is outdated due to other fields.
+            }
+        }
+
+        /**
+         * Sipgate provides only concatenated names (first name - lastname). This method tries to restore the first and
+         * family name.
+         */
+        internal fun extractName(name: String?): AddressDO {
+            val address = AddressDO()
+            if (name.isNullOrBlank()) {
+                return address
+            }
+            val names = name.split(" ")
+            address.name = names.last().trim()
+            address.firstName = names.take(names.size - 1).joinToString(" ")
+            return address
+        }
+
+        /**
+         * Builds a list of all contact / address pairs with their match score (must be greater or equal 1). Already
+         * paired (matched) contacts and addresses (member of syncDOList) will be ignored.
+         * @param syncContext list of all addresses, all remote contacts and all already synced contacts (syncDOList)
+         * @return List of all match scores greater or equal 1.
+         */
+        internal fun findMatches(syncContext: SyncContext)
+                : List&lt;MatchScore&gt; {
+            val addresses = syncContext.addressList
+            val contacts = syncContext.remoteContacts
+            val syncDOList = syncContext.syncDOList
+            // Map key is contact-id.
+            val matchScores = mutableListOf&lt;MatchScore&gt;()
+            contacts.forEach { contact -&gt;
+                if (syncDOList.any { it.sipgateContactId == contact.id }) {
+                    // Contact is already matched.
+                    return@forEach
+                }
+                addresses.filter { SipgateContactSyncDO.getName(it).lowercase() == contact.name?.trim()?.lowercase() }
+                    .forEach { matchAddress -&gt;
+                        if (syncDOList.none { it.address?.id == matchAddress.id }) {
+                            // Address isn't yet matched to any contact.
+                            contact.id?.let { contactId -&gt;
+                                val matchScore = matchScore(contact, matchAddress)
+                                if (matchScore &gt;= 1) {
+                                    matchScores.add(MatchScore(contactId, matchAddress.id!!, matchScore))
+                                }
+                            }
+                        }
+                    }
+            }
+            if (log.isDebugEnabled) {
+                val sb = StringBuilder()
+                sb.appendLine("matchscores:")
+                val map = matchScores.sortedBy { it.score }.groupBy { it.contactId }
+                map.entries.forEach { entry -&gt;
+                    sb.appendLine(
+                        "${entry.key}=[${
+                            entry.value.sortedByDescending { it.score }.joinToString { "${it.addressId}:${it.score}" }
+                        }]"
+                    )
+                }
+                log.debug { sb.toString() }
+            }
+            return matchScores
+        }
+
+        /**
+         * Calculates the match score of an address/contact pair.
+         */
+        internal fun matchScore(contact: SipgateContact, address: AddressDO): Int {
+            if (contact.name?.trim()?.lowercase() != SipgateContactSyncDO.getName(address).lowercase()) {
+                return -1
+            }
+            var counter = 1
+            if (!address.deleted) {
+                // Boost undeleted addresses. Deleted addresses with same name (family and first) with lower score.
+                counter += 1
+                if (isAddressActive(address)) {
+                    counter += 1
+                }
+            }
+            val numbers = arrayOf(
+                extractNumber(address.businessPhone),
+                extractNumber(address.mobilePhone),
+                extractNumber(address.privateMobilePhone),
+                extractNumber(address.privatePhone),
+                extractNumber(address.fax),
+            )
+            contact.numbers?.forEach { number -&gt;
+                val extractedNumber = extractNumber(number.number)
+                numbers.forEach { if (!it.isNullOrBlank() &amp;&amp; extractedNumber == it) ++counter }
+            }
+            contact.emails?.forEach { email -&gt;
+                val str = email.email?.trim()?.lowercase()
+                if (!str.isNullOrEmpty() &amp;&amp; str == address.email?.trim()
+                        ?.lowercase() || str == address.privateEmail?.trim()
+                        ?.lowercase()
+                ) {
+                    ++counter
+                }
+            }
+            /*
+            contact.addresses?.forEach { adr -&gt;
+              val str = adr.postalCode?.trim()?.lowercase()
+              if (!str.isNullOrBlank() &amp;&amp; str == address.zipCode?.trim() || str == address.privateZipCode) {
+                ++counter
+              }
+            }*/
+            if (!address.division.isNullOrBlank() &amp;&amp; contact.division?.trim()?.lowercase() == address.division?.trim()
+                    ?.lowercase()
+            ) {
+                ++counter
+            }
+            if (!address.organization.isNullOrBlank() &amp;&amp; contact.organization?.trim()
+                    ?.lowercase() == address.organization?.trim()
+                    ?.lowercase()
+            ) {
+                ++counter
+            }
+            return counter
+        }
+
+        /**
+         * Only active addresses will be pushed to Sipgate. In-active addresses will be deleted remote.
+         */</pre>
+<h2>Git History</h2><div class="hist"><pre>868d6abb7 2025 -&gt; 2026
+a7308c9a9  Fix Sipgate sync: Prevent full re-sync due to missing email types
+2014b8633 Sipgate: fix of duplicating emails by each sync.
+c2b2c24f7 Sipgate: Intelligent debouncing for address sync to prevent excessive API calls
+e64b52e17 SipgateContactSyncService registered itself at addressDao for syncing sipgate contacts after any address changes.
+2720010a9 Scheduled jobs: all jobs are now started in own thread (for avoiding blocking spring scheduler). SipgateContactSyncservice: configurable as cron job. ForecastExport: Minor fix.
+d236252ca SipgateContactSyncService fixed.
+63081666f Source file headers: 2024-&gt; 2025.
+a73905c14 Fix typos in projectforge*/ directories Found via codespell See c3b0602a893
+87dd5b87c AuftragsCache refactored, migration stuff... (all tests OK)</pre></div>
+</body></html>

@@ -1,0 +1,219 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>#2788</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}.hist{font-size:.85em;color:#555}</style></head>
+<body><div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="2787.html">← Prev</a> · <a href="2789.html">Next →</a></div>
+<h1>#2788: <code>LessSource.java</code></h1>
+<div class="meta">Java class, <code>projectforge-wicket/src/main/java/org/lesscss/LessSource.java</code></div>
+<div class="c">Java java org lesscss.</div>
+<h2>Git History</h2><div class="hist"><pre>db091392a LessSource: less noisy on startup.
+c06db1dab Nearly all jars updated (code changes required).
+a6a7aece4 Optimize Imports
+a5bbdca6a Change logger to slf4j
+9ebb88522 Initial commit</pre></div>
+<h2>Source</h2><pre>/* Copyright 2011-2012 The Apache Software Foundation.
+ *
+ * Licensed under the Apache License, Version 2.0 (the &quot;License&quot;);
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an &quot;AS IS&quot; BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+package org.lesscss;
+
+// If less.js 1.3.3 is supported again, remove this package and re-activate the pom.xml entry.
+
+import org.apache.commons.io.FileUtils;
+import org.apache.commons.io.IOUtils;
+import org.apache.commons.lang3.StringUtils;
+
+import java.io.File;
+import java.io.FileNotFoundException;
+import java.io.IOException;
+import java.io.InputStream;
+import java.util.LinkedHashMap;
+import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
+import static java.util.regex.Pattern.MULTILINE;
+
+/**
+ * Represents the metadata and content of a LESS source.
+ *
+ * @author Marcel Overdijk
+ */
+public class LessSource
+{
+
+  private static final org.slf4j.Logger log = org.slf4j.LoggerFactory
+      .getLogger(LessSource.class);
+
+  /**
+   * The &lt;code&gt;Pattern&lt;/code&gt; used to match imported files.
+   */
+  private static final Pattern IMPORT_PATTERN = Pattern
+      .compile(&quot;^(?!\\s*//\\s*)@import\\s+(url\\()?\\s*\&quot;(.+)\\s*\&quot;(\\))?\\s*;.*$&quot;, MULTILINE);
+
+  private final File file;
+  private final String content;
+  private String normalizedContent;
+  private final Map&lt;String, LessSource&gt; imports = new LinkedHashMap&lt;String, LessSource&gt;();
+
+  /**
+   * Constructs a new &lt;code&gt;LessSource&lt;/code&gt;.
+   * &lt;p&gt;
+   * This will read the metadata and content of the LESS source, and will automatically resolve the imports.
+   * &lt;/p&gt;
+   *
+   * @param file The &lt;code&gt;File&lt;/code&gt; reference to the LESS source to read.
+   * @throws FileNotFoundException If the LESS source (or one of its imports) could not be found.
+   * @throws IOException If the LESS source cannot be read.
+   */
+  public LessSource(final File file, final String folder) throws FileNotFoundException, IOException
+  {
+    if (file == null) {
+      throw new IllegalArgumentException(&quot;File must not be null.&quot;);
+    }
+    if (!file.exists()) {
+      throw new FileNotFoundException(&quot;File &quot; + file.getAbsolutePath() + &quot; not found.&quot;);
+    }
+    this.file = file;
+    this.content = this.normalizedContent = FileUtils.readFileToString(file);
+    resolveImports(folder);
+  }
+
+  /**
+   * Constructs a new &lt;code&gt;LessSource&lt;/code&gt;.
+   * &lt;p&gt;
+   * This will read the metadata and content of the LESS source, and will automatically resolve the imports.
+   * &lt;/p&gt;
+   *
+   * @param file The &lt;code&gt;InputStream&lt;/code&gt; reference to the LESS source to read.
+   * @throws IOException If the LESS source cannot be read.
+   */
+  public LessSource(final InputStream stream, final File file, final String folder) throws IOException
+  {
+    if (stream == null) {
+      throw new IllegalArgumentException(&quot;Stream must not be null.&quot;);
+    }
+    this.file = file;
+    this.content = this.normalizedContent = IOUtils.toString(stream, &quot;UTF-8&quot;);
+    log.debug(&quot;Less content: &quot; + StringUtils.abbreviate(this.content, 50));
+    resolveImports(folder);
+  }
+
+  /**
+   * Returns the absolute pathname of the LESS source.
+   *
+   * @return The absolute pathname of the LESS source.
+   */
+  public String getAbsolutePath()
+  {
+    return file.getAbsolutePath();
+  }
+
+  /**
+   * Returns the content of the LESS source.
+   *
+   * @return The content of the LESS source.
+   */
+  public String getContent()
+  {
+    return content;
+  }
+
+  /**
+   * Returns the normalized content of the LESS source.
+   * &lt;p&gt;
+   * The normalized content represents the LESS source as a flattened source where import statements have been resolved
+   * and replaced by the actual content.
+   * &lt;/p&gt;
+   *
+   * @return The normalized content of the LESS source.
+   */
+  public String getNormalizedContent()
+  {
+    return normalizedContent;
+  }
+
+  /**
+   * Returns the time that the LESS source was last modified.
+   *
+   * @return A &lt;code&gt;long&lt;/code&gt; value representing the time the file was last modified, measured in milliseconds since
+   *         the epoch (00:00:00 GMT, January 1, 1970).
+   */
+  public long getLastModified()
+  {
+    return file.lastModified();
+  }
+
+  /**
+   * Returns the time that the LESS source, or one of its imports, was last modified.
+   *
+   * @return A &lt;code&gt;long&lt;/code&gt; value representing the time the file was last modified, measured in milliseconds since
+   *         the epoch (00:00:00 GMT, January 1, 1970).
+   */
+  public long getLastModifiedIncludingImports()
+  {
+    long lastModified = getLastModified();
+    for (final Map.Entry&lt;String, LessSource&gt; entry : imports.entrySet()) {
+      final LessSource importedLessSource = entry.getValue();
+      final long importedLessSourceLastModified = importedLessSource.getLastModifiedIncludingImports();
+      if (importedLessSourceLastModified &gt; lastModified) {
+        lastModified = importedLessSourceLastModified;
+      }
+    }
+    return lastModified;
+  }
+
+  /**
+   * Returns the LESS sources imported by this LESS source.
+   * &lt;p&gt;
+   * The returned imports are represented by a &lt;code&gt;Map&amp;lt;String, LessSource&amp;gt;&lt;/code&gt; which contains the filename
+   * and the &lt;code&gt;LessSource&lt;/code&gt;.
+   * &lt;/p&gt;
+   *
+   * @return The LESS sources imported by this LESS source.
+   */
+  public Map&lt;String, LessSource&gt; getImports()
+  {
+    return imports;
+  }
+
+  private void resolveImports(String folder) throws FileNotFoundException, IOException
+  {
+    Matcher importMatcher = IMPORT_PATTERN.matcher(normalizedContent);
+    while (importMatcher.find()) {
+      String importedFile = importMatcher.group(2);
+      log.debug(&quot;Less file to import: &quot; + importedFile);
+      importedFile = importedFile.matches(&quot;.*\\.(le?|c)ss$&quot;) ? importedFile : importedFile + &quot;.less&quot;;
+      final boolean css = importedFile.matches(&quot;.*css$&quot;);
+      if (!css) {
+        LessSource importedLessSource = null;
+        try {
+          importedLessSource = new LessSource(new File(file.getParentFile(), importedFile), folder);
+        } catch (FileNotFoundException e) {
+          String pathToLessFile = folder + &quot;/&quot; + importedFile;
+          String subpath = &quot;&quot;;
+          if (importedFile.contains(&quot;/&quot;)) {
+            subpath = &quot;/&quot; + (importedFile.split(&quot;/&quot;))[0];
+          }
+          log.info(&quot;Path to less file: &quot; + pathToLessFile);
+          importedLessSource = new LessSource(
+              getClass().getClassLoader().getResourceAsStream(pathToLessFile),
+              new File(getClass().getClassLoader().getResource(pathToLessFile).toExternalForm()), folder + subpath);
+        }
+        imports.put(importedFile, importedLessSource);
+        normalizedContent = normalizedContent.substring(0, importMatcher.start())
+            + importedLessSource.getNormalizedContent() + normalizedContent.substring(importMatcher.end());
+        importMatcher = IMPORT_PATTERN.matcher(normalizedContent);
+      }
+    }
+  }
+}</pre>
+</body></html>

@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>#881: AbstractRechnungsPositionDO.kt</title>
+<style>
+body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}
+h1{border-bottom:2px solid #333;padding-bottom:.3em}
+h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}
+h3{margin-top:2em;color:#444}
+a{color:#0366d6}
+.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}
+.nav{font-size:.9em;color:#888;margin-bottom:1em}
+.meta{font-size:.9em;margin:1em 0;color:#555}
+code{background:#f0f0f0;padding:0 .2em;font-size:.93em}
+pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}
+table{border-collapse:collapse;width:100%;margin:1em 0}
+th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}
+th{background:#f5f5f5;font-weight:600}
+.hist{font-size:.85em;color:#555}
+</style>
+</head>
+<body>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="880.html">← Prev</a> · <a href="882.html">Next →</a></div>
+
+<h1>#881: <code>AbstractRechnungsPositionDO.kt</code></h1>
+
+<div class="meta">
+<p><strong>Type:</strong> Abstract JPA <code>@MappedSuperclass</code> entity</p>
+<p><strong>Package:</strong> <code>org.projectforge.business.fibu</code></p>
+<p><strong>Full path:</strong> <code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/AbstractRechnungsPositionDO.kt</code></p>
+</div>
+
+<div class="c">
+<p>Abstract base class for invoice position entities in ProjectForge. Serves as the shared superclass for both <em>outgoing</em> invoice positions (<code>RechnungsPositionDO</code>) and <em>incoming</em> invoice positions (<code>EingangsrechnungsPositionDO</code>). Provides common fields such as position number, text, quantity (<code>menge</code>), unit net price (<code>einzelNetto</code>), and VAT rate (<code>vat</code>), along with logic for managing cost assignments (<code>KostZuweisungDO</code>).</p>
+</div>
+
+<h2>Class Hierarchy</h2>
+<p>Extends <code>DefaultBaseDO</code>, implements <code>DisplayNameCapable</code> and <code>IRechnungsPosition</code>. Annotated with <code>@MappedSuperclass</code> so it is not itself a database table — concrete subclasses provide their own JPA mappings.</p>
+
+<h2>Key Properties</h2>
+<table>
+<tr><th>Property</th><th>Type</th><th>DB Column</th><th>Description</th></tr>
+<tr><td><code>number</code></td><td><code>Short</code></td><td><code>number</code></td><td>Position number, starting at 1</td></tr>
+<tr><td><code>text</code></td><td><code>String?</code></td><td><code>s_text</code> (1000)</td><td>Invoice line item description</td></tr>
+<tr><td><code>menge</code></td><td><code>BigDecimal?</code></td><td><code>menge</code></td><td>Quantity (precision 18, scale 5)</td></tr>
+<tr><td><code>einzelNetto</code></td><td><code>BigDecimal?</code></td><td><code>einzel_netto</code></td><td>Unit net price (precision 18, scale 2)</td></tr>
+<tr><td><code>vat</code></td><td><code>BigDecimal?</code></td><td><code>vat</code></td><td>VAT rate (precision 10, scale 5)</td></tr>
+<tr><td><code>kostZuweisungen</code></td><td><code>MutableList&lt;KostZuweisungDO&gt;?</code></td><td>transient</td><td>Cost assignment list (abstract, provided by subclass)</td></tr>
+<tr><td><code>info</code></td><td><code>RechnungPosInfo</code></td><td>transient</td><td>Calculated invoice position info (set via <code>RechnungCalculator</code>)</td></tr>
+</table>
+
+<h2>Cost Assignment Management</h2>
+<p>The class provides methods for managing <code>KostZuweisungDO</code> cost assignments bound to each invoice position:</p>
+<ul>
+<li><code>addKostZuweisung(kostZuweisung)</code> — Appends a cost assignment with auto-incremented index</li>
+<li><code>deleteKostZuweisung(idx)</code> — Removes a cost assignment at the given index (only deletable if not yet persisted, i.e. <code>id == null</code>)</li>
+<li><code>ensureAndGetKostzuweisungen()</code> — Returns the mutable list, lazily initializing it if null</li>
+<li><code>isKostZuweisungDeletable()</code> — Guards against deleting already-persisted cost assignments</li>
+<li><code>getKostZuweisung(idx)</code> — Returns the cost assignment at the given index or null</li>
+</ul>
+
+<h2>Computed Properties</h2>
+<table>
+<tr><th>Property</th><th>Type</th><th>Description</th></tr>
+<tr><td><code>displayName</code></td><td><code>String</code></td><td>Returns the position number as a string</td></tr>
+<tr><td><code>isEmpty</code></td><td><code>Boolean</code></td><td>True if <code>text</code> is blank and <code>einzelNetto</code> is null or zero</td></tr>
+<tr><td><code>isInfoInitialized</code></td><td><code>Boolean</code></td><td>True if the <code>lateinit</code> <code>info</code> has been initialized</td></tr>
+</table>
+
+<h2>Equality &amp; HashCode</h2>
+<p>Equality is based on <code>number</code> and <code>rechnungId</code> (the parent invoice ID). The <code>rechnungId</code> is an abstract property implemented by concrete subclasses.</p>
+
+<h2>Design Notes</h2>
+<ul>
+<li>The <code>info</code> property is marked <code>@CandHIgnore</code> to prevent CandH (Copy-and-History) from attempting to handle it, since it's not always initialized.</li>
+<li>All JPA-mapped properties are declared <code>open</code> to support Hibernate lazy-loading proxies.</li>
+<li>The <code>checkKostZuweisungId</code> abstract method lets subclasses validate that a cost assignment belongs to this position.</li>
+</ul>
+
+<h2>Git History</h2>
+<div class="hist"><pre>868d6abb7 2025 -> 2026
+63081666f Source file headers: 2024-> 2025.
+5f9bbfbd3 Fix typos in projectforge-business directory
+197d60efa Finance: incoming invoices fixed.
+ff2cc4cfa Migration stuff in progress... (all tests of all packages: OK).
+ba2479571 Migration stuff in progress...
+b47c21af6 Refactored caching and calculations with invoices (not yet finished)
+4c04cfd65 MAJOR-CHANGE! Migration of integer id's to Long id's (including fk's etc.)
+06828f490 Migration stuff in progress...
+b6092df09 Copyright 2023 -> 2024
+ab45d51fa Copyright 2001-2022 -> 2001-2023.
+5f7ef41b8 Copyright 2021 -> 2022
+a7fceb731 Some compiler warnings fixed.
+ceb63e8a1 Source code header: (C) 2001-2021.
+a1cf6f591 Code Cleanup
+07cb34acb IRechnung, IRechnungsPosition introduced. DTOs fro Eingangsrechnung{sPosition}DO added.
+552603f75 Rename setter methods in RechnungDO to avoid conflicts with Jackson
+b78b870bd ShortDisplayNameCapable -> DisplayNameCapable.
+7c79f1922 Copyright of source header -> 2020.
+8241700f0 ShortDisplayNameCapable converted to Kotlin. DO classes implementing ShortDisplayNameCapable refactored.
+7588a4be8 AbstractRechnungsPositionsDO.isEmpty fixed.
+bc7b1761c Eingangsrechnungen: Kostzuweisungen fixed.
+e63a1e98e AuftragsPositionDO: Bug fix KostZuweisungen handled now in update method.
+8675a1dbe Found big performance issue: Declared all Kotlin JPA entities and their properties as open. Lazy loading wasn't supported by Hibernate...
+483b8409d Heavy WIP: refactoring of (Eingangs)Rechnung*.
+a55ef0c14 Heavy WIP: refactoring of (Eingangs)Rechnung*.
+812b5b751 Heavy WIP: refactoring of (Eingangs)Rechnung*.
+339e017b4 ElementRegistry: @PropertyInfo is now also supported for getter methods of read-only vals.
+dd1dc1bef EingangsrechnungRest: Add position list to edit page
+c9c80e385 AbstractRechnungsPositionDO.kt: Resolve warnings
+f2b55f6aa RechnungsPositionDO.java -> RechnungsPositionDO.kt (initial Kotlin conversion)</pre></div>
+</body>
+</html>

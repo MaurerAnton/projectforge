@@ -1,0 +1,208 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>#2830</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}.hist{font-size:.85em;color:#555}</style></head>
+<body><div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="2829.html">← Prev</a> · <a href="2831.html">Next →</a></div>
+<h1>#2830: <code>CalendarPage.java</code></h1>
+<div class="meta">Java class, <code>projectforge-wicket/src/main/java/org/projectforge/web/calendar/CalendarPage.java</code></div>
+<div class="c">Java Wicket page web calendar.</div>
+<h2>Git History</h2><div class="hist"><pre>868d6abb7 2025 -&gt; 2026
+63081666f Source file headers: 2024-&gt; 2025.
+4c04cfd65 MAJOR-CHANGE! Migration of integer id's to Long id's (including fk's etc.)
+b6092df09 Copyright 2023 -&gt; 2024
+ab45d51fa Copyright 2001-2022 -&gt; 2001-2023.
+5f7ef41b8 Copyright 2021 -&gt; 2022
+ceb63e8a1 Source code header: (C) 2001-2021.
+a6a7aece4 Optimize Imports
+7c79f1922 Copyright of source header -&gt; 2020.
+b4d89c88c CalendarFilter moved from projectforge-wicket to projectforge-business for re-usage for React.
+a5bbdca6a Change logger to slf4j
+9ebb88522 Initial commit</pre></div>
+<h2>Source</h2><pre>/////////////////////////////////////////////////////////////////////////////
+//
+// Project ProjectForge Community Edition
+//         www.projectforge.org
+//
+// Copyright (C) 2001-2026 Micromata GmbH, Germany (www.micromata.com)
+//
+// ProjectForge is dual-licensed.
+//
+// This community edition is free software; you can redistribute it and/or
+// modify it under the terms of the GNU General Public License as published
+// by the Free Software Foundation; version 3 of the License.
+//
+// This community edition is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General
+// Public License for more details.
+//
+// You should have received a copy of the GNU General Public License along
+// with this program; if not, see http://www.gnu.org/licenses/.
+//
+/////////////////////////////////////////////////////////////////////////////
+
+package org.projectforge.web.calendar;
+
+import org.apache.wicket.request.mapper.parameter.PageParameters;
+import org.joda.time.DateMidnight;
+import org.projectforge.business.teamcal.filter.CalendarFilter;
+import org.projectforge.business.teamcal.filter.ICalendarFilter;
+import org.projectforge.framework.persistence.user.api.ThreadLocalUserContext;
+import org.projectforge.web.fibu.ISelectCallerPage;
+import org.projectforge.web.wicket.AbstractStandardFormPage;
+
+import java.util.Date;
+
+public class CalendarPage extends AbstractStandardFormPage implements ISelectCallerPage
+{
+  private static final long serialVersionUID = 8710165041912824126L;
+
+  private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(CalendarPage.class);
+
+  private static final String USERPREF_KEY = &quot;CalendarPage.userPrefs&quot;;
+
+  private CalendarForm form;
+
+  protected CalendarPanel calendarPanel;
+
+  protected final PageParameters pageParameters;
+
+  public CalendarPage(final PageParameters parameters)
+  {
+    super(parameters);
+    this.pageParameters = parameters;
+    initPage();
+  }
+
+  public void initPage()
+  {
+    form = initCalendarForm(this);
+    body.add(form);
+    final ICalendarFilter filter = initCalendarFilter();
+    form.setFilter(filter);
+    form.init();
+    calendarPanel = initCalenderPanel();
+    if (pageParameters != null) {
+      if (pageParameters.get(&quot;showTimesheets&quot;).isNull() == false) {
+        form.getFilter().setTimesheetUserId(getUserId());
+      }
+      if (pageParameters.get(&quot;showBirthdays&quot;).isNull() == false) {
+        form.getFilter().setShowBirthdays(true);
+      }
+    }
+  }
+
+  /**
+   * @param calendarPage
+   * @return
+   */
+  protected CalendarForm initCalendarForm(final CalendarPage calendarPage)
+  {
+    return new CalendarForm(this);
+  }
+
+  /**
+   * @return
+   */
+  protected CalendarPanel initCalenderPanel()
+  {
+    final CalendarPanel calendar = new CalendarPanel(&quot;cal&quot;, form.getCurrentDatePanel());
+    calendar.setOutputMarkupId(true);
+    body.add(calendar);
+    calendar.init(getFilter());
+    return calendar;
+  }
+
+  /**
+   *
+   * @return
+   */
+  protected ICalendarFilter initCalendarFilter()
+  {
+    CalendarFilter filter = (CalendarFilter) getUserPrefEntry(USERPREF_KEY);
+    if (filter == null) {
+      filter = new CalendarFilter();
+      putUserPrefEntry(USERPREF_KEY, filter, true);
+    }
+    return filter;
+  }
+
+  /**
+   * @see org.projectforge.web.wicket.AbstractSecuredPage#onBeforeRender()
+   */
+  @Override
+  protected void onBeforeRender()
+  {
+    super.onBeforeRender();
+    calendarPanel.forceReload(); // Needed if e. g. user or anything was changed.
+  }
+
+  @Override
+  protected String getTitle()
+  {
+    return getString(&quot;calendar.title&quot;);
+  }
+
+  protected ICalendarFilter getFilter()
+  {
+    return form.getFilter();
+  }
+
+  /**
+   * Does nothing at default, is called if the user clicks the &quot;refresh&quot; icon.
+   */
+  protected void refresh()
+  {
+  }
+
+  @Override
+  public void cancelSelection(final String property)
+  {
+  }
+
+  @Override
+  public void select(final String property, final Object selectedValue)
+  {
+    if (&quot;userId&quot;.equals(property) == true) {
+      getFilter().setTimesheetUserId((Long) selectedValue);
+    } else {
+      log.error(&quot;Property '&quot; + property + &quot;' not supported for selection.&quot;);
+    }
+  }
+
+  @Override
+  public void unselect(final String property)
+  {
+    if (&quot;userId&quot;.equals(property) == true) {
+      getFilter().setTimesheetUserId(null);
+    } else {
+      log.error(&quot;Property '&quot; + property + &quot;' not supported for selection.&quot;);
+    }
+  }
+
+  /**
+   * @param startDate
+   * @return this for chaining.
+   */
+  public CalendarPage setStartDate(final Date startDate)
+  {
+    form.getFilter().setStartDate(new DateMidnight(startDate, ThreadLocalUserContext.getDateTimeZone()));
+    return this;
+  }
+
+  /**
+   * @return the form
+   */
+  public CalendarForm getForm()
+  {
+    return form;
+  }
+
+  /**
+   * @see org.projectforge.web.wicket.AbstractSecuredPage#isBreadCrumbVisible()
+   */
+  @Override
+  protected boolean isBreadCrumbVisible()
+  {
+    return false;
+  }
+}</pre>
+</body></html>

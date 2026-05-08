@@ -1,0 +1,33 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>#752</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333}h2{margin-top:1.5em}a{color:#0366d6}.meta{font-size:.9em;margin:1em 0}.nav{font-size:.9em;color:#888;margin-bottom:1em}.c{border-left:3px solid #ddd;padding:1em;margin:1em 0;background:#fff}code{background:#f0f0f0;padding:0 .2em}</style></head>
+<body>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="751.html">← Prev</a> · <a href="753.html">Next →</a></div>
+
+<h1>#752: <code>Status.java</code></h1>
+<div class="meta"><strong>Lines:</strong> 32 · <strong>Type:</strong> Java enum — одиночное значение · <strong>Package:</strong> <code>org.projectforge.framework.xmlstream</code></div>
+
+<div class="c"><h2>Что это</h2>
+<p>Перечисление (enum) с <strong>одним единственным значением</strong>: <code>IGNORE</code>. 32 строки, из которых 21 — лицензия GPLv3. Это один из самых коротких и необычных файлов в проекте. Javadoc на значении <code>IGNORE</code> объясняет: <em>"Used by XmlObjectReader.newInstance(Class, org.dom4j.Element, String)"</em> — то есть используется методом <code>newInstance()</code> класса <code>XmlObjectReader</code> при чтении XML.</p></div>
+
+<div class="c"><h2>Зачем нужен enum с одним значением?</h2>
+<p>Это <strong>паттерн Sentinel</strong> (страж) — специальное значение, которое сигнализирует о необходимости пропустить элемент при чтении. Когда <code>XmlObjectReader.newInstance()</code> встречает XML-элемент, для которого нет зарегистрированного класса (например, тег из старой версии формата, который был удалён в новой версии), он возвращает <code>Status.IGNORE</code> вместо того чтобы упасть с ошибкой.</p>
+<p><strong>Почему просто не вернуть <code>null</code>?</strong> Потому что <code>null</code> неоднозначен: он может означать "пропустить" ИЛИ "произошла ошибка" ИЛИ "элемент пустой". <code>Status.IGNORE</code> — это явный, именованный сигнал: "Я распознал этот элемент как игнорируемый, сознательно пропускаю его, продолжай обработку."</p></div>
+
+<div class="c"><h2>Где используется</h2>
+<p>Метод <code>XmlObjectReader.newInstance(Class&lt;?&gt; rootClass, Element rootElement, String version)</code> — это фабричный метод, который создаёт объект заданного класса из XML-элемента, рекурсивно обходя дочерние элементы. На каждом уровне он проверяет <code>AliasMap</code>: если тег зарегистрирован, создаёт объект; если не зарегистрирован — возвращает <code>Status.IGNORE</code>, и вызывающий код пропускает этот элемент. Это позволяет XML-файлам содержать "лишние" теги (например, из более новой версии формата при чтении старой версией) без ошибок — механизм обратной совместимости.</p></div>
+
+<div class="c"><h2>Почему enum, а не константа?</h2>
+<p>Enum с одним значением — это одновременно и <strong>тип</strong>, и <strong>значение</strong>. Если бы <code>newInstance()</code> возвращал <code>Object</code> (где <code>null</code> = пропустить), вызывающий код должен был бы проверять <code>if (result == null)</code>. Но <code>null</code> также может быть легитимным результатом (если поле действительно пустое). Использование отдельного типа <code>Status</code> позволяет вызывающему коду точно различать три случая:</p>
+<pre>
+Object result = reader.newInstance(clazz, element, version);
+if (result == Status.IGNORE) {
+    // элемент нераспознан, пропускаем
+} else if (result == null) {
+    // распознан, но значение null (поле пустое)
+} else {
+    // нормальный объект
+}
+</pre>
+<p>Это значительно чище, чем возвращать <code>null</code> с неоднозначной семантикой. Паттерн распространён в парсерах и десериализаторах — например, Rust использует <code>Option&lt;T&gt;</code>, Haskell — <code>Maybe</code>, а здесь — одноэлементный enum.</p></div>
+
+</body></html>

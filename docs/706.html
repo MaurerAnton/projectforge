@@ -1,0 +1,64 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>#706</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:2em;color:#444}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}.warn{background:#fff3cd;border-left:3px solid #ffc107;padding:.5em 1em;margin:1em 0}.tip{background:#d4edda;border-left:3px solid #28a745;padding:.5em 1em;margin:1em 0}</style></head>
+<body><div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="705.html">← Prev</a> · <a href="707.html">Next →</a></div>
+<h1>#706: <code>HibernateProxyHelper.java</code></h1>
+<div class="meta">Java utility — static helper that unwraps Hibernate proxy objects to their underlying entity instances, <code>projectforge-business/src/main/java/org/projectforge/framework/persistence/xstream/HibernateProxyHelper.java</code></div>
+<div class="c">A small static utility class providing a single generic method <code>get(T object)</code> that detects whether an object is a <code>HibernateProxy</code> and, if so, unwraps it to the real entity via <code>getHibernateLazyInitializer().getImplementation()</code>. If the object is not a proxy, it returns the object unchanged. This is the simplest and most reusable proxy-unwrapping utility in the XStream+Hibernate bridge layer — used by <a href="708.html">ProxyIdRefMarshaller</a> for ID-based reference tracking and available for any code that needs to inspect the real object behind a proxy wrapper.</div>
+
+<h2>Architecture</h2>
+
+<h3>Class Design</h3>
+<p><code>HibernateProxyHelper</code> is a pure utility class with a single public static generic method. It has no state, no dependencies (beyond <code>org.hibernate.proxy.HibernateProxy</code>), and no instance methods. The generic type parameter <code>&lt;T&gt;</code> preserves the compile-time type through the unwrap operation, so callers don't need to cast.</p>
+
+<h3>get(T object) Method</h3>
+<pre>public static &lt;T&gt; T get(T object) {
+    if (object instanceof HibernateProxy) {
+        HibernateProxy proxy = (HibernateProxy) object;
+        return (T) proxy.getHibernateLazyInitializer().getImplementation();
+    }
+    return object;
+}</pre>
+
+<p>The logic is straightforward:</p>
+<ol>
+  <li><strong>Proxy check:</strong> Uses <code>instanceof HibernateProxy</code> — the standard way to detect Hibernate proxies, since all Hibernate-generated proxies implement this interface.</li>
+  <li><strong>Unwrap:</strong> Calls <code>getHibernateLazyInitializer().getImplementation()</code> which forces proxy initialization (triggers lazy loading) and returns the real entity.</li>
+  <li><strong>Identity return:</strong> If not a proxy, returns the same object reference — a no-op pass-through.</li>
+</ol>
+
+<div class="warn">The <code>getImplementation()</code> call <strong>forces proxy initialization</strong>. If the entity has not been loaded from the database, this triggers a SQL query. Callers must ensure an active Hibernate session is available, or handle the potential <code>LazyInitializationException</code>.</div>
+
+<h2>Integration Points</h2>
+<ul>
+  <li><strong>Primary consumer:</strong> <a href="708.html">ProxyIdRefMarshaller</a> — uses <code>HibernateProxyHelper.get(item)</code> to unwrap proxies before checking the ID reference dictionary and marshalling.</li>
+  <li>Can be used by any code in the <code>persistence.xstream</code> package or elsewhere that needs safe proxy unwrapping.</li>
+  <li>Authored by Wolfgang Jung (w.jung@micromata.de), unlike most of the XStream bridge classes which are attributed to Costin Leau.</li>
+</ul>
+
+<h2>Relationship to Other Proxy Handling</h2>
+<table>
+<tr><th>Class</th><th>Approach</th><th>Context</th></tr>
+<tr><td><strong>HibernateProxyHelper</strong> (this class)</td><td>Static utility method <code>get()</code></td><td>General-purpose unwrap for any code</td></tr>
+<tr><td><a href="705.html">HibernateProxyConverter</a></td><td>XStream converter that intercepts before reflection serialization</td><td>Integrated into XStream converter chain</td></tr>
+<tr><td><a href="707.html">HibernateProxyXPathMarshaller</a></td><td>Unwraps proxies before XPath reference tracking</td><td>Integrated into XStream marshalling strategy</td></tr>
+<tr><td><a href="704.html">HibernateMapper</a></td><td>Resolves proxy's real class name for XML element naming</td><td>Integrated into XStream mapper chain</td></tr>
+</table>
+<p>Each of these solves the proxy problem at a different layer of the XStream architecture. <code>HibernateProxyHelper</code> is the lowest-level, most reusable building block.</p>
+
+<h2>Design Decisions & Gotchas</h2>
+<ul>
+  <li><strong>Unchecked cast:</strong> The <code>(T)</code> cast is unchecked because <code>getImplementation()</code> returns <code>Object</code>. This is safe in practice because Hibernate proxies are always subclasses of the entity type, so the returned object is always assignable to <code>T</code>.</li>
+  <li><strong>No null check:</strong> The method does not guard against <code>null</code> input — <code>null instanceof HibernateProxy</code> evaluates to <code>false</code>, so <code>null</code> is returned unchanged. This is correct behavior.</li>
+  <li><strong>Simplicity vs. Hibernate.isInitialized():</strong> Unlike <a href="701.html">ReflectionToString</a>, this helper does not check <code>Hibernate.isInitialized()</code> first. It always tries to get the implementation, which forces initialization. This is intentional — the helper is used in contexts where the real object is needed (XML export), not for display purposes.</li>
+</ul>
+
+<h2>Git History</h2><div class="hist"><pre>868d6abb7 2025 -> 2026
+63081666f Source file headers: 2024-> 2025.
+b6092df09 Copyright 2023 -> 2024
+ab45d51fa Copyright 2001-2022 -> 2001-2023.
+5f7ef41b8 Copyright 2021 -> 2022
+ceb63e8a1 Source code header: (C) 2001-2021.
+7c79f1922 Copyright of source header -> 2020.
+dd5ca38ac CopyRight of all java file-header updated or created.
+9ebb88522 Initial commit</pre></div>
+</body></html>

@@ -1,0 +1,58 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>1160</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:2em;color:#444}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}</style></head>
+<body><div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="1159.html">← Prev</a> · <a href="1161.html">Next →</a></div>
+<h1>1160: <code>VacationSendMailService.kt</code></h1>
+<div class="meta">Service, projectforge-business/src/main/kotlin/org/projectforge/business/vacation/service/VacationSendMailService.kt</div>
+<div class="c">Sends e-mail notifications to vacationers, managers, replacements, and HR staff when vacation entries are created, modified, or deleted.</div>
+
+<h2>Architecture</h2>
+<p><code>VacationSendMailService</code> is a <code>@Service</code> that wires together <code>ConfigurationService</code> (mail server config, HR e-mail address), <code>EmployeeDao</code> (employee/user lookups), and <code>SendMail</code> (mail infrastructure). It is invoked exclusively from <code>VacationDao</code>'s <code>after*</code> lifecycle hooks.</p>
+
+<h3>Notification Flow</h3>
+<ol>
+<li><code>checkAndSendMail(obj, operationType, dbObj)</code> — Entry point. Checks mail server is configured, builds a <code>VacationInfo</code> holder.</li>
+<li>For special vacation entries with status IN_PROGRESS or APPROVED, sends to HR e-mail address (configured in administration).</li>
+<li>Sends to the vacationer (if they didn't make the change themselves — checked via <code>ThreadLocalUserContext.loggedInUserId</code>).</li>
+<li>Sends to the manager (if not the actor).</li>
+<li>Sends to the primary replacement and all other replacements (deduplicated via a set).</li>
+</ol>
+
+<h3>Mail Composition</h3>
+<p>The <code>prepareMail()</code> method creates a <code>Mail</code> object with HTML content rendered from the <code>mail/vacationMail.html</code> Groovy template. The template receives a map containing:</p>
+<ul>
+<li><code>vacationInfo</code> — <code>VacationInfo</code> inner class with all resolved user names, e-mails, formatted dates, and working days</li>
+<li><code>vacation</code> — the raw <code>VacationDO</code> object</li>
+<li><code>mailInfo</code> — subject, operation type (insert/update/delete/undelete), and mode (own/manager/replacement/HR)</li>
+</ul>
+
+<h3>VacationInfo Inner Class</h3>
+<p>This data holder resolves all employee references (vacationer, manager, replacement, otherReplacements) to <code>PFUserDO</code> objects and formats dates, working days, half-day flags, and special status. The <code>updateI18n(recipient)</code> method re-resolves user-visible strings for the recipient's locale, enabling localized e-mail delivery to recipients in different language settings.</p>
+
+<h3>URL Generation</h3>
+<p>The companion object lazily builds a link to the vacation edit page via <code>SendMail.buildUrl()</code> combined with <code>MenuItemDefId.VACATION.url</code>, producing deep links like <code>/vacation/edit/123?returnToCaller=account</code>.</p>
+
+<h2>Design Rationale</h2>
+<p>Mail sending is separated from the DAO to keep persistence concerns isolated. The service uses <code>VacationInfo</code> as an intermediate data class rather than passing the entity directly to templates — this ensures templates never access lazy-loaded JPA proxies (which would fail outside a transaction). The <code>updateI18n</code> method supports the multi-locale requirement of a German company with international employees. The HR notification path for special vacations ensures compliance monitoring even when employees and managers are the same person.</p>
+
+<h2>Git History</h2><div class="hist"><pre>868d6abb7 2025 -> 2026
+600951ee0 2025 -> 2026
+b131193e7 Member variables refactored by using by lazy {}...
+d5cc73eb6 Member variables refactored by using by lazy {}...
+63081666f Source file headers: 2024-> 2025.
+199c26801 Source file headers: 2024-> 2025.
+e1db80611 Hotfix: com.sun.mail added.
+0a78bc22c Hotfix: com.sun.mail added.
+1b50060c3 BaseDao: renamed get->find, save->insert, getList->select, load->select
+514533e99 BaseDao: renamed get->find, save->insert, getList->select, load->select
+87aaf6a5a Migration stuff: BaseDao refactored...
+41217b065 Migration stuff: BaseDao refactored...
+67805f2fc ThreadLocalUserContext.user -> loggedInUser
+58ffda82b ThreadLocalUserContext.user -> loggedInUser
+4c04cfd65 MAJOR-CHANGE! Migration of integer id's to Long id's.
+fd13c259a MAJOR-CHANGE! Migration of integer id's to Long id's.
+06828f490 Migration stuff in progress...
+4b3872a1b Migration stuff in progress...
+b6092df09 Copyright 2023 -> 2024
+9a0609dd1 Copyright 2023 -> 2024
+</pre></div>
+</body></html>

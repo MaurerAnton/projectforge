@@ -1,0 +1,197 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>1143</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:2em;color:#444}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}</style></head>
+<body><div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="1142.html">← Prev</a> · <a href="1144.html">Next →</a></div>
+<h1>1143: <code>UserPrefEntryDO.kt</code></h1>
+<div class="meta">Data Object, projectforge-business/src/main/kotlin/org/projectforge/framework/persistence/user/entities/UserPrefEntryDO.kt</div>
+<div class="c">Hibernate entity/DO for individual user preference entries, storing key-value pairs within a preference area for a specific user.</div>
+
+<h2>Source Code</h2>
+<pre>/////////////////////////////////////////////////////////////////////////////
+//
+// Project ProjectForge Community Edition
+//         www.projectforge.org
+//
+// Copyright (C) 2001-2026 Micromata GmbH, Germany (www.micromata.com)
+//
+// ProjectForge is dual-licensed.
+//
+// This community edition is free software; you can redistribute it and/or
+// modify it under the terms of the GNU General Public License as published
+// by the Free Software Foundation; version 3 of the License.
+//
+// This community edition is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General
+// Public License for more details.
+//
+// You should have received a copy of the GNU General Public License along
+// with this program; if not, see http://www.gnu.org/licenses/.
+//
+/////////////////////////////////////////////////////////////////////////////
+
+package org.projectforge.framework.persistence.user.entities
+
+import jakarta.persistence.*
+import org.apache.commons.lang3.builder.ToStringBuilder
+import org.projectforge.framework.persistence.api.BaseDO
+import org.projectforge.framework.persistence.api.EntityCopyStatus
+import org.projectforge.framework.persistence.entities.AbstractBaseDO
+import org.projectforge.framework.persistence.entities.AbstractBaseDO.Companion.copyValues
+import org.projectforge.framework.utils.NumberHelper.parseInteger
+import java.io.Serializable
+
+/**
+ * Represents a single generic user preference entry.
+ *
+ * @author Kai Reinhard (k.reinhard@micromata.de)
+ */
+@Entity
+@Table(
+    name = &quot;T_USER_PREF_ENTRY&quot;,
+    uniqueConstraints = [UniqueConstraint(columnNames = [&quot;user_pref_fk&quot;, &quot;parameter&quot;])],
+    indexes = [Index(name = &quot;idx_fk_t_user_pref_entry_user_pref_fk&quot;, columnList = &quot;user_pref_fk&quot;)]
+)
+class UserPrefEntryDO : BaseDO&lt;Long&gt;, Serializable {
+    @get:Column(length = 255)
+    var parameter: String? = null // 255 not null
+
+    @get:Column(name = &quot;s_value&quot;, length = MAX_STRING_VALUE_LENGTH)
+    var value: String? = null // MAX_STRING_VALUE_LENGTH
+
+    /**
+     * The entries will be ordered by this property. This field is not persisted.
+     */
+    @get:Transient
+    var orderString: String? = null
+
+    /**
+     * For displaying paramter&#x27;s localized label (if given). This field is not persisted.
+     *
+     * @see UserPrefParameter.i18nKey
+     */
+    @get:Transient
+    var i18nKey: String? = null
+
+    @get:Transient
+    var tooltipI18nKey: String? = null
+
+    @get:Transient
+    var dependsOn: String? = null
+
+    /**
+     * Type of parameter value (if given). This field is not persisted.
+     */
+    @get:Transient
+    var type: Class&lt;*&gt;? = null
+
+    /**
+     * Value as object, if given. This field is not persisted.
+     */
+    @get:Transient
+    var valueAsObject: Any? = null
+
+    /**
+     * This field is not persisted.
+     *
+     * @see UserPrefParameter.required
+     */
+    @get:Transient
+    var isRequired: Boolean = false
+
+    /**
+     * This field is not persisted.
+     */
+    @get:Transient
+    var maxLength: Int? = null
+
+    /**
+     * This field is not persisted.
+     *
+     * @see UserPrefParameter.multiline
+     */
+    @get:Transient
+    var isMultiline: Boolean = false
+
+    @get:Column(name = &quot;pk&quot;)
+    @get:GeneratedValue(strategy = GenerationType.SEQUENCE, generator = &quot;hibernate_sequence&quot;)
+    @get:Id
+    override var id: Long? = null
+
+    @get:Transient
+    val valueAsInteger: Int?
+        get() = parseInteger(value)
+
+    @get:Transient
+    override var isMinorChange: Boolean
+        /**
+         * @return Always true.
+         * @see org.projectforge.framework.persistence.api.BaseDO.isMinorChange
+         */
+        get() = false
+        /**
+         * Throws UnsupportedOperationException.
+         *
+         * @see org.projectforge.framework.persistence.api.BaseDO.setMinorChange
+         */
+        set(value) {
+            throw UnsupportedOperationException()
+        }
+
+    /**
+     * UserPrefEntryDO is equal to another UserPrefEntryDO if their parameters are equal.
+     */
+    override fun equals(other: Any?): Boolean {
+        return if (other is UserPrefEntryDO) {
+            this.parameter == other.parameter
+        } else {
+            false
+        }
+    }
+
+    override fun hashCode(): Int {
+        return parameter.hashCode()
+    }
+
+    override fun toString(): String {
+        val sb = ToStringBuilder(this)
+        sb.append(&quot;id&quot;, id)
+        sb.append(&quot;parameter&quot;, this.parameter)
+        sb.append(&quot;value&quot;, this.value)
+        return sb.toString()
+    }
+
+    /**
+     * @param src
+     * @see AbstractBaseDO.copyValues
+     */
+    override fun copyValuesFrom(src: BaseDO&lt;out Serializable&gt;, vararg ignoreFields: String): EntityCopyStatus {
+        return copyValues(src, this, *ignoreFields)
+    }
+
+    override fun getTransientAttribute(key: String): Any? {
+        throw UnsupportedOperationException()
+    }
+
+    override fun removeTransientAttribute(key: String): Any? {
+        throw UnsupportedOperationException()
+    }
+
+    override fun setTransientAttribute(key: String, value: Any?) {
+        throw UnsupportedOperationException()
+    }
+
+    companion object {
+        private const val serialVersionUID = 7163902159871289059L
+
+        const val MAX_STRING_VALUE_LENGTH: Int = 10000
+    }
+}</pre>
+<h2>Git History</h2><div class="hist"><pre>868d6abb7 2025 -> 2026
+63081666f Source file headers: 2024-> 2025.
+d6ad9ea38 Migration stuff in progress...
+66ec668f6 Migration stuff in progress...
+384da53de Migration stuff in progress...
+4c04cfd65 MAJOR-CHANGE! Migration of integer id's to Long id's (including fk's etc.)
+067a4cbb1 Migration stuff in progress...
+b7b459e73 Migration stuff in progress...</pre></div>
+</body></html>

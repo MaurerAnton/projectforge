@@ -1,0 +1,165 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>#2294</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}.hist{font-size:.85em;color:#555}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}</style></head>
+<body><div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="2293.html">← Prev</a> · <a href="2295.html">Next →</a></div>
+<h1>#2294: <code>AbstractSipgateEntityService.kt</code></h1>
+<div class="meta">Abstract REST Service, <code>projectforge-rest/src/main/kotlin/org/projectforge/rest/sipgate/AbstractSipgateEntityService.kt</code> (153 lines)</div>
+<div class="c">Source file: AbstractSipgateEntityService.kt - abstract rest service in ProjectForge REST module.</div>
+<h2>Source Code</h2><pre>/////////////////////////////////////////////////////////////////////////////
+//
+// Project ProjectForge Community Edition
+//         www.projectforge.org
+//
+// Copyright (C) 2001-2026 Micromata GmbH, Germany (www.micromata.com)
+//
+// ProjectForge is dual-licensed.
+//
+// This community edition is free software; you can redistribute it and/or
+// modify it under the terms of the GNU General Public License as published
+// by the Free Software Foundation; version 3 of the License.
+//
+// This community edition is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General
+// Public License for more details.
+//
+// You should have received a copy of the GNU General Public License along
+// with this program; if not, see http://www.gnu.org/licenses/.
+//
+/////////////////////////////////////////////////////////////////////////////
+
+package org.projectforge.rest.sipgate
+
+import mu.KotlinLogging
+import org.projectforge.framework.json.JsonUtils
+import org.springframework.beans.factory.annotation.Autowired
+import org.springframework.http.HttpStatus
+import org.springframework.web.reactive.function.BodyInserters
+import org.springframework.web.reactive.function.client.WebClient
+import org.springframework.web.util.UriBuilder
+import jakarta.annotation.PostConstruct
+
+private val log = KotlinLogging.logger {}
+
+/**
+ * @author K. Reinhard (k.reinhard@micromata.de)
+ */
+abstract class AbstractSipgateEntityService&lt;T&gt;(
+  val path: String,
+  val entityName: String,
+  val listDataClass: Class&lt;out ListData&lt;T&gt;&gt;,
+) {
+
+  @Autowired
+  internal lateinit var sipgateClient: SipgateClient
+
+  internal var debugConsoleOutForTesting = false
+
+  protected lateinit var webClient: WebClient
+
+  @PostConstruct
+  internal fun postConstruct() {
+    webClient = sipgateClient.webClient
+  }
+
+  abstract fun setId(obj: T, id: String)
+
+  open fun getList(offset: Int = 0, limit: Int = 5000, maxNumberOfPages: Int = 100): List&lt;T&gt; {
+    return SipgateService.getList(
+      webClient,
+      sipgateClient,
+      path = path,
+      entityName = entityName,
+      offset = offset,
+      limit = limit,
+      maxNumberOfPages = maxNumberOfPages,
+      debugConsoleOutForTesting = debugConsoleOutForTesting,
+      listDataClass = listDataClass,
+    )
+  }
+
+  open fun create(entity: T): Boolean {
+    val json = JsonUtils.toJson(entity, true)
+    try {
+      val uriSpec = webClient.post()
+      if (debugConsoleOutForTesting) {
+        println("create body: $json")
+      }
+      log.info { "${getLogInfo(entity)}: Trying to create $entityName in Sipgate: $json" }
+      val bodySpec = uriSpec.uri(path)
+        .body(
+          BodyInserters.fromValue(json)
+        )
+      val response = sipgateClient.execute(bodySpec, String::class.java, HttpStatus.CREATED)
+      if (debugConsoleOutForTesting) {
+        println("response: $response")
+      }
+      return true
+    } catch (ex: Exception) {
+      log.error("${getLogInfo(entity)}: Error while creating $entityName in Sipgate: ${ex.message}: $json")
+      return false
+    }
+  }
+
+  open fun delete(id: String?, entity: T): Boolean {
+    val json = JsonUtils.toJson(entity, true)
+    if (debugConsoleOutForTesting) {
+      println("Trying to delete $entityName #$id: $json")
+    }
+    if (id.isNullOrBlank()) {
+      log.error { "${getLogInfo(entity)}: Can't delete $entityName #$id: $json" }
+      return false
+    }
+    log.info("${getLogInfo(entity)}: Trying to delete $entityName #$id: $json")
+    val uriSpec = webClient.delete()
+    val headersSpec = uriSpec.uri { uriBuilder: UriBuilder -&gt;
+      uriBuilder
+        .path("$path/{id}")
+        .build(id)
+    }
+
+    val response = sipgateClient.execute(headersSpec, String::class.java)
+    log.info { "${getLogInfo(entity)}: response=[$response]" }
+    return true
+  }
+
+  /**
+   * Updates the remoteState only, if there is any field to update. Otherwise, nothing will be modified.
+   * @return true if the remoteState was updated or false if the remoteState of each field is up-to-date.
+   * @see buildUpdateEntity
+   */
+  open fun update(id: String, entity: T): Boolean {
+    setId(entity, id)
+    val json = JsonUtils.toJson(entity, true)
+    try {
+      val uriSpec = webClient.put()
+      val headersSpec = uriSpec.uri { uriBuilder: UriBuilder -&gt;
+        uriBuilder
+          .path("$path/{id}")
+          .build(id)
+      }
+      if (debugConsoleOutForTesting) {
+        println("update body: $json")
+      }
+      log.info { "${getLogInfo(entity)}: Trying to update $entityName #$id in Sipgate: $json" }
+      val bodySpec = headersSpec.body(
+        BodyInserters.fromValue(json)
+      )
+      val response = sipgateClient.execute(bodySpec, String::class.java, HttpStatus.NO_CONTENT)
+      if (debugConsoleOutForTesting) {
+        println("response: $response")
+      }
+      return true
+    } catch (ex: Exception) {
+      log.error("${getLogInfo(entity)}: Error while updating $entityName in Sipgate: ${ex.message}: $json")
+      return false
+    }
+  }
+
+  abstract fun getLogInfo(entity: T): String
+}</pre>
+<h2>Git History</h2><div class="hist"><pre>868d6abb7 2025 -&gt; 2026
+63081666f Source file headers: 2024-&gt; 2025.
+77bade6df javax.* -&gt; jakarta.*
+b6092df09 Copyright 2023 -&gt; 2024
+eafdb76c0 WIP Sipgate.</pre></div>
+</body></html>

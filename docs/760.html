@@ -1,0 +1,42 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>#760</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333}h2{margin-top:1.5em}a{color:#0366d6}.meta{font-size:.9em;margin:1em 0}.nav{font-size:.9em;color:#888;margin-bottom:1em}.c{border-left:3px solid #ddd;padding:1em;margin:1em 0;background:#fff}code{background:#f0f0f0;padding:0 .2em}.hist{border-left:3px solid #c90;padding:.5em 1em;margin:1em 0;background:#fffa}</style></head>
+<body>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="759.html">← Prev</a> · <a href="761.html">Next →</a></div>
+
+<h1>#760: <code>XmlRegistry.java</code></h1>
+<div class="meta"><strong>Lines:</strong> 248 · <strong>Author:</strong> Kai Reinhard · <strong>Type:</strong> Java — центральный реестр фреймворка XmlStream (Singleton + наследуемый)</div>
+
+<div class="c"><h2>Что это</h2>
+<p><strong>Центральный реестр</strong> фреймворка XmlStream — хранит маппинги Class↔Alias, Class↔Converter, и список типов-по-умолчанию-атрибутов. 248 строк. Реализован как <strong>Singleton с наследованием</strong>: есть один глобальный экземпляр (<code>baseRegistry</code>), но можно создать дочерние реестры которые сначала ищут в себе, а при отсутствии — делегируют в <code>baseRegistry</code>. Это позволяет плагинам регистрировать свои типы не модифицируя глобальный реестр.</p></div>
+
+<div class="c"><h2>Singleton + Delegation паттерн</h2>
+<p>Статический блок <code>static { baseRegistry = new XmlRegistry(); baseRegistry.initializeDefaultRegistry(); }</code> создаёт глобальный синглтон при загрузке класса. Все lookup-методы (<code>getConverter</code>, <code>getAliasForClass</code>, <code>getClassForAlias</code>, <code>asAttributeAsDefault</code>) следуют одному шаблону: сначала ищут в себе, если нет — проверяют <code>this == baseRegistry</code> (чтобы избежать рекурсии), и если это дочерний реестр — делегируют в <code>baseRegistry</code>. Пример:</p>
+<pre>public IConverter getConverter(Class clazz) {
+    if (converterRegistry != null) {
+        IConverter conv = converterRegistry.get(clazz);     // поиск в себе
+        if (conv != null) return conv;
+        for (Class cls : converterRegistry.keySet()) {      // поиск по иерархии
+            if (cls.isAssignableFrom(clazz)) { ... }
+        }
+    }
+    if (this == baseRegistry) return null;                   // стоп-условие
+    return baseRegistry.getConverter(clazz);                 // делегация
+}</pre></div>
+
+<div class="c"><h2><code>initializeDefaultRegistry()</code> — что регистрируется по умолчанию</h2>
+<p>Приватный метод, вызывается один раз при загрузке класса. Регистрирует 3 категории:</p>
+<ol>
+<li><strong>asAttributeAsDefault (14 типов):</strong> BigDecimal, Boolean, Date, Double, Integer, Long, Short, TimeZone, Locale, Version — все они по умолчанию пишутся как XML-атрибуты а не элементы (компактнее). Включает и примитивы, и обёртки</li>
+<li><strong>Alias'ы (15 типов):</strong> BigDecimal→"decimal", Boolean→"boolean", Double→"double", Integer→"int", Long→"long", Short→"short", TimeZone→"timeZone", Locale→"locale", Version→"version". Без алиасов в XML были бы полные имена классов</li>
+<li><strong>Converter'ы (14 типов):</strong> BooleanConverter, DoubleConverter, IntConverter, LongConverter, ShortConverter, ByteArrayConverter, BigDecimalConverter, ClassConverter, DateConverter, StringConverter, TimeZoneConverter, LocaleConverter, VersionConverter, LocalDateConverter. Каждый конвертер умеет преобразовывать значение в строку и обратно</li>
+</ol></div>
+
+<div class="c"><h2>getConverter — поиск с учётом иерархии классов</h2>
+<p>Простой поиск <code>converterRegistry.get(clazz)</code> находит только точное совпадение. Но часто нужен конвертер для подкласса. Поэтому если точного совпадения нет, Registry ищет <strong>родительский класс</strong> через <code>cls.isAssignableFrom(clazz)</code> — например, для <code>java.sql.Date</code> (подкласс <code>java.util.Date</code>) будет найден <code>DateConverter</code>. Найденный конвертер кэшируется для класса через <code>internalRegisterConverter(clazz, conv)</code> чтобы не повторять поиск.</p></div>
+
+<div class="c"><h2>История изменений</h2>
+<div class="hist">
+<p>Только копирайт-обновления и одно значимое изменение: <code>73a9755df</code> — "More code cleanup" заменил StringBuffer→StringBuilder, ArrayList&lt;Class&gt;→ArrayList&lt;&gt;, и убрал deprecated HSSFColors. Пакет был переименован в <code>cd27dd997</code>. Файл стабилен — список регистрируемых типов редко меняется.</p>
+</div></div>
+
+</body></html>

@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>#927: EmployeeService.kt</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:2em;color:#444}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}</style>
+</head>
+<body>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="926.html">← Prev</a> · <a href="928.html">Next →</a></div>
+<h1>#927: <code>EmployeeService.kt</code></h1>
+<div class="meta">Type: Spring Service / Business Logic · Purpose: Public-facing employee business logic — active status checks, time-dependent attributes, monthly reports · Path: <code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/EmployeeService.kt</code></div>
+<div class="c">The primary public API for employee business logic. Serves as the façade over <code>EmployeeServiceSupport</code> (internal implementation), <code>EmployeeDao</code>, <code>EmployeeCache</code>, and <code>TimesheetDao</code>. Exposed as a singleton via <code>EmployeeService.instance</code>. Registers a history adapter for <code>EmployeeValidSinceAttrDO</code> on initialization.</div>
+
+<h2>Architecture &amp; Design</h2>
+
+<h3>Dependencies &amp; Initialization</h3>
+<table>
+<tr><th>Dependency</th><th>Role</th></tr>
+<tr><td><code>PfCaches</code></td><td>Access to <code>UserGroupCache</code> for user resolution (used in <code>isEmployeeActive()</code>).</td></tr>
+<tr><td><code>EmployeeDao</code></td><td>Entity lookup and select operations. Circular dependency resolved: <code>EmployeeService</code> sets itself on <code>EmployeeDao.employeeService</code> during <code>@PostConstruct</code>.</td></tr>
+<tr><td><code>EmployeeServiceSupport</code></td><td>Internal service containing the actual implementation logic (validation, insert, update, find). Marked <code>internal</code> visibility.</td></tr>
+<tr><td><code>HistoryFormatService</code></td><td>Registers <code>EmployeeValidSinceAttrHistoryAdapter</code> for history rendering of time-dependent attributes.</td></tr>
+<tr><td><code>TimesheetDao</code></td><td>Used by <code>getReportOfMonth()</code> to aggregate timesheet data per employee/month.</td></tr>
+</table>
+
+<h3>Active-Status Logic</h3>
+<p><code>isEmployeeActive(employee, showRecentlyLeavers)</code>: Returns true if:</p>
+<ul>
+<li><strong>No quit date:</strong> Employee is active if user is neither deleted nor deactivated (null user = active, for tests).</li>
+<li><strong>Has quit date:</strong> Employee is active if the quit date is on or after the reference date (<code>now</code>, or <code>now minus 3 months</code> if <code>showRecentlyLeavers=true</code>).</li>
+</ul>
+
+<h3>Time-Dependent Attribute Methods</h3>
+<p>All time-dependent methods iterate through <code>ValidSinceAttrDO</code> entries sorted by <code>validSince DESC</code> and select the entry whose <code>validSince</code> is on or before the reference date. Methods are organized by attribute type:</p>
+<ul>
+<li><strong>Annual Leave:</strong> <code>getAnnualLeaveDays()</code> (with/without date), <code>selectAnnualLeaveDayEntries()</code> (by employee or ID), <code>insertAnnualLeaveDays()</code></li>
+<li><strong>Weekly Hours:</strong> <code>getWeeklyWorkingHours()</code> (with/without date), <code>selectWeeklyWorkingHoursEntries()</code> (by employee or ID), <code>insertWeeklyHours()</code></li>
+<li><strong>Status:</strong> <code>getEmployeeStatus()</code>, <code>selectStatusEntries()</code>, <code>insertStatus()</code></li>
+</ul>
+
+<h3>ValidSinceAttr CRUD Operations</h3>
+<p>The service provides a complete CRUD surface for <code>EmployeeValidSinceAttrDO</code>:</p>
+<ul>
+<li><code>insert()</code> — Insert with employee ID or entity, delegates to <code>EmployeeServiceSupport</code></li>
+<li><code>updateValidSinceAttr()</code> — Update with copy semantics (handles deleted-entry reuse)</li>
+<li><code>markValidSinceAttrAsDeleted()</code> — Soft delete</li>
+<li><code>undeleteValidSinceAttr()</code> — Undelete/restore</li>
+<li><code>validate()</code> — Returns error message string or null if valid</li>
+</ul>
+
+<h3>Monthly Employee Report</h3>
+<p><code>getReportOfMonth(year, month, user)</code> creates a <code>MonthlyEmployeeReport</code>, initializes date boundaries, queries timesheets via <code>TimesheetFilter</code> for the given user and month range, adds each timesheet (with access-check info), and calculates aggregated durations by <code>Kost2</code>.</p>
+
+<h2>Git History</h2>
+<div class="hist"><pre>868d6abb7 2025 -> 2026
+7893cea1e Selection of User/Employee improved. EmployeeService.selectAllActive returns now sorted list.
+7cdc06ad7 MonthlyEmployeeReport[Week] -> Kotlin
+feb661d79 Employee: displaying history for time attrs
+28efde264 Employee: weeklyWorkingHours now as time-dependent attr.
+63081666f Source file headers: 2024-> 2025.
+4ae4f3ea3 Bugfixes while going-live...
+ddf02927d Migration stuff in progress...
+4942c854d Migration stuff in progress...
+b71b5073d Migration stuff in progress... (all tests of all packages: OK).
+ffb18cf8f Migration stuff in progress...
+1012e347a Migration stuff in progress... (all tests of all packages: OK).
+e74d3655b Migration stuff in progress...
+6aca64431 Migration stuff in progress... (all tests of all packages: OK).
+016699665 Migration stuff in progress...
+8bd78b145 Migration stuff in progress... (all tests of all packages: OK).
+ac2dbb269 Migration stuff in progress...
+4b9ffbee2 Migration stuff in progress... (all tests of all packages: OK).
+e80642c81 Migration stuff in progress... (all tests of all packages: OK).
+1204b927b Migration stuff in progress... (all tests of all packages: OK).
+9e38d3c0d Migration stuff in progress...
+84e863624 Migration stuff in progress... (all tests of all packages: OK).
+b79a1edca Migration stuff in progress... (all tests of all packages: OK).
+d67bce18b Migration stuff in progress...
+6f7e0fbc7 Migration stuff in progress...
+1b50060c3 BaseDao: renamed: get -> find, save -> insert, getList -> select, load -> select
+87aaf6a5a Migration stuff in progress... BaseDao refactored.
+1faf30810 Migration stuff in progress...
+3aeda5ef5 Big change: all save|update|...InTrans renamed.
+85b4e1175 PfPersistenceService and PfPersistenceContext: query renamed to executeQuery.
+b095e6f7d Big change of Transaction handling.
+f59810cf0 Migration stuff in progress...
+4c04cfd65 MAJOR-CHANGE! Migration of integer id's to Long id's
+d54f93842 EmployeeServiceImpl -> EmployeeService.</pre></div>
+</body>
+</html>

@@ -1,0 +1,39 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>#735</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333}h2{margin-top:1.5em}a{color:#0366d6}.meta{font-size:.9em;margin:1em 0}.nav{font-size:.9em;color:#888;margin-bottom:1em}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}code{background:#f0f0f0;padding:0 .2em}pre{background:#f5f5f5;padding:.5em;margin:.5em 0;border-radius:3px;font-size:.85em;overflow-x:auto}</style></head>
+<body>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="734.html">← Prev</a> · <a href="736.html">Next →</a></div>
+
+<h1>#735: <code>IntRanges.java</code></h1>
+<div class="meta"><strong>Lines:</strong> 54 · <strong>Author:</strong> Kai Reinhard · <strong>Type:</strong> Java — extends <code>Ranges&lt;Integer&gt;</code> · <strong>interface</strong> <code>org.projectforge.framework.utils</code></div>
+
+<div class="c"><h2>Purpose</h2>
+<p>Represents a <strong>union of integer intervals</strong> — parses strings like <code>"1,3-5,10-15,20"</code> into a structured set of ranges and individual values, then provides <code>doesMatch(value)</code> to test membership. This is the integer specialization of the generic <code>Ranges&lt;T&gt;</code> abstract base class (<a href="742.html">#742</a>).</p>
+<p>The concrete use case is <strong>timesheet week number filtering</strong>. When an admin configures "show timesheets for weeks 1-5, 10, and 20-25", that config string is passed to <code>new IntRanges("1-5,10,20-25")</code>, and each timesheet entry's week number is tested with <code>ranges.doesMatch(weekNumber)</code>. This is simpler and more readable than building complex SQL <code>WHERE week IN (...)</code> clauses, especially when the range list is configurable per user.</p></div>
+
+<div class="c"><h2>Class hierarchy</h2>
+<pre>Ranges&lt;T extends Comparable&lt;T&gt;&gt;  (abstract, 176 lines)
+  └── IntRanges extends Ranges&lt;Integer&gt;  (54 lines, this file)</pre>
+<p><code>Ranges</code> handles all the parsing logic — splitting on commas/semicolons (<code>separatorChars = ";,"</code>), detecting hyphens as range delimiters (<code>rangesSeparatorChar = '-'</code>), and building a list of <code>Range&lt;T&gt;</code> objects plus isolated values. <code>IntRanges</code> only provides the concrete <code>parseValue(String)</code> method that converts a string to an Integer — this is the Template Method pattern: the abstract base defines the algorithm, the subclass defines the type conversion.</p></div>
+
+<div class="c"><h2>The parsing algorithm (in <code>Ranges</code> base class)</h2>
+<p>Given input <code>"1-5,10,20-25"</code>:</p>
+<ol>
+<li>Split on <code>,</code> or <code>;</code> → <code>["1-5", "10", "20-25"]</code></li>
+<li>For each part, check if it contains <code>-</code>:
+<ul><li>If yes: split on <code>-</code>, parse both sides → <code>Range(1, 5)</code> or <code>Range(20, 25)</code></li>
+<li>If no: parse as single value → add <code>10</code> to the <code>values</code> list</li></ul></li>
+</ol>
+<p>The <code>doesMatch(value)</code> method tests against all ranges (using <code>Range.doesMatch()</code> which checks <code>min <= value <= max</code>) and all individual values (using <code>Comparable.compareTo()</code> for exact match). A <code>nullRangeMatchesAlways</code> flag controls behavior when no ranges/values are specified (defaults to <code>false</code> — nothing matches).</p></div>
+
+<div class="c"><h2>Key design details</h2>
+<ul>
+<li><strong>Separator characters:</strong> Both comma (<code>,</code>) and semicolon (<code>;</code>) are accepted — graceful handling of copy-pasted input from different sources</li>
+<li><strong>Negative numbers:</strong> The parsing supports negative integers (e.g. <code>"-5--1"</code> means "from -5 to -1") because <code>Integer.valueOf()</code> handles the minus sign. The hyphen-as-range-separator conflicts with the negative sign, but the parser checks for two consecutive hyphens (<code>--</code>) as a range with negative boundaries</li>
+<li><strong>Whitespace tolerance:</strong> The parser trims whitespace around values, so <code>"1 - 5, 10"</code> works the same as <code>"1-5,10"</code></li>
+<li><strong>Duplicate handling:</strong> Adding the same value or overlapping range multiple times is allowed — <code>doesMatch()</code> returns <code>true</code> on the first match, so duplicates don't cause incorrect results but waste a small amount of memory</li>
+<li><strong>54-line simplicity:</strong> The entire file is just a constructor that calls <code>super(rangesString)</code> and a 3-line <code>parseValue()</code> override. All the complexity lives in the abstract <code>Ranges</code> base — this is the ideal use of inheritance: the subclass provides only the type-specific conversion, nothing else</li></ul></div>
+
+<div class="c"><h2>Usage in the codebase</h2>
+<p>Primarily used in the <strong>timesheet module</strong> for week number filtering. The timesheet filter (<a href="598.html">#598</a>) allows filtering by week numbers — the admin or user enters a range expression like <code>"1-10, 15, 20-25"</code>, which is parsed into an <code>IntRanges</code> instance. When displaying timesheets, each entry's week number is tested against the ranges to determine visibility. The <code>Serializable</code> interface (inherited from <code>Ranges</code>) allows the ranges to be saved in user preferences XML.</p></div>
+
+</body></html>

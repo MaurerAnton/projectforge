@@ -1,0 +1,141 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>#2796</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}.hist{font-size:.85em;color:#555}</style></head>
+<body><div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="2795.html">← Prev</a> · <a href="2797.html">Next →</a></div>
+<h1>#2796: <code>AccessEditPage.java</code></h1>
+<div class="meta">Java class, <code>projectforge-wicket/src/main/java/org/projectforge/web/access/AccessEditPage.java</code></div>
+<div class="c">Java Wicket page web access.</div>
+<h2>Git History</h2><div class="hist"><pre>868d6abb7 2025 -&gt; 2026
+63081666f Source file headers: 2024-&gt; 2025.
+b095e6f7d !!!!! Big change of Transaction handling: Re-uses PfPersistenceContext as much as possible (not yet finished). Tests doesn't yet run.
+9f874e26c MAJOR-CHANGE! Migration of integer id's to Long id's (including fk's etc.)
+4efcbd0fb Migration stuff in progress...
+06828f490 Migration stuff in progress...
+b6092df09 Copyright 2023 -&gt; 2024
+ab45d51fa Copyright 2001-2022 -&gt; 2001-2023.
+5f7ef41b8 Copyright 2021 -&gt; 2022
+c5495102d TutorialPage and Documentation removed from web app.
+ceb63e8a1 Source code header: (C) 2001-2021.
+a6a7aece4 Optimize Imports
+7c79f1922 Copyright of source header -&gt; 2020.
+fac743136 PROJECTFORGE-3408 : Big fixed
+eaffd6c02 PROJECTFORGE-3408 : First Test and chnages
+a5bbdca6a Change logger to slf4j
+9ebb88522 Initial commit</pre></div>
+<h2>Source</h2><pre>/////////////////////////////////////////////////////////////////////////////
+//
+// Project ProjectForge Community Edition
+//         www.projectforge.org
+//
+// Copyright (C) 2001-2026 Micromata GmbH, Germany (www.micromata.com)
+//
+// ProjectForge is dual-licensed.
+//
+// This community edition is free software; you can redistribute it and/or
+// modify it under the terms of the GNU General Public License as published
+// by the Free Software Foundation; version 3 of the License.
+//
+// This community edition is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General
+// Public License for more details.
+//
+// You should have received a copy of the GNU General Public License along
+// with this program; if not, see http://www.gnu.org/licenses/.
+//
+/////////////////////////////////////////////////////////////////////////////
+
+package org.projectforge.web.access;
+
+import org.apache.wicket.request.mapper.parameter.PageParameters;
+import org.projectforge.framework.access.AccessDao;
+import org.projectforge.framework.access.GroupTaskAccessDO;
+import org.projectforge.web.WicketSupport;
+import org.projectforge.web.fibu.ISelectCallerPage;
+import org.projectforge.web.wicket.AbstractEditPage;
+import org.projectforge.web.wicket.EditPage;
+import org.slf4j.Logger;
+
+@EditPage(defaultReturnPage = AccessListPage.class)
+public class AccessEditPage extends AbstractEditPage&lt;GroupTaskAccessDO, AccessEditForm, AccessDao&gt;
+    implements ISelectCallerPage
+{
+  private static final long serialVersionUID = 4636922408954211544L;
+
+  private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(AccessEditPage.class);
+
+  public AccessEditPage(final PageParameters parameters)
+  {
+    super(parameters, &quot;access&quot;);
+    super.init();
+  }
+
+  @Override
+  public void cancelSelection(final String property)
+  {
+    // Do nothing.
+  }
+
+  //Create Or Update
+  @Override
+  protected void create()
+  {
+    GroupTaskAccessDO accessDaoEntry = WicketSupport.getAccessDao().getEntry(getData().getTask(), getData().getGroup());
+    if(accessDaoEntry != null &amp;&amp; accessDaoEntry.getDeleted()) {
+      getData().setId(accessDaoEntry.getId());
+      super.undelete();
+    }
+    else if(accessDaoEntry != null &amp;&amp; accessDaoEntry.getDeleted() == false) {
+      error(getLocalizedMessage(&quot;access.exception.standard&quot;, accessDaoEntry.getTask().getTitle(), accessDaoEntry
+        .getGroup().getName()));
+    }
+    else {
+      super.create();
+    }
+  }
+
+  @Override
+  public void select(final String property, final Object selectedValue)
+  {
+    var accessDao = WicketSupport.getAccessDao();
+    if (&quot;taskId&quot;.equals(property) == true) {
+      accessDao.setTask(getData(), (Long) selectedValue);
+    } else if (&quot;groupId&quot;.equals(property) == true) {
+      accessDao.setGroup(getData(), (Long) selectedValue);
+      form.groupSelectPanel.getTextField().modelChanged();
+    } else {
+      log.error(&quot;Property '&quot; + property + &quot;' not supported for selection.&quot;);
+    }
+  }
+
+  @Override
+  public void unselect(final String property)
+  {
+    if (&quot;taskId&quot;.equals(property) == true) {
+      getData().setTask(null);
+    } else if (&quot;groupId&quot;.equals(property) == true) {
+      getData().setGroup(null);
+      form.groupSelectPanel.getTextField().modelChanged();
+    } else {
+      log.error(&quot;Property '&quot; + property + &quot;' not supported for unselection.&quot;);
+    }
+  }
+
+  @Override
+  protected AccessDao getBaseDao()
+  {
+    return WicketSupport.getAccessDao();
+  }
+
+  @Override
+  protected AccessEditForm newEditForm(final AbstractEditPage&lt;?, ?, ?&gt; parentPage, final GroupTaskAccessDO data)
+  {
+    return new AccessEditForm(this, data);
+  }
+
+  @Override
+  protected Logger getLogger()
+  {
+    return log;
+  }
+}</pre>
+</body></html>

@@ -1,0 +1,30 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>#755</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333}h2{margin-top:1.5em}a{color:#0366d6}.meta{font-size:.9em;margin:1em 0}.nav{font-size:.9em;color:#888;margin-bottom:1em}.c{border-left:3px solid #ddd;padding:1em;margin:1em 0;background:#fff}code{background:#f0f0f0;padding:0 .2em}pre{background:#f5f5f5;padding:.5em;margin:.5em 0;border-radius:3px;font-size:.85em;overflow-x:auto}</style></head>
+<body>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="754.html">← Prev</a> · <a href="756.html">Next →</a></div>
+
+<h1>#755: <code>XmlHelper.java</code></h1>
+<div class="meta"><strong>Lines:</strong> 135 · <strong>Author:</strong> Kai Reinhard · <strong>Type:</strong> Java utility · <strong>Package:</strong> <code>org.projectforge.framework.xmlstream</code></div>
+
+<div class="c"><h2>Что это</h2>
+<p><strong>Утилитный класс для работы с XML</strong> — преобразование строк в XML-элементы, XML-элементов в строки, форматирование. 135 строк. Использует библиотеку <a href="https://dom4j.github.io/">dom4j</a> для парсинга и сериализации <strong>обычного XML</strong> (не XStream, не W3C DOM). Это <strong>третья XML-библиотека</strong> в проекте наряду с XStream (пользовательские настройки) и W3C DOM API (SVG через Batik).</p>
+<p>Константа <code>XML_HEADER = "&lt;?xml version=\"1.0\" encoding=\"UTF-8\"?&gt;"</code> — стандартный XML-заголовок, используемый при генерации XML-файлов для экспорта. Кодировка жёстко зафиксирована как <strong>UTF-8</strong> — это решение на уровне кода, не конфигурации.</p></div>
+
+<div class="c"><h2>Методы</h2>
+
+<h3><code>replaceQuotes(String xml)</code> — нормализация кавычек</h3>
+<p>Заменяет одинарные кавычки (<code>'</code>) на двойные (<code>"</code>) в XML-строке. Javadoc: <em>"This is useful for writing xml string constants e.g. in test cases."</em> В Java строковых литералах проще использовать одинарные кавычки для атрибутов (не надо экранировать), но валидный XML требует двойные. Этот метод позволяет писать в тестах: <code>XmlHelper.replaceQuotes("&lt;node name='test'/&gt;")</code> → <code>"&lt;node name=\"test\"/&gt;"</code>.</p>
+
+<h3><code>fromString(String str)</code> — строка → dom4j Element</h3>
+<p>Парсит XML-строку в dom4j <code>Element</code>. Использует <code>DocumentHelper.parseText()</code> — dom4j'евский аналог <code>DocumentBuilder.parse()</code> из W3C. Возвращает корневой элемент (<code>document.getRootElement()</code>). При ошибке парсинга логирует и возвращает <code>null</code> (не бросает исключение — вызывающий код должен проверять null). Для пустой строки возвращает null.</p>
+
+<h3><code>toString(Element el, boolean prettyFormat)</code> — dom4j Element → отформатированная XML-строка</h3>
+<p>Сериализует dom4j <code>Element</code> обратно в строку. Использует dom4j'евский <code>XMLWriter</code> с <code>OutputFormat</code>. При <code>prettyFormat=true</code>: включает переносы строк и отступ в 2 пробела. Важно: <code>writer.close()</code> вызывается в finally-неявном стиле (в try-блоке после записи) — writer должен быть закрыт чтобы flush'нуть буфер.</p>
+
+<h3><code>toString(org.w3c.dom.Document, boolean prettyFormat)</code> — W3C DOM Document → строка</h3>
+<p>Этот метод работает с <strong>другим типом XML</strong> — <code>org.w3c.dom.Document</code> (используется в SVG/Batik). Использует <code>javax.xml.transform.Transformer</code> (XSLT-процессор) для сериализации. При <code>prettyFormat=true</code>: добавляет <code>INDENT=yes</code> и специфичный для Xalan отступ (<code>{http://xml.apache.org/xslt}indent-amount</code>=2). Все ошибки оборачиваются в <code>InternalErrorException</code> (в отличие от dom4j-метода который логирует и возвращает null) — это потому что ошибки транcформации W3C DOM считаются критическими внутренними ошибками, а не ошибками пользовательских данных.</p></div>
+
+<div class="c"><h2>Две XML-библиотеки в одном классе — архитектурный долг</h2>
+<p>Наличие методов для двух разных XML-представлений (dom4j и W3C DOM) в одном классе — это <strong>исторический артефакт</strong>. dom4j используется для XmlStream (сериализация данных), W3C DOM — для SVG-рендеринга (Batik). Они оказались в одном утилитном классе потому что "работа с XML" была воспринята как одна ответственность, хотя на самом деле это две разные подсистемы. Правильный рефакторинг: выделить W3C-метод в <code>SvgXmlHelper</code> или встроить его в <code>BatikImageRenderer</code> (<a href="711.html">#711</a>).</p></div>
+
+</body></html>

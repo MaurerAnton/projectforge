@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>File #47: BankAccountDao.kt</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333}h2{margin-top:2em;border-bottom:1px solid #ddd;padding-bottom:.2em}a{color:#0366d6;text-decoration:none}.meta{background:#f0f0f0;border-radius:6px;padding:1em;margin:1em 0;font-size:.9em}.code-block{background:#f8f8f8;border:1px solid #ddd;border-radius:4px;padding:.5em;margin:.5em 0;overflow-x:auto}.code-block pre{margin:0;font-family:'Consolas',monospace;font-size:.85em;line-height:1.5}.commentary{margin:1em 0;line-height:1.7;background:#fff;padding:.5em 1em;border-radius:6px;border-left:4px solid #ddd}code{background:#e8e8e8;border-radius:3px;padding:.1em .3em;font-size:.9em}.nav{font-size:.9em;color:#888;margin-bottom:1em}table{border-collapse:collapse;width:100%;margin:1em 0;font-size:.9em}th,td{border:1px solid #ddd;padding:.5em;text-align:left}th{background:#f0f0f0}.warn{background:#fff3cd;border:1px solid #ffc107;border-radius:4px;padding:.5em 1em;margin:.5em 0}</style>
+</head>
+<body>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Documentation index</a> · <a href="file-index.html">← File index</a> · <a href="46.html">← Prev</a> · <a href="48.html">Next →</a></div>
+<h1>File #47: <code>BankAccountDao.kt</code></h1>
+<div class="meta"><p><strong>Path:</strong> <code>./plugins/.../BankAccountDao.kt</code> · <strong>Type:</strong> Kotlin DAO · <strong>Lines:</strong> 77 · <strong>Source:</strong> <a href="https://github.com/micromata/projectforge/blob/9ed5fbe0f/plugins/org.projectforge.plugins.banking/src/main/kotlin/org/projectforge/plugins/banking/BankAccountDao.kt">GitHub</a></p></div>
+
+<h2>What it does</h2>
+<div class="commentary"><p>DAO for <strong>bank accounts</strong> — the parent entity of <a href="46.html">BankAccountBalanceDO</a> (#46). Same pattern as <a href="45.html">BankAccountBalanceDao</a> (#45): extends <code>BaseDao</code>, overrides <code>hasAccess()</code> and <code>newInstance()</code>. Called by <a href="45.html">BankAccountBalanceDao.hasAccess()</a> line 68 as the authorization delegate.</p></div>
+
+<h2>Authorization logic (lines 43-72)</h2>
+<div class="code-block"><pre>50 if (!accessChecker.isUserMemberOfGroup(user, FINANCE_GROUP))
+51   return false                              <span style="color:#888">← gate: finance group required</span>
+53 if (accessChecker.isUserMemberOfAdminGroup(user))
+54   return true                               <span style="color:#888">← bypass: admins always have access</span>
+57 if (!accessChecker.isUserMemberOfGroup(user, FINANCE_GROUP))
+58   return false                              <span style="color:#888">← redundant: same check as line 50</span>
+61 if (obj == null && oldObj == null)
+62   return true                               <span style="color:#888">← null objects = general read access</span>
+65 return BaseUserGroupRightUtils.hasAccess(...)  <span style="color:#888">← check object-level rights</span></pre></div>
+<div class="commentary"><div class="warn"><strong>Lines 50 and 57 are redundant:</strong> Both check <code>FINANCE_GROUP</code> membership. Line 57 is unreachable if line 50 passes (line 51 already returned false for non-members). This appears to be defensive copy-paste from calling <code>accessChecker.isUserMemberOfGroup(user, ...)</code> (line 50) vs <code>accessChecker.isLoggedInUserMemberOfGroup(...)</code> (as used in <a href="45.html">#45</a> line 58).</div></div>
+
+<h2>Access flow</h2>
+<div class="code-block"><pre>Is user in FINANCE_GROUP?
+├─ NO  → denied
+└─ YES → Is user an admin?
+    ├─ YES → granted (admin override)
+    └─ NO  → Is object null (new record or general query)?
+        ├─ YES → granted (read access for all finance members)
+        └─ NO  → Check object-level rights via BaseUserGroupRightUtils
+            ├─ has rights → granted
+            └─ no rights → denied</pre></div>
+
+<h2>Key takeaways</h2>
+<div class="commentary"><ul><li><strong>77 lines, redundant checks:</strong> Lines 50 and 57 duplicate the same FINANCE_GROUP gate — likely from evolving the method over time.</li>
+<li><strong>Admin bypass:</strong> Unlike <a href="45.html">BankAccountBalanceDao</a>, this DAO explicitly grants admins unconditional access (line 53-54).</li>
+<li><strong>Object-level rights:</strong> <code>BaseUserGroupRightUtils.hasAccess()</code> checks per-object permission assignments — beyond simple group membership.</li>
+<li><strong>Null object = read access:</strong> Finance staff can list all bank accounts even without explicit object rights.</li></ul></div>
+
+<div class="nav" style="margin-top:2em;padding-top:1em;border-top:1px solid #ddd"><a href="46.html">← #46: BankAccountBalanceDO.kt</a> · <a href="48.html">#48: BankAccountDO.kt →</a></div>
+</body>
+</html>

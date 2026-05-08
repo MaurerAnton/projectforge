@@ -1,0 +1,210 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>#2256</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}.hist{font-size:.85em;color:#555}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}</style></head>
+<body><div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="2255.html">← Prev</a> · <a href="2257.html">Next →</a></div>
+<h1>#2256: <code>VisitorbookEntryPageRest.kt</code></h1>
+<div class="meta">REST Controller, <code>projectforge-rest/src/main/kotlin/org/projectforge/rest/orga/VisitorbookEntryPageRest.kt</code> (196 lines)</div>
+<div class="c">Source file: VisitorbookEntryPageRest.kt - rest controller in ProjectForge REST module.</div>
+<h2>Source Code</h2><pre>/////////////////////////////////////////////////////////////////////////////
+//
+// Project ProjectForge Community Edition
+//         www.projectforge.org
+//
+// Copyright (C) 2001-2026 Micromata GmbH, Germany (www.micromata.com)
+//
+// ProjectForge is dual-licensed.
+//
+// This community edition is free software; you can redistribute it and/or
+// modify it under the terms of the GNU General Public License as published
+// by the Free Software Foundation; version 3 of the License.
+//
+// This community edition is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General
+// Public License for more details.
+//
+// You should have received a copy of the GNU General Public License along
+// with this program; if not, see http://www.gnu.org/licenses/.
+//
+/////////////////////////////////////////////////////////////////////////////
+
+package org.projectforge.rest.orga
+
+import jakarta.servlet.http.HttpServletRequest
+import org.projectforge.business.orga.VisitorbookEntryDO
+import org.projectforge.business.orga.VisitorbookService
+import org.projectforge.framework.time.PFDateTime
+import org.projectforge.rest.config.Rest
+import org.projectforge.rest.core.AbstractDynamicPageRest
+import org.projectforge.rest.core.RestResolver
+import org.projectforge.rest.dto.FormLayoutData
+import org.projectforge.rest.dto.PostData
+import org.projectforge.rest.dto.VisitorbookEntry
+import org.projectforge.ui.*
+import org.springframework.beans.factory.annotation.Autowired
+import org.springframework.http.HttpStatus
+import org.springframework.http.ResponseEntity
+import org.springframework.web.bind.annotation.*
+import java.time.LocalDate
+
+/**
+ * Dialog for registering a new token or modifying/deleting an existing one.
+ */
+@RestController
+@RequestMapping("${Rest.URL}/visitorbookEntry")
+class VisitorbookEntryPageRest : AbstractDynamicPageRest() {
+    @Autowired
+    private lateinit var visitorbookService: VisitorbookService
+
+    @Autowired
+    private lateinit var visitorbookPagesRest: VisitorbookPagesRest
+
+    class ResponseData(
+        var entries: List&lt;VisitorbookEntry&gt;? = null,
+    )
+
+    @GetMapping("dynamic")
+    fun getForm(
+        request: HttpServletRequest,
+        @RequestParam("id") idString: String?,
+        @RequestParam("visitorbookId") visitorbookId: Long?,
+    ): FormLayoutData {
+        val id = idString?.toLongOrNull() ?: -1
+        requiredFields(id, visitorbookId)
+        val data = if (id &gt; 0) {
+            VisitorbookEntry(visitorbookService.findVisitorbookEntry(id))
+        } else {
+            VisitorbookEntry(visitorbookId = visitorbookId).also {
+                it.dateOfVisit = LocalDate.now()
+                it.arrived = PFDateTime.now().localTimeString
+            }
+        }
+        val lc = LayoutContext(VisitorbookEntryDO::class.java)
+        val layout = UILayout("orga.visitorbook.timeofvisit")
+        layout.add(lc, "dateOfVisit", "arrived", "departed", "comment")
+        layout.addAction(UIButton.createCancelButton(responseAction = ResponseAction(targetType = TargetType.CLOSE_MODAL)))
+        if (id &lt; 0) {
+            // New entry
+            layout.addAction(
+                UIButton.createAddButton(
+                    responseAction = ResponseAction(
+                        url = RestResolver.getRestUrl(this::class.java, "insert"),
+                        targetType = TargetType.POST,
+                    )
+                )
+            )
+        } else {
+            layout.addAction(
+                UIButton.createDeleteButton(
+                    layout,
+                    responseAction = ResponseAction(
+                        RestResolver.getRestUrl(this::class.java, "delete"),
+                        targetType = TargetType.POST,
+                    ),
+                )
+            )
+            layout.addAction(
+                UIButton.createUpdateButton(
+                    responseAction = ResponseAction(
+                        RestResolver.getRestUrl(this::class.java, "update"),
+                        targetType = TargetType.POST
+                    ),
+                )
+            )
+        }
+
+        layout.addTranslations("cancel", "yes")
+        LayoutUtils.process(layout)
+
+        return FormLayoutData(data, layout, createServerData(request))
+    }
+
+    @PostMapping("delete")
+    fun delete(@RequestBody postData: PostData&lt;VisitorbookEntry&gt;): ResponseEntity&lt;*&gt; {
+        requiredFields(postData.data)
+        val dto = postData.data
+        visitorbookService.markVisitorbookEntryAsDeleted(visitorbookId = dto.visitorbookId, entryId = dto.id)
+        return closeModal(dto)
+    }
+
+    /**
+     * Updates only the displayName.
+     */
+    @PostMapping("update")
+    fun update(@RequestBody postData: PostData&lt;VisitorbookEntry&gt;): ResponseEntity&lt;ResponseAction&gt; {
+        requiredFields(postData.data)
+        val dto = postData.data
+        validate(dto)?.let { return it }
+        val entry = dto.cloneAsDO()
+        visitorbookService.updateVisitorbookEntry(visitorbookId = dto.visitorbookId, entry = entry)
+        return closeModal(dto)
+    }
+
+    /**
+     * Updates only the displayName.
+     */
+    @PostMapping("insert")
+    fun insert(@RequestBody postData: PostData&lt;VisitorbookEntry&gt;): ResponseEntity&lt;ResponseAction&gt; {
+        requiredFields(postData.data, idNull = true)
+        validate(postData.data)?.let { return it }
+        val dto = postData.data
+        val entry = dto.cloneAsDO()
+        visitorbookService.insert(visitorbookId = dto.visitorbookId!!, entry = entry)
+        return visitorbookPagesRest.getListPageResponseEntity(
+            absolute = true,
+            forceAGGridReload = true,
+            highlightedObjectId = dto.visitorbookId,
+        )
+    }
+
+    private fun closeModal(dto: VisitorbookEntry): ResponseEntity&lt;ResponseAction&gt; {
+        val responseAction = ResponseAction(targetType = TargetType.CLOSE_MODAL, merge = true)
+        val entries = visitorbookService.selectAllVisitorbookEntries(dto.visitorbookId!!, deleted = false)
+            .map { VisitorbookEntry(it) }
+        responseAction.addVariable("data", ResponseData(entries = entries))
+        return ResponseEntity.ok(responseAction)
+    }
+
+    private fun requiredFields(dto: VisitorbookEntry, idNull: Boolean = false) {
+        requiredFields(dto.id, dto.visitorbookId, idNull)
+    }
+
+    private fun requiredFields(
+        id: Long?,
+        visitorbookId: Long?,
+        idNull: Boolean = false,
+    ) {
+        if (idNull) {
+            require(id == null) { "Can't insert VisitorbookEntry entry with given id." }
+        } else {
+            requireNotNull(id) { "Can't update/delete VisitorbookEntry entry without id." }
+        }
+        requireNotNull(visitorbookId) { "Can't update VisitorbookEntry entry without visitorbookId." }
+    }
+
+    private fun validate(dto: VisitorbookEntry): ResponseEntity&lt;ResponseAction&gt;? {
+        val validationErrors = mutableListOf&lt;ValidationError&gt;()
+        if (dto.dateOfVisit == null) {
+            validationErrors.add(
+                ValidationError.createFieldRequired(
+                    VisitorbookEntryDO::class.java,
+                    fieldId = "dateOfVisit",
+                )
+            )
+        }
+        if (validationErrors.isNotEmpty()) {
+            return ResponseEntity(
+                ResponseAction(validationErrors = validationErrors),
+                HttpStatus.NOT_ACCEPTABLE
+            )
+        }
+        return null
+    }
+}</pre>
+<h2>Git History</h2><div class="hist"><pre>868d6abb7 2025 -&gt; 2026
+c75d202df AdminPage refreshes now also AuftragsRechnungCache. Visitorbook: unused field contactPerson removed. ForecastExportInvoices: cache access for order positions changed (fix of missing invoices)
+63081666f Source file headers: 2024-&gt; 2025.
+27a5e6cad Visitorbook: bugfix on contactPersons. Also affected: vacation, AbstractPagesrest, PagesResolver
+010ea985f Release 8.0.
+7bc8f49c9 Migration stuff in progress... (all tests of all packages: OK).
+b5dc26e24 Migration stuff in progress... (all tests of all packages: OK).</pre></div>
+</body></html>

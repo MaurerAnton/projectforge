@@ -1,0 +1,46 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>#733</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333}h2{margin-top:1.5em}a{color:#0366d6}.meta{font-size:.9em;margin:1em 0}.nav{font-size:.9em;color:#888;margin-bottom:1em}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}code{background:#f0f0f0;padding:0 .2em}</style></head>
+<body>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="732.html">← Prev</a> · <a href="734.html">Next →</a></div>
+
+<h1>#733: <code>GZIPHelper.java</code></h1>
+<div class="meta"><strong>Lines:</strong> 81 · <strong>Type:</strong> Java utility — <code>org.projectforge.framework.utils</code></div>
+
+<div class="c"><h2>Purpose</h2>
+<p>Compresses and decompresses strings using <strong>GZIP + Base64 encoding</strong>. Solves two problems: (1) some database fields have limited character length (e.g. <code>VARCHAR(4000)</code>), and (2) storing large JSON blobs in database columns wastes space. This utility compresses the string with GZIP, then <strong>Base64-encodes</strong> the binary result so it can be stored as a plain string in a database <code>VARCHAR</code> or <code>TEXT</code> column. The decompression reverses the process: Base64 decode → GZIP decompress → original string.</p>
+<p><strong>Why Base64 after GZIP?</strong> GZIP produces binary bytes — not safe for storage in text-based database columns (which use character encodings like UTF-8 that may interpret certain byte values as control characters). Base64 converts binary data into a pure ASCII string (using 64 safe characters: A-Z, a-z, 0-9, +, /) — guaranteed safe for any text storage.</p></div>
+
+<div class="c"><h2>API — two methods</h2>
+<h3><code>compress(String str) → String</code></h3>
+<p>Takes any string (null-safe — returns null for null/empty input). Wraps user preference XML, JSON configuration blobs, and large text fields for database storage. Algorithm:
+<ol><li><code>str.getBytes()</code> — converts to platform-default charset bytes. <strong>Warning:</strong> uses the JVM's default charset (typically UTF-8 on modern systems but could be different on legacy setups). If the original string contains non-ASCII characters, different JVMs could produce different compressed results</li>
+<li>Wraps in <code>GZIPOutputStream</code> — the Java standard library GZIP implementation (RFC 1952)</li>
+<li>Closes the GZIP stream — this <strong>flushes</strong> the compressed data to the underlying <code>ByteArrayOutputStream</code></li>
+<li>Encodes the compressed bytes to Base64 string via <a href="724.html">Base64Helper.encodeObject()</a> — returns the Base64 string</li></ol>
+<strong>Error handling:</strong> On IOException, logs the error at ERROR level and returns <code>null</code>. The caller must handle null — most callers treat null the same as empty string.</p>
+
+<h3><code>uncompress(String base64ByteArray) → String</code></h3>
+<p>Reverses <code>compress()</code>. Takes a Base64-encoded compressed string, returns the original. Algorithm:
+<ol><li><code>Base64Helper.decodeObject(base64ByteArray)</code> — decodes Base64 to raw bytes (<strong>cast from Object to byte[]</strong> — note the unchecked cast. The <code>decodeObject</code> method returns <code>Object</code> for historical XStream compatibility)</li>
+<li>Wraps in <code>GZIPInputStream</code> — decompresses the GZIP data</li>
+<li>Uses <code>IOUtils.copy(gzip, out)</code> (Apache Commons IO) to stream decompressed data into a <code>ByteArrayOutputStream</code></li>
+<li><code>out.toString()</code> — converts bytes back to string using the platform default charset (same charset assumption as compress)</li></ol>
+<strong>Error handling:</strong> Catches both <code>IOException</code> and <code>ClassNotFoundException</code> (the latter from <code>Base64Helper.decodeObject()</code> which uses Java object deserialization under the hood — a <strong>potential security issue</strong> if malicious Base64 data is passed). Returns <code>null</code> on any error.</p></div>
+
+<div class="c"><h2>Usage in ProjectForge</h2>
+<p>Used by two key components:</p>
+<ul>
+<li><strong>User preferences (<a href="606.html">UserXmlPreferencesService</a>):</strong> User preference XML can become quite large (especially calendar view configurations with multiple calendars, custom colors, and saved filters). Before storing in the database, the XML is compressed via <code>GZIPHelper.compress()</code> and stored as a Base64 string in the <code>UserPrefDO</code> entity. On load, <code>uncompress()</code> restores the original XML</li>
+<li><strong>Audit trail / event log:</strong> The <code>external_access_logs</code> column on <code>t_plugin_datatransfer_area</code> (see <a href="105.html">#105</a>) stores a JSON-serialized list of access events. With frequent external access, this string could exceed the <code>VARCHAR(10000)</code> limit — GZIP compression reduces its size significantly</li>
+</ul>
+<p>Notably, this is <strong>not</strong> used for the license key BLOB storage (<a href="144.html">LicenseDO</a>) — binary files use direct JDBC <code>BLOB</code> columns, not text compression.</p></div>
+
+<div class="c"><h2>Key design decisions and gotchas</h2>
+<ul>
+<li><strong>Platform-default charset:</strong> Both methods use <code>str.getBytes()</code> and <code>out.toString()</code> without specifying a charset. This means the compression round-trip is only guaranteed if compress and uncompress run on the <strong>same JVM</strong>. If compressed data is moved to a different server with a different default charset, the decompressed string could be corrupted. In practice, all modern JVMs default to UTF-8 (since Java 18), so this is rarely an issue in production</li>
+<li><strong>Base64 overhead:</strong> GZIP typically compresses text to 20-30% of original size, but Base64 encoding adds ~33% overhead (3 binary bytes → 4 Base64 characters). Net result: compressed+Base64 is typically 25-40% of original size. This means it's useful for strings over ~2KB where the compression dominates the Base64 overhead</li>
+<li><strong>Null handling:</strong> Both methods return <code>null</code> for null input — callers don't need to pre-check. But callers <strong>do</strong> need to handle null returns (when compression/decompression fails) — treating null as empty string is typical</li>
+<li><strong>No thread safety concerns:</strong> All I/O is through local <code>ByteArrayInputStream/OutputStream</code> objects — no shared state, fully thread-safe</li>
+<li><strong>ClassNotFoundException in uncompress:</strong> This is a <strong>code smell</strong> — <code>Base64Helper.decodeObject()</code> uses Java's <code>ObjectInputStream</code>, which can deserialize arbitrary Java objects (a <a href="https://owasp.org/www-community/vulnerabilities/Deserialization_of_untrusted_data">known security vulnerability</a>). If an attacker can inject Base64 data that gets passed to <code>uncompress()</code>, they could potentially execute arbitrary code. In practice, the data only comes from the database and is generated by <code>compress()</code>, so the attack surface is limited to database compromise scenarios</li></ul></div>
+
+</body></html>

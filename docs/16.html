@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>File #16: docker/environment.sh</title>
+<style>
+  body { font-family: system-ui, sans-serif; max-width: 960px; margin: 2em auto; padding: 0 1em; background: #fafafa; color: #222; line-height: 1.6; }
+  h1 { border-bottom: 2px solid #333; }
+  h2 { margin-top: 2.5em; border-bottom: 1px solid #ddd; padding-bottom: 0.2em; }
+  a { color: #0366d6; text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  .meta { background: #f0f0f0; border-radius: 6px; padding: 1em; margin: 1em 0; font-size: 0.9em; }
+  .code-block { background: #f8f8f8; border: 1px solid #ddd; border-radius: 4px; padding: 0.5em; margin: 0.5em 0; overflow-x: auto; }
+  .code-block pre { margin: 0; font-family: 'Consolas', monospace; font-size: 0.85em; line-height: 1.5; }
+  .commentary { margin: 1em 0; line-height: 1.7; background: #fff; padding: 0.5em 1em; border-radius: 6px; border-left: 4px solid #ddd; }
+  code { background: #e8e8e8; border-radius: 3px; padding: 0.1em 0.3em; font-size: 0.9em; }
+  .nav { font-size: 0.9em; color: #888; margin-bottom: 1em; }
+  .link { font-size: 0.85em; color: #888; margin-left: 0.5em; }
+  table { border-collapse: collapse; width: 100%; margin: 1em 0; font-size: 0.9em; }
+  th, td { border: 1px solid #ddd; padding: 0.5em; text-align: left; }
+  th { background: #f0f0f0; }
+  ins { background: #d4edda; text-decoration: none; color: #155724; }
+</style>
+</head>
+<body>
+<div class="nav">
+  <a href="https://maureranton.github.io/projectforge/">← Documentation index</a> · <a href="file-index.html">← File index</a> · <a href="15.html">← Prev</a> · <a href="17.html">Next →</a>
+</div>
+<h1>File #16: <code>docker/environment.sh</code></h1>
+<div class="meta">
+  <p><strong>Path:</strong> <code>./docker/environment.sh</code> · <strong>Type:</strong> Bash shell script · <strong>Lines:</strong> 10 · <strong>Source:</strong> <a href="https://github.com/micromata/projectforge/blob/9ed5fbe0f/docker/environment.sh">GitHub</a></p>
+</div>
+
+<h2>What it does</h2>
+<div class="commentary">
+  <p>A 10-line template for JVM tuning when running ProjectForge in Docker. This file gets <strong>volume-mounted</strong> into the container at <code>/ProjectForge/environment.sh</code> and is sourced by <a href="15.html">docker/entrypoint.sh</a> at line 53 before starting Java. All variables are commented out by default — the admin uncomments and sets values per-installation.</p>
+</div>
+
+<h2>Line-by-line</h2>
+
+<div class="code-block"><pre>1  #!/bin/bash
+2
+3  # Set the java options and arguments here for Your docker installation only.
+4
+5  # Increase ProjectForge's memory settings:
+6  #export JAVA_OPTS=-Xms1g -Xmx1g
+7  <ins>export JAVA_OPTS=</ins>
+8
+9  # Define your optional program arguments here
+10  <ins>export JAVA_ARGS=</ins></pre></div>
+
+<h2>Two exported variables</h2>
+<div class="commentary">
+<p>Both are consumed in <a href="15.html">entrypoint.sh</a> lines 56–64 and line 74:</p>
+<table>
+  <tr><th>Variable</th><th>Line</th><th>Purpose</th><th>Example value</th></tr>
+  <tr>
+    <td><code>JAVA_OPTS</code></td>
+    <td>7</td>
+    <td>JVM flags: memory, GC, debugging</td>
+    <td><code>-Xms1g -Xmx1g -XX:+UseG1GC</code></td>
+  </tr>
+  <tr>
+    <td><code>JAVA_ARGS</code></td>
+    <td>10</td>
+    <td>Spring Boot / application arguments</td>
+    <td><code>--server.port=9090 --spring.profiles.active=prod</code></td>
+  </tr>
+</table>
+<p>The default values (<code>JAVA_OPTS=</code> and <code>JAVA_ARGS=</code>) are empty strings — the JVM uses its defaults (typically 25% of container memory for heap in Java 10+).</p>
+</div>
+
+<h2>Connection to the Docker stack</h2>
+<div class="commentary">
+<p>This file bridges the gap between <strong>build-time</strong> (the Docker image, defined in <code>Dockerfile</code>) and <strong>run-time</strong> (the admin's environment):</p>
+<ol>
+  <li>The admin copies this template from the repo</li>
+  <li>Uncomments and sets values for the specific server</li>
+  <li>Mounts the modified file as a volume: <code>-v ./environment.sh:/ProjectForge/environment.sh</code></li>
+  <li><a href="15.html">entrypoint.sh</a> sources it on container start</li>
+  <li>Java launches with the admin's custom flags</li>
+</ol>
+<p>Without this file (or if the mount doesn't exist), the <code>-f</code> check in entrypoint.sh line 51 skips sourcing entirely — no error, just JVM defaults.</p>
+</div>
+
+<h2>Key takeaways</h2>
+<div class="commentary">
+  <ul>
+    <li><strong>Only 10 lines:</strong> The shortest file documented so far — but critical for production memory tuning.</li>
+    <li><strong>Admin-controlled:</strong> Changes don't require rebuilding the Docker image — just restart the container.</li>
+    <li><strong>Optional:</strong> If the volume mount is missing, entrypoint.sh ignores it gracefully (no crash).</li>
+    <li><strong>Comments are the documentation:</strong> The template itself explains each variable — self-documenting infrastructure-as-code.</li>
+  </ul>
+</div>
+
+<div class="nav" style="margin-top:2em; padding-top:1em; border-top:1px solid #ddd">
+  <a href="15.html">← #15: docker/entrypoint.sh</a> · <a href="17.html">#17 →</a>
+</div>
+</body>
+</html>

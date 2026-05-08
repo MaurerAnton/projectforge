@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>File #31: .github/workflows/gradle.yml</title>
+<style>
+  body { font-family: system-ui, sans-serif; max-width: 960px; margin: 2em auto; padding: 0 1em; background: #fafafa; color: #222; line-height: 1.6; }
+  h1 { border-bottom: 2px solid #333; }
+  h2 { margin-top: 2.5em; border-bottom: 1px solid #ddd; padding-bottom: 0.2em; }
+  a { color: #0366d6; text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  .meta { background: #f0f0f0; border-radius: 6px; padding: 1em; margin: 1em 0; font-size: 0.9em; }
+  .code-block { background: #f8f8f8; border: 1px solid #ddd; border-radius: 4px; padding: 0.5em; margin: 0.5em 0; overflow-x: auto; }
+  .code-block pre { margin: 0; font-family: 'Consolas', monospace; font-size: 0.85em; line-height: 1.5; }
+  .commentary { margin: 1em 0; line-height: 1.7; background: #fff; padding: 0.5em 1em; border-radius: 6px; border-left: 4px solid #ddd; }
+  code { background: #e8e8e8; border-radius: 3px; padding: 0.1em 0.3em; font-size: 0.9em; }
+  .nav { font-size: 0.9em; color: #888; margin-bottom: 1em; }
+  table { border-collapse: collapse; width: 100%; margin: 1em 0; font-size: 0.9em; }
+  th, td { border: 1px solid #ddd; padding: 0.5em; text-align: left; }
+  th { background: #f0f0f0; }
+  .warn { background: #fff3cd; border: 1px solid #ffc107; border-radius: 4px; padding: 0.5em 1em; margin: 0.5em 0; }
+</style>
+</head>
+<body>
+<div class="nav">
+  <a href="https://maureranton.github.io/projectforge/">← Documentation index</a> · <a href="file-index.html">← File index</a> · <a href="30.html">← Prev</a> · <a href="32.html">Next →</a>
+</div>
+<h1>File #31: <code>.github/workflows/gradle.yml</code></h1>
+<div class="meta">
+  <p><strong>Path:</strong> <code>./.github/workflows/gradle.yml</code> · <strong>Type:</strong> GitHub Actions CI workflow · <strong>Lines:</strong> 46 · <strong>Source:</strong> <a href="https://github.com/micromata/projectforge/blob/9ed5fbe0f/.github/workflows/gradle.yml">GitHub</a></p>
+</div>
+
+<h2>What it does</h2>
+<div class="commentary">
+  <p>Runs the full Gradle build (<code>./gradlew build</code>) on every push and pull request to <code>develop</code> — <strong>excluding</strong> site-only changes (which are handled by <a href="30.html">#30</a>). This is the primary CI pipeline: compiles all modules, runs tests, checks code quality. Java 17 + Eclipse Temurin + Gradle wrapper + <code>SPRING_PROFILES_ACTIVE: ci</code>.</p>
+</div>
+
+<h2>Section-by-section</h2>
+
+<h3>Lines 1–10: Triggers</h3>
+<div class="code-block"><pre>2  on:
+3    push:
+4      branches: [ develop ]
+5      paths-ignore:
+6        - 'site/**'
+7    pull_request:
+8      branches: [ develop ]
+9      paths-ignore:
+10       - 'site/**'</pre></div>
+<div class="commentary">
+  <p>Fires on both <strong>push</strong> and <strong>pull_request</strong> to develop. The <code>paths-ignore: site/**</code> is the inverse of <a href="30.html">#30's</a> filter — this prevents redundant CI runs when only the website changes (no code to build). This is important for monorepos where doc-only commits should not waste CI minutes.</p>
+</div>
+
+<h3>Lines 17–20: Checkout</h3>
+<div class="code-block"><pre>18 - name: Checkout code
+19   uses: actions/checkout@v3
+20 - uses: actions/checkout@v3                    <span style="color:#888">← DUPLICATE</span></pre></div>
+<div class="commentary">
+  <div class="warn"><strong>Duplicate checkout:</strong> Line 19 and 20 both invoke <code>actions/checkout@v3</code>. Line 18 has a <code>name</code>, line 20 doesn't — the second checkout is redundant and doubles the checkout time unnecessarily. The first checkout (line 19, with name "Checkout code") is sufficient.</div>
+</div>
+
+<h3>Lines 22–34: Java and caching</h3>
+<div class="code-block"><pre>22 - name: Set up JDK 17
+23   uses: actions/setup-java@v3
+24   with:
+25     java-version: '17'
+26     distribution: 'temurin'               <span style="color:#888">← Eclipse Temurin (formerly AdoptOpenJDK)</span>
+28 - name: Cache Gradle dependencies
+29   uses: actions/cache@v3
+30   with:
+31     path: ~/.gradle/caches
+32     key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}</pre></div>
+<div class="commentary">
+  <p><a href="https://adoptium.net/">Eclipse Temurin</a> is the reference OpenJDK distribution — matches the <code>openjdk:17-slim</code> base image in <a href="17.html">Dockerfile</a> line 1. Gradle cache keyed on <code>*.gradle*</code> + <code>gradle-wrapper.properties</code> — any dependency or plugin change invalidates the cache.</p>
+</div>
+
+<h3>Lines 39–43: Build</h3>
+<div class="code-block"><pre>39 - name: Test and build with Gradle
+40   run: ./gradlew build
+41   env:
+42     SPRING_PROFILES_ACTIVE: ci</pre></div>
+<div class="commentary">
+  <p><code>./gradlew build</code> runs the full pipeline: compile, test, check, assemble. The <code>SPRING_PROFILES_ACTIVE: ci</code> environment variable tells Spring Boot to load <code>application-ci.properties</code> — likely disables features that require external services (SMS gateway, mail server) and configures in-memory databases for testing.</p>
+</div>
+
+<h2>Comparison: push vs pull_request triggers</h2>
+<div class="commentary">
+<table>
+  <tr><th>Trigger</th><th>Context</th><th>Secret access</th><th>Purpose</th></tr>
+  <tr><td><code>push</code></td><td>Direct commit to develop</td><td>Full repo secrets</td><td>Mainline CI — build + test after merge</td></tr>
+  <tr><td><code>pull_request</code></td><td>PR from any branch → develop</td><td>Limited (no secrets from fork PRs)</td><td>Pre-merge validation — catch failures before merging</td></tr>
+</table>
+</div>
+
+<h2>Key takeaways</h2>
+<div class="commentary">
+  <ul>
+    <li><strong>46 lines, standard CI:</strong> Java 17 Temurin + Gradle wrapper + cache — textbook GitHub Actions Java CI.</li>
+    <li><strong>Site-aware filtering:</strong> <code>paths-ignore: site/**</code> prevents redundant builds on doc-only commits — complements <a href="30.html">#30</a>.</li>
+    <li><strong>Duplicate checkout:</strong> Lines 19-20 check out the repo twice — harmless but wasteful.</li>
+    <li><strong>CI Spring profile:</strong> <code>SPRING_PROFILES_ACTIVE: ci</code> isolates tests from external dependencies.</li>
+    <li><strong>No separate test step:</strong> Lines 45-46 have a commented-out <code>./gradlew test</code> — tests run as part of <code>build</code>, so the separate step is unnecessary.</li>
+  </ul>
+</div>
+
+<div class="nav" style="margin-top:2em; padding-top:1em; border-top:1px solid #ddd">
+  <a href="30.html">← #30: github-pages.yml</a> · <a href="32.html">#32 →</a>
+</div>
+</body>
+</html>

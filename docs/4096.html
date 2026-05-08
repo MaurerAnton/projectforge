@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><title>File #4096: startProjectForge.sh</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333}a{color:#0366d6}.meta{background:#f0f0f0;border-radius:6px;padding:1em;margin:1em 0;font-size:.9em}.code-block{background:#1e1e1e;color:#d4d4d4;border-radius:4px;padding:.8em 1em;margin:.5em 0;overflow-x:auto;font-family:Consolas,monospace;font-size:.82em;line-height:1.5}.commentary{margin:.8em 0;background:#fff;padding:.5em 1em;border-radius:6px;border-left:4px solid #ddd;line-height:1.7}table{border-collapse:collapse;width:100%;margin:.8em 0;font-size:.9em}th,td{border:1px solid #ddd;padding:.4em .6em}th{background:#f0f0f0}.nav{font-size:.9em;color:#888;margin-bottom:1em}.history{background:#fffbe6;border-radius:6px;padding:1em;margin:1em 0;font-size:.9em;border-left:4px solid #ffc107}.warn{background:#fff3cd;border-radius:6px;padding:1em;margin:1em 0;font-size:.9em;border-left:4px solid #ffc107}</style></head>
+<body><div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="4095.html">← Prev</a> · <a href="4097.html">Next →</a></div>
+<h1>File #4096: <code>startProjectForge.sh</code></h1>
+<div class="meta"><p><strong>Path:</strong> <code>site/uploads/startProjectForge.sh</code> · <strong>Lines:</strong> 22 · <strong>Shebang:</strong> <code>#!/bin/bash</code></p><p><strong>Purpose:</strong> Production startup script — detects Java installation across platforms (Cygwin/Linux/macOS), allocates 4GB heap, launches ProjectForge as a <code>nohup</code> background daemon with all output redirected to <code>/dev/null</code>.</p><p><strong>Source:</strong> <a href="https://github.com/micromata/projectforge/blob/develop/site/uploads/startProjectForge.sh">GitHub</a></p></div>
+<div class="history"><table><tr><th>Commit</th><th>Message</th></tr><tr><td><code>ac75fabf3</code></td><td>Github pages migrated to Asciidoc</td></tr></table></div>
+<div class="warn"><strong>Syntax error on line 3:</strong> Missing opening double-quote — <code>PF_JAR=${HOME}/application/..."</code>. The correct line should be <code>PF_JAR="${HOME}/application/projectforge-application-xxx.jar"</code>. The script as-is will fail to parse.</div>
+
+<h2>Three-tier Java detection</h2>
+<div class="code-block"><pre>if [ "${OSTYPE}" == 'cygwin' ]; then
+  JAVA=`cygpath "${JAVA_HOME}"`/jre/bin/java     # Windows via Cygwin
+else
+  if [[ -n "$JAVA_HOME" ]] && [[ -x "$JAVA_HOME/bin/java" ]]; then
+    JAVA="$JAVA_HOME/bin/java"                      # Linux/macOS with JAVA_HOME
+  else
+    JAVA=/usr/bin/java                              # Fallback: system Java
+  fi
+fi</pre></div>
+<div class="commentary"><p><strong>Tier 1 — Cygwin:</strong> Converts Windows path (<code>C:\Program Files\Java\jdk17</code>) to Unix-style (<code>/cygdrive/c/Program Files/Java/jdk17</code>) using <code>cygpath</code>.</p><p><strong>Tier 2 — JAVA_HOME:</strong> Checks that <code>$JAVA_HOME/bin/java</code> exists AND is executable (<code>-x</code>). Both conditions must pass.</p><p><strong>Tier 3 — System default:</strong> <code>/usr/bin/java</code> — works on most Linux distributions but may be an older version or a stub that redirects to <code>alternatives</code>.</p></div>
+
+<h2>The launch command — line 22</h2>
+<div class="code-block"><pre>nohup ${JAVA} -Xms4g -Xmx4g ${DEBUGOPTS} -jar $PF_JAR 2>&1 > /dev/null &</pre></div>
+<div class="commentary"><table><tr><th>Component</th><th>Effect</th></tr><tr><td><code>nohup</code></td><td>Ignores SIGHUP — process survives terminal logout</td></tr><tr><td><code>-Xms4g -Xmx4g</code></td><td>4GB heap, min=max. Avoids GC pauses from heap resizing. Appropriate for production, overkill for development.</td></tr><tr><td><code>${DEBUGOPTS}</code></td><td>Empty by default (line 20). Change to <code>-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=5005</code> for remote debugging.</td></tr><tr><td><code>2>&1 > /dev/null</code></td><td>Redirects stderr→stdout, then stdout→/dev/null. ALL console output discarded. ProjectForge logs to <code>~/ProjectForge/logs/ProjectForge.log</code> via Logback — not affected.</td></tr><tr><td><code>&</code></td><td>Background — script returns immediately, doesn't wait for startup.</td></tr></table></div>
+<h2>Key takeaways</h2><div class="commentary"><ul><li><strong>Fix the syntax error:</strong> Line 3 is missing an opening quote. The script won't execute.</li><li><strong>xxx placeholder:</strong> <code>projectforge-application-xxx.jar</code> — replace <code>xxx</code> with actual version before use.</li><li><strong>No startup check:</strong> Script doesn't verify ProjectForge actually started. Always check <code>~/ProjectForge/logs/ProjectForge.log</code> after running.</li><li><strong>Not for Docker:</strong> Docker users should use <code>docker start/stop projectforge</code> instead.</li></ul></div>
+<div class="nav" style="margin-top:2em"><a href="4095.html">← #4095</a> · <a href="4097.html">#4097 →</a></div>
+</body></html>

@@ -1,0 +1,43 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>1151</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:2em;color:#444}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}</style></head>
+<body><div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="1150.html">← Prev</a> · <a href="1152.html">Next →</a></div>
+<h1>1151: <code>UserXmlPreferencesMigrationDao.kt</code></h1>
+<div class="meta">Migration DAO, projectforge-business/src/main/kotlin/org/projectforge/business/user/UserXmlPreferencesMigrationDao.kt</div>
+<div class="c">Migrates serialized user XML preferences across version upgrades using a version-numbered migration scheme with admin-only access.</div>
+
+<h2>Architecture</h2>
+<p>This <code>@Service</code> class implements a migration engine for <code>UserXmlPreferencesDO</code> — serialized user settings (filters, personal preferences) stored as XML in the database. It follows a strategy pattern: each deployment may introduce new migration steps triggered by the oldest <code>version</code> field found among all preference records.</p>
+
+<h3>Dependency Graph</h3>
+<p><code>UserXmlPreferencesMigrationDao</code> relies on <code>AccessChecker</code> (admin gate), <code>UserGroupCache</code> (user lookups), <code>UserXmlPreferencesDao</code> (persistence), <code>UserXmlPreferencesCache</code> (cache refresh), and <code>PfPersistenceService</code> (JPQL execution). The access gate ensures only administrators can trigger migrations.</p>
+
+<h3>Migration Flow</h3>
+<ol>
+<li><code>migrateAllUserPrefs()</code> — Entry point. Checks admin membership, queries all <code>UserXmlPreferencesDO</code> ordered by user and key, finds the oldest version number.</li>
+<li><code>migrateUserPrefs(userPrefs)</code> — Per-entry migration. If the version is current, skips. Otherwise calls <code>migrate(userPrefs)</code> and then attempts deserialization (<code>userXmlPreferencesDao.deserialize</code>) as a compatibility check.</li>
+<li><code>migrate(version)</code> — Optional override point for bulk operations (e.g. deleting entries by unused keys). Currently contains a commented-out example for version &lt; 4.</li>
+<li><code>deleteOldKeys(key)</code> — Deletes all preference entries with a given key via JPQL delete.</li>
+</ol>
+
+<h3>Version Handling</h3>
+<p>The companion object's <code>migrate(userPrefs)</code> performs in-place version upgrades. Currently only one rule: versions before 4 are bumped to 4. <code>UserXmlPreferencesDO.getCurrentVersion()</code> defines the target version number. New migration rules are added as conditional branches inside this method.</p>
+
+<h2>Design Rationale</h2>
+<p>User preferences are serialized objects (XStream or Java serialization), making schema migrations impossible through SQL. The version field on each preference record enables lazy, per-entry migration at read time while this DAO provides a bulk migration option for administrators. The deserialization check after migration serves as a smoke test — if re-serialization fails after version upgrade, the entry is flagged but not deleted, preserving data for manual repair.</p>
+
+<h2>Git History</h2><div class="hist"><pre>868d6abb7 2025 -> 2026
+600951ee0 2025 -> 2026
+63081666f Source file headers: 2024-> 2025.
+199c26801 Source file headers: 2024-> 2025.
+4d58829cc UserPrefCache and UserXmlPreferencesCache refactored.
+c2ff31479 UserPrefCache and UserXmlPreferencesCache refactored.
+85b4e1175 PfPersistenceService and PfPersistenceContext: query renamed to executeQuery.
+a37e9ac82 PfPersistenceService and PfPersistenceContext: query renamed to executeQuery.
+108ecf629 !!!!! Big change of Transaction handling: Re-uses PfPersistenceContext...
+168443ea5 !!!!! Big change of Transaction handling: Re-uses PfPersistenceContext...
+5bafe7941 @Repository -> @Service. @Transactional-Annotations removed.
+a2c2dc5be @Repository -> @Service. @Transactional-Annotations removed.
+65c267d78 Migration stuff in progress...
+14f2239dd Migration stuff in progress...
+</pre></div>
+</body></html>

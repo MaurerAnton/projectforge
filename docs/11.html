@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>File #11: docker/compose/docker-compose.yml</title>
+<style>
+  body { font-family: system-ui, sans-serif; max-width: 960px; margin: 2em auto; padding: 0 1em; background: #fafafa; color: #222; line-height: 1.6; }
+  h1 { border-bottom: 2px solid #333; }
+  h2 { margin-top: 2.5em; border-bottom: 1px solid #ddd; padding-bottom: 0.2em; }
+  a { color: #0366d6; text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  .meta { background: #f0f0f0; border-radius: 6px; padding: 1em; margin: 1em 0; font-size: 0.9em; }
+  .code-block { background: #f8f8f8; border: 1px solid #ddd; border-radius: 4px; padding: 0.5em; margin: 0.5em 0; overflow-x: auto; }
+  .code-block pre { margin: 0; font-family: 'Consolas', monospace; font-size: 0.85em; line-height: 1.5; }
+  .commentary { margin: 1em 0; line-height: 1.7; background: #fff; padding: 0.5em 1em; border-radius: 6px; border-left: 4px solid #ddd; }
+  table { border-collapse: collapse; width: 100%; margin: 1em 0; font-size: 0.9em; }
+  th, td { border: 1px solid #ddd; padding: 0.5em; text-align: left; }
+  th { background: #f0f0f0; }
+  code { background: #e8e8e8; border-radius: 3px; padding: 0.1em 0.3em; font-size: 0.9em; }
+  .nav { font-size: 0.9em; color: #888; margin-bottom: 1em; }
+  .diagram { background: #f8f8f8; border: 1px solid #ddd; border-radius: 4px; padding: 0.8em; font-family: 'Consolas', monospace; font-size: 0.85em; white-space: pre; }
+</style>
+</head>
+<body>
+<div class="nav">
+  <a href="https://maureranton.github.io/projectforge/">← Documentation index</a> ·
+  <a href="file-index.html">← File index</a> ·
+  <a href="10.html">← Prev</a> · Next →
+</div>
+<h1>File #11: <code>docker/compose/docker-compose.yml</code></h1>
+<div class="meta">
+  <p><strong>Path:</strong> <code>./docker/compose/docker-compose.yml</code> · <strong>Type:</strong> <a href="https://docs.docker.com/compose/">Docker Compose</a> · <strong>Lines:</strong> 48 · <strong>Source:</strong> <a href="https://github.com/micromata/projectforge/blob/9ed5fbe0f/docker/compose/docker-compose.yml">GitHub</a></p>
+</div>
+
+<h2>What it does</h2>
+<div class="commentary">
+  <p>This file defines a <strong>production-ready Docker stack</strong> with three services: the ProjectForge application, a <a href="https://www.postgresql.org/">PostgreSQL</a> database, and an <a href="https://nginx.org/">nginx</a> reverse proxy. One command — <code>docker compose up -d</code> — launches the entire system.</p>
+  <p>The app is served from a pre-built Docker image (<code>micromata/projectforge:latest</code>), NOT built from source. The database uses a pinned version (<code>postgres:13.18</code>) for stability.</p>
+</div>
+
+<h2>Architecture</h2>
+<div class="diagram">                        Internet
+                           │
+                      ┌────▼────┐
+                      │  nginx  │  ← port 80/443, TLS termination
+                      │ (reverse│
+                      │  proxy) │
+                      └────┬────┘
+                           │
+                      ┌────▼─────────┐
+                      │ projectforge │  ← port 8080 (internal)
+                      │    -app      │     image: micromata/projectforge
+                      └────┬─────────┘
+                           │
+                      ┌────▼─────────┐
+                      │ projectforge │  ← port 5432 (internal)
+                      │    -db       │     image: postgres:13.18
+                      └──────────────┘</div>
+
+<h2>Service breakdown</h2>
+
+<h3>projectforge-app (lines 3–21)</h3>
+<div class="commentary">
+  <table>
+    <tr><td><code>image</code></td><td><code>micromata/projectforge:latest</code> — pulls from <a href="https://hub.docker.com/r/micromata/projectforge">Docker Hub</a>. Built via <a href="7.html">deployment.adoc</a> step 7.</td></tr>
+    <tr><td><code>restart: always</code></td><td>Auto-restart on crash or Docker daemon restart. Production-standard.</td></tr>
+    <tr><td><code>DOCKER_OPTS="-Ddocker=stack"</code></td><td>Java system property — tells ProjectForge it's running in Docker. Used to <strong>hide the embedded database option</strong> in the setup wizard (line 9 comment). Forces users to configure PostgreSQL.</td></tr>
+    <tr><td><code>ports</code></td><td>Maps <code>${APP_PORT}:8080</code> — default from <a href="https://docs.docker.com/compose/environment-variables/env-file/">.env file</a>. The commented line shows a secure variant (localhost-only binding).</td></tr>
+    <tr><td><code>volumes</code></td><td>Commented out — would mount <code>~/ProjectForge</code> for persistent application data (uploaded files, config, logs).</td></tr>
+    <tr><td><code>depends_on</code></td><td>Starts <code>projectforge-db</code> BEFORE the app. Note: <code>depends_on</code> only waits for container start, not database readiness — in production, the app should retry DB connections.</td></tr>
+  </table>
+</div>
+
+<h3>projectforge-db (lines 23–34)</h3>
+<div class="commentary">
+  <table>
+    <tr><td><code>image</code></td><td><code>postgres:13.18</code> — pinned to a specific PostgreSQL minor version. Critical for schema compatibility.</td></tr>
+    <tr><td><code>volumes</code></td><td><code>./ProjectForgeDB:/var/lib/postgresql/data</code> — persists DB data on the host. Without this, <code>docker compose down</code> would delete all data.</td></tr>
+    <tr><td><code>environment</code></td><td>Credentials from <code>.env</code> file via <code>${POSTGRES_USER}</code>, <code>${POSTGRES_PASSWORD}</code>, <code>${POSTGRES_DB}</code>. Never hardcoded.</td></tr>
+  </table>
+</div>
+
+<h3>nginx (lines 36–48)</h3>
+<div class="commentary">
+  <table>
+    <tr><td><code>image</code></td><td><code>nginx:latest</code> — floating tag (updates automatically on <code>docker compose pull</code>).</td></tr>
+    <tr><td><code>ports</code></td><td>80 (HTTP) and 443 (HTTPS) exposed to the world. TLS terminated at nginx, internal traffic is plain HTTP.</td></tr>
+    <tr><td><code>volumes</code></td><td>Three mounts: <code>nginx.conf</code> (proxy config), <code>certs/</code> (SSL certificates), <code>keys/</code> (private keys).</td></tr>
+  </table>
+</div>
+
+<h2>Key takeaways</h2>
+<div class="commentary">
+  <ul>
+    <li><strong>48 lines, production stack:</strong> App + PostgreSQL + nginx — the standard deployment for all but evaluation setups.</li>
+    <li><strong>Docker, not Kubernetes:</strong> Single-host deployment — no orchestration, no scaling. Suitable for SME deployments.</li>
+    <li><strong>DB version pinned:</strong> <code>postgres:13.18</code> — flying too close to <code>:latest</code> for DB is dangerous.</li>
+    <li><strong>Credentials from <code>.env</code>:</strong> Lines 32–34 — never commit passwords to the compose file.</li>
+    <li><strong>TLS at nginx:</strong> Internal traffic (app↔db, nginx↔app) is plain HTTP — TLS terminates at the edge.</li>
+  </ul>
+</div>
+
+<div class="nav" style="margin-top:2em; padding-top:1em; border-top:1px solid #ddd">
+  <a href="10.html">← #10: doc/installation.adoc</a> · Next: <a href="file-index.html">File index</a>
+</div>
+</body>
+</html>

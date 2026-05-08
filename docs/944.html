@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8"><title>#944: Kost2Dao.kt</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:2em;color:#444}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}</style></head>
+<body>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="943.html">← Prev</a> · <a href="945.html">Next →</a></div>
+<h1>#944: <code>Kost2Dao.kt</code></h1>
+<div class="meta">Type: DAO / Service · Purpose: Data access for Kost2 cost center entities · Source: projectforge-business/src/main/kotlin/org/projectforge/business/fibu/kost/Kost2Dao.kt</div>
+<div class="c">Spring <code>@Service</code> managing persistence operations for <code>Kost2DO</code> entities. Extends <code>BaseDao</code> to provide CRUD, search, and validation logic. Handles project linkage, cost type assignment, uniqueness enforcement, and post-save cache updates.</div>
+<h2>Key Methods</h2>
+<table>
+<tr><th>Method</th><th>Description</th></tr>
+<tr><td><code>setProjekt(kost2, projektId)</code></td><td>Links a Kost2 to a Projekt and copies its nummernkreis/bereich/teilbereich</td></tr>
+<tr><td><code>setKost2Art(kost2, kost2ArtId)</code></td><td>Sets the Kost2Art (cost type) on a Kost2 entry</td></tr>
+<tr><td><code>getKost2(kostString)</code></td><td>Looks up Kost2 by formatted string (e.g. "5.123.45.67")</td></tr>
+<tr><td><code>getKost2(nk, b, tb, art)</code></td><td>Looks up Kost2 by individual numeric components</td></tr>
+<tr><td><code>getActiveKost2(nk, b, tb)</code></td><td>Returns active Kost2 entries for a given 6-digit prefix</td></tr>
+<tr><td><code>getActiveKost2(projekt)</code></td><td>Convenience: active Kost2 entries for a project</td></tr>
+</table>
+<h2>Select / Filtering Architecture</h2>
+<p>The <code>select(filter)</code> override performs a two-phase query:</p>
+<ol>
+<li><strong>Database query:</strong> Uses <code>QueryFilter</code> with a join on <code>kost2Art</code>, ordered by all numeric components</li>
+<li><strong>In-memory filtering:</strong> Filters by <code>effectiveKostentraegerStatus</code> (which may inherit ENDED status from the linked project). Supports: ACTIVE, NONACTIVE, ENDED, NOT_ENDED, and ALL</li>
+</ol>
+<h2>Validation (onInsertOrModify)</h2>
+<ul>
+<li>If a <code>Projekt</code> is linked, verifies that the Kost2's nummernkreis/bereich/teilbereich match the project's ID components</li>
+<li>Nummmernkreis 4 or 5 requires a project assignment</li>
+<li>Checks for duplicate Kost2 entries (business key collision) using named queries</li>
+</ul>
+<h2>Dependencies</h2>
+<ul>
+<li><code>ProjektDao</code> — for project lookup and validation</li>
+<li><code>Kost2ArtDao</code> — for cost type assignment</li>
+<li><code>KostCache</code> — updated via <code>afterInsertOrModify</code> after every save</li>
+<li>Access right: <code>UserRightId.FIBU_COST_UNIT</code></li>
+</ul>
+<h2>Source Code (abridged)</h2>
+<pre>@Service
+open class Kost2Dao : BaseDao&lt;Kost2DO&gt;(Kost2DO::class.java) {
+    @Autowired private lateinit var projektDao: ProjektDao
+    @Autowired private lateinit var kost2ArtDao: Kost2ArtDao
+    @Autowired private lateinit var kostCache: KostCache
+
+    override fun select(filter: BaseSearchFilter): List&lt;Kost2DO&gt; {
+        val myFilter = if (filter is KostFilter) filter else KostFilter(filter)
+        val queryFilter = QueryFilter(myFilter).apply { createJoin("kost2Art") }
+        val allKost2 = select(queryFilter)
+        return when {
+            myFilter.isActive -> allKost2.filter {
+                it.effectiveKostentraegerStatus == ACTIVE || it.effectiveKostentraegerStatus == null
+            }
+            myFilter.isNonActive -> allKost2.filter { it.effectiveKostentraegerStatus == NONACTIVE }
+            myFilter.isEnded -> allKost2.filter { it.effectiveKostentraegerStatus == ENDED }
+            myFilter.isNotEnded -> allKost2.filter { it.effectiveKostentraegerStatus != ENDED }
+            else -> allKost2
+        }
+    }
+}</pre>
+<h2>Git History</h2>
+<div class="hist"><pre>868d6abb7 2025 -> 2026
+8239a53ee Kost2: Virtuelle Status-Vererbung von ProjektDO implementiert
+63081666f Source file headers: 2024-> 2025.
+770891c57 Bugfix CandH:CollectionHandler
+d394f410f Migration stuff (all tests OK).
+d67bce18b Migration stuff in progress...
+5989b32fd BaseDao: onChangeLister refactored.
+1b50060c3 BaseDao: get->find, save->insert, getList->select, load->select
+3aeda5ef5 Big change: InTrans removed, PfPersistenceContext as ThreadLocal.
+85b4e1175 PfPersistenceService: query -> executeQuery.
+b095e6f7d Big change of Transaction handling.
+4c04cfd65 MAJOR-CHANGE! Integer id's to Long id's.
+5bafe7941 @Repository -> @Service. @Transactional removed.
+f2f7cff74 Migration stuff in progress... (file created)</pre></div>
+</body>
+</html>

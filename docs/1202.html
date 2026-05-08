@@ -1,0 +1,78 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>1202</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:2em;color:#444}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}</style></head>
+<body><div class="nav"><a href="https://maureranton.github.io/projectforge/">&#8592; Index</a> &#183; <a href="file-index.html">&#8592; File index</a> &#183; <a href="1201.html">&#8592; Prev</a> &#183; <a href="1203.html">Next &#8594;</a></div>
+<h1>1202: <code>JobHandler.kt</code></h1>
+<div class="meta">Spring Service, projectforge-business/src/main/kotlin/org/projectforge/framework/jobs/JobHandler.kt</div>
+<div class="c">Central job scheduler and lifecycle manager for <code>AbstractJob</code>. Handles job registration, queue strategy evaluation, coroutine-based execution, timeout enforcement, cleanup of terminated jobs, and health-check monitoring via email alerts. Implements <code>ShutdownListener</code> to cancel running jobs gracefully on application shutdown.</div>
+
+<h2>Architecture</h2>
+<h3>Class Overview</h3>
+<ul>
+  <li><strong>@Service</strong> — Spring-managed singleton</li>
+  <li><strong>ShutdownListener</strong> — registered via <code>ShutdownService</code> in <code>@PostConstruct</code></li>
+  <li>Maintains a <code>List&lt;AbstractJob&gt;</code> as the job registry</li>
+</ul>
+
+<h3>Job Lifecycle Management</h3>
+<table>
+  <tr><th>Method</th><th>Description</th></tr>
+  <tr><td><code>addJob(job)</code></td><td>Registers job, spawns a coroutine via <code>runBlocking { launch { ... } }</code> that waits for queue clearance then calls <code>job.start()</code></td></tr>
+  <tr><td><code>tidyUp()</code></td><td>Called every minute by <code>JobHandlerScheduler</code>; cancels timed-out jobs, removes old terminated jobs</td></tr>
+  <tr><td><code>cancelJob(job)</code></td><td>Cancels job if user has write access; calls <code>job.cancel()</code></td></tr>
+  <tr><td><code>shutdown()</code></td><td>Cancels and joins all running jobs on application shutdown</td></tr>
+</table>
+
+<h3>Queue Strategy Evaluation</h3>
+<p>The <code>addJob</code> method spawns a coroutine that:</p>
+<ol>
+  <li>Iterates up to 10,000 times (paranoia counter, max 10,000 seconds wait)</li>
+  <li>Checks all existing jobs for blocking via <code>other.isBlocking(job)</code></li>
+  <li>If blocked with REFUSE strategy, marks job as REFUSED (errorCode: REFUSED_BY_ANOTHER_RUNNING_JOB)</li>
+  <li>If blocked with PER_QUEUE strategy, sets status to WAITING and delays 1000ms</li>
+  <li>If no blocks found, sets status to RUNNING and starts execution</li>
+  <li>If loop exhausts, marks job as FAILED (errorCode: TIMEOUT_WHILE_WAITING)</li>
+</ol>
+
+<h3>Health Monitoring</h3>
+<ul>
+  <li><code>checkStatus()</code> — verifies <code>tidyUp()</code> was called within last 5 minutes</li>
+  <li><code>reportErrorMail(message)</code> — sends email to support address via <code>SendMail</code> using Groovy template <code>mail/feedback.txt</code></li>
+</ul>
+
+<h3>Coroutine Context Propagation</h3>
+<p>When launching the job coroutine, the following contexts are propagated:</p>
+<ul>
+  <li><strong>userContext</strong> — <code>ThreadLocalUserContext.userContextAsContextElement</code> (preserves logged-in user)</li>
+  <li><strong>localeContext</strong> — <code>ThreadLocalUserContext.localeAsContextElement</code> (preserves locale for i18n)</li>
+  <li><strong>mdcContext</strong> — <code>MDCContext()</code> (preserves SLF4J MDC for logging)</li>
+</ul>
+
+<h3>Cleanup Constants</h3>
+<ul>
+  <li><code>KEEP_TERMINATED_JOBS_INTERVALL_MS</code> = 1 hour (<code>Constants.MILLIS_PER_HOUR</code>)</li>
+</ul>
+
+<h2>Git History</h2><div class="hist"><pre>
+868d6abb7 2025 -> 2026
+00ec94e68 New version of fr-opensagres-xdocreport-poi-xwpf-converter-pdf, DataTransferBridge, ThreadLocalUserContext for coroutines.
+63081666f Source file headers: 2024-> 2025.
+5f9fbbbd3 Fix typos in projectforge-business directory
+f8961fd66 Shutdown handling improved: ShutdownService shuts down some services before database.
+67805f2fc ThreadLocalUserContext.user -> ThreadLocalUserContext.loggedInUser
+77bade6df javax.* -> jakarta.*
+b6092df09 Copyright 2023 -> 2024
+a060d94b0 JobHandler was not scheduled. Fixed.
+bdcc7ed73 Report failure of Spring scheduler as mail (to be tested).
+ab45d51fa Copyright 2001-2022 -> 2001-2023.
+163492453 WIP: Jobs and Bank account records.
+9f6ae7a0f WIP: Jobs.
+232a91c5a BaseUserGroupRightUtils implemented. WIP BankingPlugin and jobs-handling.
+7bc51ed17 WIP: Jobs.
+38bec971a ThreadLocal -> Kotlin
+f99714d0a Wrong log import fixed.
+fcc4c67f6 WIP: Jobmonitor.
+d93f61491 WIP: Banking plugin (and new import module).
+cd69cc40f WIP: Banking plugin (and new import module).
+67eed70e4 WIP: Banking plugin (and new import module). JobHandler/monitor started.
+</pre></div>
+</body></html>

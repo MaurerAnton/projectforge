@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>#882: AbstractRechnungsStatistik.kt</title>
+<style>
+body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}
+h1{border-bottom:2px solid #333;padding-bottom:.3em}
+h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}
+h3{margin-top:2em;color:#444}
+a{color:#0366d6}
+.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}
+.nav{font-size:.9em;color:#888;margin-bottom:1em}
+.meta{font-size:.9em;margin:1em 0;color:#555}
+code{background:#f0f0f0;padding:0 .2em;font-size:.93em}
+pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}
+table{border-collapse:collapse;width:100%;margin:1em 0}
+th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}
+th{background:#f5f5f5;font-weight:600}
+.hist{font-size:.85em;color:#555}
+</style>
+</head>
+<body>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="881.html">← Prev</a> · <a href="883.html">Next →</a></div>
+
+<h1>#882: <code>AbstractRechnungsStatistik.kt</code></h1>
+
+<div class="meta">
+<p><strong>Type:</strong> Abstract generic class (<code>Serializable</code>)</p>
+<p><strong>Package:</strong> <code>org.projectforge.business.fibu</code></p>
+<p><strong>Full path:</strong> <code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/AbstractRechnungsStatistik.kt</code></p>
+</div>
+
+<div class="c">
+<p>Abstract statistics calculator for invoices. Aggregates financial metrics across a collection of invoices (outgoing or incoming): gross (<code>brutto</code>), net (<code>netto</code>), with cash discount (<code>bruttoMitSkonto</code>), paid (<code>gezahlt</code>), open (<code>offen</code>), overdue (<code>ueberfaellig</code>), and cash discount amounts (<code>skonto</code>). Also tracks payment term averages and provides Markdown-formatted output for Wicket UI display. Supports multi-currency conversion with warning tracking.</p>
+</div>
+
+<h2>Type Parameter</h2>
+<p><code>T : AbstractRechnungDO?</code> — The concrete invoice type (e.g., <code>RechnungDO</code> or <code>EingangsrechnungDO</code>).</p>
+
+<h2>Aggregated Properties</h2>
+<table>
+<tr><th>Property</th><th>Type</th><th>Description</th></tr>
+<tr><td><code>brutto</code></td><td><code>BigDecimal</code></td><td>Total gross sum across all invoices</td></tr>
+<tr><td><code>netto</code></td><td><code>BigDecimal</code></td><td>Total net sum</td></tr>
+<tr><td><code>bruttoMitSkonto</code></td><td><code>BigDecimal</code></td><td>Total gross with discount applied</td></tr>
+<tr><td><code>gezahlt</code></td><td><code>BigDecimal</code></td><td>Total amount paid</td></tr>
+<tr><td><code>offen</code></td><td><code>BigDecimal</code></td><td>Total outstanding (not yet paid)</td></tr>
+<tr><td><code>ueberfaellig</code></td><td><code>BigDecimal</code></td><td>Total overdue amount</td></tr>
+<tr><td><code>skonto</code></td><td><code>BigDecimal</code></td><td>Accepted shortfall (discounts granted by customer)</td></tr>
+<tr><td><code>counter</code></td><td><code>Int</code></td><td>Total number of invoices counted</td></tr>
+<tr><td><code>counterBezahlt</code></td><td><code>Int</code></td><td>Number of fully paid invoices</td></tr>
+</table>
+
+<h2>Core Method: <code>add(rechnung: T)</code></h2>
+<p>The primary entry point. For each invoice added:</p>
+<ol>
+<li>Retrieves cached invoice info via <code>rechnungCache.getRechnungInfo(rechnung)</code></li>
+<li>Converts all amounts to the system's configured currency using <code>currencyConversionService.convert()</code></li>
+<li>If currency conversion fails for any invoice, a warning message is accumulated in <code>currencyConversionWarnings</code> and the original (unconverted) amount is used as fallback</li>
+<li>Accumulates gross, net, gross-with-discount, and paid/open/overdue amounts</li>
+<li>Calculates cash discount (<code>skonto</code>) when paid amount is less than gross</li>
+<li>Tracks payment term averages: contractual (<code>zahlungsZielSum</code>) and actual (<code>tatsaechlichesZahlungsZiel</code>)</li>
+<li>Detects overdue invoices via <code>rechnungInfo.isUeberfaellig</code></li>
+</ol>
+
+<h2>Currency Conversion</h2>
+<p>The private <code>convertToSystemCurrency()</code> method handles multi-currency scenarios:</p>
+<ul>
+<li>Skips conversion if source and target currencies match (case-insensitive)</li>
+<li>Uses <code>useFallbackToOldestRate = true</code> for historical invoices where an exact exchange rate may not exist</li>
+<li>Builds warning messages for display in the format: <code>"invoiceRef (date): USD → EUR"</code></li>
+<li>Falls back to the original amount when conversion is unavailable</li>
+</ul>
+
+<h2>Computed Properties</h2>
+<table>
+<tr><th>Property</th><th>Type</th><th>Description</th></tr>
+<tr><td><code>zahlungszielAverage</code></td><td><code>Int</code></td><td>Average contractual payment term in days</td></tr>
+<tr><td><code>tatsaechlichesZahlungzielAverage</code></td><td><code>Int</code></td><td>Weighted average actual payment duration in days</td></tr>
+<tr><td><code>asMarkdown</code></td><td><code>String</code></td><td>Markdown table with all financial metrics, colored for open (blue) and overdue (red) amounts</td></tr>
+<tr><td><code>hasCurrencyConversionWarnings</code></td><td><code>Boolean</code></td><td>True if any currency conversion failures occurred</td></tr>
+<tr><td><code>currencyConversionWarningsList</code></td><td><code>List&lt;String&gt;</code></td><td>List of warning messages for Wicket display</td></tr>
+</ul>
+
+<h2>Companion Object Dependencies</h2>
+<p>The companion object holds <code>lateinit</code> service references that must be set externally before use:</p>
+<ul>
+<li><code>rechnungCache: RechnungCache</code> — provides <code>RechnungInfo</code> for each invoice</li>
+<li><code>currencyConversionService: CurrencyConversionService</code> — handles multi-currency amount conversion</li>
+<li><code>configurationService: ConfigurationService</code> — provides the system default currency</li>
+</ul>
+
+<h2>Git History</h2>
+<div class="hist"><pre>868d6abb7 2025 -> 2026
+472fbc977 WIP: currency conversion with Claude Code.
+8c2bf04f0 WIP: currency conversion with Claude Code.
+6be9c2b84 WIP: currency conversion with Claude Code.
+63081666f Source file headers: 2024-> 2025.
+b47c21af6 Refactored caching and calculations with invoices (not yet finished)
+ccb7ca64d Migration stuff in progress...
+b6092df09 Copyright 2023 -> 2024
+ab45d51fa Copyright 2001-2022 -> 2001-2023.
+09b3f0df7 WIP: Jobmonitor. ListStatisticsSupport -> MarkdownBuilder
+0b835b27e Support of statistics or other infos on result set on list page.
+a286007ee Mass update of creditor invoices: handling of discount implemented.
+832934b14 WIP: mass update</pre></div>
+</body>
+</html>

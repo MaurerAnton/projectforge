@@ -1,0 +1,207 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>#2888</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}.hist{font-size:.85em;color:#555}</style></head>
+<body><div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="2887.html">← Prev</a> · <a href="2889.html">Next →</a></div>
+<h1>#2888: <code>AbstractRechnungListForm.java</code></h1>
+<div class="meta">Java class, <code>projectforge-wicket/src/main/java/org/projectforge/web/fibu/AbstractRechnungListForm.java</code></div>
+<div class="c">Java Wicket form web fibu.</div>
+<h2>Git History</h2><div class="hist"><pre>868d6abb7 2025 -&gt; 2026
+8c2bf04f0 WIP: currency conversion with Claude Code.
+63081666f Source file headers: 2024-&gt; 2025.
+39417385b Migration stuff in progress...
+b6092df09 Copyright 2023 -&gt; 2024
+ab45d51fa Copyright 2001-2022 -&gt; 2001-2023.
+b1e95b955 Migration to Wicket 8 finished?
+4a6390e11 Merge branch 'develop' into feature/wicket8
+5f7ef41b8 Copyright 2021 -&gt; 2022
+ceb63e8a1 Source code header: (C) 2001-2021.
+a6a7aece4 Optimize Imports
+7c1c48782 Replacing more instance of java.sql.Date with java.time.LocalDate Replacing instances of java sql.Timestamp with java.util.Date
+7c79f1922 Copyright of source header -&gt; 2020.
+a5bbdca6a Change logger to slf4j
+38275e826 PROJECTFORGE-3404 Add filter for paymentType to invoice list form
+347abe2fc Additional radio group fix
+74133b8bb Remove backport of lambda model and replace it with wicket/LambdaModel
+dd14a205b PROJECTFORGE-3069 add UI elements and filter for filtering by period of performance in RechnungListPage
+0d9f70a71 PROJECTFORGE-3069 preparations for filtering by period of performance in RechnungListPage
+6fa1d209f PROJECTFORGE-3134 fix bug where the datepicker did not reset when the filter was reset</pre></div>
+<h2>Source</h2><pre>/////////////////////////////////////////////////////////////////////////////
+//
+// Project ProjectForge Community Edition
+//         www.projectforge.org
+//
+// Copyright (C) 2001-2026 Micromata GmbH, Germany (www.micromata.com)
+//
+// ProjectForge is dual-licensed.
+//
+// This community edition is free software; you can redistribute it and/or
+// modify it under the terms of the GNU General Public License as published
+// by the Free Software Foundation; version 3 of the License.
+//
+// This community edition is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General
+// Public License for more details.
+//
+// You should have received a copy of the GNU General Public License along
+// with this program; if not, see http://www.gnu.org/licenses/.
+//
+/////////////////////////////////////////////////////////////////////////////
+
+package org.projectforge.web.fibu;
+
+import org.apache.wicket.model.LambdaModel;
+import org.apache.wicket.model.Model;
+import org.apache.wicket.model.PropertyModel;
+import org.projectforge.business.fibu.AbstractRechnungsStatistik;
+import org.projectforge.business.fibu.RechnungFilter;
+import org.projectforge.business.utils.CurrencyFormatter;
+import org.projectforge.framework.configuration.Configuration;
+import org.projectforge.web.wicket.AbstractListForm;
+import org.projectforge.web.wicket.AbstractListPage;
+import org.projectforge.web.wicket.WebConstants;
+import org.projectforge.web.wicket.flowlayout.*;
+import org.slf4j.Logger;
+
+public abstract class AbstractRechnungListForm&lt;F extends RechnungFilter, P extends AbstractListPage&lt;?, ?, ?&gt;&gt; extends
+    AbstractListForm&lt;F, P&gt; {
+  private static final long serialVersionUID = 2678813484329104564L;
+
+  private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(AbstractRechnungListForm.class);
+
+  protected int[] years;
+
+  @Override
+  protected void init() {
+    super.init(false);
+
+    // time period for Rechnungsdatum
+    final F filter = getSearchFilter();
+    addTimePeriodPanel(&quot;fibu.rechnung.datum&quot;,
+        LambdaModel.of(filter::getFromDate, filter::setFromDate),
+        LambdaModel.of(filter::getToDate, filter::setToDate)
+    );
+
+    onBeforeAddStatistics();
+
+    addStatistics();
+  }
+
+  private void addStatistics() {
+    gridBuilder.newGridPanel();
+
+    // Show currency conversion warnings if any - use lazy evaluation
+    final FieldsetPanel warningFs = gridBuilder.newFieldset(&quot;&quot;)
+        .setLabelSide(false)
+        .suppressLabelForWarning();
+
+    warningFs.add(new org.apache.wicket.markup.html.basic.Label(warningFs.newChildId(), new Model&lt;String&gt;() {
+      @Override
+      public String getObject() {
+        try {
+          if (getStats().getHasCurrencyConversionWarnings()) {
+            StringBuilder sb = new StringBuilder();
+            sb.append(&quot;&lt;span style='color: red; font-weight: bold;'&gt;&quot;);
+            sb.append(getString(&quot;fibu.rechnung.currencyConversion.warnings.header&quot;));
+            sb.append(&quot;&lt;/span&gt;&lt;br/&gt;&quot;);
+            for (String warning : getStats().getCurrencyConversionWarningsList()) {
+              sb.append(&quot;&lt;span style='color: red;'&gt;• &quot;).append(warning).append(&quot;&lt;/span&gt;&lt;br/&gt;&quot;);
+            }
+            sb.append(&quot;&lt;br/&gt;&quot;);
+            return sb.toString();
+          }
+        } catch (Exception e) {
+          // List not yet available during init, will be shown on next render
+        }
+        return &quot;&quot;;
+      }
+    }).setEscapeModelStrings(false));
+
+    final FieldsetPanel fs = gridBuilder.newFieldset(getString(&quot;statistics&quot;)).suppressLabelForWarning();
+    fs.add(new DivTextPanel(fs.newChildId(), new Model&lt;String&gt;() {
+      @Override
+      public String getObject() {
+        return getString(&quot;fibu.common.brutto&quot;) + &quot;: &quot; + CurrencyFormatter.format(getStats().getBrutto()) + WebConstants.HTML_TEXT_DIVIDER;
+      }
+    }));
+    fs.add(new DivTextPanel(fs.newChildId(), new Model&lt;String&gt;() {
+      @Override
+      public String getObject() {
+        return getString(&quot;fibu.common.netto&quot;) + &quot;: &quot; + CurrencyFormatter.format(getStats().getNetto()) + WebConstants.HTML_TEXT_DIVIDER;
+      }
+    }));
+    fs.add(new DivTextPanel(fs.newChildId(), new Model&lt;String&gt;() {
+      @Override
+      public String getObject() {
+        return getString(&quot;fibu.rechnung.offen&quot;) + &quot;: &quot; + CurrencyFormatter.format(getStats().getOffen()) + WebConstants.HTML_TEXT_DIVIDER;
+      }
+    }, TextStyle.BLUE));
+    fs.add(new DivTextPanel(fs.newChildId(), new Model&lt;String&gt;() {
+      @Override
+      public String getObject() {
+        return getString(&quot;fibu.rechnung.filter.ueberfaellig&quot;) + &quot;: &quot; + CurrencyFormatter.format(getStats().getUeberfaellig());
+      }
+    }, TextStyle.RED));
+    fs.add(new DivTextPanel(fs.newChildId(), new Model&lt;String&gt;() {
+      @Override
+      public String getObject() {
+        return WebConstants.HTML_TEXT_DIVIDER
+            + getString(&quot;fibu.rechnung.skonto&quot;)
+            + &quot;: &quot;
+            + CurrencyFormatter.format(getStats().getSkonto())
+            + WebConstants.HTML_TEXT_DIVIDER;
+      }
+    }));
+    // fieldset.add(new HtmlCodePanel(fieldset.newChildId(), &quot;&lt;br/&gt;&quot;));
+    fs.add(new DivTextPanel(fs.newChildId(), new Model&lt;String&gt;() {
+      @Override
+      public String getObject() {
+        return getString(&quot;fibu.rechnung.zahlungsZiel&quot;)
+            + &quot;: Ø &quot;
+            + String.valueOf(getStats().getZahlungszielAverage())
+            + WebConstants.HTML_TEXT_DIVIDER;
+      }
+    }));
+    fs.add(new DivTextPanel(fs.newChildId(), new Model&lt;String&gt;() {
+      @Override
+      public String getObject() {
+        return getString(&quot;fibu.rechnung.zahlungsZiel.actual&quot;) + &quot;: Ø &quot; + String.valueOf(getStats().getTatsaechlichesZahlungzielAverage());
+      }
+    }));
+  }
+
+  protected void onBeforeAddStatistics() {
+  }
+
+  /**
+   * @see org.projectforge.web.wicket.AbstractListForm#onOptionsPanelCreate(org.projectforge.web.wicket.flowlayout.FieldsetPanel,
+   * org.projectforge.web.wicket.flowlayout.DivPanel)
+   */
+  @SuppressWarnings(&quot;serial&quot;)
+  @Override
+  protected void onOptionsPanelCreate(final FieldsetPanel optionsFieldsetPanel, final DivPanel optionsCheckBoxesPanel) {
+    final DivPanel radioGroupPanel = optionsFieldsetPanel.addNewRadioBoxButtonDiv();
+    final RadioGroupPanel&lt;String&gt; radioGroup = new RadioGroupPanel&lt;&gt;(radioGroupPanel.newChildId(), &quot;listtype&quot;,
+        new PropertyModel&lt;&gt;(getSearchFilter(), &quot;listType&quot;));
+    radioGroupPanel.add(radioGroup);
+    radioGroup.add(new Model&lt;String&gt;(&quot;all&quot;), getString(&quot;filter.all&quot;));
+    radioGroup.add(new Model&lt;String&gt;(&quot;unbezahlt&quot;), getString(&quot;fibu.rechnung.filter.unbezahlt&quot;));
+    radioGroup.add(new Model&lt;String&gt;(&quot;ueberfaellig&quot;), getString(&quot;fibu.rechnung.filter.ueberfaellig&quot;));
+
+    if (Configuration.getInstance().isCostConfigured() == true) {
+      optionsCheckBoxesPanel.add(new CheckBoxButton(optionsCheckBoxesPanel.newChildId(), new PropertyModel&lt;&gt;(getSearchFilter(),
+          &quot;showKostZuweisungStatus&quot;), getString(&quot;fibu.rechnung.showKostZuweisungstatus&quot;)));
+    }
+  }
+
+  protected abstract AbstractRechnungsStatistik&lt;?&gt; getStats();
+
+  public AbstractRechnungListForm(final P parentPage) {
+    super(parentPage);
+  }
+
+  @Override
+  protected Logger getLogger() {
+    return log;
+  }
+}</pre>
+</body></html>

@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>#887: AuftragFilter.kt</title>
+<style>
+body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}
+h1{border-bottom:2px solid #333;padding-bottom:.3em}
+h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}
+h3{margin-top:2em;color:#444}
+a{color:#0366d6}
+.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}
+.nav{font-size:.9em;color:#888;margin-bottom:1em}
+.meta{font-size:.9em;margin:1em 0;color:#555}
+code{background:#f0f0f0;padding:0 .2em;font-size:.93em}
+pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}
+table{border-collapse:collapse;width:100%;margin:1em 0}
+th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}
+th{background:#f5f5f5;font-weight:600}
+.hist{font-size:.85em;color:#555}
+</style>
+</head>
+<body>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="886.html">← Prev</a> · <a href="888.html">Next →</a></div>
+
+<h1>#887: <code>AuftragFilter.kt</code></h1>
+
+<div class="meta">
+<p><strong>Type:</strong> Search filter class</p>
+<p><strong>Package:</strong> <code>org.projectforge.business.fibu</code></p>
+<p><strong>Full path:</strong> <code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/AuftragFilter.kt</code></p>
+</div>
+
+<div class="c">
+<p>Main search filter for the order book (<em>Auftragsbuch</em>). Extends <code>BaseSearchFilter</code>, implements <code>Serializable</code> and <code>SearchFilterWithPeriodOfPerformance</code>. Supports filtering orders by user assignment, date ranges, period of performance, order status, position type (<code>AuftragsPositionsArt</code>), position payment type, invoiced status, and project membership. Used both by the backend DAO for database queries and by the frontend for programmatic result filtering via <code>match()</code>.</p>
+</div>
+
+<h2>Class Definition</h2>
+<pre>@XStreamAlias("AuftragFilter")
+class AuftragFilter @JvmOverloads constructor(filter: BaseSearchFilter? = null) : BaseSearchFilter(filter),
+    Serializable, SearchFilterWithPeriodOfPerformance</pre>
+
+<h2>Filter Properties</h2>
+<table>
+<tr><th>Property</th><th>Type</th><th>Default</th><th>Description</th></tr>
+<tr><td><code>user</code></td><td><code>PFUserDO?</code></td><td>null</td><td>Filter by assigned user (project manager, head of business, sales manager, or contact person)</td></tr>
+<tr><td><code>startDate</code></td><td><code>LocalDate?</code></td><td>null</td><td>Filter by creation date (from)</td></tr>
+<tr><td><code>endDate</code></td><td><code>LocalDate?</code></td><td>null</td><td>Filter by creation date (to)</td></tr>
+<tr><td><code>periodOfPerformanceStartDate</code></td><td><code>LocalDate?</code></td><td>null</td><td>Period of performance lower bound</td></tr>
+<tr><td><code>periodOfPerformanceEndDate</code></td><td><code>LocalDate?</code></td><td>null</td><td>Period of performance upper bound</td></tr>
+<tr><td><code>auftragsStatuses</code></td><td><code>MutableList&lt;AuftragsStatus&gt;</code></td><td>empty</td><td>Filter by order/position status values</td></tr>
+<tr><td><code>auftragsPositionsArten</code></td><td><code>ArrayList&lt;AuftragsPositionsArt&gt;</code></td><td>empty</td><td>Filter by position type categories</td></tr>
+<tr><td><code>auftragFakturiertFilterStatus</code></td><td><code>AuftragFakturiertFilterStatus?</code></td><td>ALL</td><td>Filter by invoiced status (ALL / ZU_FAKTURIEREN / FAKTURIERT / NICHT_FAKTURIERT)</td></tr>
+<tr><td><code>auftragsPositionsPaymentType</code></td><td><code>AuftragsPositionsPaymentType?</code></td><td>null</td><td>Filter by position payment type (null = all)</td></tr>
+<tr><td><code>projectList</code></td><td><code>Collection&lt;ProjektDO&gt;?</code></td><td>null</td><td>Filter by project membership</td></tr>
+</table>
+
+<h2>Match Methods (Programmatic Filtering)</h2>
+
+<h3><code>match(auftrag): Boolean</code></h3>
+<p>Checks if an order passes all active filters. Evaluates in order:</p>
+<ol>
+<li><code>matchUser</code> — user assignment</li>
+<li>Creation date range (<code>erfassungsDatum</code> against <code>startDate</code>/<code>endDate</code>)</li>
+<li>Period of performance overlap</li>
+<li><code>matchProjectList</code> — project membership</li>
+<li><code>matchAuftragsStatus</code> — status matching</li>
+<li><code>matchAuftragsPositionsArten</code> — position type matching</li>
+</ol>
+<p>Short-circuits: returns <code>false</code> immediately on the first non-matching criterion.</p>
+
+<h3><code>matchUser(auftrag): Boolean</code></h3>
+<p>Returns <code>true</code> if the filter's <code>user</code> is null, or if the user's ID matches any of: <code>projectManager.id</code>, <code>headOfBusinessManager.id</code>, <code>contactPerson.id</code>, or <code>salesManager.id</code>.</p>
+
+<h3><code>matchProjectList(auftrag): Boolean</code></h3>
+<p>Returns <code>true</code> if <code>projectList</code> is null or empty, or if the order's <code>projekt.id</code> is found in the list.</p>
+
+<h3><code>matchAuftragsStatus(auftrag): Boolean</code></h3>
+<p>Returns <code>true</code> if <code>auftragsStatuses</code> is empty, or if the order's <code>status</code> matches, or if any non-deleted position's status matches.</p>
+
+<h3><code>matchAuftragsPositionsArten(auftrag): Boolean</code></h3>
+<p>Returns <code>true</code> if <code>auftragsPositionsArten</code> is empty, or if any non-deleted position has a matching <code>art</code>.</p>
+
+<h2>Invoiced Status Filtering</h2>
+<p><code>filterFakturiert(list): List&lt;AuftragDO&gt;</code> — Filters a result list by invoiced status using <code>AuftragsCache</code>:</p>
+<table>
+<tr><th>Status</th><th>Condition</th></tr>
+<tr><td><code>ALL</code> or null</td><td>No filtering</td></tr>
+<tr><td><code>ZU_FAKTURIEREN</code></td><td><code>orderInfo.toBeInvoiced == true</code></td></tr>
+<tr><td><code>FAKTURIERT</code></td><td><code>orderInfo.isVollstaendigFakturiert == true</code></td></tr>
+<tr><td><code>NICHT_FAKTURIERT</code></td><td><code>orderInfo.notYetInvoicedSum > BigDecimal.ZERO</code></td></tr>
+</table>
+
+<h2>Reset</h2>
+<p><code>reset()</code> clears all filter fields and returns <code>this</code> for fluent chaining.</p>
+
+<h2>Git History</h2>
+<div class="hist"><pre>868d6abb7 2025 -> 2026
+26f08992e WIP: order forecast and snapshots.
+7b32b554a WIP: Forecast of orders... AuftragFilter refactored.
+63081666f Source file headers: 2024-> 2025.
+9c633d4ce AuftragDao/AuftragFilter: to-be-invoiced and fully-invoiced fixed.
+9aff90908 Migration stuff in progress...
+3f25c773a Migration stuff in progress...
+67ce75fe9 Migration stuff in progress...
+fba4da3f5 ForecastExport now usable for scripts. AuftragFilter.projectList added...
+b6092df09 Copyright 2023 -> 2024
+ab45d51fa Copyright 2001-2022 -> 2001-2023.
+9a65e1bc0 AuftragDO: statistics refactored (not yet invoiced, to be invoiced, invoiced etc.)
+013c514bd AuftragsCache for much better performance of order book's list view.
+9ec78f80a AuftragDO/AuftragFilter: ignore deleted positions and payment Schedules for orders to be invoiced.
+5f7ef41b8 Copyright 2021 -> 2022
+ceb63e8a1 Source code header: (C) 2001-2021.
+d89920003 Order book filter "to be invoiced" added.
+78b436d9e Replace instances of java.util.date and java.sql.Date with java.time.LocalDate
+7c79f1922 Copyright of source header -> 2020.
+b0a4e8463 tidy up
+9448cfc6e AuftragDao: JPA
+706ed61a0 AuftragDao -> JPA
+bf525ef55 AuftragFilter.java -> Kotlin</pre></div>
+</body>
+</html>

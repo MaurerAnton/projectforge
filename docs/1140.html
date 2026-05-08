@@ -1,0 +1,145 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>1140</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:2em;color:#444}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}</style></head>
+<body><div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="1139.html">← Prev</a> · <a href="1141.html">Next →</a></div>
+<h1>1140: <code>UserPrefCache.kt</code></h1>
+<div class="meta">Cache, projectforge-business/src/main/kotlin/org/projectforge/business/user/UserPrefCache.kt</div>
+<div class="c">Cache implementation for user preferences, extending AbstractUserPrefCache with concrete storage and retrieval logic for UserPrefEntryDO entities.</div>
+<h2>Architecture</h2>
+<h3>Cache Hierarchy</h3><p>Extends <code>AbstractUserPrefCache</code>. Uses in-memory <code>ConcurrentHashMap</code> per user for fast access. Falls back to database queries via <code>UserPrefDao</code> on cache miss.</p>
+<h3>Type Safety</h3><p>Provides generic <code>getEntry(key, type)</code> methods using Kotlin reified generics. Supports String, Integer, Boolean, and serialized object values.</p>
+<h3>Design Rationale</h3><p>Preferences are read on virtually every page load but change infrequently. The cache eliminates redundant DB reads while <code>putValue()</code> ensures write-through consistency.</p>
+<h2>Source Code</h2>
+<pre>/////////////////////////////////////////////////////////////////////////////
+//
+// Project ProjectForge Community Edition
+//         www.projectforge.org
+//
+// Copyright (C) 2001-2026 Micromata GmbH, Germany (www.micromata.com)
+//
+// ProjectForge is dual-licensed.
+//
+// This community edition is free software; you can redistribute it and/or
+// modify it under the terms of the GNU General Public License as published
+// by the Free Software Foundation; version 3 of the License.
+//
+// This community edition is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General
+// Public License for more details.
+//
+// You should have received a copy of the GNU General Public License along
+// with this program; if not, see http://www.gnu.org/licenses/.
+//
+/////////////////////////////////////////////////////////////////////////////
+
+package org.projectforge.business.user
+
+import jakarta.annotation.PostConstruct
+import mu.KotlinLogging
+import org.projectforge.ShutdownService
+import org.projectforge.framework.persistence.user.entities.UserPrefDO
+import org.springframework.beans.factory.annotation.Autowired
+import org.springframework.context.annotation.DependsOn
+import org.springframework.stereotype.Component
+
+private val log = KotlinLogging.logger {}
+
+/**
+ * A cache for UserPrefDO, if preferences are modified and accessed very often by the user&#x27;s normal work
+ * (such as current filters in Calendar and list pages etc.)
+ *
+ * @author Kai Reinhard (k.reinhard@micromata.de)
+ */
+@Component
+@DependsOn(&quot;entityManagerFactory&quot;)
+class UserPrefCache : AbstractUserPrefCache&lt;UserPrefDO&gt;(&quot;UserPrefCache&quot;, &quot;area&quot;) {
+    @Autowired
+    private lateinit var shutdownService: ShutdownService
+
+    @Autowired
+    private lateinit var userPrefDao: UserPrefDao
+
+    @PostConstruct
+    private fun postConstruct() {
+        shutdownService.registerListener(this)
+    }
+
+    override fun newEntry(): UserPrefDO {
+        return UserPrefDO()
+    }
+
+    override fun selectUserPreferencesByUserId(userId: Long): Collection&lt;UserPrefDO&gt; {
+        return userPrefDao.selectUserPrefs(userId)
+    }
+
+    override fun saveOrUpdate(userId: Long, key: UserPrefCacheDataKey, value: Any, checkAccess: Boolean) {
+        userPrefDao.insertOrUpdate(userId, key, value, checkAccess)
+    }
+
+    override fun remove(userId: Long, key: UserPrefCacheDataKey) {
+        throw UnsupportedOperationException(&quot;Not implemented yet.&quot;)
+    }
+
+    override fun deserialize(userPref: UserPrefDO): Any? {
+        return userPrefDao.deserizalizeValueObject(userPref)
+    }
+
+    override fun serialize(value: Any): String {
+        return UserPrefDao.serialize(value, compressBigContent = true)
+    }
+
+    override fun setExpireTimeInMinutes(expireTime: Long) {
+        this.expireTime = 10 * TICKS_PER_MINUTE
+    }
+
+    companion object {
+        /**
+         * If true, the preDestroy will not call sync to database. This is useful for tests, but should never be called
+         * in production mode. Otherwise, user data will be lost.
+         * This is a static variable, because the preDestroy method is called by the Spring container and the test
+         * In test cases the database connections may be closed before [preDestroy] is called.
+         * This is a workaround for this problem.
+         * This variable is also used by [UserXmlPreferencesCache].
+         */
+        @JvmStatic
+        var dontCallShutdownInTestMode = false
+    }
+}</pre>
+<h2>Git History</h2><div class="hist"><pre>868d6abb7 2025 -> 2026
+63081666f Source file headers: 2024-> 2025.
+f8961fd66 Shutdown handling of ProjectForge improved: ShutdownService will shutdown some services first before database will gone.
+011000f03 Migration stuff in progress... (all tests of all packages: OK).
+4d58829cc UserPrefCache and UserXmlPreferencesCache refactored.
+4b9ffbee2 Migration stuff in progress... (all tests of all packages: OK).
+1b50060c3 BaseDao: renamed: get -> find, save -> insert, getList -> select, load -> select
+87aaf6a5a Migration stuff in progress... BaseDao refactored (not yet finished) internal* methods renamed.
+b1a4bf2ac Migration stuff in progress... (all tests of all packages: OK).
+3aeda5ef5 Big change: all save|update|...InTrans renamed (InTrans removed). PfPesistenceContext as param not needed anymore (ThreadLocal is used instead). (all tests of all packages: OK).
+67805f2fc ThreadLocalUserContext.user -> ThreadLocalUserContext.loggedInUser (renamed for avoiding mis-understandings in code).
+1135ccbca Persistence: functions renamed: *NewTrans -> *InTrans
+b095e6f7d !!!!! Big change of Transaction handling: Re-uses PfPersistenceContext as much as possible (not yet finished). Tests doesn't yet run.
+4c04cfd65 MAJOR-CHANGE! Migration of integer id's to Long id's (including fk's etc.)
+d809ca82a Migration stuff in progress...
+31a7c1cba Migration stuff in progress...
+06828f490 Migration stuff in progress...
+77bade6df javax.* -> jakarta.*
+b6092df09 Copyright 2023 -> 2024
+ab45d51fa Copyright 2001-2022 -> 2001-2023.
+38bec971a ThreadLocal -> Kotlin
+243078633 ProjektEditPage returns now to Wicket-version if called by.
+fc0e360a8 React list: filter reset will also reset AG grid states and reloads the page.
+5f7ef41b8 Copyright 2021 -> 2022
+ceb63e8a1 Source code header: (C) 2001-2021.
+4d0748a45 UserPrefCache: synchronize. Bugfix: user prefs were lost!
+b6750dc96 Nothing real.
+fc9fb3e5a WIP: Token handling for authorization.
+7c79f1922 Copyright of source header -> 2020.
+fadbfeb2c WIP: MagicFilter, currentFilter, favorites, UserPrefCache/Dao...
+8d0def4e1 WicketSupport for Kotlin based SpringBeans improved.
+dc4db8a8e Workaround for Wicket-SpringBean issue: KotlinComponents and WicketSupport classes added as hot-fix for the de-migration phase of Wicket.
+3f7eb5ee9 UserPrefCache: class must be declared as open (Wicket tries to proxy this class).
+a7bc98bdd Json serialization: UtilDateConverter re-used for ToString, Rest and UserPrefDao. WIP: UserPrefCache...
+523ce3c90 New UserPrefCache seems to work now, ready to fly...
+31f0b32b5 WIP: UserPrefs...
+747bfa24c WIP: UserPrefCache: support of json serialízation and deserialization.</pre></div>
+</body></html>

@@ -1,0 +1,150 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>#2237</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}.hist{font-size:.85em;color:#555}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}</style></head>
+<body><div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="2236.html">← Prev</a> · <a href="2238.html">Next →</a></div>
+<h1>#2237: <code>MassUpdateContext.kt</code></h1>
+<div class="meta">Data Class, <code>projectforge-rest/src/main/kotlin/org/projectforge/rest/multiselect/MassUpdateContext.kt</code> (133 lines)</div>
+<div class="c">Source file: MassUpdateContext.kt - data class in ProjectForge REST module.</div>
+<h2>Source Code</h2><pre>/////////////////////////////////////////////////////////////////////////////
+//
+// Project ProjectForge Community Edition
+//         www.projectforge.org
+//
+// Copyright (C) 2001-2026 Micromata GmbH, Germany (www.micromata.com)
+//
+// ProjectForge is dual-licensed.
+//
+// This community edition is free software; you can redistribute it and/or
+// modify it under the terms of the GNU General Public License as published
+// by the Free Software Foundation; version 3 of the License.
+//
+// This community edition is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General
+// Public License for more details.
+//
+// You should have received a copy of the GNU General Public License along
+// with this program; if not, see http://www.gnu.org/licenses/.
+//
+/////////////////////////////////////////////////////////////////////////////
+
+package org.projectforge.rest.multiselect
+
+import com.fasterxml.jackson.annotation.JsonIgnore
+import mu.KotlinLogging
+import org.projectforge.common.i18n.UserException
+import org.projectforge.framework.i18n.translate
+import org.projectforge.framework.i18n.translateMsg
+import org.projectforge.framework.utils.NumberFormatter
+
+private val log = KotlinLogging.logger {}
+
+/**
+ * Stores also statistic data and errors during mass update run.
+ */
+abstract class MassUpdateContext&lt;T&gt;(
+  var massUpdateParams: MutableMap&lt;String, MassUpdateParameter&gt;,
+) {
+  class Error(val identifier: String, val message: String)
+
+  abstract fun getId(obj: T): Long
+
+  var modifiedCounter: Int = 0
+    private set
+  var unmodifiedCounter: Int = 0
+    private set
+  val total: Int
+    get() = modifiedCounter + unmodifiedCounter
+  val errorMessages = mutableListOf&lt;Error&gt;()
+  val errorCounter: Int
+    get() = errorMessages.size
+
+  // Synthetic fields such as taskAndKost2 for time sheets should be ignored in old/new-value modification check.
+  @JsonIgnore
+  var ignoreFieldsForModificationCheck: List&lt;String&gt;? = null
+
+  private var current: MassUpdateObject&lt;T&gt;? = null
+
+  internal val massUpdateObjects = mutableListOf&lt;MassUpdateObject&lt;T&gt;&gt;()
+
+  fun startUpdate(dbObj: T) {
+    current = object : MassUpdateObject&lt;T&gt;(dbObj, massUpdateParams, ignoreFieldsForModificationCheck) {
+      override fun getId(): Long {
+        return getId(dbObj)
+      }
+    }
+  }
+
+  /**
+   * @param identifier4Message The identifier as part of the user feedback on errors. Should display a string for the
+   * user to identifier the failed update object (e. g. invoice number or time sheet user and start-date etc.).
+   */
+  fun commitUpdate(
+    identifier4Message: String,
+    modifiedObj: T,
+    update: () -&gt; Unit
+  ) {
+    if (current == null) {
+      log.warn("Commit update without current object, please start update first by calling startUpdate.")
+    }
+    try {
+      current?.setModifiedObject(modifiedObj, identifier4Message)
+      update()
+      current?.let {
+        massUpdateObjects.add(it)
+        if (it.hasModifications()) {
+          ++modifiedCounter
+        } else {
+          ++unmodifiedCounter
+        }
+        current = null
+      } ?: {
+        ++modifiedCounter
+      }
+    } catch (ex: Exception) {
+      addError(ex, identifier4Message)
+    }
+  }
+
+  private fun addError(ex: Exception, identifier4Message: String) {
+    ++unmodifiedCounter
+    if (ex is UserException) {
+      errorMessages.add(Error(identifier = identifier4Message, message = translateMsg(ex)))
+    } else {
+      errorMessages.add(
+        Error(
+          identifier = identifier4Message,
+          message = ex.localizedMessage ?: translate("massUpdate.error.unspecifiedError")
+        )
+      )
+    }
+  }
+
+  /**
+   * Show result message after processing: {0} entries were processed: {1} modified, {2} unmodified and {3} with errors.
+   */
+  val resultMessage: String
+    get() {
+      // {0} entries were processed: {1} modified, {2} unmodified and {3} with errors.
+      return translateMsg(
+        "massUpdate.result",
+        NumberFormatter.format(total),
+        NumberFormatter.format(modifiedCounter),
+        NumberFormatter.format(unmodifiedCounter),
+        NumberFormatter.format(errorCounter),
+      )
+    }
+
+  val nothingDone: Boolean
+    get() = total == 0
+}</pre>
+<h2>Git History</h2><div class="hist"><pre>868d6abb7 2025 -&gt; 2026
+9674eeab4 Mass update improved: description of which fields were changed to excel file in user's data transfer box.
+63081666f Source file headers: 2024-&gt; 2025.
+4c04cfd65 MAJOR-CHANGE! Migration of integer id's to Long id's (including fk's etc.)
+e33c8b9c2 Migration stuff in progress...
+b6092df09 Copyright 2023 -&gt; 2024
+ab45d51fa Copyright 2001-2022 -&gt; 2001-2023.
+b8eed82e7 Massupdate: preset of append fixed, modified and unmodified counter fixed.
+6872f6d9c WIP: refactoring for mass update of address campaign.
+1ea2ca290 Mass-update: download Excel with all modifications.</pre></div>
+</body></html>

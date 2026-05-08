@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8"><title>#952: RechnungDO.kt</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:2em;color:#444}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}</style></head>
+<body>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="951.html">← Prev</a> · <a href="953.html">Next →</a></div>
+<h1>#952: <code>RechnungDO.kt</code></h1>
+<div class="meta">Type: JPA Entity (DO) · Purpose: Outgoing invoice entity (Ausgangsrechnung) · Source: projectforge-business/src/main/kotlin/org/projectforge/business/fibu/RechnungDO.kt</div>
+<div class="c">Represents an outgoing invoice issued to a customer. Extends <code>AbstractRechnungDO</code> to inherit common invoice properties (date, payment amount, etc.) and implements <code>IRechnung</code> via the abstract parent. Contains the invoice-specific fields: sequential number, customer reference, project link, status, type, and child positions.</div>
+<h2>Entity Design</h2>
+<table>
+<tr><th>Field</th><th>Type</th><th>DB Column</th><th>Description</th></tr>
+<tr><td><code>nummer</code></td><td><code>Int?</code></td><td>INT (nullable)</td><td>Sequential invoice number (null for planned/storno)</td></tr>
+<tr><td><code>kunde</code></td><td><code>KundeDO?</code></td><td>FK kunde_id</td><td>Invoice recipient customer (may differ from project customer)</td></tr>
+<tr><td><code>kundeText</code></td><td><code>String?</code></td><td>VARCHAR</td><td>Free-text customer name (legacy/adhoc customers)</td></tr>
+<tr><td><code>projekt</code></td><td><code>ProjektDO?</code></td><td>FK projekt_id</td><td>Associated project (indexed depth 2 for Hibernate Search)</td></tr>
+<tr><td><code>status</code></td><td><code>RechnungStatus?</code></td><td>VARCHAR(30)</td><td>GEPLANT, GESTELLT, BEZAHLT, STORNIERT</td></tr>
+<tr><td><code>typ</code></td><td><code>RechnungTyp?</code></td><td>VARCHAR(40)</td><td>RECHNUNG, GUTSCHRIFT, GUTSCHRIFTSANZEIGE_DURCH_KUNDEN, etc.</td></tr>
+<tr><td><code>customerref1</code></td><td><code>String?</code></td><td>VARCHAR</td><td>Customer reference field 1 (Hibernate Search indexed)</td></tr>
+<tr><td><code>attachment</code></td><td><code>String?</code></td><td>VARCHAR</td><td>Attachment information (indexed)</td></tr>
+<tr><td><code>customerAddress</code></td><td><code>String?</code></td><td>VARCHAR</td><td>Customer address text (indexed)</td></tr>
+<tr><td><code>periodOfPerformanceBegin</code></td><td><code>LocalDate?</code></td><td>DATE</td><td>Start of performance period</td></tr>
+<tr><td><code>periodOfPerformanceEnd</code></td><td><code>LocalDate?</code></td><td>DATE</td><td>End of performance period</td></tr>
+<tr><td><code>positionen</code></td><td><code>MutableList&lt;RechnungsPositionDO&gt;?</code></td><td>OneToMany</td><td>Child invoice positions (ordered by number)</td></tr>
+</table>
+<h3>Computed (Transient) Properties</h3>
+<table>
+<tr><th>Property</th><th>Type</th><th>Description</th></tr>
+<tr><td><code>kundeAsString</code></td><td><code>String</code></td><td>Formatted via <code>KundeFormatter.formatKundeAsString</code></td></tr>
+<tr><td><code>isValid</code></td><td><code>Boolean</code></td><td>Not deleted and status not GEPLANT/STORNIERT</td></tr>
+<tr><td><code>abstractPositionen</code></td><td><code>List?</code></td><td>Type-safe access for <code>AbstractRechnungDO</code></td></tr>
+</table>
+<h2>Inheritance Hierarchy</h2>
+<ul>
+<li><code>DefaultBaseDO</code> → <code>AbstractRechnungDO</code> → <code>RechnungDO</code></li>
+<li>Implements <code>Comparable&lt;RechnungDO&gt;</code> — ordered by date then number</li>
+<li><code>AbstractRechnungDO</code> provides: datum, zahlBetrag, zahlungsZielInTagen, faelligkeit, counter, currency, bemerkung, uiStatus, plus recalculate() and position management</li>
+</ul>
+<h2>Persistence Details</h2>
+<ul>
+<li>Mapped to <code>t_fibu_rechnung</code> with indexes on konto_id, kunde_id, projekt_id</li>
+<li><strong>Named queries:</strong> <code>SELECT_MIN_MAX_DATE</code> (for year range), <code>FIND_OTHER_BY_NUMMER</code> (duplicate check)</li>
+<li><code>@JsonManagedReference</code> on <code>positionen</code> — outward side of the bidir relationship</li>
+<li><code>@ListIndexBase(1)</code> — position numbering starts at 1</li>
+<li><code>FetchType.LAZY</code> on all associations for performance</li>
+<li>All Kotlin properties declared <code>open</code> for Hibernate proxy support</li>
+</ul>
+<h2>Position Management</h2>
+<p>The entity provides position list management inherited from <code>AbstractRechnungDO</code>:</p>
+<ul>
+<li><code>ensureAndGetPositionen()</code> — lazy-initializes the list if null</li>
+<li><code>addPositionWithoutCheck(position)</code> — adds and sets back-reference</li>
+<li><code>setAbstractRechnung(position)</code> — sets the parent reference (polymorphic)</li>
+</ul>
+<h2>Source Code (abridged)</h2>
+<pre>@Entity @Indexed @Table(name = "t_fibu_rechnung", ...)
+open class RechnungDO : AbstractRechnungDO(), Comparable&lt;RechnungDO&gt; {
+    open var nummer: Int? = null
+    open var kunde: KundeDO? = null
+    open var kundeText: String? = null
+    open var projekt: ProjektDO? = null
+    open var status: RechnungStatus? = null
+    open var typ: RechnungTyp? = null
+    open var customerref1: String? = null
+    open var attachment: String? = null
+    open var customerAddress: String? = null
+    open var periodOfPerformanceBegin: LocalDate? = null
+    open var periodOfPerformanceEnd: LocalDate? = null
+
+    @OneToMany(mappedBy = "rechnung", fetch = LAZY)
+    @OrderColumn(name = "number") @ListIndexBase(1)
+    override var positionen: MutableList&lt;RechnungsPositionDO&gt;? = null
+
+    override val isValid: Boolean
+        @Transient get() = !deleted
+            && status?.isIn(GEPLANT, STORNIERT) == false
+}</pre>
+<h2>Git History</h2>
+<div class="hist"><pre>868d6abb7 2025 -> 2026
+8c2bf04f0 WIP: currency conversion.
+1e0e7225b KostzuweisungsExport ignores invalid invoices/0.00 positions.
+63081666f Source file headers: 2024-> 2025.
+0237d5eba Json: IdOnlySerializer and IdsOnlySerializer.
+b47c21af6 Refactored caching and calculations with invoices.
+4c04cfd65 MAJOR-CHANGE! Integer id's to Long id's.
+07cb34acb IRechnung, IRechnungsPosition introduced.
+552603f75 Rename setter methods for Jackson conflicts.
+78b436d9e Replace java.util.Date with java.time.LocalDate.
+8675a1dbe Kotlin JPA entities declared open (lazy loading fix).
+b0a4e8463 tidy up
+483b8409d Heavy WIP: refactoring (Eingangs)Rechnung* perf killer.
+812b5b751 Heavy WIP: refactoring (Eingangs)Rechnung* perf killer.
+39cdd224c Hibernate search: DateBridge.
+985286296 hibernate 5.4.3 -> 5.4.4, ehcache introduced.
+fe5a7c982 Heavy WIP: NamedQueries everywhere.
+f2b55f6aa RechnungsPositionDO.java -> .kt
+ff0c08740 RechnungDO.java -> RechnungDO.kt</pre></div>
+</body>
+</html>

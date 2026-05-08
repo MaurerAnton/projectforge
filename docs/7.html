@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>File #7: doc/deployment.adoc</title>
+<style>
+  body { font-family: system-ui, sans-serif; max-width: 960px; margin: 2em auto; padding: 0 1em; background: #fafafa; color: #222; line-height: 1.6; }
+  h1 { border-bottom: 2px solid #333; }
+  h2 { margin-top: 2.5em; border-bottom: 1px solid #ddd; padding-bottom: 0.2em; }
+  a { color: #0366d6; text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  .meta { background: #f0f0f0; border-radius: 6px; padding: 1em; margin: 1em 0; font-size: 0.9em; }
+  .code-block { background: #f8f8f8; border: 1px solid #ddd; border-radius: 4px; padding: 0.5em; margin: 0.5em 0; overflow-x: auto; }
+  .code-block pre { margin: 0; font-family: 'Consolas', monospace; font-size: 0.85em; line-height: 1.5; }
+  .commentary { margin: 1em 0; line-height: 1.7; background: #fff; padding: 0.5em 1em; border-radius: 6px; border-left: 4px solid #ddd; }
+  table { border-collapse: collapse; width: 100%; margin: 1em 0; font-size: 0.9em; }
+  th, td { border: 1px solid #ddd; padding: 0.5em; text-align: left; }
+  th { background: #f0f0f0; }
+  td:first-child { text-align: right; white-space: nowrap; color: #888; font-weight: bold; min-width: 2em; }
+  code { background: #e8e8e8; border-radius: 3px; padding: 0.1em 0.3em; font-size: 0.9em; }
+  .nav { font-size: 0.9em; color: #888; margin-bottom: 1em; }
+  .checklist { font-size: 0.9em; }
+</style>
+</head>
+<body>
+
+<div class="nav">
+  <a href="https://maureranton.github.io/projectforge/">← Documentation index</a> ·
+  <a href="file-index.html">← File index</a> ·
+  <a href="6.html">← Prev</a> · Next →
+</div>
+
+<h1>File #7: <code>doc/deployment.adoc</code></h1>
+
+<div class="meta">
+  <p><strong>Path:</strong> <code>./doc/deployment.adoc</code></p>
+  <p><strong>Type:</strong> <a href="https://asciidoc.org/">AsciiDoc</a> documentation</p>
+  <p><strong>Lines:</strong> 47</p>
+  <p><strong>Purpose:</strong> Step-by-step release checklist — from version bump to Docker push</p>
+  <p><strong>Source:</strong> <a href="https://github.com/micromata/projectforge/blob/9ed5fbe0f/doc/deployment.adoc">GitHub</a></p>
+</div>
+
+<h2>What it does</h2>
+
+<div class="commentary">
+  <p>This is the <strong>release manager's cookbook</strong> — a 13-step checklist for publishing a new ProjectForge version. It covers the entire pipeline from version bump to SourceForge upload. Every step is a manual action (not automated in CI), meaning a human release manager executes this sequentially.</p>
+  <p>The document is written in <a href="https://asciidoc.org/">AsciiDoc</a> (<code>.adoc</code>) — a lightweight markup language similar to Markdown but more powerful for technical documentation (tables of contents, cross-references, conditional output).</p>
+</div>
+
+<h2>Step-by-step breakdown</h2>
+
+<table class="checklist">
+  <tr><td>1</td><td><strong>Update changelogs</strong></td><td>Edit <code>site/_changelogs</code> with new release notes. This is the user-facing documentation of what changed.</td></tr>
+  <tr><td>2</td><td><strong>Sort i18n + fix headers</strong></td><td>Run <code>DevelopmentMainForRelease.kt</code> — a one-shot Kotlin script that alphabetically sorts <code>I18nResources*.properties</code> files and adds/repairs GPLv3 license headers. Prevents merge conflicts from unsorted keys.</td></tr>
+  <tr><td>3</td><td><strong>Set release version</strong></td><td>Edit <a href="1.html"><code>build.gradle.kts</code></a> line 9: <code>version = "8.0"</code>. This is the single source of truth for the version string — see documentation for file #1.</td></tr>
+  <tr><td>4</td><td><strong>Build</strong></td><td><code>./gradlew clean build</code> — compiles, tests, packages. The <code>clean</code> ensures no stale artifacts from previous builds.</td></tr>
+  <tr><td>5</td><td><strong>Test</strong></td><td>Manual verification: check that all tests pass AND the application starts with both new and existing databases. This catches schema migration bugs that unit tests might miss.</td></tr>
+  <tr><td>6</td><td><strong>Upload JAR to SourceForge</strong></td><td>Copy <code>projectforge-application-*.jar</code> to <a href="https://sourceforge.net/projects/projectforge/">SourceForge</a> — the primary distribution channel. Tag as default for all platforms.</td></tr>
+  <tr><td>7a</td><td><strong>Docker: read docs</strong></td><td>Refer to <code>/docker/README.adoc</code> for Docker-specific instructions.</td></tr>
+  <tr><td>7b–e</td><td><strong>Docker: build and push</strong></td><td><code>docker buildx build --platform linux/arm64,linux/amd64</code> — multi-architecture Docker image (ARM64 for Apple Silicon/Mac, AMD64 for x86 servers). Uses <code>buildx</code> for cross-platform builds.</td></tr>
+  <tr><td>7f</td><td><strong>Docker: verify</strong></td><td>Check <a href="https://hub.docker.com/r/micromata/projectforge">Docker Hub</a> — both <code>arm64</code> and <code>amd64</code> images should be available.</td></tr>
+  <tr><td>8</td><td><strong>Git Flow: finish release</strong></td><td>Merge the release branch into <code>master</code> AND <code>develop</code>. Follows <a href="https://nvie.com/posts/a-successful-git-branching-model/">Git Flow</a> conventions.</td></tr>
+  <tr><td>9</td><td><strong>Tag</strong></td><td>Tag <code>master</code> with the version number (e.g. <code>v8.0</code>). This creates a permanent reference for reproducing builds.</td></tr>
+  <tr><td>10–11</td><td><strong>Bump to next SNAPSHOT</strong></td><td>Switch to <code>develop</code>, increment version to <code>8.0.1-SNAPSHOT</code>. This ensures new development doesn't conflict with the released version.</td></tr>
+  <tr><td>12–13</td><td><strong>Push + upload artifacts</strong></td><td>Commit everything, push to GitHub, upload JARs to GitHub Releases and SourceForge.</td></tr>
+</table>
+
+<h2>Technical details</h2>
+
+<div class="commentary">
+  <h3>Why multi-arch Docker?</h3>
+  <p>Step 7e builds for both <code>linux/arm64</code> and <code>linux/amd64</code>. Without this, Mac users (Apple Silicon) would get emulated x86 performance instead of native ARM speed. The <code>buildx</code> tool creates a <a href="https://docs.docker.com/build/building/multi-platform/">multi-platform manifest</a> — Docker Hub serves the correct architecture automatically.</p>
+
+  <h3>Why SourceForge + Docker Hub + GitHub?</h3>
+  <p>Three distribution channels for different audiences:</p>
+  <table>
+    <tr><th>Channel</th><th>Audience</th><th>Format</th></tr>
+    <tr><td><a href="https://sourceforge.net/projects/projectforge/">SourceForge</a></td><td>Traditional download users</td><td>JAR file</td></tr>
+    <tr><td><a href="https://hub.docker.com/r/micromata/projectforge">Docker Hub</a></td><td>Container users</td><td>Docker image</td></tr>
+    <tr><td><a href="https://github.com/micromata/projectforge/releases">GitHub Releases</a></td><td>Developers, CI/CD</td><td>JAR + source</td></tr>
+  </table>
+
+  <h3>Optional <code>buildx</code> setup (lines 42–46)</h3>
+  <p>The <a href="https://github.com/docker/buildx"><code>docker buildx</code></a> builder only needs to be created once. The commands at the bottom are run once per machine — they set up a buildx instance named <code>mybuilder</code> that can produce multi-architecture images.</p>
+</div>
+
+<h2>Key takeaways</h2>
+
+<div class="commentary">
+  <ul>
+    <li><strong>47 lines, one purpose:</strong> Release checklist — no automation, human-executed.</li>
+    <li><strong>Single source of truth (step 3):</strong> <a href="1.html"><code>build.gradle.kts</code></a> line 9 is the only place to change the version.</li>
+    <li><strong>Step 5 is critical:</strong> Testing with both new AND existing databases catches schema migration bugs.</li>
+    <li><strong>Multi-arch Docker (step 7e):</strong> ARM64 + AMD64 — covers both Mac and Intel servers.</li>
+    <li><strong>SNAPSHOT bump (step 11):</strong> Essential for Git Flow — prevents version conflicts between release and development.</li>
+  </ul>
+</div>
+
+<div class="nav" style="margin-top:2em; padding-top:1em; border-top:1px solid #ddd">
+  <a href="6.html">← #6: CLAUDE.md</a> ·
+  Next: <a href="file-index.html">File index</a>
+</div>
+
+</body>
+</html>

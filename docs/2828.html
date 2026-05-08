@@ -1,0 +1,216 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>#2828</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}.hist{font-size:.85em;color:#555}</style></head>
+<body><div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="2827.html">← Prev</a> · <a href="2829.html">Next →</a></div>
+<h1>#2828: <code>CalendarForm.java</code></h1>
+<div class="meta">Java class, <code>projectforge-wicket/src/main/java/org/projectforge/web/calendar/CalendarForm.java</code></div>
+<div class="c">Java Wicket form web calendar.</div>
+<h2>Git History</h2><div class="hist"><pre>868d6abb7 2025 -&gt; 2026
+63081666f Source file headers: 2024-&gt; 2025.
+4c04cfd65 MAJOR-CHANGE! Migration of integer id's to Long id's (including fk's etc.)
+d6d3d176f Migration stuff in progress...
+4efcbd0fb Migration stuff in progress...
+b6092df09 Copyright 2023 -&gt; 2024
+ab45d51fa Copyright 2001-2022 -&gt; 2001-2023.
+4548710df WIP: migration.
+4a6390e11 Merge branch 'develop' into feature/wicket8
+5f7ef41b8 Copyright 2021 -&gt; 2022
+c0f2b9de0 Tenants functionality removed everywhere (untested).
+ceb63e8a1 Source code header: (C) 2001-2021.
+a6a7aece4 Optimize Imports
+7c79f1922 Copyright of source header -&gt; 2020.
+b4d89c88c CalendarFilter moved from projectforge-wicket to projectforge-business for re-usage for React.
+6aa6a9cc3 Changed wicket and wicketstuff version to 8.0.0-M6
+9ebb88522 Initial commit</pre></div>
+<h2>Source</h2><pre>/////////////////////////////////////////////////////////////////////////////
+//
+// Project ProjectForge Community Edition
+//         www.projectforge.org
+//
+// Copyright (C) 2001-2026 Micromata GmbH, Germany (www.micromata.com)
+//
+// ProjectForge is dual-licensed.
+//
+// This community edition is free software; you can redistribute it and/or
+// modify it under the terms of the GNU General Public License as published
+// by the Free Software Foundation; version 3 of the License.
+//
+// This community edition is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General
+// Public License for more details.
+//
+// You should have received a copy of the GNU General Public License along
+// with this program; if not, see http://www.gnu.org/licenses/.
+//
+/////////////////////////////////////////////////////////////////////////////
+
+package org.projectforge.web.calendar;
+
+import org.apache.wicket.markup.html.basic.Label;
+import org.apache.wicket.markup.html.form.DropDownChoice;
+import org.apache.wicket.markup.html.form.FormComponentUpdatingBehavior;
+import org.apache.wicket.model.Model;
+import org.apache.wicket.model.PropertyModel;
+import org.apache.wicket.spring.injection.annot.SpringBean;
+import org.joda.time.DateMidnight;
+import org.projectforge.business.teamcal.filter.ICalendarFilter;
+import org.projectforge.business.user.UserDao;
+import org.projectforge.business.user.UserGroupCache;
+import org.projectforge.framework.access.AccessChecker;
+import org.projectforge.framework.persistence.user.entities.PFUserDO;
+import org.projectforge.web.WicketSupport;
+import org.projectforge.web.wicket.AbstractStandardForm;
+import org.projectforge.web.wicket.WicketUtils;
+import org.projectforge.web.wicket.bootstrap.GridBuilder;
+import org.projectforge.web.wicket.bootstrap.GridSize;
+import org.projectforge.web.wicket.components.DateTimePanel;
+import org.projectforge.web.wicket.components.JodaDatePanel;
+import org.projectforge.web.wicket.flowlayout.*;
+
+public class CalendarForm extends AbstractStandardForm&lt;ICalendarFilter, CalendarPage&gt;
+{
+  private static final long serialVersionUID = -145923669780937370L;
+
+  protected ICalendarFilter filter;
+
+  private JodaDatePanel currentDatePanel;
+
+  private Label durationLabel;
+
+  protected ButtonGroupPanel buttonGroupPanel;
+
+  protected FieldsetPanel fieldset;
+
+  protected CalendarPageSupport createCalendarPageSupport()
+  {
+    final CalendarPageSupport calendarPageSupport = new CalendarPageSupport(parentPage);
+    return calendarPageSupport;
+  }
+
+  @SuppressWarnings(&quot;serial&quot;)
+  @Override
+  protected void init()
+  {
+    super.init();
+    gridBuilder.newSplitPanel(GridSize.SPAN8);
+    fieldset = gridBuilder.newFieldset(getString(&quot;label.options&quot;));
+    final CalendarPageSupport calendarPageSupport = createCalendarPageSupport();
+    calendarPageSupport.addUserSelectPanel(fieldset, new PropertyModel&lt;PFUserDO&gt;(this, &quot;timesheetsUser&quot;), true);
+    currentDatePanel = new JodaDatePanel(fieldset.newChildId(), new PropertyModel&lt;DateMidnight&gt;(filter, &quot;startDate&quot;))
+        .setAutosubmit(true);
+    currentDatePanel.getDateField().setOutputMarkupId(true);
+    fieldset.add(currentDatePanel);
+
+    final DropDownChoice&lt;Integer&gt; firstHourDropDownChoice = new DropDownChoice&lt;Integer&gt;(fieldset.getDropDownChoiceId(),
+        new PropertyModel&lt;Integer&gt;(filter, &quot;firstHour&quot;), DateTimePanel.getHourOfDayRenderer().getValues(),
+        DateTimePanel.getHourOfDayRenderer());
+    firstHourDropDownChoice.add(new FormComponentUpdatingBehavior()); // required to reload the page on update
+    firstHourDropDownChoice.setNullValid(false);
+    firstHourDropDownChoice.setRequired(true);
+    WicketUtils.addTooltip(firstHourDropDownChoice, getString(&quot;calendar.option.firstHour.tooltip&quot;));
+    fieldset.add(firstHourDropDownChoice);
+
+    final DivPanel checkBoxPanel = fieldset.addNewCheckBoxButtonDiv();
+
+    calendarPageSupport.addOptions(checkBoxPanel, true, filter);
+    checkBoxPanel.add(new CheckBoxButton(checkBoxPanel.newChildId(), new PropertyModel&lt;Boolean&gt;(filter, &quot;slot30&quot;),
+        getString(&quot;calendar.option.slot30&quot;)).setTooltip(getString(&quot;calendar.option.slot30.tooltip&quot;)));
+
+    buttonGroupPanel = new ButtonGroupPanel(fieldset.newChildId());
+    fieldset.add(buttonGroupPanel);
+    {
+      final IconButtonPanel refreshButtonPanel = new IconButtonPanel(buttonGroupPanel.newChildId(), IconType.REFRESH,
+          getRefreshIconTooltip())
+      {
+        /**
+         * @see org.projectforge.web.wicket.flowlayout.IconButtonPanel#onSubmit()
+         */
+        @Override
+        protected void onSubmit()
+        {
+          parentPage.refresh();
+          setResponsePage(getPage().getClass(), getPage().getPageParameters());
+        }
+      };
+      buttonGroupPanel.addButton(refreshButtonPanel);
+      setDefaultButton(refreshButtonPanel.getButton());
+    }
+    gridBuilder.newSplitPanel(GridSize.SPAN4);
+    final FieldsetPanel fs = gridBuilder.newFieldset(getString(&quot;timesheet.duration&quot;)).suppressLabelForWarning();
+    final DivTextPanel durationPanel = new DivTextPanel(fs.newChildId(),
+        new Label(DivTextPanel.WICKET_ID, new Model&lt;String&gt;()
+        {
+          @Override
+          public String getObject()
+          {
+            return parentPage.calendarPanel.getTotalTimesheetDuration();
+          }
+        }));
+    durationLabel = durationPanel.getLabel4Ajax();
+    fs.add(durationPanel);
+    onAfterInit(gridBuilder);
+  }
+
+  protected String getRefreshIconTooltip()
+  {
+    return getString(&quot;refresh&quot;);
+  }
+
+  /**
+   * Hook method where child implementations could place their logic
+   *
+   * @param gridBuilder
+   */
+  protected void onAfterInit(final GridBuilder gridBuilder)
+  {
+    // by default nothing happens here
+  }
+
+  public CalendarForm(final CalendarPage parentPage)
+  {
+    super(parentPage);
+  }
+
+  public ICalendarFilter getFilter()
+  {
+    return filter;
+  }
+
+  protected void setFilter(final ICalendarFilter filter)
+  {
+    this.filter = filter;
+  }
+
+  public PFUserDO getTimesheetsUser()
+  {
+    final Long userId = getFilter().getTimesheetUserId();
+    return userId != null ? UserGroupCache.getInstance().getUser(userId) : null;
+  }
+
+  public void setTimesheetsUser(final PFUserDO user)
+  {
+    if (user == null) {
+      getFilter().setTimesheetUserId(null);
+    } else {
+      getFilter().setTimesheetUserId(user.getId());
+    }
+  }
+
+  /**
+   * @return the currentDatePanel
+   */
+  public JodaDatePanel getCurrentDatePanel()
+  {
+    return currentDatePanel;
+  }
+
+  /**
+   * @return the durationLabel
+   */
+  public Label getDurationLabel()
+  {
+    return durationLabel;
+  }
+
+}</pre>
+</body></html>

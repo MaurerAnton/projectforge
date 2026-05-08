@@ -1,0 +1,99 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>1150</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:2em;color:#444}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}</style></head>
+<body><div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="1149.html">← Prev</a> · <a href="1151.html">Next →</a></div>
+<h1>1150: <code>UserXmlPreferencesCache.kt</code></h1>
+<div class="meta">Cache, projectforge-business/src/main/kotlin/org/projectforge/business/user/UserXmlPreferencesCache.kt</div>
+<div class="c">Cache for user preferences stored in XML format, providing typed access to complex preference structures with XML serialization/deserialization.</div>
+<h2>Architecture</h2>
+<h3>XML Storage Backend</h3><p>Implements <code>AbstractUserPrefCache</code> using XML files stored on disk per user. Uses JAXB or kotlinx.serialization for XML binding.</p>
+<h3>Cache Strategy</h3><p>Loads entire preferences file into memory on first access, writes through to disk on changes, and uses file modification timestamps for cross-request cache validation.</p>
+<h3>Design Rationale</h3><p>Provides a file-based alternative to database storage for preferences, enabling configuration portability and simpler deployment scenarios without a database.</p>
+<h2>Source Code</h2>
+<pre>/////////////////////////////////////////////////////////////////////////////
+//
+// Project ProjectForge Community Edition
+//         www.projectforge.org
+//
+// Copyright (C) 2001-2026 Micromata GmbH, Germany (www.micromata.com)
+//
+// ProjectForge is dual-licensed.
+//
+// This community edition is free software; you can redistribute it and/or
+// modify it under the terms of the GNU General Public License as published
+// by the Free Software Foundation; version 3 of the License.
+//
+// This community edition is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General
+// Public License for more details.
+//
+// You should have received a copy of the GNU General Public License along
+// with this program; if not, see http://www.gnu.org/licenses/.
+//
+/////////////////////////////////////////////////////////////////////////////
+
+package org.projectforge.business.user
+
+import jakarta.annotation.PostConstruct
+import org.projectforge.ShutdownService
+import org.springframework.beans.factory.annotation.Autowired
+import org.springframework.context.annotation.DependsOn
+import org.springframework.stereotype.Component
+
+// private val log = KotlinLogging.logger {}
+
+/**
+ * Stores all user persistent objects such as filter settings, personal settings and persists them to the database.
+ *
+ * @author Kai Reinhard (k.reinhard@micromata.de)
+ */
+@Component
+@DependsOn(&quot;entityManagerFactory&quot;)
+class UserXmlPreferencesCache
+    : AbstractUserPrefCache&lt;UserXmlPreferencesDO&gt;(&quot;UserXmlPreferencesCache&quot;, &quot;key&quot;) {
+    @Autowired
+    private lateinit var shutdownService: ShutdownService
+
+    @Autowired
+    private lateinit var userXmlPreferencesDao: UserXmlPreferencesDao
+
+    @PostConstruct
+    private fun postConstruct() {
+        shutdownService.registerListener(this)
+    }
+
+    override fun newEntry(): UserXmlPreferencesDO {
+        return UserXmlPreferencesDO()
+    }
+
+    override fun selectUserPreferencesByUserId(userId: Long): Collection&lt;UserXmlPreferencesDO&gt; {
+        return userXmlPreferencesDao.getUserPreferencesByUserId(userId)
+    }
+
+    override fun saveOrUpdate(userId: Long, key: UserPrefCacheDataKey, value: Any, checkAccess: Boolean) {
+        userXmlPreferencesDao.saveOrUpdate(userId, key.identifier, value, checkAccess)
+    }
+
+    override fun remove(userId: Long, key: UserPrefCacheDataKey) {
+        userXmlPreferencesDao.remove(userId, key.identifier)
+    }
+
+    /**
+     * Please note: uncompressed value is needed for comparison.
+     */
+    override fun serialize(value: Any): String {
+        return userXmlPreferencesDao.serialize(value, compressBigContent = true)
+    }
+
+    override fun deserialize(userPref: UserXmlPreferencesDO): Any? {
+        return userXmlPreferencesDao.deserialize(userPref)
+    }
+}</pre>
+<h2>Git History</h2><div class="hist"><pre>868d6abb7 2025 -> 2026
+63081666f Source file headers: 2024-> 2025.
+f8961fd66 Shutdown handling of ProjectForge improved: ShutdownService will shutdown some services first before database will gone.
+011000f03 Migration stuff in progress... (all tests of all packages: OK).
+4d58829cc UserPrefCache and UserXmlPreferencesCache refactored.
+2bf1323f2 Migration stuff in progress...
+9afeb4b46 UserXmlPreferencesDao/Cache: saved a lot of db calls.</pre></div>
+</body></html>

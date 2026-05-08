@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>File #30: .github/workflows/github-pages.yml</title>
+<style>
+  body { font-family: system-ui, sans-serif; max-width: 960px; margin: 2em auto; padding: 0 1em; background: #fafafa; color: #222; line-height: 1.6; }
+  h1 { border-bottom: 2px solid #333; }
+  h2 { margin-top: 2.5em; border-bottom: 1px solid #ddd; padding-bottom: 0.2em; }
+  a { color: #0366d6; text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  .meta { background: #f0f0f0; border-radius: 6px; padding: 1em; margin: 1em 0; font-size: 0.9em; }
+  .code-block { background: #f8f8f8; border: 1px solid #ddd; border-radius: 4px; padding: 0.5em; margin: 0.5em 0; overflow-x: auto; }
+  .code-block pre { margin: 0; font-family: 'Consolas', monospace; font-size: 0.85em; line-height: 1.5; }
+  .commentary { margin: 1em 0; line-height: 1.7; background: #fff; padding: 0.5em 1em; border-radius: 6px; border-left: 4px solid #ddd; }
+  code { background: #e8e8e8; border-radius: 3px; padding: 0.1em 0.3em; font-size: 0.9em; }
+  .nav { font-size: 0.9em; color: #888; margin-bottom: 1em; }
+  table { border-collapse: collapse; width: 100%; margin: 1em 0; font-size: 0.9em; }
+  th, td { border: 1px solid #ddd; padding: 0.5em; text-align: left; }
+  th { background: #f0f0f0; }
+  .diagram { background: #f8f8f8; border: 1px solid #ddd; border-radius: 4px; padding: 0.8em; font-family: 'Consolas', monospace; font-size: 0.85em; white-space: pre; }
+</style>
+</head>
+<body>
+<div class="nav">
+  <a href="https://maureranton.github.io/projectforge/">← Documentation index</a> · <a href="file-index.html">← File index</a> · <a href="29.html">← Prev</a> · <a href="31.html">Next →</a>
+</div>
+<h1>File #30: <code>.github/workflows/github-pages.yml</code></h1>
+<div class="meta">
+  <p><strong>Path:</strong> <code>./.github/workflows/github-pages.yml</code> · <strong>Type:</strong> GitHub Actions workflow · <strong>Lines:</strong> 35 · <strong>Source:</strong> <a href="https://github.com/micromata/projectforge/blob/9ed5fbe0f/.github/workflows/github-pages.yml">GitHub</a></p>
+</div>
+
+<h2>What it does</h2>
+<div class="commentary">
+  <p>Deploys the <a href="https://jekyllrb.com/">Jekyll</a>-based website (<code>site/</code> directory) to <a href="https://pages.github.com/">GitHub Pages</a> on every push to <code>develop</code> that touches <code>site/**</code> files. Uses the <a href="https://github.com/helaili/jekyll-action">helaili/jekyll-action</a> third-party action to build the Jekyll site and push the output to the <code>gh-pages</code> branch.</p>
+  <div class="diagram">Push to develop (site/** changes)
+    → checkout code
+    → cache Ruby gems (vendor/bundle)
+    → jekyll-action@v2: build site/
+    → deploy to gh-pages branch
+    → projectforge.org updated</div>
+</div>
+
+<h2>Section-by-section</h2>
+
+<h3>Lines 1–8: Trigger</h3>
+<div class="code-block"><pre>1  name: GitHub Pages publication
+3  on:
+4    push:
+5      branches: [ develop ]
+6      paths:
+7        - 'site/**'
+8        - '.github/workflows/**'</pre></div>
+<div class="commentary">
+  <p>Only fires on pushes to <code>develop</code>, and only when files in <code>site/</code> or workflow files change. This avoids unnecessary builds — code-only changes (Java/Kotlin) don't trigger a site rebuild.</p>
+</div>
+
+<h3>Lines 10–22: Cache</h3>
+<div class="code-block"><pre>17 - uses: actions/cache@v3
+18   with:
+19     path: vendor/bundle
+20     key: ${{ runner.os }}-gems-${{ hashFiles('**/Gemfile') }}</pre></div>
+<div class="commentary">
+  <p>Caches Ruby gems in <code>vendor/bundle</code> keyed by the Gemfile hash — when the Gemfile doesn't change, gems are restored from cache, speeding up builds.</p>
+</div>
+
+<h3>Lines 24–35: Jekyll build and deploy</h3>
+<div class="code-block"><pre>25 - uses: helaili/jekyll-action@v2
+26   with:
+27     token: ${{ secrets.GITHUB_TOKEN }}
+28     jekyll_src: 'site'
+31 - uses: helaili/jekyll-action@v2
+32   with:
+33     token: ${{ secrets.GITHUB_TOKEN }}
+34     target_branch: 'gh-pages'
+35     jekyll_src: 'site'</pre></div>
+<div class="commentary">
+  <p>The <a href="https://github.com/helaili/jekyll-action">helaili/jekyll-action</a> builds the Jekyll site from <code>site/</code> and pushes output to the <code>gh-pages</code> branch. The <code>GITHUB_TOKEN</code> secret is auto-provided by GitHub Actions — no manual token configuration needed.</p>
+</div>
+
+<h2>Comparison with our docs deployment</h2>
+<div class="commentary">
+<table>
+  <tr><th></th><th>#30 (original projectforge.org)</th><th>Our docs (draft43npm-docs)</th></tr>
+  <tr><td>Content source</td><td><code>site/</code> (Jekyll)</td><td><code>docs/</code> (static HTML)</td></tr>
+  <tr><td>Built by</td><td>Jekyll on CI</td><td>Manually written HTML</td></tr>
+  <tr><td>Deploy target</td><td><code>gh-pages</code> branch</td><td><code>draft43npm-docs</code> branch (root <code>docs/</code>)</td></tr>
+  <tr><td>Trigger</td><td>Push to develop (site/** changes)</td><td>Manual <code>git push --force</code></td></tr>
+  <tr><td>Build tool</td><td>helaili/jekyll-action@v2</td><td>None (pre-built HTML)</td></tr>
+</table>
+</div>
+
+<h2>Key takeaways</h2>
+<div class="commentary">
+  <ul>
+    <li><strong>35 lines, CI for projectforge.org:</strong> Builds the Jekyll marketing site from <code>site/</code> and deploys to GitHub Pages.</li>
+    <li><strong>Path-filtered trigger:</strong> Only fires on <code>site/**</code> changes — no wasted builds on code commits.</li>
+    <li><strong>Third-party action:</strong> Uses <code>helaili/jekyll-action@v2</code> — not the official GitHub Pages action.</li>
+    <li><strong>Ruby gem caching:</strong> Standard CI optimization — gem installation is slow without caching.</li>
+  </ul>
+</div>
+
+<div class="nav" style="margin-top:2em; padding-top:1em; border-top:1px solid #ddd">
+  <a href="29.html">← #29: Testinstallation-deutsch.adoc</a> · <a href="31.html">#31 →</a>
+</div>
+</body>
+</html>

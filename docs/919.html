@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>#919: EmployeeDao.kt</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:2em;color:#444}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}</style>
+</head>
+<body>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="918.html">← Prev</a> · <a href="920.html">Next →</a></div>
+<h1>#919: <code>EmployeeDao.kt</code></h1>
+<div class="meta">Type: Spring Service / DAO · Purpose: Data access layer for Employee entities · Path: <code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/EmployeeDao.kt</code></div>
+<div class="c">Extends <code>BaseDao&lt;EmployeeDO&gt;</code> providing all standard CRUD operations plus employee-specific queries (by user, by name, by staff number, active status filtering). Manages the relationship between <code>EmployeeDO</code> and <code>PFUserDO</code> / <code>Kost1DO</code>. Auto-populates time-dependent attributes via <code>EmployeeCache</code>. User right: <code>HR_EMPLOYEE</code>.</div>
+
+<h2>Architecture &amp; Design</h2>
+
+<h3>Dependencies</h3>
+<table>
+<tr><th>Dependency</th><th>Role</th></tr>
+<tr><td><code>Kost1Dao</code></td><td>Resolves cost center (<code>Kost1DO</code>) when setting <code>kost1</code> on an employee.</td></tr>
+<tr><td><code>UserDao</code></td><td>Resolves <code>PFUserDO</code> for the <code>setUser()</code> method.</td></tr>
+<tr><td><code>EmployeeCache</code></td><td>Populates time-dependent fields (<code>status</code>, <code>annualLeave</code>, <code>weeklyWorkingHours</code>) on fetched entities.</td></tr>
+<tr><td><code>EmployeeService</code></td><td>Injected by <code>EmployeeService.postConstruct()</code> to avoid circular dependency. Used for <code>getEmployeeStatus()</code> and <code>isEmployeeActive()</code> checks.</td></tr>
+</table>
+
+<h3>Query Methods</h3>
+<ul>
+<li><strong><code>findByUserId(userId)</code></strong> — Uses named query <code>EmployeeDO.FIND_BY_USER_ID</code>. Auto-sets time-dependent attrs.</li>
+<li><strong><code>findEmployeeIdByUserId(userId)</code></strong> — Uses named query <code>EmployeeDO.GET_EMPLOYEE_ID_BY_USER_ID</code>. Returns only the PK for efficiency.</li>
+<li><strong><code>findByName(fullname)</code></strong> — Parses "lastname, firstname" format. Uses <code>FIND_BY_LASTNAME_AND_FIRST_NAME</code> named query. Validates exactly 2 tokens.</li>
+<li><strong><code>findByStaffnumber(staffnumber)</code></strong> — Uses a dynamic JPQL query with <code>NoResultException</code> handling (returns null).</li>
+<li><strong><code>selectWithActiveStatus(filter, checkAccess, showOnlyActive, showRecentlyLeavers)</code></strong> — Core filtering method: first fetches all matching employees, then post-filters using <code>EmployeeService.isEmployeeActive()</code>. Supports recently-left-employees mode (within 3 months).</li>
+</ul>
+
+<h3>Select Override</h3>
+<p><code>select(filter)</code> wraps any <code>BaseSearchFilter</code> in <code>EmployeeFilter</code> if needed, then optionally post-filters by <code>active</code> flag and always calls <code>employeeCache.setTimeDependentAttrs()</code>.</p>
+
+<h3>History Integration</h3>
+<p><code>addOwnHistoryEntries()</code> extends the employee's history by loading and merging all <code>EmployeeValidSinceAttrDO</code> history entries — this ensures changes to time-dependent attributes (annual leave, weekly hours, status) appear in the employee's combined history timeline.</p>
+
+<h3>Autocompletion</h3>
+<p>Only <code>abteilung</code> and <code>position</code> properties are enabled for autocompletion via <code>ENABLED_AUTOCOMPLETION_PROPERTIES</code>.</p>
+
+<h3>Additional Search Fields</h3>
+<p>Extends full-text search to include nested user fields (<code>user.firstname</code>, <code>user.lastname</code>, <code>user.username</code>, <code>user.description</code>, <code>user.organization</code>) and Kost1 fields (<code>kost1.nummer</code>, <code>kost1.name</code>).</p>
+
+<h3>Sort Properties</h3>
+<p>Default sort: <code>user.firstname ASC, user.lastname ASC</code>.</p>
+
+<h2>Git History</h2>
+<div class="hist"><pre>868d6abb7 2025 -> 2026
+28efde264 Employee: weeklyWorkingHours now as time-dependent attr. eintritt/austritt: timestamp -> date
+63081666f Source file headers: 2024-> 2025.
+ffb18cf8f Migration stuff in progress...
+1012e347a Migration stuff in progress... (all tests of all packages: OK).
+...</pre></div>
+</body>
+</html>

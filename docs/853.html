@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>#853: CalendarFilter.kt — ProjectForge Docs</title>
+<style>
+body { font-family: system-ui, sans-serif; max-width: 960px; margin: 2em auto; padding: 0 1em; background: #fafafa; color: #222; line-height: 1.6; }
+h1 { border-bottom: 2px solid #333; padding-bottom: 0.3em; }
+h2 { margin-top: 2.5em; border-bottom: 1px solid #ddd; padding-bottom: 0.2em; color: #333; }
+h3 { margin-top: 2em; color: #444; }
+a { color: #0366d6; }
+.c { border-left: 3px solid #ddd; padding: .5em 1em; margin: 1em 0; background: #fff; }
+.nav { font-size: .9em; color: #888; margin-bottom: 1em; }
+.meta { font-size: .9em; margin: 1em 0; color: #555; }
+code { background: #f0f0f0; padding: 0 .2em; font-size: .93em; }
+pre { background: #f5f5f5; padding: .8em 1em; border: 1px solid #ddd; border-radius: 4px; overflow-x: auto; font-size: .88em; line-height: 1.4; }
+table { border-collapse: collapse; width: 100%; margin: 1em 0; }
+th, td { border: 1px solid #ddd; padding: .5em .8em; text-align: left; font-size: .9em; }
+th { background: #f5f5f5; font-weight: 600; }
+.hist { font-size: .85em; color: #555; }
+</style>
+</head>
+<body>
+
+<p class="nav">
+<a href="https://maureranton.github.io/projectforge/">← Index</a> ·
+<a href="file-index.html">← File index</a> ·
+<a href="852.html">← Prev</a> ·
+<a href="854.html">Next →</a>
+</p>
+
+<h1>#853: <code>CalendarFilter.kt</code></h1>
+
+<div class="meta">
+<strong>Type:</strong> Kotlin class (data model)<br>
+<strong>Purpose:</strong> Persistable user calendar filter with visibility, timesheet, and vacation settings<br>
+<strong>Source path:</strong> <code>projectforge-business/src/main/kotlin/org/projectforge/business/calendar/CalendarFilter.kt</code><br>
+<strong>Extends:</strong> <code>AbstractFavorite</code> (which provides <code>name: String?</code> and <code>id: Long?</code>)
+</div>
+
+<div class="c">
+<p>
+<code>CalendarFilter</code> is the core user-facing configuration object for the ProjectForge calendar. It extends the favorite system, allowing users to create named filter profiles, switch between them, and persist their preferences. Each filter controls which calendars are displayed, which are hidden, what default calendar new entries are assigned to, timesheet visibility (for a specific user), vacation entries (by group or user), break highlighting, and display parameters such as grid size and the first visible hour of the day. The class also includes deep-copy, serialization clean-up, and legacy migration support (from the old Wicket-based calendar of ProjectForge v6).
+</p>
+</div>
+
+<h2>Constructor Parameters</h2>
+
+<table>
+<tr><th>Parameter</th><th>Type</th><th>Default</th><th>Description</th></tr>
+<tr>
+  <td><code>name</code></td>
+  <td><code>String?</code></td>
+  <td><code>null</code></td>
+  <td>Human-readable name of the filter (inherited from <code>AbstractFavorite</code>).</td>
+</tr>
+<tr>
+  <td><code>id</code></td>
+  <td><code>Long?</code></td>
+  <td><code>null</code></td>
+  <td>Database ID of the filter (inherited from <code>AbstractFavorite</code>).</td>
+</tr>
+<tr>
+  <td><code>defaultCalendarId</code></td>
+  <td><code>Long?</code></td>
+  <td><code>null</code></td>
+  <td>New calendar entries will be assumed to belong to this calendar. If null, the timesheet creation page is instantiated instead.</td>
+</tr>
+<tr>
+  <td><code>gridSize</code></td>
+  <td><code>Int</code></td>
+  <td><code>15</code></td>
+  <td>Grid step size in minutes. Must evenly divide 60.</td>
+</tr>
+<tr>
+  <td><code>firstHour</code></td>
+  <td><code>Int</code></td>
+  <td><code>8</code></td>
+  <td>First hour of the day shown in week and day time grids (e.g., 8 for 08:00).</td>
+</tr>
+<tr>
+  <td><code>otherTimesheetUsersEnabled</code></td>
+  <td><code>Boolean</code></td>
+  <td><code>false</code></td>
+  <td>Whether timesheets of other users can be shown.</td>
+</tr>
+<tr>
+  <td><code>timesheetUserId</code></td>
+  <td><code>Long?</code></td>
+  <td><code>null</code></td>
+  <td>If set, display time sheets only for this user. If null, no timesheets are shown.</td>
+</tr>
+<tr>
+  <td><code>vacationGroupIds</code></td>
+  <td><code>Set&lt;Long?&gt;?</code></td>
+  <td><code>null</code></td>
+  <td>Vacations of employees in these groups will be displayed.</td>
+</tr>
+<tr>
+  <td><code>vacationUserIds</code></td>
+  <td><code>Set&lt;Long?&gt;?</code></td>
+  <td><code>null</code></td>
+  <td>Vacations of these specific employees (by user ID) will be displayed.</td>
+</tr>
+<tr>
+  <td><code>showBreaks</code></td>
+  <td><code>Boolean?</code></td>
+  <td><code>null</code></td>
+  <td>If true, gaps between time sheets within a day are highlighted, and clicking a gap allows creating a new time sheet in that window.</td>
+</tr>
+<tr>
+  <td><code>showPlanning</code></td>
+  <td><code>Boolean?</code></td>
+  <td><code>null</code></td>
+  <td>Not yet supported. Reserved for future planning features.</td>
+</tr>
+</table>
+
+<h2>Key Properties</h2>
+
+<h3><code>calendarIds: MutableSet&lt;Long?&gt;</code></h3>
+<p>All calendar IDs managed by this filter (both visible and hidden). This is the master set of calendars the filter knows about.</p>
+
+<h3><code>invisibleCalendars: MutableSet&lt;Long?&gt;</code></h3>
+<p>Subset of <code>calendarIds</code> that are currently hidden. Calendars in <code>calendarIds</code> but not in this set are visible.</p>
+
+<h2>Public Methods</h2>
+
+<h3><code>copyFrom(src: CalendarFilter): CalendarFilter</code></h3>
+<p>Performs a deep copy of all fields from <code>src</code> into <code>this</code>, including copying all collection contents. Returns <code>this</code> for fluent chaining. The <code>calendarIds</code> and <code>invisibleCalendars</code> sets are re-allocated and populated with the source values.</p>
+
+<h3><code>addCalendarId(calendarId: Long)</code></h3>
+<p>Adds a calendar to the filter and ensures it is visible (removes it from <code>invisibleCalendars</code> if present).</p>
+
+<h3><code>removeCalendarId(calendarId: Long)</code></h3>
+<p>Removes a calendar from both <code>calendarIds</code> and <code>invisibleCalendars</code>.</p>
+
+<h3><code>setVisibility(calendarId: Long?, visible: Boolean)</code></h3>
+<p>Toggles visibility for a given calendar. If <code>calendarId</code> is null (possible during deserialization), the call is silently ignored. Calls <code>tidyUp()</code> after mutation.</p>
+
+<h3><code>isInvisible(calendarId: Long?): Boolean</code></h3>
+<p>Returns <code>true</code> if the calendar is either <code>null</code> or present in <code>invisibleCalendars</code>.</p>
+
+<h3><code>tidyUp()</code></h3>
+<p>Removes entries from <code>invisibleCalendars</code> that are not present in the main <code>calendarIds</code> set. Keeps the two sets in sync.</p>
+
+<h3><code>afterDeserialization()</code></h3>
+<p>Post-deserialization clean-up. Handles the case where <code>calendarIds</code> or <code>invisibleCalendars</code> might be null after deserialization, and strips any spurious <code>null</code> values from the sets. Calls <code>tidyUp()</code> at the end.</p>
+
+<h3><code>isModified(other: CalendarFilter): Boolean</code></h3>
+<p>Compares all fields (name, id, defaultCalendarId, timesheetUserId, gridSize, firstHour, showBreaks, showPlanning, plus all collection contents) against another filter to determine if any value differs. Uses a helper <code>isModified(col1, col2)</code> for collection comparison (checking mutual containment of non-null values).</p>
+
+<h2>Private Helpers</h2>
+
+<h3><code>copySet(srcSet: Set&lt;Long?&gt;?): Set&lt;Long&gt;?</code></h3>
+<p>Copies a nullable set, filtering out null entries. Returns null if the source is null.</p>
+
+<h3><code>isModified(col1, col2)</code></h3>
+<p>Compares two nullable collections by checking that each non-null element of col1 exists in col2 and vice versa.</p>
+
+<h2>Companion Object — Legacy Support</h2>
+
+<h3><code>copyFrom(templateEntry: TemplateEntry?): CalendarFilter</code></h3>
+<p>Factory method that converts a legacy <code>TemplateEntry</code> (from the old Wicket calendar system, ProjectForge ≤v6) into a new <code>CalendarFilter</code>. Maps properties including calendar IDs, visibility settings, timesheet settings, and break/planning flags. If the old template had <code>showTimesheets</code> enabled, the timesheet user is set to the currently logged-in user.</p>
+
+<h2 class="hist">Git History</h2>
+<div class="hist">
+<ul>
+<li><strong>868d6abb7</strong> 2025 → 2026</li>
+<li><strong>63081666f</strong> Source file headers: 2024→ 2025.</li>
+<li><strong>67805f2fc</strong> UserContext.user → loggedInUser (rename for clarity)</li>
+<li><strong>4c04cfd65</strong> MAJOR: Migration of integer IDs to Long IDs</li>
+<li><strong>b6092df09</strong> Copyright 2023 → 2024</li>
+<li><strong>ab45d51fa</strong> Copyright 2001-2022 → 2001-2023</li>
+<li><strong>38bec971a</strong> ThreadLocal → Kotlin</li>
+<li><strong>59c37d132</strong> Fix visible calendars on slow connections</li>
+<li><strong>893e60ff7</strong> Timesheet breaks implemented</li>
+<li><strong>407b4c9c9</strong> First hour of day configurable; tooltips</li>
+<li><strong>06a8f9eaa</strong> More features: refresh, link to calendar list, tooltips</li>
+<li><strong>0dceea14d</strong> NPE fix: null calendar IDs due to (de)serialization</li>
+<li><strong>5f7ef41b8</strong> Copyright 2021 → 2022</li>
+<li><strong>ceb63e8a1</strong> Copyright 2001-2021</li>
+<li><strong>7c79f1922</strong> Copyright → 2020</li>
+<li><strong>d3a178833</strong> Reverted wrong "calendar" → "datetime" refactoring</li>
+<li><strong>21d25e87e</strong> Vacation calendar works for groups and users</li>
+<li><strong>f180ee2b4</strong> WIP: VacationCache and VacationProvider</li>
+<li><strong>4a5111739</strong> Default grid size 15 (was 30)</li>
+<li><strong>009e83aaa</strong> Grid size 15 → 30 minutes</li>
+<li><strong>a08cb441c</strong> Grid size customizable</li>
+<li><strong>5dc55cb4a</strong> Timesheet user selection (role-dependent)</li>
+<li><strong>3e5dc3d34</strong> WIP: CalendarFavorites</li>
+<li><strong>88b028834</strong> Show sync icon only if favorite is modified</li>
+<li><strong>f2b2d5e8b</strong> WIP CalendarFilter</li>
+<li><strong>73398dec9</strong> WIP: CalendarFilter</li>
+<li><strong>159f9409b</strong> Remove null values from sets after deserialization</li>
+<li><strong>05244ff19</strong> Kotlin file header created/updated</li>
+<li><strong>46f71e71a</strong> Moved to business module</li>
+<li><strong>bd3a3e824</strong> Module rename: jax-rs → rest</li>
+<li><strong>4da4886be</strong> Visibility of active calendar IDs</li>
+<li><strong>6da83b5c3</strong> WIP: CalendarFilter</li>
+<li><strong>d0665668c</strong> Persistence of activeCalendarIds</li>
+<li><strong>d27ecfa74</strong> WIP: CalendarFilter</li>
+<li><strong>7b2661bfc</strong> Calendars and colors</li>
+<li><strong>62b30ad90</strong> WIP: React calendar</li>
+<li><strong>8caaa35a0</strong> WIP: New React calendar</li>
+</ul>
+</div>
+
+<h2>Design Rationale</h2>
+<p>
+<code>CalendarFilter</code> is a data-rich model class rather than a traditional DTO. It carries business logic for maintaining consistency between its two related sets (<code>calendarIds</code> and <code>invisibleCalendars</code>) through methods like <code>tidyUp()</code> and <code>afterDeserialization()</code>. The <code>@Suppress("SENSELESS_COMPARISON")</code> annotations acknowledge that nullable <code>Long?</code> values in the sets are technically possible after XML/JSON deserialization, and the class defensively cleans them up. By extending <code>AbstractFavorite</code>, it inherits the named-favorites infrastructure (name + id), allowing users to create, name, and switch between multiple filter configurations — a key UX feature of the calendar. The deep-copy via <code>copyFrom()</code> (rather than a <code>clone()</code> override or data class) gives callers explicit control over when copies occur, avoiding unintended shared mutable state. The legacy <code>copyFrom(TemplateEntry)</code> in the companion object encapsulates all migration logic from the old Wicket calendar, keeping the main class clean while preserving backward compatibility for existing user preferences.
+</p>
+
+</body>
+</html>

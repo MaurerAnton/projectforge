@@ -1,0 +1,79 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>1262</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:2em;color:#444}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}</style></head>
+<body><div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="1261.html">← Prev</a> · <a href="1263.html">Next →</a></div>
+<h1>1262: <code>HistoryService.kt</code></h1>
+<div class="meta">Core Service, projectforge-business/.../persistence/history/HistoryService.kt</div>
+<div class="c">Primary facade for loading, merging, saving, and deleting history entries including attribute-level change tracking. Also handles access-checked entity resolution and user-comment appending.</div>
+
+<h2>Architecture &amp; Role</h2>
+<p><code>HistoryService</code> is a singleton <code>@Service</code> that ties together the low-level data access (<code>HistoryEntryDO</code>/<code>HistoryEntryAttrDO</code>) with the display-layer converters. It manages the full lifecycle: creation of history entries via <code>BaseDao</code> adapters, loading with embedded-object recursion, user-comment appending, and forced deletion.</p>
+
+<h3>Key Methods</h3>
+<table>
+<tr><th>Method</th><th>Description</th></tr>
+<tr><td><code>mergeHistoryEntries(loadContext, entries)</code></td><td>Merges entries into the load context, deduplicating by ID.</td></tr>
+<tr><td><code>findEntryAndEntityById(id, checkAccess?)</code></td><td>Loads a history entry + its target entity, checking select+update access. Returns <code>EntryInfo</code> with entity class, DAO, and access flags.</td></tr>
+<tr><td><code>appendUserComment(id, comment, checkAccess?)</code></td><td>Appends a timestamped user comment to a history entry. Prefixes with ISO datetime and username if the commenter differs from the original modifier.</td></tr>
+<tr><td><code>loadHistory(baseDO, baseDao?)</code></td><td>Entry point for loading all history for a given entity. Creates a fresh <code>HistoryLoadContext</code> and invokes the recursive loader.</td></tr>
+<tr><td><code>loadAndMergeHistory(entityClass, entityIds, loadContext)</code></td><td>Recursively loads history for a set of entity IDs, following <code>@OneToMany</code> relationships to load history of embedded/child entities. Uses reflection to read actual child collections from loaded entities.</td></tr>
+<tr><td><code>insertUpdateHistoryEntry(entity, property, class, oldVal, newVal)</code></td><td>Creates a single-attribute change entry via <code>HistoryBaseDaoAdapter</code>. Checks demo/restricted user before writing.</td></tr>
+<tr><td><code>forceDeletion(historyEntry)</code></td><td>Hard-deletes a history entry and all its attributes (for GDPR-style entity purge).</td></tr>
+<tr><td><code>save(em/historyEntry, attrs?)</code></td><td>Persists a new history entry with optional attributes, setting <code>modifiedBy</code> and <code>modifiedAt</code>.</td></tr>
+</table>
+
+<h3>Embedded Object Resolution</h3>
+<p>The private <code>processAndMergeHistory()</code> method scans history entry attributes for <code>@OneToMany</code> property names, extracts entity IDs from both <code>value</code> (added) and <code>oldValue</code> (removed) fields, and recursively loads history for those embedded entities. It also uses reflection on the actual loaded parent entities to find currently-assigned children that may not appear in history diffs.</p>
+
+<h3>Inner Class: EntryInfo</h3>
+<p>Return type for <code>findEntryAndEntityById()</code>. Packs the raw <code>HistoryEntryDO</code>, the resolved entity class, its <code>BaseDao</code>, the loaded entity instance, and read/write access booleans.</p>
+
+<h2>Git History</h2><div class="hist"><pre>868d6abb7 2025 -> 2026
+3808112aa t_pf_history.user_comment varchar(2000) -> varchar(10000), appendUserComment adds timestamp.
+749bdd1cd HistoryEntry: user able to append user comments to history entries.
+398ac8947 History comments: editing prepared.
+b7861b2ff Addresses: forced deletion fixed (after mgc migration).
+63081666f Source file headers: 2024-> 2025.
+d9d0cc1bf WIP: orderbook storage.
+bbc198d03 Migration stuff in progress... (all tests OK).
+9e3c523c7 Migration stuff in progress... (all tests OK).
+55972f36a Migration stuff in progress...
+f189d3418 Migration stuff in progress... (all tests OK).
+d18c899b5 Refactoring of history entries.
+b79a1edca Migration stuff in progress... (all tests OK).
+e3fe7c42b Migration stuff in progress... (all tests OK).
+5989b32fd BaseDao: onChangeListener mechanism refactored.
+87aaf6a5a BaseDao refactored, internal* methods renamed.
+e4f9ca1be Migration stuff in progress...
+67805f2fc ThreadLocalUserContext.user -> loggedInUser (renamed).
+cb03dc74f Migration stuff in progress... (all tests OK).
+68be78d38 Migration stuff in progress... (all tests OK).
+85b4e1175 PfPersistenceService: query renamed to executeQuery.
+b095e6f7d Big change of Transaction handling: PfPersistenceContext.
+95afd297d Migration stuff in progress...
+eaa4d9d3a HistoryService -> HistoryFormatService
+57f08f175 HistoryService supports registered adapters (User adapter).
+f3ed38265 HistoryService (displaying entries) improved.
+5f7ef41b8 Copyright 2021 -> 2022
+c0f2b9de0 Tenants functionality removed everywhere.
+ceb63e8a1 Source code header: (C) 2001-2021.
+8b60b4c0a wip: attachments
+365059990 HistoryService and I18nEnum: fix for unknown enum values.
+7c79f1922 Copyright of source header -> 2020.
+8d164f4ad AbstractRest, AbstractDORest, AbstractDTORest refactored.
+f1e8cca68 HistoryService supports insert operations.
+05244ff19 CopyRight headers created.
+bd3a3e824 Module projectforge-jax-rs renamed to projectforge-rest.
+0475167da PFUserDO: Code review.
+b4f102fe5 Time ago (human readable) for history entries.
+2b7abdf0e Typo: modfied -> modified.
+8116fa842 Json serialization: camel case.
+b0fd52b9f menu moved from jax-rs to business.
+895414c05 Kotlin: refactored lateinit.
+be8f793fc Auto-layout: refactoring.
+91accbd15 Auto-layout: refactoring.
+298e24d04 Translation of operation type.
+7b4263462 Bugfix in auto translation of property names.
+57009fbe8 Auto translation of I18nEnum values in history entries.
+cc2c470f9 HistoryEntry: diffEntries as list of historyEntry.
+03d2d150d New rest service rs/&lt;entity&gt;/history/id</pre></div>
+</body></html>

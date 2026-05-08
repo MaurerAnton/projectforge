@@ -1,0 +1,78 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>#757</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333}h2{margin-top:1.5em}h3{margin-top:1.2em}a{color:#0366d6}.meta{font-size:.9em;margin:1em 0}.nav{font-size:.9em;color:#888;margin-bottom:1em}.c{border-left:3px solid #ddd;padding:1em;margin:1em 0;background:#fff}code{background:#f0f0f0;padding:0 .2em}pre{background:#f5f5f5;padding:.5em;margin:.5em 0;border-radius:3px;font-size:.85em;overflow-x:auto}tb{border-collapse:collapse;width:100%}td,th{border:1px solid #ddd;padding:.3em .6em;font-size:.9em}</style></head>
+<body>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="756.html">← Prev</a> · <a href="758.html">Next →</a></div>
+
+<h1>#757: <code>XmlObjectReader.java</code></h1>
+<div class="meta"><strong>Lines:</strong> 514 · <strong>Author:</strong> Kai Reinhard · <strong>Type:</strong> Java — движок десериализации XmlStream · <strong>Library:</strong> dom4j</div>
+
+<div class="c"><h2>Что это</h2>
+<p><strong>Ядро десериализации</strong> фреймворка XmlStream — превращает XML (в виде dom4j <code>Element</code> дерева) обратно в Java-объекты с заполненными полями. 514 строк. Это <strong>самый большой файл</strong> в XmlStream-фреймворке. Javadoc: <em>"Parses objects serialized by the XmlObjectWriter. Uses the dom4j."</em> Работает в паре с <a href="773.html">XmlObjectWriter</a> — Writer сериализует объекты в XML, Reader десериализует XML обратно в объекты.</p></div>
+
+<div class="c"><h2>Архитектура — state machine с backtracking</h2>
+<p>Reader — это <strong>stateful объект</strong> (в отличие от stateless Writer). Он хранит состояние во время одного сеанса чтения:</p>
+<ul>
+<li><code>processedElements</code> (Set&lt;Element&gt;) — какие XML-элементы были успешно прочитаны. После завершения чтения, все элементы НЕ из этого сета считаются "проигнорированными" и попадают в warnings</li>
+<li><code>processedAttributes</code> (Map&lt;Element, Set&lt;String&gt;&gt;) — какие атрибуты каждого элемента были прочитаны. Аналогично для предупреждений</li>
+<li><code>referenceObjects</code> (Map&lt;String, Object&gt;) — кэш десериализованных объектов по их <code>o-id</code>. Используется для дедупликации: если два XML-элемента ссылаются на один объект, он десериализуется один раз, а второй раз — возвращается из кэша</li>
+<li><code>warnings</code> (String) — накопленные предупреждения о проигнорированных элементах/атрибутах</li>
+</ul></div>
+
+<div class="c"><h2>Входные точки — два метода <code>read()</code></h2>
+<h3><code>read(String xml)</code> — публичный API</h3>
+<p>Принимает сырую XML-строку. Парсит её через <code>XmlHelper.fromString()</code> → dom4j <code>Element</code>. Очищает состояние (processedElements, processedAttributes, warnings). Вызывает внутренний <code>read(Element)</code>. После чтения запускает <code>checkForIgnoredElements()</code> — если в XML остались необработанные теги/атрибуты, они попадают в warnings. Возвращает корневой десериализованный объект.</p>
+
+<h3><code>read(Element el)</code> — внутренний API</h3>
+<p>Берёт dom4j Element, по имени тега находит класс (через <code>getClass()</code>), и вызывает рекурсивный <code>read(Class&lt;?&gt; clazz, Element el, ...)</code>. Если класс не найден — возвращает <code>null</code>.</p></div>
+
+<div class="c"><h2>Трёхуровневый поиск класса — <code>getClass(String elementName)</code></h2>
+<p>При встрече XML-тега, Reader ищет соответствующий Java-класс в трёх местах (в порядке приоритета):</p>
+<ol>
+<li><strong>AliasMap (свой):</strong> <code>this.aliasMap.getClassForAlias(name)</code> — если был явно задан через <code>setAliasMap()</code></li>
+<li><strong>XmlRegistry (глобальный):</strong> <code>xmlRegistry.getClassForAlias(name)</code> — из <a href="776.html">XmlRegistry</a>, куда классы регистрируются при старте</li>
+<li><strong>Class.forName() (fallback):</strong> попытка загрузить класс по полному квалифицированному имени. Если класс — интерфейс, проверяет <code>implementationMapping</code> (интерфейс → конкретный класс). Если класс не найден — логирует ошибку и возвращает <code>null</code> (элемент будет проигнорирован)</li>
+</ol>
+<p>Эта трёхуровневая система позволяет гибко управлять маппингом: AliasMap для локальных переопределений, XmlRegistry для глобальных правил, Class.forName для обратной совместимости со старыми XML-файлами где теги были полными именами классов.</p></div>
+
+<div class="c"><h2>Основной рекурсивный метод — <code>read(Class, Element, attrName, attrValue)</code></h2>
+<p>Это <strong>сердце</strong> всего Reader'а. Принимает тип поля, XML-элемент, и опционально имя/значение атрибута (если значение пришло из атрибута а не из текста элемента). Логика — цепочка проверок типа:</p>
+<ol>
+<li><strong>Reference check:</strong> если у элемента есть атрибут <code>o-ref-id</code> — это ссылка на уже десериализованный объект. Ищет в <code>referenceObjects</code> и возвращает кэшированный объект (дедупликация). Если ref-id не найден — логирует ошибку</li>
+<li><strong>Converter check:</strong> если для типа зарегистрирован <code>IConverter</code> (через <code>xmlRegistry.getConverter(clazz)</code>) — вызывает <code>converter.fromString()</code>. Это для простых типов: String, Integer, Date, BigDecimal, Boolean</li>
+<li><strong>Enum check:</strong> если класс — enum, вызывает <code>enumFromString()</code>. Пытается <code>Enum.valueOf(clazz, val)</code>. При <code>IllegalArgumentException</code> делает <strong>вторую попытку с <code>toUpperCase()</code></strong> — это для обратной совместимости со старыми XML где enum'ы были в нижнем регистре. Значение <code>"null"</code> трактуется как <code>null</code></li>
+<li><strong>Collection check:</strong> если класс — Collection (List/Set/SortedSet), создаёт соответствующую реализацию (ArrayList/HashSet/TreeSet), и рекурсивно читает все дочерние XML-элементы как элементы коллекции. Если <code>ignoreEmptyCollections=true</code> и коллекция пуста — оставляет поле <code>null</code></li>
+<li><strong>Complex object:</strong> для всех остальных типов (классы с <code>@XmlObject</code>) — создаёт экземпляр через <code>BeanHelper.newInstance()</code>, проверяет наличие <code>o-id</code> атрибута (сохраняет в <code>referenceObjects</code> для будущих ref-id ссылок), и вызывает <code>read(obj, el)</code> для рекурсивного заполнения полей</li>
+</ol></div>
+
+<div class="c"><h2>Заполнение полей — <code>read(Object obj, Element el)</code></h2>
+<p>Обходит все поля объекта (через <code>BeanHelper.getAllDeclaredFields()</code> — כולя унаследованные), делает их accessible (reflection), и для каждого XML-атрибута и дочернего элемента ищет соответствующее поле:</p>
+<ul>
+<li>Сначала проверяет <code>@XmlOmitField</code> — если есть, поле пропускается</li>
+<li>Ищет <code>@XmlField</code> аннотацию. Сравнивает имя тега/атрибута с именем поля (case-sensitive) и с alias'ом из аннотации</li>
+<li>Если поле найдено — вызывает <code>read(field.getType(), element, key, attrValue)</code> для десериализации значения, затем <code>field.set(obj, value)</code> для присвоения</li>
+<li>Если поле НЕ найдено — логирует warning <code>"Field '...' not found."</code>. Элемент остаётся непомеченным в <code>processedElements</code> и попадёт в warnings</li>
+</ul>
+<p><strong>Важно:</strong> поля <code>o-id</code> и <code>ref-id</code> (XML-атрибуты Writer'а) явно пропускаются — они не ищутся среди полей объекта.</p></div>
+
+<div class="c"><h2>Предупреждения — <code>checkForIgnoredElements()</code></h2>
+<p>После чтения всего XML, Reader проверяет: все ли элементы из исходного XML-дерева были помечены как <code>processed</code>? Если нет — значит в XML были теги, для которых не нашлось полей в Java-классе. Это может означать:</p>
+<ul>
+<li>XML создан более новой версией ProjectForge (новые поля есть в XML но нет в коде)</li>
+<li>Опечатка в имени поля или alias'е</li>
+<li>Класс был изменён (поле удалено или переименовано)</li>
+</ul>
+<p>Все непомеченные элементы и атрибуты собираются в <code>warnings</code> строку. Если строка > 500 символов — обрезается (<code>ABBREVIATE_WARNING=500</code>) чтобы не забивать логи.</p></div>
+
+<div class="c"><h2>Хуки для подклассов — Template Method</h2>
+<p>Три protected-метода могут быть переопределены в подклассах:</p>
+<ul>
+<li><code>newInstance(Class, Element, String, String)</code> — перехват создания объекта. Если возвращает <code>Status.IGNORE</code>, объект пропускается. По умолчанию возвращает <code>null</code> (создавать стандартно)</li>
+<li><code>addCollectionEntry(Collection, Object, Element)</code> — перехват добавления в коллекцию. Если возвращает <code>true</code>, объект НЕ добавляется автоматически. По умолчанию <code>false</code></li>
+<li><code>setField(Field, Object, Object, Element, String, String)</code> — перехват присвоения поля. По умолчанию вызывает <code>field.set(obj, value)</code></li>
+</ul>
+<p>Эти хуки позволяют наследникам модифицировать поведение без переписывания всей логики — например, пропускать определённые поля, фильтровать коллекции, или выполнять пост-обработку объектов.</p></div>
+
+<div class="c"><h2><code>initialize(Class)</code> — предварительное сканирование</h2>
+<p>Может быть вызван перед чтением чтобы <strong>заранее зарегистрировать</strong> все @XmlObject-классы в AliasMap. Рекурсивно обходит дерево типов: для класса с <code>@XmlObject</code> регистрирует алиас, затем для каждого не-примитивного поля рекурсивно вызывает <code>initialize()</code>. Использует <code>processed</code> Set для предотвращения бесконечной рекурсии при циклических ссылках. Это позволяет не указывать все классы вручную — достаточно передать корневой класс, и Reader сам найдёт все вложенные типы.</p></div>
+
+</body></html>

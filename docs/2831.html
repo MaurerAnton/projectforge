@@ -1,0 +1,174 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>#2831</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}.hist{font-size:.85em;color:#555}</style></head>
+<body><div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="2830.html">← Prev</a> · <a href="2832.html">Next →</a></div>
+<h1>#2831: <code>CalendarPageSupport.java</code></h1>
+<div class="meta">Java class, <code>projectforge-wicket/src/main/java/org/projectforge/web/calendar/CalendarPageSupport.java</code></div>
+<div class="c">Java web calendar.</div>
+<h2>Git History</h2><div class="hist"><pre>868d6abb7 2025 -&gt; 2026
+63081666f Source file headers: 2024-&gt; 2025.
+67805f2fc ThreadLocalUserContext.user -&gt; ThreadLocalUserContext.loggedInUser (renamed for avoiding mis-understandings in code).
+d6d3d176f Migration stuff in progress...
+b6092df09 Copyright 2023 -&gt; 2024
+ab45d51fa Copyright 2001-2022 -&gt; 2001-2023.
+4a6390e11 Merge branch 'develop' into feature/wicket8
+5f7ef41b8 Copyright 2021 -&gt; 2022
+ceb63e8a1 Source code header: (C) 2001-2021.
+a6a7aece4 Optimize Imports
+267f0ad53 Typo in i18n: sheeets -&gt; sheets.
+7c79f1922 Copyright of source header -&gt; 2020.
+7c896e3a8 PROJECTFORGE-3161 Remove task address configuration
+6aa6a9cc3 Changed wicket and wicketstuff version to 8.0.0-M6
+9ebb88522 Initial commit</pre></div>
+<h2>Source</h2><pre>/////////////////////////////////////////////////////////////////////////////
+//
+// Project ProjectForge Community Edition
+//         www.projectforge.org
+//
+// Copyright (C) 2001-2026 Micromata GmbH, Germany (www.micromata.com)
+//
+// ProjectForge is dual-licensed.
+//
+// This community edition is free software; you can redistribute it and/or
+// modify it under the terms of the GNU General Public License as published
+// by the Free Software Foundation; version 3 of the License.
+//
+// This community edition is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General
+// Public License for more details.
+//
+// You should have received a copy of the GNU General Public License along
+// with this program; if not, see http://www.gnu.org/licenses/.
+//
+/////////////////////////////////////////////////////////////////////////////
+
+package org.projectforge.web.calendar;
+
+import org.apache.wicket.ajax.AjaxRequestTarget;
+import org.apache.wicket.ajax.form.OnChangeAjaxBehavior;
+import org.apache.wicket.markup.html.form.FormComponentUpdatingBehavior;
+import org.apache.wicket.model.IModel;
+import org.apache.wicket.model.Model;
+import org.apache.wicket.model.PropertyModel;
+import org.projectforge.business.teamcal.filter.ICalendarFilter;
+import org.projectforge.framework.persistence.user.api.ThreadLocalUserContext;
+import org.projectforge.framework.persistence.user.entities.PFUserDO;
+import org.projectforge.web.WicketSupport;
+import org.projectforge.web.fibu.ISelectCallerPage;
+import org.projectforge.web.user.UserSelectPanel;
+import org.projectforge.web.wicket.flowlayout.CheckBoxButton;
+import org.projectforge.web.wicket.flowlayout.DivPanel;
+import org.projectforge.web.wicket.flowlayout.FieldsetPanel;
+
+import java.io.Serializable;
+
+public class CalendarPageSupport implements Serializable
+{
+  private static final long serialVersionUID = 8223888624685052575L;
+
+  private final PFUserDO user;
+
+  private final ISelectCallerPage parentPage;
+
+  private boolean showTimsheetsSelectors = true, showOptions = true;
+
+  private UserSelectPanel userSelectPanel;
+
+  public CalendarPageSupport(final ISelectCallerPage parentPage)
+  {
+    this.parentPage = parentPage;
+    this.user = ThreadLocalUserContext.getLoggedInUser();
+  }
+
+  public UserSelectPanel addUserSelectPanel(final FieldsetPanel fieldset, final IModel&lt;PFUserDO&gt; model,
+      final boolean autosubmit)
+  {
+    if (showTimsheetsSelectors == false || isOtherTimesheetsUsersAllowed() == false) {
+      return null;
+    }
+    userSelectPanel = new UserSelectPanel(fieldset.newChildId(), model, parentPage, &quot;userId&quot;);
+    fieldset.add(userSelectPanel);
+    userSelectPanel.withAutoSubmit(autosubmit).setLabel(new Model&lt;String&gt;(fieldset.getString(&quot;user&quot;))).init();
+    return userSelectPanel;
+  }
+
+  public void addOptions(final DivPanel checkBoxDivPanel, final boolean autoSubmit,
+      final ICalendarFilter filter)
+  {
+    if (WicketSupport.getAccessChecker().isRestrictedUser(user) == true || showOptions == false) {
+      return;
+    }
+    if (isOtherTimesheetsUsersAllowed() == false) {
+      addCheckBox(checkBoxDivPanel, filter, &quot;showTimesheets&quot;, &quot;calendar.option.timesheets&quot;, null, autoSubmit);
+    }
+    addCheckBox(checkBoxDivPanel, filter, &quot;showBreaks&quot;, &quot;calendar.option.showBreaks&quot;,
+        &quot;calendar.option.showBreaks.tooltip&quot;, autoSubmit);
+    addCheckBox(checkBoxDivPanel, filter, &quot;showPlanning&quot;, &quot;calendar.option.planning&quot;,
+        &quot;calendar.option.planning.tooltip&quot;, autoSubmit);
+    addCheckBox(checkBoxDivPanel, filter, &quot;showBirthdays&quot;, &quot;calendar.option.birthdays&quot;, null, autoSubmit);
+    addCheckBox(checkBoxDivPanel, filter, &quot;showStatistics&quot;, &quot;calendar.option.statistics&quot;,
+        &quot;calendar.option.statistics.tooltip&quot;, autoSubmit);
+  }
+
+  @SuppressWarnings(&quot;serial&quot;)
+  private void addCheckBox(final DivPanel checkBoxDivPanel, final ICalendarFilter filter, final String property,
+      final String labelKey,
+      final String tooltipKey, final boolean autoSubmit)
+  {
+    final CheckBoxButton checkBoxButton = new CheckBoxButton(checkBoxDivPanel.newChildId(),
+        new PropertyModel&lt;Boolean&gt;(filter, property), checkBoxDivPanel.getString(labelKey), autoSubmit ? new FormComponentUpdatingBehavior() : null);
+    if (autoSubmit == false) {
+      checkBoxButton.getCheckBox().add(new OnChangeAjaxBehavior()
+      {
+        @Override
+        protected void onUpdate(final AjaxRequestTarget target)
+        {
+          // Do nothing (the model object is updated).
+        }
+      });
+    }
+    if (tooltipKey != null) {
+      checkBoxButton.setTooltip(checkBoxDivPanel.getString(tooltipKey));
+    }
+    checkBoxDivPanel.add(checkBoxButton);
+  }
+
+  /**
+   * Has the logged-in user the permission to see time-sheets of other users?
+   *
+   * @return
+   */
+  public boolean isOtherTimesheetsUsersAllowed()
+  {
+    return WicketSupport.getAccessChecker().hasLoggedInUserAccessToTimesheetsOfOtherUsers();
+  }
+
+  /**
+   * @param showOptions the showOptions to set
+   * @return this for chaining.
+   */
+  public CalendarPageSupport setShowOptions(final boolean showOptions)
+  {
+    this.showOptions = showOptions;
+    return this;
+  }
+
+  /**
+   * @param showTimsheetsSelectors the showTimsheetsSelectors to set
+   * @return this for chaining.
+   */
+  public CalendarPageSupport setShowTimsheetsSelectors(final boolean showTimsheetsSelectors)
+  {
+    this.showTimsheetsSelectors = showTimsheetsSelectors;
+    return this;
+  }
+
+  /**
+   * @return the userSelectPanel
+   */
+  public UserSelectPanel getUserSelectPanel()
+  {
+    return userSelectPanel;
+  }
+}</pre>
+</body></html>

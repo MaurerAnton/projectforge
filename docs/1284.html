@@ -1,0 +1,68 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>1284</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:2em;color:#444}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}</style></head>
+<body><div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="1283.html">← Prev</a> · <a href="1285.html">Next →</a></div>
+<h1>1284: <code>SendMail.kt</code></h1>
+<div class="meta">Core Service, projectforge-business/.../mail/SendMail.kt</div>
+<div class="c">Central email sending service with SMTP configuration, MIME multipart support (calendar invites, attachments), Groovy template rendering for dynamic emails, and async delivery via <code>CompletableFuture</code>.</div>
+
+<h2>Architecture &amp; Role</h2>
+<p><code>SendMail</code> is a Spring <code>@Service</code> that encapsulates all outbound email in ProjectForge. It reads SMTP settings from <code>application.properties</code>, builds Jakarta Mail <code>MimeMessage</code>s with optional iCal content and arbitrary attachments, renders email bodies through Groovy templates, and provides both async (default) and synchronous sending modes.</p>
+
+<h3>Configuration</h3>
+<table>
+<tr><th>Property</th><th>Source</th><th>Description</th></tr>
+<tr><td><code>mailingEnabled</code></td><td><code>mail.session.pfmailsession.emailEnabled</code></td><td>Global on/off switch</td></tr>
+<tr><td><code>mailFromStandardEmailSender</code></td><td><code>mail.session.pfmailsession.standardEmailSender</code></td><td>Default From address</td></tr>
+<tr><td><code>mailSmtpEncryptionProtocol</code></td><td><code>mail.session.pfmailsession.encryption</code></td><td>Plain, StartTLS, or SSL</td></tr>
+<tr><td><code>mailSmtpHost</code></td><td><code>mail.session.pfmailsession.smtp.host</code></td><td>SMTP server hostname</td></tr>
+<tr><td><code>mailSmtpPort</code></td><td><code>mail.session.pfmailsession.smtp.port</code></td><td>SMTP port (default 25)</td></tr>
+<tr><td><code>mailSmtpAuth</code></td><td><code>mail.session.pfmailsession.smtp.auth</code></td><td>Authentication required?</td></tr>
+<tr><td><code>mailSmtpUser</code></td><td><code>mail.session.pfmailsession.smtp.user</code></td><td>SMTP username</td></tr>
+<tr><td><code>mailSmtpPassword</code></td><td><code>mail.session.pfmailsession.smtp.password</code></td><td>SMTP password (logged as ***)</td></tr>
+</table>
+
+<h3>Key Methods</h3>
+<table>
+<tr><th>Method</th><th>Description</th></tr>
+<tr><td><code>send(composedMessage, attachments)</code></td><td>Sends a <code>Mail</code> object with optional file attachments. Async by default.</td></tr>
+<tr><td><code>send(composedMessage, icalContent, attachments, async)</code></td><td>Full variant with iCal calendar content for meeting invites.</td></tr>
+<tr><td><code>renderGroovyTemplate(composedMessage, template, data, title, recipient)</code></td><td>Executes a Groovy template file to produce the email body, populating the data map with standard keys (<code>msg</code>, <code>recipient</code>, <code>baseUrl</code>, <code>logoUrl</code>, <code>createdLabel</code>).</td></tr>
+<tr><td><code>buildUrl(subPath)</code></td><td>Builds absolute URLs using the configured domain service.</td></tr>
+</table>
+
+<h3>MIME Multipart Handling</h3>
+<p>The private <code>createMailAttachmentContent()</code> builds multipart messages:</p>
+<ul>
+<li><strong>Body part</strong>: HTML or text content with charset.</li>
+<li><strong>iCal part</strong> (optional): Calendar invite with <code>method=REQUEST</code> header and <code>text/calendar</code> content type.</li>
+<li><strong>Attachments</strong>: Each <code>IMailAttachment</code> is added as a MIME body part with auto-detected content type via <code>MimetypesFileTypeMap</code>.</li>
+</ul>
+
+<h3>Protocol: Plain / StartTLS / SSL</h3>
+<p>The <code>Protocol</code> enum controls the transport security. In <code>session</code> property setup, StartTLS enables <code>mail.smtp.starttls.enable</code>, SSL enables <code>mail.smtp.ssl.enable</code>. Plain uses no encryption.</p>
+
+<h3>Test Mode</h3>
+<p><code>Companion.internalSetTestMode()</code> sets a static flag that prevents actual <code>Transport.send()</code>, logging instead. Used by test cases.</p>
+
+<h2>Git History</h2><div class="hist"><pre>868d6abb7 2025 -> 2026
+b309e9be9 MailAttachments improved (BirthdayButler, Polls). Nightly sanity check errors auto-sent.
+63081666f Source file headers: 2024-> 2025.
+b405cf643 WIP
+67805f2fc ThreadLocalUserContext.user -> loggedInUser (renamed).
+77bade6df javax.* -> jakarta.*
+b6092df09 Copyright 2023 -> 2024
+a25c868cb SendMail refactored (Genome part removed).
+ab45d51fa Copyright 2001-2022 -> 2001-2023.
+73b0be50b org.apache.commons.collections -> org.apache.commons.collections4
+38bec971a ThreadLocal -> Kotlin
+eec260821 I18nHelper.getLocalizedMessage(user, ...) for user locale in mail.
+24a051884 SendMail -> Kotlin (fixes)
+71754f106 SendMail: data map allows null values.
+9b1017171 Test fixed.
+bc6e7c72d SendMail -> Kotlin
+e428c924d SendMail Kotlin -> Groovy (due to Powermock issues).
+c1d6f116a Source file headers fixed.
+5955e0edd Logo bug fixed.
+0fb0c21b8 WIP: mail service. Logo handled by ConfigurationService.
+c5e6d921b GroovyEngine and SendMail -> Kotlin.</pre></div>
+</body></html>

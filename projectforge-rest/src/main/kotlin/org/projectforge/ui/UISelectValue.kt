@@ -23,6 +23,7 @@
 
 package org.projectforge.ui
 
+@Serializable
 data class UISelectValue<T>(
         val id: T,
         val displayName: String)

@@ -23,6 +23,7 @@
 
 package org.projectforge.ui
 
+import kotlinx.serialization.Serializable
 import org.projectforge.common.FormatterUtils
 import org.projectforge.framework.i18n.translate
 import org.projectforge.framework.i18n.translateMsg
@@ -33,6 +34,7 @@ import org.projectforge.framework.jcr.AttachmentsService
  * See DynamicAttachmentList.jsx for usage.
  */
 @Suppress("unused")
+@Serializable
 class UIAttachmentList(
   /**
    * Simply use [org.projectforge.rest.core.AbstractPagesRest.category] if using in pages rest. Otherwise

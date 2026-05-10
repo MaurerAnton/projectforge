@@ -23,11 +23,13 @@
 
 package org.projectforge.ui
 
+import kotlinx.serialization.Serializable
 import com.fasterxml.jackson.annotation.JsonValue
 import org.projectforge.framework.i18n.InternalErrorException
 import org.projectforge.rest.core.AbstractPagesRest
 import org.springframework.util.ClassUtils
 
+@Serializable
 data class UIInput(
   override var id: String,
   @Transient

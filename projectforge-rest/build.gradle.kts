@@ -3,6 +3,7 @@ import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 plugins {
     id("buildlogic.pf-module-conventions")
     id("org.jetbrains.kotlin.jvm")
+    kotlin("plugin.serialization")
 }
 
 tasks.withType<KotlinCompile> {
@@ -13,6 +14,7 @@ tasks.withType<KotlinCompile> {
 
 dependencies {
     api(project(":projectforge-business"))
+    api(libs.org.jetbrains.kotlinx.serialization.json)
     api(libs.org.springframework.boot.starter.webflux)
     api(libs.jakarta.annotation.api)
     api(libs.jakarta.ws.rs.api)

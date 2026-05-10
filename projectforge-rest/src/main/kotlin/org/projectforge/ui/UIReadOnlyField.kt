@@ -23,6 +23,7 @@
 
 package org.projectforge.ui
 
+@Serializable
 data class UIReadOnlyField(
   val id: String? = null,
   @Transient

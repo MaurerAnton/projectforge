@@ -23,10 +23,12 @@
 
 package org.projectforge.ui
 
+import kotlinx.serialization.Serializable
 import org.projectforge.framework.i18n.translate
 import org.projectforge.framework.i18n.translateIfKey
 import org.projectforge.rest.config.RestUtils
 
+@Serializable
 class UIButton
 private constructor(
   val id: String,

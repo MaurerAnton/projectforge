@@ -23,6 +23,7 @@
 
 package org.projectforge.ui
 
+@Serializable
 open class UITable(
     val id: String,
     val columns: MutableList<UITableColumn> = mutableListOf(),

@@ -23,11 +23,13 @@
 
 package org.projectforge.ui
 
+import kotlinx.serialization.Serializable
 import kotlin.reflect.KProperty
 
 /**
  * Twelve column grid system.
  */
+@Serializable
 open class UICol(
   /**
    * Length in grid system

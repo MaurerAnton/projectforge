@@ -26,6 +26,7 @@ package org.projectforge.ui
 /**
  * One badge, mostly used as pill.
  */
+@Serializable
 data class UIBadge(
   var title: String? = null,
   val color: UIColor? = null,

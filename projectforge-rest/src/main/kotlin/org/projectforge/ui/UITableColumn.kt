@@ -23,6 +23,7 @@
 
 package org.projectforge.ui
 
+@Serializable
 data class UITableColumn(var id: String,
                          var title: String? = null,
                          var titleIcon: UIIconType? = null,

@@ -27,6 +27,7 @@ package org.projectforge.ui
  * A named container represents a bunch of UIElements usable by the UI referenced by the given name (id). It may contain
  * e. g. filter settings in a list view.
  */
+@Serializable
 data class UINamedContainer(
         /** The name of the container. */
         val id: String,

@@ -23,6 +23,7 @@
 
 package org.projectforge.ui
 
+import kotlinx.serialization.Serializable
 import org.projectforge.business.configuration.ConfigurationServiceAccessor
 import org.projectforge.common.DateFormatType
 import org.projectforge.common.props.PropertyType
@@ -36,6 +37,7 @@ import kotlin.reflect.KProperty
 /**
  * Column def AgGrid
  */
+@Serializable
 open class UIAgGridColumnDef(
     var field: String? = null,
     var headerName: String? = null,

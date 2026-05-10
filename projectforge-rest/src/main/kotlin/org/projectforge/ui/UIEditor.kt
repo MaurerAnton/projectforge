@@ -23,11 +23,13 @@
 
 package org.projectforge.ui
 
+import kotlinx.serialization.Serializable
 import org.projectforge.business.scripting.ScriptDO
 
 /**
  * UIEditor is used for e. g. source code editing (Kotlin/Groovy-scripts).
  */
+@Serializable
 class UIEditor(
   val id: String,
   var mode: String = "kotlin",

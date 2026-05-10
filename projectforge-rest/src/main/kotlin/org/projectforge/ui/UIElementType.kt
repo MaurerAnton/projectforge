@@ -23,6 +23,7 @@
 
 package org.projectforge.ui
 
+@Serializable
 enum class UIElementType {
     ALERT,
     /**

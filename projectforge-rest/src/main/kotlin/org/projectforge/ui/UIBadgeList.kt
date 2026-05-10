@@ -26,6 +26,7 @@ package org.projectforge.ui
 /**
  * List of badges.
  */
+@Serializable
 class UIBadgeList : UIElement(UIElementType.BADGE_LIST) {
   var badgeList = mutableListOf<UIBadge>()
 

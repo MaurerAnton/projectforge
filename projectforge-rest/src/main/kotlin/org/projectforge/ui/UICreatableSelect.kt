@@ -23,6 +23,7 @@
 
 package org.projectforge.ui
 
+@Serializable
 class UICreatableSelect(
   val id: String,
   @Transient

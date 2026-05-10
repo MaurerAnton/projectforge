@@ -23,6 +23,7 @@
 
 package org.projectforge.ui
 
+import kotlinx.serialization.Serializable
 import com.fasterxml.jackson.annotation.JsonFormat
 import com.fasterxml.jackson.annotation.JsonValue
 
@@ -31,6 +32,7 @@ import com.fasterxml.jackson.annotation.JsonValue
  * Check https://fontawesome.com/icons/ for available non-pro icons.
  */
 @JsonFormat
+@Serializable
 enum class UIIconType(@JsonValue val icon: Array<String>) {
     /**
      * https://fontawesome.com/icons/check?style=solid

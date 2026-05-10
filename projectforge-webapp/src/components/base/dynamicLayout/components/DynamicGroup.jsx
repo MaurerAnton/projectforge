@@ -19,6 +19,23 @@ export const buildLengthForColumn = (length, offset = undefined) => (offset
         }), {})
     : length);
 
+function contentStructEqual(a, b) {
+    if (a === b) return true;
+    if (!a || !b) return false;
+    if (a.length !== b.length) return false;
+    for (let i = 0; i < a.length; i++) {
+        if (a[i].key !== b[i].key) return false;
+        if (a[i].type !== b[i].type) return false;
+    }
+    return true;
+}
+
+function groupPropsEqual(prev, next) {
+    return prev.type === next.type
+        && prev.collapseTitle === next.collapseTitle
+        && contentStructEqual(prev.content, next.content);
+}
+
 // A Component to put a tag around dynamic layout content
 function DynamicGroup(props) {
     const {
@@ -32,59 +49,57 @@ function DynamicGroup(props) {
     // Get renderLayout function from context.
     const { renderLayout } = React.useContext(DynamicLayoutContext);
 
-    return React.useMemo(() => {
-        let groupProperties = {};
+    let groupProperties = {};
 
-        // Determine the needed tag.
-        let Tag;
-        switch (type) {
-            case 'COL':
-                Tag = Col;
+    // Determine the needed tag.
+    let Tag;
+    switch (type) {
+        case 'COL':
+            Tag = Col;
 
-                if (length) {
-                    groupProperties = {
-                        ...groupProperties,
-                        ...(buildLengthForColumn(length, offset)),
-                    };
-                }
+            if (length) {
+                groupProperties = {
+                    ...groupProperties,
+                    ...(buildLengthForColumn(length, offset)),
+                };
+            }
 
-                break;
-            case 'FRAGMENT':
-                Tag = React.Fragment;
-                break;
-            case 'GROUP':
-                Tag = FormGroup;
-                groupProperties.row = true;
-                break;
-            case 'ROW':
-                Tag = Row;
-                break;
-            // When no type detected, use React.Fragment
-            default:
-                Tag = React.Fragment;
-        }
+            break;
+        case 'FRAGMENT':
+            Tag = React.Fragment;
+            break;
+        case 'GROUP':
+            Tag = FormGroup;
+            groupProperties.row = true;
+            break;
+        case 'ROW':
+            Tag = Row;
+            break;
+        // When no type detected, use React.Fragment
+        default:
+            Tag = React.Fragment;
+    }
 
-        if (collapseTitle) {
-            const id = String.idify(collapseTitle);
-            return (
-                <Tag {...groupProperties}>
-                    <Button id={id} color="link">
-                        {collapseTitle}
-                        <FontAwesomeIcon icon={faChevronDown} className={style.chevron} />
-                    </Button>
-                    <UncontrolledCollapse toggler={`#${id}`}>
-                        {renderLayout(content)}
-                    </UncontrolledCollapse>
-                </Tag>
-            );
-        }
-        // Render tag and further content
+    if (collapseTitle) {
+        const id = String.idify(collapseTitle);
         return (
             <Tag {...groupProperties}>
-                {renderLayout(content)}
+                <Button id={id} color="link">
+                    {collapseTitle}
+                    <FontAwesomeIcon icon={faChevronDown} className={style.chevron} />
+                </Button>
+                <UncontrolledCollapse toggler={`#${id}`}>
+                    {renderLayout(content)}
+                </UncontrolledCollapse>
             </Tag>
         );
-    }, [props]);
+    }
+    // Render tag and further content
+    return (
+        <Tag {...groupProperties}>
+            {renderLayout(content)}
+        </Tag>
+    );
 }
 
 export const lengthPropType = PropTypes.shape({
@@ -109,4 +124,4 @@ DynamicGroup.propTypes = {
     collapseTitle: PropTypes.string,
 };
 
-export default DynamicGroup;
+export default React.memo(DynamicGroup, groupPropsEqual);

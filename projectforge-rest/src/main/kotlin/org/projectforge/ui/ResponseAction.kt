@@ -23,12 +23,14 @@
 
 package org.projectforge.ui
 
+import kotlinx.serialization.Serializable
 import org.projectforge.framework.i18n.translate
 import org.projectforge.framework.i18n.translateMsg
 
 /**
  * Given as response of a rest call to inform the client on how to proceed.
  */
+@Serializable
 class ResponseAction(
   val url: String? = null,
   /**

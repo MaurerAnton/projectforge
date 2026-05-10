@@ -27,6 +27,7 @@ package org.projectforge.ui
  * An inline group displays UI elements side-by-side without wrapping, useful for compact layouts
  * like "Label + Input + Label" combinations that should stay together on one line.
  */
+@Serializable
 data class UIInlineGroup(val content: MutableList<UIElement> = mutableListOf()) : UIElement(UIElementType.INLINE_GROUP) {
     fun add(element: UIElement): UIInlineGroup {
         content.add(element)

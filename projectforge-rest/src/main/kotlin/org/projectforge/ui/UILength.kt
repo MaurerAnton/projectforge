@@ -26,6 +26,7 @@ package org.projectforge.ui
 /**
  * Length definition (for bootstrap grid layout).
  */
+@Serializable
 class UILength(
         /**
          * Length for extra small screen and up(default) in grid system (1-12)

@@ -26,6 +26,7 @@ package org.projectforge.ui
 /**
  * For displaying message boxes.
  */
+@Serializable
 data class UIAlert(
         /**
          * message to display (static). For non-static messages, please use id instead.

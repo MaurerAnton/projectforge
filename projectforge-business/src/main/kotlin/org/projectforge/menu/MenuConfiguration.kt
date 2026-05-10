@@ -55,6 +55,9 @@ open class MenuConfiguration {
     @Value("\${projectforge.menu.visibility.changeWlanPassword}")
     private var changeWlanPasswordVisibility: String? = null
 
+    @Value("\${projectforge.menu.visibility.about}")
+    private var aboutVisibility: String? = null
+
     @Value("\${projectforge.menu.visibility.feedback}")
     private var feedbackVisibility: String? = null
 
@@ -177,6 +180,7 @@ open class MenuConfiguration {
     @PostConstruct
     private fun postConstruct() {
         instance = this
+        registry.add(MenuVisibility("about", aboutVisibility, MenuItemDefId.HELP_ABOUT))
         registry.add(MenuVisibility("access", accessVisibility, MenuItemDefId.ACCESS_LIST))
         registry.add(MenuVisibility("addresses", addressesVisibility, MenuItemDefId.ADDRESS_LIST))
         registry.add(MenuVisibility("addressbooks", addressbooksVisibility, MenuItemDefId.ADDRESSBOOK_LIST))

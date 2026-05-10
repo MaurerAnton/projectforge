@@ -23,6 +23,7 @@
 
 package org.projectforge.ui
 
+import kotlinx.serialization.Serializable
 import jakarta.servlet.http.HttpServletRequest
 import org.projectforge.Constants
 import org.projectforge.business.user.UserLocale
@@ -41,6 +42,7 @@ import kotlin.reflect.KProperty
 /**
  * Table using AgGrid
  */
+@Serializable
 open class UIAgGrid(
     val id: String,
     var columnDefs: MutableList<UIAgGridColumnDef> = mutableListOf(),

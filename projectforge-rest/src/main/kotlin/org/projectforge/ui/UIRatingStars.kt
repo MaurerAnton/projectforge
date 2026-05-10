@@ -23,6 +23,7 @@
 
 package org.projectforge.ui
 
+@Serializable
 data class UIRatingStars(var id: String,
                          @Transient
                          override val layoutContext: LayoutContext? = null,

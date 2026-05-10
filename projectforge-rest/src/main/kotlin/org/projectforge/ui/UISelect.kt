@@ -23,18 +23,17 @@
 
 package org.projectforge.ui
 
-import com.fasterxml.jackson.databind.annotation.JsonSerialize
+import kotlinx.serialization.Serializable
 import mu.KotlinLogging
 import org.projectforge.business.fibu.EmployeeService
 import org.projectforge.business.group.service.GroupService
 import org.projectforge.business.user.service.UserService
 import org.projectforge.common.i18n.I18nEnum
 import org.projectforge.framework.i18n.translate
-import org.projectforge.rest.json.UISelectTypeSerializer
 
 private val log = KotlinLogging.logger {}
 
-@JsonSerialize(using = UISelectTypeSerializer::class)
+@Serializable
 class UISelect<T>(
     override var id: String,
     @Transient

@@ -72,6 +72,7 @@ enum class MenuItemDefId constructor(val i18nKey: String, val url: String? = nul
     FEEDBACK("menu.gear.feedback", url = "wa/feedback"), //
     GANTT("menu.gantt", "wa/ganttList"), //
     GROUP_LIST("menu.groupList", getReactListUrl("group")), //
+    HELP_ABOUT("menu.help.about", getReactDynamicPageUrl("about")), //
     HR_PLANNING_LIST("menu.hrPlanningList", "wa/hrPlanningList"), //
     HR_VIEW("menu.hrList", "wa/hrList"), //
     INBOX_LIST("menu.orga.posteingang", getReactListUrl("incomingMail")), //

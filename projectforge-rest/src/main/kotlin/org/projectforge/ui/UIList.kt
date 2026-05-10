@@ -23,8 +23,10 @@
 
 package org.projectforge.ui
 
+import kotlinx.serialization.Serializable
 import com.fasterxml.jackson.annotation.JsonIgnore
 
+@Serializable
 data class UIList(
         /**
          * Needed to register elementVar during layout processing.

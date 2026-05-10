@@ -23,6 +23,7 @@
 
 package org.projectforge.ui
 
+@Serializable
 data class UICustomized(
   val id: String,
   var values: MutableMap<String, Any>? = null

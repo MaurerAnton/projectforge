@@ -23,8 +23,10 @@
 
 package org.projectforge.ui
 
+import kotlinx.serialization.Serializable
 import com.fasterxml.jackson.annotation.JsonProperty
 
+@Serializable
 enum class UIColor {
     @JsonProperty("danger")
     DANGER,

@@ -9,6 +9,23 @@ import { DynamicLayoutContext } from '../context';
 import { buildLengthForColumn, lengthPropType } from './DynamicGroup';
 import style from './DynamicFieldset.module.scss';
 
+function contentStructEqual(a, b) {
+    if (a === b) return true;
+    if (!a || !b) return false;
+    if (a.length !== b.length) return false;
+    for (let i = 0; i < a.length; i++) {
+        if (a[i].key !== b[i].key) return false;
+        if (a[i].type !== b[i].type) return false;
+    }
+    return true;
+}
+
+function fieldsetPropsEqual(prev, next) {
+    return prev.title === next.title
+        && prev.collapsed === next.collapsed
+        && contentStructEqual(prev.content, next.content);
+}
+
 // The Fieldset component enclosed in a col. Very similar to DynamicGroup.
 function DynamicFieldset(props) {
     const {
@@ -29,16 +46,13 @@ function DynamicFieldset(props) {
 
     // If collapsed prop is not provided (null/undefined), render static fieldset
     if (collapsed === null || collapsed === undefined) {
-        return React.useMemo(
-            () => (
-                <Col {...buildLengthForColumn(length, offset)}>
-                    <fieldset>
-                        {title ? <legend>{title}</legend> : undefined}
-                        {renderLayout(content)}
-                    </fieldset>
-                </Col>
-            ),
-            [content, title, length, offset, renderLayout],
+        return (
+            <Col {...buildLengthForColumn(length, offset)}>
+                <fieldset>
+                    {title ? <legend>{title}</legend> : undefined}
+                    {renderLayout(content)}
+                </fieldset>
+            </Col>
         );
     }
 
@@ -83,4 +97,4 @@ DynamicFieldset.propTypes = {
     collapsed: PropTypes.bool,
 };
 
-export default DynamicFieldset;
+export default React.memo(DynamicFieldset, fieldsetPropsEqual);

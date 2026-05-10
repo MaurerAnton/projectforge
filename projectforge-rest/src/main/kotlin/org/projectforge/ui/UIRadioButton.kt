@@ -23,6 +23,7 @@
 
 package org.projectforge.ui
 
+@Serializable
 data class UIRadioButton(val id: String,
                          val value: Any,
                          /**

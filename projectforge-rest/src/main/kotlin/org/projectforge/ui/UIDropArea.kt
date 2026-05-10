@@ -23,6 +23,7 @@
 
 package org.projectforge.ui
 
+@Serializable
 data class UIDropArea(
   var title: String?,
   var uploadUrl: String,

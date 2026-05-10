@@ -23,6 +23,7 @@
 
 package org.projectforge.ui
 
+@Serializable
 class UIFieldset(
   /**
    * Length in grid system

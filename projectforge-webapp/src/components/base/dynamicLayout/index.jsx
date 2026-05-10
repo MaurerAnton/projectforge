@@ -69,23 +69,36 @@ function DynamicLayout(
         actions && showActionButtons && <DynamicActionGroup actions={actions} />
     ), [actions, showActionButtons]);
 
+    const contextValue = React.useMemo(() => ({
+        ...dynamicLayoutContextDefaultValues,
+        ui,
+        options,
+        renderLayout,
+        callAction,
+        data,
+        setData,
+        setVariables,
+        validationErrors,
+        variables,
+        ...props,
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }), [
+        ui,
+        options,
+        callAction,
+        data,
+        setData,
+        setVariables,
+        validationErrors,
+        variables,
+        props.disableLayoutRendering,
+        props.displayPageMenu,
+        props.setBrowserTitle,
+        props.showActionButtons,
+    ]);
+
     return (
-        <DynamicLayoutContext.Provider
-            /* eslint-disable-next-line react/jsx-no-constructed-context-values */
-            value={{
-                ...dynamicLayoutContextDefaultValues,
-                ui,
-                options,
-                renderLayout,
-                callAction,
-                data,
-                setData,
-                setVariables,
-                validationErrors,
-                variables,
-                ...props,
-            }}
-        >
+        <DynamicLayoutContext.Provider value={contextValue}>
             {menu}
             {children}
             {!disableLayoutRendering && renderLayout(layout)}

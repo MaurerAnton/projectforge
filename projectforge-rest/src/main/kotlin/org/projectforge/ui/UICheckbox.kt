@@ -23,6 +23,7 @@
 
 package org.projectforge.ui
 
+@Serializable
 data class UICheckbox(var id: String,
                       @Transient
                       override val layoutContext: LayoutContext? = null,

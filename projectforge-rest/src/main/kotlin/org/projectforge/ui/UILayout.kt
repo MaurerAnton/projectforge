@@ -23,12 +23,14 @@
 
 package org.projectforge.ui
 
+import kotlinx.serialization.Serializable
 import org.projectforge.framework.i18n.addTranslations
 import org.projectforge.framework.i18n.translate
 import org.projectforge.menu.MenuItem
 import org.projectforge.rest.core.AbstractPagesRest
 import kotlin.reflect.KProperty
 
+@Serializable
 class UILayout(
   title: String,
   /** restBaseUrl is needed, if [UIAttachmentList] is used. */

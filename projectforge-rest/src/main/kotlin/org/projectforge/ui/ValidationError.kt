@@ -23,12 +23,14 @@
 
 package org.projectforge.ui
 
+import kotlinx.serialization.Serializable
 import org.projectforge.framework.i18n.I18nKeyAndParams
 import org.projectforge.framework.i18n.translate
 import org.projectforge.framework.i18n.translateMsg
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
 
+@Serializable
 data class ValidationError(
   var message: String? = null,
   var fieldId: String? = null,

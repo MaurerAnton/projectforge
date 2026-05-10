@@ -23,6 +23,7 @@
 
 package org.projectforge.ui
 
+@Serializable
 data class UILabel(
         override var label: String? = null,
         /**

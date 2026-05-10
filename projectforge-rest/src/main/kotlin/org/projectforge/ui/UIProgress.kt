@@ -28,6 +28,7 @@ package org.projectforge.ui
  * should update the data object or the variables part (if progress info is set as variable).
  * @param fetchUpdateInterval Update interval in ms if [fetchUpdateUrl] is given. Default is 1000 (1s).
  */
+@Serializable
 data class UIProgress(
   override var id: String,
   val title: String? = null,

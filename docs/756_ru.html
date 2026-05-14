@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>#756: XmlObjectWriter [RU]</title>
+<style>
+  body { font-family: system-ui, sans-serif; max-width: 960px; margin: 2em auto; padding: 0 1em; background: #fafafa; color: #222; line-height: 1.6; }
+  h1 { border-bottom: 2px solid #333; padding-bottom: 0.3em; }
+  h2 { margin-top: 2.5em; border-bottom: 1px solid #ddd; padding-bottom: 0.2em; color: #333; }
+  h3 { margin-top: 2em; color: #444; }
+  a { color: #0366d6; }
+  .c { border-left: 3px solid #ddd; padding: .5em 1em; margin: 1em 0; background: #fff; }
+  .nav { font-size: .9em; color: #888; margin-bottom: 1em; }
+  .lang { font-size: .85em; color: #888; float: right; }
+  .lang a { color: #888; text-decoration: none; padding: 0 .3em; }
+  .lang a.active { color: #0366d6; font-weight: 600; text-decoration: underline; }
+  .meta { font-size: .9em; margin: 1em 0; color: #555; }
+  code { background: #f0f0f0; padding: 0 .2em; font-size: .93em; }
+  pre { background: #f5f5f5; padding: .8em 1em; border: 1px solid #ddd; border-radius: 4px; overflow-x: auto; font-size: .88em; line-height: 1.4; }
+  table { border-collapse: collapse; width: 100%; margin: 1em 0; }
+  th, td { border: 1px solid #ddd; padding: .5em .8em; text-align: left; font-size: .9em; }
+  th { background: #f5f5f5; font-weight: 600; }
+  .hist { font-size: .85em; color: #555; }
+</style>
+</head>
+<body>
+<div class="lang"><a href="756.html">EN</a> · <a href="756_de.html">DE</a> · <a href="756_ru.html" class="active">RU</a> · <a href="756_fr.html">FR</a> · <a href="756_es.html">ES</a></div>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="755.html">← Prev</a> · <a href="757.html">Next →</a></div>
+
+<h1>#756: <code>XmlObjectWriter.java</code></h1>
+<div class="meta"><strong>Строк:</strong> 387 · <strong>Автор:</strong> Kai Reinhard · <strong>Тип:</strong> Java — движок сериализации XmlStream · <strong>Библиотека:</strong> dom4j</div>
+
+<div class="c"><h2>Что это</h2>
+<p><strong>Движок сериализации</strong> фреймворка XmlStream — превращает Java-объекты в XML (dom4j <code>Document</code>). 387 строк. Javadoc: <em>"A simple solution for streaming xml objects and to prevent default values from the xml output (because this feature isn't yet available in XStream)."</em> — XStream на момент написания не умел пропускать поля со значениями по умолчанию, а для экспорта данных это критично.</p>
+<p>Пара с <a href="755.html">XmlObjectReader</a>: Writer сериализует Java → XML, Reader десериализует XML → Java.</p></div>
+
+<div class="c"><h2>Две константы — deduplication через XML-атрибуты</h2>
+<ul>
+<li><code>ATTR_ID = "o-id"</code> — уникальный идентификатор объекта. Writer присваивает каждому новому объекту возрастающий <code>refIdCounter</code></li>
+<li><code>ATTR_REF_ID = "ref-id"</code> — ссылка на уже записанный объект. Если объект уже был сериализован, Writer пишет <code>ref-id="0"</code> вместо полного содержимого</li>
+</ul>
+<p>Этот механизм решает проблему циклических ссылок и дублирования.</p></div>
+
+<div class="c"><h2>Кэш записанных объектов — <code>writtenObjects</code></h2>
+<p><code>Map&lt;String, Element&gt;</code> где ключ — <code>className:hashCode</code>. Это <strong>identity-based</strong> кэш (по хэш-коду), а не equals-based — два разных объекта с одинаковыми полями будут записаны оба, но один объект, встреченный дважды — только один раз.</p></div>
+
+<div class="c"><h2>Основной метод — <code>write(Branch parent, Object obj, ...)</code></h2>
+<p>Рекурсивный метод сериализации. Цепочка проверок: определение имени тега → deduplication check → Converter → Enum → Collection → Complex object.</p></div>
+
+<div class="c"><h2>Default-value skipping — ключевая фича</h2>
+<p>Метод <code>isDefaultType(ann, value)</code> проверяет: равно ли значение поля значению по умолчанию из аннотации <code>@XmlField.default*</code>? Если да — поле <strong>не записывается</strong>. Это то, ради чего создавался XmlStream:</p>
+<ul>
+<li><code>Boolean</code>: по умолчанию <code>false</code> — все false-поля пропускаются</li>
+<li><code>Double</code>: сравнивается с <code>defaultDoubleValue()</code></li>
+<li><code>Integer</code>: сравнивается с <code>defaultIntValue()</code>. Магическое число <code>MAGIC_INT_NUMBER</code> из <a href="751.html">XmlConstants</a></li>
+<li><code>String/Enum</code>: сравнивается с <code>defaultStringValue()</code></li>
+</ul></div>
+
+<div class="c"><h2>Git History</h2>
+<div class="hist"><pre>868d6abb7 2025 → 2026
+63081666f Source file headers: 2024→2025
+9f874e26c MAJOR-CHANGE! Migration Integer → Long id's
+b6092df09 Copyright 2023 → 2024
+ab45d51fa Copyright 2001-2022 → 2001-2023
+5f7ef41b8 Copyright 2021 → 2022
+cd27dd997 package xstream → xmlstream
+24019a0f5 Eliminate DateHolder occurences
+73a9755df Code cleanup (StringBuffer→StringBuilder, diamond)
+32f634b88 Optimize imports
+a5bbdca6a Change logger to slf4j
+f979e8a42 MGC-UPDATE: Update auf Version 3.0.0-SNAPSHOT
+9ebb88522 Initial commit</pre></div>
+<p>Ключевые изменения: <code>9f874e26c</code> — массовая миграция идентификаторов с Integer на Long. <code>24019a0f5</code> — удаление DateHolder. <code>cd27dd997</code> — пакет переименован с xstream на xmlstream; комментарий "(should be replaced by xstream later)" — автор планировал заменить на XStream, но этого не произошло.</p></div>
+
+</body>
+</html>

@@ -1,9 +1,47 @@
-<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>#802</title>
-<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333}h2{margin-top:1.5em}a{color:#0366d6}.meta{font-size:.9em;margin:1em 0}.nav{font-size:.9em;color:#888;margin-bottom:1em}.c{border-left:3px solid #ddd;padding:1em;margin:1em 0;background:#fff}code{background:#f0f0f0;padding:0 .2em}</style></head>
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>#802: AbstractAggregatedValues.java</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:2em;color:#444}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.lang{font-size:.85em;color:#888;float:right}.lang a{color:#888;text-decoration:none;padding:0 .3em}.lang a.active{color:#0366d6;font-weight:600;text-decoration:underline}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}</style></head>
 <body>
+<div class="lang"><a href="802.html" class="active">EN</a> · <a href="802_de.html">DE</a> · <a href="802_ru.html">RU</a> · <a href="802_fr.html">FR</a> · <a href="802_es.html">ES</a></div>
 <div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="801.html">← Prev</a> · <a href="803.html">Next →</a></div>
 <h1>#802: <code>AbstractAggregatedValues.java</code></h1>
-<div class="meta"><strong>Type:</strong> Java абстрактный класс — база для агрегации статистики</div>
-<div class="c"><h2>Что это</h2>
-<p><strong>Базовый класс для накопления агрегированных значений</strong> во времени. Используется в модуле статистики и прогнозирования ликвидности (<a href="171.html">LiquidityForecast</a>). Хранит массив значений по дням (или другим единицам времени) и предоставляет методы для накопления (<code>add()</code>), получения значения по индексу, вычисления средних и сумм. Подклассы: <code>IntAggregatedValues</code>, <code>BigDecimalAggregatedValues</code>. Используется в <a href="171.html">LiquidityForecast</a> для weighted average вычислений времени платежа.</p></div>
+<div class="meta">Abstract base class, projectforge-business/src/main/java/org/projectforge/statistics/AbstractAggregatedValues.java</div>
+
+<div class="c"><h2>Statistical Aggregation Base Class</h2>
+<p><strong>A generic abstract base class for accumulating aggregated values over time.</strong> Used by the statistics module and specifically by <a href="171.html">LiquidityForecast</a> for weighted-average payment timing calculations. Subclasses (<code>IntAggregatedValues</code>, <code>BigDecimalAggregatedValues</code>) provide type-specific implementations.</p>
+<p>Generic parameter <code>&lt;T&gt;</code> allows arithmetic operations on any numeric type without code duplication. The class stores two parallel <code>LinkedList</code>s — one for values, one for weights — enabling both simple averages and weighted averages on the same data set.</p></div>
+
+<div class="c"><h2>Template Method Pattern</h2>
+<p>The class implements the <strong>Template Method</strong> pattern. Core algorithms (<code>getAverage()</code>, <code>getWeightedAverage()</code>) are defined in the abstract class, while type-specific arithmetic is delegated to subclasses via six abstract methods:</p>
+<table>
+<tr><th>Abstract Method</th><th>Purpose</th></tr>
+<tr><td><code>getZero()</code></td><td>Returns the additive identity for type T (e.g. <code>0</code> or <code>BigDecimal.ZERO</code>)</td></tr>
+<tr><td><code>sum(T, T)</code></td><td>Adds two values of type T</td></tr>
+<tr><td><code>convert(int)</code></td><td>Converts an <code>int</code> count into type T for division</td></tr>
+<tr><td><code>divide(T, T)</code></td><td>Divides sum by count/weight</td></tr>
+<tr><td><code>multiply(T, T)</code></td><td>Multiplies value by weight (for weighted average)</td></tr>
+<tr><td><code>isZero(T)</code></td><td>Checks if a value is zero (guards against division by zero)</td></tr>
+</table></div>
+
+<div class="c"><h2>Dirty-Flag Caching</h2>
+<p>Both <code>average</code> and <code>weightedAverage</code> results are lazily computed and cached using a <strong>dirty-flag pattern</strong>. Two boolean fields (<code>averageDirty</code>, <code>weightedAverageDirty</code>) track whether the cached value is stale. Calling <code>add()</code> sets both dirty flags to <code>true</code>. The cached values are only recomputed when <code>getAverage()</code> or <code>getWeightedAverage()</code> is called and the respective dirty flag is set.</p>
+<p>This optimization avoids recomputing averages on every addition, which is important when many values are added in sequence before the average is queried.</p></div>
+
+<div class="c"><h2>Fluent API (Method Chaining)</h2>
+<p>Both <code>add()</code> overloads and <code>clear()</code> return <code>this</code>, enabling fluent chaining:</p>
+<pre>aggregatedValues.add(val1).add(val2, weight2).add(val3).getWeightedAverage();</pre>
+</div>
+
+<div class="c"><h2>Usage Context: LiquidityForecast</h2>
+<p>In <a href="171.html">LiquidityForecast</a>, this class is used to compute the weighted average payment time across multiple invoice positions. Each position contributes a value (amount) and a weight (days until payment). The weighted average yields a single representative payment time for the forecast.</p></div>
+
+<h2>Git History</h2><div class="hist"><pre>868d6abb7 2025 -> 2026
+63081666f Source file headers: 2024-> 2025.
+b6092df09 Copyright 2023 -> 2024
+ab45d51fa Copyright 2001-2022 -> 2001-2023.
+5f7ef41b8 Copyright 2021 -> 2022
+ceb63e8a1 Source code header: (C) 2001-2021.
+7c79f1922 Copyright of source header -> 2020.
+73a9755df Code cleanup: collapsed catch blocks, diamond operator, StringBuilder, list.sort
+000ca723d Remove pointless boolean expressions (business)
+dd5ca38ac CopyRight of all java file-header updated or created.</pre></div>
 </body></html>

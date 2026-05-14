@@ -1,42 +1,102 @@
-<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>#760</title>
-<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333}h2{margin-top:1.5em}a{color:#0366d6}.meta{font-size:.9em;margin:1em 0}.nav{font-size:.9em;color:#888;margin-bottom:1em}.c{border-left:3px solid #ddd;padding:1em;margin:1em 0;background:#fff}code{background:#f0f0f0;padding:0 .2em}.hist{border-left:3px solid #c90;padding:.5em 1em;margin:1em 0;background:#fffa}</style></head>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>#760: Status</title>
+<style>
+  body { font-family: system-ui, sans-serif; max-width: 960px; margin: 2em auto; padding: 0 1em; background: #fafafa; color: #222; line-height: 1.6; }
+  h1 { border-bottom: 2px solid #333; padding-bottom: 0.3em; }
+  h2 { margin-top: 2.5em; border-bottom: 1px solid #ddd; padding-bottom: 0.2em; color: #333; }
+  h3 { margin-top: 2em; color: #444; }
+  a { color: #0366d6; }
+  .c { border-left: 3px solid #ddd; padding: .5em 1em; margin: 1em 0; background: #fff; }
+  .nav { font-size: .9em; color: #888; margin-bottom: 1em; }
+  .lang { font-size: .85em; color: #888; float: right; }
+  .lang a { color: #888; text-decoration: none; padding: 0 .3em; }
+  .lang a.active { color: #0366d6; font-weight: 600; text-decoration: underline; }
+  .meta { font-size: .9em; margin: 1em 0; color: #555; }
+  code { background: #f0f0f0; padding: 0 .2em; font-size: .93em; }
+  pre { background: #f5f5f5; padding: .8em 1em; border: 1px solid #ddd; border-radius: 4px; overflow-x: auto; font-size: .88em; line-height: 1.4; }
+  table { border-collapse: collapse; width: 100%; margin: 1em 0; }
+  th, td { border: 1px solid #ddd; padding: .5em .8em; text-align: left; font-size: .9em; }
+  th { background: #f5f5f5; font-weight: 600; }
+  .hist { font-size: .85em; color: #555; }
+</style>
+</head>
 <body>
+<div class="lang"><a href="760.html" class="active">EN</a> · <a href="760_de.html">DE</a> · <a href="760_ru.html">RU</a> · <a href="760_fr.html">FR</a> · <a href="760_es.html">ES</a></div>
 <div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="759.html">← Prev</a> · <a href="761.html">Next →</a></div>
 
-<h1>#760: <code>XmlRegistry.java</code></h1>
-<div class="meta"><strong>Lines:</strong> 248 · <strong>Author:</strong> Kai Reinhard · <strong>Type:</strong> Java — центральный реестр фреймворка XmlStream (Singleton + наследуемый)</div>
+<h1>#760: <code>Status.java</code></h1>
+<div class="meta"><strong>Java enum</strong> — single-value sentinel for XML deserialization control. 32 lines. Source: <code>projectforge-business/src/main/java/org/projectforge/framework/xmlstream/Status.java</code></div>
 
-<div class="c"><h2>Что это</h2>
-<p><strong>Центральный реестр</strong> фреймворка XmlStream — хранит маппинги Class↔Alias, Class↔Converter, и список типов-по-умолчанию-атрибутов. 248 строк. Реализован как <strong>Singleton с наследованием</strong>: есть один глобальный экземпляр (<code>baseRegistry</code>), но можно создать дочерние реестры которые сначала ищут в себе, а при отсутствии — делегируют в <code>baseRegistry</code>. Это позволяет плагинам регистрировать свои типы не модифицируя глобальный реестр.</p></div>
+<div class="c">
+<strong>Purpose:</strong> An enum with a <strong>single value</strong>: <code>IGNORE</code>. 32 lines, of which 21 are the GPLv3 license header. One of the shortest and most unusual files in the project. The Javadoc on <code>IGNORE</code> explains: <em>"Used by XmlObjectReader.newInstance(Class, org.dom4j.Element, String)"</em> — it is used by the <code>newInstance()</code> method of <code>XmlObjectReader</code> during XML reading.
+</div>
 
-<div class="c"><h2>Singleton + Delegation паттерн</h2>
-<p>Статический блок <code>static { baseRegistry = new XmlRegistry(); baseRegistry.initializeDefaultRegistry(); }</code> создаёт глобальный синглтон при загрузке класса. Все lookup-методы (<code>getConverter</code>, <code>getAliasForClass</code>, <code>getClassForAlias</code>, <code>asAttributeAsDefault</code>) следуют одному шаблону: сначала ищут в себе, если нет — проверяют <code>this == baseRegistry</code> (чтобы избежать рекурсии), и если это дочерний реестр — делегируют в <code>baseRegistry</code>. Пример:</p>
-<pre>public IConverter getConverter(Class clazz) {
-    if (converterRegistry != null) {
-        IConverter conv = converterRegistry.get(clazz);     // поиск в себе
-        if (conv != null) return conv;
-        for (Class cls : converterRegistry.keySet()) {      // поиск по иерархии
-            if (cls.isAssignableFrom(clazz)) { ... }
-        }
-    }
-    if (this == baseRegistry) return null;                   // стоп-условие
-    return baseRegistry.getConverter(clazz);                 // делегация
-}</pre></div>
+<h2>Why a Single-Value Enum?</h2>
 
-<div class="c"><h2><code>initializeDefaultRegistry()</code> — что регистрируется по умолчанию</h2>
-<p>Приватный метод, вызывается один раз при загрузке класса. Регистрирует 3 категории:</p>
-<ol>
-<li><strong>asAttributeAsDefault (14 типов):</strong> BigDecimal, Boolean, Date, Double, Integer, Long, Short, TimeZone, Locale, Version — все они по умолчанию пишутся как XML-атрибуты а не элементы (компактнее). Включает и примитивы, и обёртки</li>
-<li><strong>Alias'ы (15 типов):</strong> BigDecimal→"decimal", Boolean→"boolean", Double→"double", Integer→"int", Long→"long", Short→"short", TimeZone→"timeZone", Locale→"locale", Version→"version". Без алиасов в XML были бы полные имена классов</li>
-<li><strong>Converter'ы (14 типов):</strong> BooleanConverter, DoubleConverter, IntConverter, LongConverter, ShortConverter, ByteArrayConverter, BigDecimalConverter, ClassConverter, DateConverter, StringConverter, TimeZoneConverter, LocaleConverter, VersionConverter, LocalDateConverter. Каждый конвертер умеет преобразовывать значение в строку и обратно</li>
-</ol></div>
+<div class="c">
+<p>This is the <strong>Sentinel Pattern</strong> — a special value that signals the need to skip an element during reading. When <code>XmlObjectReader.newInstance()</code> encounters an XML element for which there is no registered class (e.g., a tag from an old format version that was removed in a newer version), it returns <code>Status.IGNORE</code> rather than crashing with an error.</p>
 
-<div class="c"><h2>getConverter — поиск с учётом иерархии классов</h2>
-<p>Простой поиск <code>converterRegistry.get(clazz)</code> находит только точное совпадение. Но часто нужен конвертер для подкласса. Поэтому если точного совпадения нет, Registry ищет <strong>родительский класс</strong> через <code>cls.isAssignableFrom(clazz)</code> — например, для <code>java.sql.Date</code> (подкласс <code>java.util.Date</code>) будет найден <code>DateConverter</code>. Найденный конвертер кэшируется для класса через <code>internalRegisterConverter(clazz, conv)</code> чтобы не повторять поиск.</p></div>
+<p><strong>Why not just return <code>null</code>?</strong> Because <code>null</code> is ambiguous: it could mean "skip" OR "an error occurred" OR "the element is empty". <code>Status.IGNORE</code> is an explicit, named signal: "I recognize this element as ignorable, consciously skipping it, continue processing."</p>
+</div>
 
-<div class="c"><h2>История изменений</h2>
+<h2>Three-State Resolution</h2>
+
+<div class="c">
+<p>The enum enables clean three-state return value semantics:</p>
+<pre>
+Object result = newInstance(clazz, element, version);
+if (result == Status.IGNORE) {
+    // Unknown element, skip it
+} else if (result == null) {
+    // Recognized but has null value (field is empty)
+} else {
+    // Normal deserialized object
+}
+</pre>
+<p>This is significantly cleaner than returning <code>null</code> with ambiguous semantics. The pattern is common in parsers and deserializers — e.g., Rust uses <code>Option&lt;T&gt;</code>, Haskell uses <code>Maybe</code>, and here — a single-element enum.</p>
+</div>
+
+<h2>Where Used</h2>
+
+<div class="c">
+<p>Method <code>XmlObjectReader.newInstance(Class&lt;?&gt; clazz, Element rootElement, String version)</code> — a protected factory method that subclasses can override. At each level, it checks <code>AliasMap</code>: if the tag is registered, creates an object; if not registered — returns <code>Status.IGNORE</code>, and the calling code skips that element. This allows XML files to contain "extra" tags (e.g., from a newer format version when read by an older version) without errors — a backward compatibility mechanism.</p>
+</div>
+
+<h2>Why Enum, Not a Constant?</h2>
+
+<div class="c">
+<p>An enum with one value is simultaneously both a <strong>type</strong> and a <strong>value</strong>. If <code>newInstance()</code> returned just <code>Object</code> (where <code>null</code> = skip), the calling code would need <code>if (result == null)</code>. But <code>null</code> could also be a legitimate result (a genuinely empty field). Using a separate type <code>Status</code> allows the calling code to precisely distinguish between "skip this" (IGNORE) and "value is absent" (null).</p>
+</div>
+
+<h2>Contrast: Status.IGNORE vs. @XmlOmitField vs. Default Skipping</h2>
+
+<table>
+<tr><th>Mechanism</th><th>Scope</th><th>When activated</th></tr>
+<tr><td><code>Status.IGNORE</code></td><td>Runtime — per-element, during read</td><td>XML tag has no corresponding Java class registered</td></tr>
+<tr><td><code>@XmlOmitField</code> (<a href="757.html">#757</a>)</td><td>Compile-time — on field declaration</td><td>Always — field never serialized/deserialized</td></tr>
+<tr><td>Default-value skipping</td><td>Compile-time — in <code>@XmlField</code></td><td>Field equals declared default value</td></tr>
+</table>
+
+<h2>Git History</h2>
 <div class="hist">
-<p>Только копирайт-обновления и одно значимое изменение: <code>73a9755df</code> — "More code cleanup" заменил StringBuffer→StringBuilder, ArrayList&lt;Class&gt;→ArrayList&lt;&gt;, и убрал deprecated HSSFColors. Пакет был переименован в <code>cd27dd997</code>. Файл стабилен — список регистрируемых типов редко меняется.</p>
-</div></div>
+<pre>868d6abb7 2025 → 2026 (copyright year update)
+63081666f Source file headers: 2024→2025
+b6092df09 Copyright 2023 → 2024
+ab45d51fa Copyright 2001-2022 → 2001-2023
+5f7ef41b8 Copyright 2021 → 2022
+cd27dd997 package xstream → xmlstream
+ceb63e8a1 Source code header: (C) 2001-2021
+7c79f1922 Copyright of source header → 2020
+dd5ca38ac CopyRight of all java file-header updated or created
+9ebb88522 Initial commit</pre>
+</div>
 
-</body></html>
+<div class="c">
+The enum has one value (<code>IGNORE</code>) and has never changed since the initial commit beyond copyright headers and the package rename. A single-value enum with a clear sentinel purpose is a "done" design — there's nothing to add or modify. This is one of the most stable files in the entire ProjectForge codebase.
+</div>
+
+</body>
+</html>

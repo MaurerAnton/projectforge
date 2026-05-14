@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>#758: AliasMap [RU]</title>
+<style>
+  body { font-family: system-ui, sans-serif; max-width: 960px; margin: 2em auto; padding: 0 1em; background: #fafafa; color: #222; line-height: 1.6; }
+  h1 { border-bottom: 2px solid #333; padding-bottom: 0.3em; }
+  h2 { margin-top: 2.5em; border-bottom: 1px solid #ddd; padding-bottom: 0.2em; color: #333; }
+  h3 { margin-top: 2em; color: #444; }
+  a { color: #0366d6; }
+  .c { border-left: 3px solid #ddd; padding: .5em 1em; margin: 1em 0; background: #fff; }
+  .nav { font-size: .9em; color: #888; margin-bottom: 1em; }
+  .lang { font-size: .85em; color: #888; float: right; }
+  .lang a { color: #888; text-decoration: none; padding: 0 .3em; }
+  .lang a.active { color: #0366d6; font-weight: 600; text-decoration: underline; }
+  .meta { font-size: .9em; margin: 1em 0; color: #555; }
+  code { background: #f0f0f0; padding: 0 .2em; font-size: .93em; }
+  pre { background: #f5f5f5; padding: .8em 1em; border: 1px solid #ddd; border-radius: 4px; overflow-x: auto; font-size: .88em; line-height: 1.4; }
+  table { border-collapse: collapse; width: 100%; margin: 1em 0; }
+  th, td { border: 1px solid #ddd; padding: .5em .8em; text-align: left; font-size: .9em; }
+  th { background: #f5f5f5; font-weight: 600; }
+  .hist { font-size: .85em; color: #555; }
+</style>
+</head>
+<body>
+<div class="lang"><a href="758.html">EN</a> · <a href="758_de.html">DE</a> · <a href="758_ru.html" class="active">RU</a> · <a href="758_fr.html">FR</a> · <a href="758_es.html">ES</a></div>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="757.html">← Prev</a> · <a href="759.html">Next →</a></div>
+
+<h1>#758: <code>AliasMap.java</code></h1>
+<div class="meta"><strong>Строк:</strong> 40 · <strong>Автор:</strong> Kai Reinhard · <strong>Тип:</strong> Java утилита — двунаправленный маппинг Class↔XML-alias · <strong>Пакет:</strong> <code>org.projectforge.framework.xmlstream</code></div>
+
+<div class="c"><h2>Что это</h2>
+<p><strong>Двунаправленный маппинг</strong> между Java-классами и XML-именами тегов. 40 строк. Поддерживает две <code>HashMap</code> — одну для <code>Class → alias</code> и другую для <code>alias → Class</code> — обеспечивая O(1) поиск в обоих направлениях. Это центральный реестр "как Java-классы отображаются на XML-теги" в фреймворке XmlStream. Используется <code>XmlObjectWriter</code> (запись правильного имени тега) и <code>XmlObjectReader</code> (поиск класса по тегу в XML).</p></div>
+
+<div class="c"><h2>Дизайн — двунаправленный HashMap</h2>
+<ul>
+<li><code>aliasMap1: Map&lt;Class&lt;?&gt;, String&gt;</code> — Class → alias для сериализации</li>
+<li><code>aliasMap2: Map&lt;String, Class&lt;?&gt;&gt;</code> — alias → Class для десериализации</li>
+</ul>
+<p>Обе карты заполняются одновременно через <code>put(Class, String)</code>. Простой и эффективный паттерн — не нужен Guava <code>BiMap</code>, только два обычных <code>HashMap</code>. Двойная память за быстрый двунаправленный поиск, но при типичных размерах (десятки-сотни записей) накладные расходы пренебрежимо малы.</p></div>
+
+<div class="c"><h2>API</h2>
+<table>
+<tr><th>Метод</th><th>Направление</th><th>Возвращает</th></tr>
+<tr><td><code>put(Class, String)</code></td><td>Регистрация</td><td>void — заполняет обе карты</td></tr>
+<tr><td><code>getAliasForClass(Class)</code></td><td>Class → alias</td><td>String или null</td></tr>
+<tr><td><code>getClassForAlias(String)</code></td><td>alias → Class</td><td>Class&gt;?&lt; или null</td></tr>
+<tr><td><code>containsAlias(String)</code></td><td>Проверка наличия</td><td>boolean</td></tr>
+</table></div>
+
+<div class="c"><h2>Использование в конвейере XmlStream</h2>
+<ol>
+<li><strong>Регистрация:</strong> <code>XmlRegistry</code> и <code>XmlObjectReader.initialize()</code> заполняют AliasMap для всех классов с <code>@XmlObject</code></li>
+<li><strong>Сериализация (Writer):</strong> <code>XmlObjectWriter.write()</code> вызывает <code>aliasMap.getAliasForClass(type)</code></li>
+<li><strong>Десериализация (Reader):</strong> <code>XmlObjectReader.getClass()</code> вызывает <code>aliasMap.getClassForAlias(elementName)</code></li>
+</ol></div>
+
+<div class="c"><h2>Почему не Guava BiMap?</h2>
+<p>AliasMap предшествует широкому использованию Guava в ProjectForge. Подход с двумя HashMap проще, избегает внешней зависимости, а уникальность значений обеспечивается вызывающим кодом (XmlRegistry), а не структурой данных.</p></div>
+
+<div class="c"><h2>Git History</h2>
+<div class="hist"><pre>868d6abb7 2025 → 2026
+63081666f Source file headers: 2024→2025
+b6092df09 Copyright 2023 → 2024
+ab45d51fa Copyright 2001-2022 → 2001-2023
+5f7ef41b8 Copyright 2021 → 2022
+cd27dd997 package xstream → xmlstream
+ceb63e8a1 Source code header: (C) 2001-2021
+7c79f1922 Copyright of source header → 2020
+73a9755df Code cleanup (diamond operator)
+dd5ca38ac CopyRight of all java file-header updated or created
+9ebb88522 Initial commit</pre></div>
+<p>Класс исключительно стабилен. Единственное изменение кода — <code>73a9755df</code>: <code>new HashMap&lt;Class, String&gt;()</code> → <code>new HashMap&lt;&gt;()</code> (diamond operator). Дизайн с двумя параллельными HashMap оказался долговечным.</p></div>
+
+</body>
+</html>

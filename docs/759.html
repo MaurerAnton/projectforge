@@ -1,29 +1,100 @@
-<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>#759</title>
-<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333}h2{margin-top:1.5em}a{color:#0366d6}.meta{font-size:.9em;margin:1em 0}.nav{font-size:.9em;color:#888;margin-bottom:1em}.c{border-left:3px solid #ddd;padding:1em;margin:1em 0;background:#fff}code{background:#f0f0f0;padding:0 .2em}.hist{border-left:3px solid #c90;padding:.5em 1em;margin:1em 0;background:#fffa}</style></head>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>#759: XmlOmitField</title>
+<style>
+  body { font-family: system-ui, sans-serif; max-width: 960px; margin: 2em auto; padding: 0 1em; background: #fafafa; color: #222; line-height: 1.6; }
+  h1 { border-bottom: 2px solid #333; padding-bottom: 0.3em; }
+  h2 { margin-top: 2.5em; border-bottom: 1px solid #ddd; padding-bottom: 0.2em; color: #333; }
+  h3 { margin-top: 2em; color: #444; }
+  a { color: #0366d6; }
+  .c { border-left: 3px solid #ddd; padding: .5em 1em; margin: 1em 0; background: #fff; }
+  .nav { font-size: .9em; color: #888; margin-bottom: 1em; }
+  .lang { font-size: .85em; color: #888; float: right; }
+  .lang a { color: #888; text-decoration: none; padding: 0 .3em; }
+  .lang a.active { color: #0366d6; font-weight: 600; text-decoration: underline; }
+  .meta { font-size: .9em; margin: 1em 0; color: #555; }
+  code { background: #f0f0f0; padding: 0 .2em; font-size: .93em; }
+  pre { background: #f5f5f5; padding: .8em 1em; border: 1px solid #ddd; border-radius: 4px; overflow-x: auto; font-size: .88em; line-height: 1.4; }
+  table { border-collapse: collapse; width: 100%; margin: 1em 0; }
+  th, td { border: 1px solid #ddd; padding: .5em .8em; text-align: left; font-size: .9em; }
+  th { background: #f5f5f5; font-weight: 600; }
+  .hist { font-size: .85em; color: #555; }
+</style>
+</head>
 <body>
+<div class="lang"><a href="759.html" class="active">EN</a> · <a href="759_de.html">DE</a> · <a href="759_ru.html">RU</a> · <a href="759_fr.html">FR</a> · <a href="759_es.html">ES</a></div>
 <div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="758.html">← Prev</a> · <a href="760.html">Next →</a></div>
 
 <h1>#759: <code>XmlOmitField.java</code></h1>
-<div class="meta"><strong>Lines:</strong> 39 · <strong>Author:</strong> Kai Reinhard · <strong>Type:</strong> Java marker annotation · <strong>Package:</strong> <code>org.projectforge.framework.xmlstream</code></div>
+<div class="meta"><strong>Java marker annotation</strong> — excludes a field from XmlStream XML serialization. Source: <code>projectforge-business/src/main/java/org/projectforge/framework/xmlstream/XmlOmitField.java</code></div>
 
-<div class="c"><h2>Что это</h2>
-<p><strong>Маркерная аннотация</strong> — помечает поле Java-класса как <strong>не подлежащее XML-сериализации</strong>. 39 строк, из которых 21 — GPL-лицензия, 15 — импорты/объявление, и только 3 строки самого кода. Это <strong>полный аналог</strong> <code>transient</code> из Java Serialization API и <code>@XmlTransient</code> из JAXB, но для фреймворка XmlStream. Без параметров — чисто маркер. Проверяется в <a href="758.html">XmlObjectWriter.writeField()</a> (строка 242): <code>if (field.isAnnotationPresent(XmlOmitField.class)) continue;</code> и в <a href="757.html">XmlObjectReader.read()</a> (строка 471).</p></div>
+<div class="c">
+<strong>Purpose:</strong> A zero-parameter marker annotation that tells the XmlStream framework to skip a field during XML serialization and deserialization. It is the XmlStream equivalent of Java's <code>transient</code> keyword and JAXB's <code>@XmlTransient</code>, but scoped exclusively to the ProjectForge XmlStream framework — leaving the field intact for Java serialization, JPA persistence, and other subsystems.
+</div>
 
-<div class="c"><h2>Почему отдельная аннотация, а не <code>transient</code>?</h2>
-<p>Java ключевое слово <code>transient</code> исключает поле из <strong>всех</strong> видов сериализации — и Java Serialization, и XStream, и XmlStream. Но иногда нужно чтобы поле участвовало в Java-сериализации (например, для кэширования в HTTP-сессии) но НЕ попадало в XML-экспорт. <code>@XmlOmitField</code> даёт гранулярный контроль: поле может быть НЕ-transient (участвует в Java-сериализации) но всё равно исключено из XML.</p>
+<h2>Architecture</h2>
 
-<p><strong>Пример:</strong> поле <code>password</code> в <code>PFUserDO</code>. Оно должно быть <code>transient</code> (не сериализоваться в сессию), но даже если бы не было — <code>@XmlOmitField</code> гарантирует что пароль никогда не попадёт в XML-экспорт данных. Двойная защита.</p></div>
+<div class="c">
+The annotation itself is minimal — 3 lines of code, <code>@Target(FIELD)</code>, <code>@Retention(RUNTIME)</code>. Its power comes from the <em>consumers</em> that check for its presence:<br><br>
+• <strong><code>XmlObjectWriter.writeField()</code></strong> (<a href="758.html">#758</a>, line ~242): <code>if (field.isAnnotationPresent(XmlOmitField.class)) continue;</code><br>
+• <strong><code>XmlObjectReader.read()</code></strong> (<a href="757.html">#757</a>, line ~471): skips fields annotated with <code>@XmlOmitField</code> during deserialization<br><br>
+There is no logic in the annotation itself — it's a pure marker consumed reflectively by the reader/writer pair.
+</div>
 
-<div class="c"><h2>Отличие от default-value skipping</h2>
-<p><code>@XmlOmitField</code> пропускает поле <strong>всегда</strong>, независимо от значения. Механизм default-value из <code>@XmlField</code> пропускает поле только если его значение равно значению по умолчанию. Это разные сценарии:</p>
-<ul>
-<li><code>@XmlOmitField</code> — "это поле никогда не должно быть в XML" (пароли, временные данные, вычисляемые поля)</li>
-<li><code>@XmlField(defaultIntValue=0)</code> — "это поле не нужно в XML если оно равно 0" (оптимизация размера)</li>
-</ul></div>
+<h2>Why a Separate Annotation Instead of <code>transient</code>?</h2>
 
-<div class="c"><h2>История изменений</h2>
+<div class="c">
+Java's <code>transient</code> keyword excludes a field from <strong>all</strong> serialization mechanisms — Java Serialization, XStream, XmlStream, JSON mappers, everything. This is often too broad:<br><br>
+<strong>Scenario:</strong> A field like <code>computedHash</code> should be cached in the HTTP session (Java serialization) but must not appear in XML exports (wasteful, misleading).<br><br>
+<strong>Solution:</strong> Make the field non-transient (so it participates in Java session serialization) and annotate it with <code>@XmlOmitField</code> (so XmlStream skips it). This gives <em>per-framework</em> control over serialization visibility.<br><br>
+<strong>Security example:</strong> <code>password</code> in <code>PFUserDO</code>. The field is <code>transient</code> (session safety) AND annotated with <code>@XmlOmitField</code> (XML safety). Even if someone removes <code>transient</code> for debugging, the annotation provides a second barrier preventing passwords from leaking into XML exports.
+</div>
+
+<h2>Contrast with <code>@XmlField(defaultValue=...)</code></h2>
+
+<table>
+<tr><th>Mechanism</th><th>When field is skipped</th><th>Use case</th></tr>
+<tr><td><code>@XmlOmitField</code></td><td><strong>Always</strong> — regardless of value</td><td>Passwords, computed fields, temporary state, sensitive data</td></tr>
+<tr><td><code>@XmlField(defaultIntValue=0)</code></td><td><strong>Conditionally</strong> — only when value equals the default</td><td>Size optimization: omit zero-values, empty strings, nulls</td></tr>
+</table>
+
+<div class="c">
+The difference is semantic: <code>@XmlOmitField</code> says "this field has no business being in XML", while <code>@XmlField(defaultValue=...)</code> says "this field is sometimes redundant — skip it when it is". One is a hard policy, the other is a soft optimization.
+</div>
+
+<h2>Git History</h2>
 <div class="hist">
-<p>Git log содержит только обновления копирайта и одно переименование пакета. Файл практически не менялся с момента создания — что ожидаемо для аннотации-маркера без параметров. Единственное значимое изменение: <code>cd27dd997</code> — "package xstream -> xmlstream" (пакет был переименован чтобы избежать путаницы с библиотекой XStream).</p>
-</div></div>
+<pre>868d6abb7 2025 → 2026 (copyright year update)
+63081666f Source file headers: 2024→2025
+b6092df09 Copyright 2023 → 2024
+ab45d51fa Copyright 2001-2022 → 2001-2023
+5f7ef41b8 Copyright 2021 → 2022
+cd27dd997 package xstream → xmlstream (renamed to avoid confusion with XStream library)
+ceb63e8a1 Source code header: (C) 2001-2021
+7c79f1922 Copyright of source header → 2020
+32f634b88 Optimize imports
+dd5ca38ac CopyRight of all java file-header updated or created
+9ebb88522 Initial commit</pre>
+</div>
 
-</body></html>
+<div class="c">
+The annotation has remained unchanged since the initial commit — only copyright headers and one package rename (<code>xstream</code> → <code>xmlstream</code>). This stability reflects its design: a marker annotation with no parameters has no moving parts to break. The only meaningful change was <code>cd27dd997</code> which renamed the package from <code>xstream</code> to <code>xmlstream</code> to avoid namespace collision with the XStream library (<code>com.thoughtworks.xstream</code>).
+</div>
+
+<h2>XmlStream Annotation Trio</h2>
+
+<table>
+<tr><th>Annotation</th><th>File</th><th>Role</th></tr>
+<tr><td><code>@XmlField</code></td><td><a href="755.html">#755</a></td><td>Declares a field for serialization with name, type, default value, format, ordering</td></tr>
+<tr><td><code>@XmlObject</code></td><td><a href="756.html">#756</a></td><td>Declares a class as XML-serializable with alias</td></tr>
+<tr><td><code>@XmlOmitField</code></td><td><strong>#759</strong></td><td>Excludes a field from serialization entirely</td></tr>
+</table>
+
+<div class="c">
+Together these three annotations form the complete configuration surface of the XmlStream framework. <code>@XmlObject</code> enables a class for serialization, <code>@XmlField</code> configures individual fields, and <code>@XmlOmitField</code> selectively disables fields. This is simpler than JAXB (which has ~20 annotations) and more explicit than XStream's pure-convention approach.
+</div>
+
+</body>
+</html>

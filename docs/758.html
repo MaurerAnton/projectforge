@@ -1,68 +1,97 @@
-<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>#758</title>
-<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333}h2{margin-top:1.5em}h3{margin-top:1em}a{color:#0366d6}.meta{font-size:.9em;margin:1em 0}.nav{font-size:.9em;color:#888;margin-bottom:1em}.c{border-left:3px solid #ddd;padding:1em;margin:1em 0;background:#fff}code{background:#f0f0f0;padding:0 .2em}pre{background:#f5f5f5;padding:.5em;margin:.5em 0;border-radius:3px;font-size:.85em;overflow-x:auto}.hist{border-left:3px solid #c90;padding:.5em 1em;margin:1em 0;background:#fffa}f0}</style></head>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>#758: AliasMap</title>
+<style>
+  body { font-family: system-ui, sans-serif; max-width: 960px; margin: 2em auto; padding: 0 1em; background: #fafafa; color: #222; line-height: 1.6; }
+  h1 { border-bottom: 2px solid #333; padding-bottom: 0.3em; }
+  h2 { margin-top: 2.5em; border-bottom: 1px solid #ddd; padding-bottom: 0.2em; color: #333; }
+  h3 { margin-top: 2em; color: #444; }
+  a { color: #0366d6; }
+  .c { border-left: 3px solid #ddd; padding: .5em 1em; margin: 1em 0; background: #fff; }
+  .nav { font-size: .9em; color: #888; margin-bottom: 1em; }
+  .lang { font-size: .85em; color: #888; float: right; }
+  .lang a { color: #888; text-decoration: none; padding: 0 .3em; }
+  .lang a.active { color: #0366d6; font-weight: 600; text-decoration: underline; }
+  .meta { font-size: .9em; margin: 1em 0; color: #555; }
+  code { background: #f0f0f0; padding: 0 .2em; font-size: .93em; }
+  pre { background: #f5f5f5; padding: .8em 1em; border: 1px solid #ddd; border-radius: 4px; overflow-x: auto; font-size: .88em; line-height: 1.4; }
+  table { border-collapse: collapse; width: 100%; margin: 1em 0; }
+  th, td { border: 1px solid #ddd; padding: .5em .8em; text-align: left; font-size: .9em; }
+  th { background: #f5f5f5; font-weight: 600; }
+  .hist { font-size: .85em; color: #555; }
+</style>
+</head>
 <body>
+<div class="lang"><a href="758.html" class="active">EN</a> · <a href="758_de.html">DE</a> · <a href="758_ru.html">RU</a> · <a href="758_fr.html">FR</a> · <a href="758_es.html">ES</a></div>
 <div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="757.html">← Prev</a> · <a href="759.html">Next →</a></div>
 
-<h1>#758: <code>XmlObjectWriter.java</code></h1>
-<div class="meta"><strong>Lines:</strong> 387 · <strong>Author:</strong> Kai Reinhard · <strong>Type:</strong> Java — движок сериализации XmlStream · <strong>Library:</strong> dom4j</div>
+<h1>#758: <code>AliasMap.java</code></h1>
+<div class="meta"><strong>Java utility class</strong> — bidirectional Class↔XML-alias mapping. 40 lines. Source: <code>projectforge-business/src/main/java/org/projectforge/framework/xmlstream/AliasMap.java</code></div>
 
-<div class="c"><h2>Что это</h2>
-<p><strong>Движок сериализации</strong> фреймворка XmlStream — превращает Java-объекты в XML (dom4j <code>Document</code>). 387 строк. Javadoc объясняет мотивацию создания: <em>"A simple solution for streaming xml objects and to prevent default values from the xml output (because this feature isn't yet available in XStream). It's only fit the ProjectForge requirements and is not very useful as generic xml streaming package."</em> — то есть XStream на момент написания не умел пропускать поля со значениями по умолчанию, а для экспорта данных это критично (чтобы XML не раздувался от тысяч <code>&lt;deleted&gt;false&lt;/deleted&gt;</code>).</p>
-<p>Пара с <a href="757.html">XmlObjectReader</a>: Writer сериализует Java → XML, Reader десериализует XML → Java. Оба используют dom4j как XML-библиотеку и <a href="756.html">@XmlObject</a>/<a href="754.html">@XmlField</a> аннотации для управления форматом.</p></div>
+<div class="c">
+<strong>Purpose:</strong> A bidirectional map that bridges Java classes and XML element/attribute names. It maintains two internal <code>HashMap</code>s — one mapping <code>Class → alias</code> and another mapping <code>alias → Class</code> — providing O(1) lookup in both directions. This is the central registry of "how Java classes map to XML tags" in the XmlStream framework, used by both <code>XmlObjectWriter</code> (to write the correct tag name) and <code>XmlObjectReader</code> (to find the correct class for a tag encountered in XML).
+</div>
 
-<div class="c"><h2>История изменений (git log)</h2>
-<div class="hist">
-<p><strong>Ключевые коммиты, сформировавшие этот файл:</strong></p>
+<h2>Design — Bidirectional HashMap</h2>
+
+<div class="c">
+<p>The class uses two <code>HashMap</code> fields:</p>
 <ul>
-<li><strong><code>9f874e26c</code> — "MAJOR-CHANGE! Migration of integer id's to Long id's (including fk's etc.)"</strong> — массовая миграция всех идентификаторов с Integer на Long. Затронула <code>refIdCounter</code> (long) и <code>ATTR_ID</code>/<code>ATTR_REF_ID</code> атрибуты. До этого идентификаторы объектов в XML были Integer (макс. ~2 миллиарда), после — Long (макс. ~9 квинтиллионов). Критично для крупных инсталляций где счётчик переполнялся</li>
-<li><strong><code>cd27dd997</code> — "package xstream -> xmlstream. (should be replaced by xstream later)."</strong> — пакет был переименован с <code>xstream</code> на <code>xmlstream</code> чтобы избежать путаницы с библиотекой XStream. Комментарий "(should be replaced by xstream later)" — автор планировал в будущем заменить свой фреймворк на XStream, но этого так и не произошло. XmlStream жив до сих пор</li>
-<li><strong><code>24019a0f5</code> — "Eliminate DateHolder occurences"</strong> — удаление использований DateHolder (устаревший pre-Java-8 класс) из Writer'а. Замена на <code>java.util.Date</code> и <code>java.time</code> типы через конвертеры</li>
-<li><strong><code>73a9755df</code> — "More code cleanup: Collapsed catch blocks, StringBuffer→StringBuilder, ArrayList&lt;Class&gt;→ArrayList&lt;&gt;, removed deprecated HSSFColors"</strong> — общий рефакторинг: замена StringBuffer на StringBuilder (непотокобезопасный но быстрее), использование diamond-оператора, удаление deprecated-вызовов. Затронул форматирование и читаемость</li>
-<li><strong><code>868d6abb7</code> — "2025 -> 2026"</strong> (и аналогичные) — ежегодное обновление копирайта в GPL-заголовке. 8 из 15 коммитов — только обновление года в лицензии. Это норма для GPL-проектов — каждый год нужно обновлять копирайт</li>
+<li><code>aliasMap1: Map&lt;Class&lt;?&gt;, String&gt;</code> — <code>Class → alias</code> for converting Java types to XML tag names during serialization</li>
+<li><code>aliasMap2: Map&lt;String, Class&lt;?&gt;&gt;</code> — <code>alias → Class</code> for converting XML tag names back to Java types during deserialization</li>
 </ul>
-</div></div>
+<p>Both maps are populated simultaneously via <code>put(Class, String)</code>. This is a simple but effective pattern: no need for Guava's <code>BiMap</code> or any external dependency — just two plain <code>HashMap</code>s maintained in sync. The trade-off is double the memory for fast bidirectional lookups, but since alias maps typically contain tens to hundreds of entries, the overhead is negligible.</p>
+</div>
 
-<div class="c"><h2>Две константы — deduplication через XML-атрибуты</h2>
-<ul>
-<li><code>ATTR_ID = "o-id"</code> — уникальный идентификатор объекта в XML. Writer присваивает каждому новому объекту возрастающий <code>refIdCounter</code> и записывает как атрибут <code>o-id="0"</code>, <code>o-id="1"</code> и т.д.</li>
-<li><code>ATTR_REF_ID = "ref-id"</code> — ссылка на уже записанный объект. Если объект уже был сериализован ранее (найден в <code>writtenObjects</code> кэше), Writer НЕ записывает его содержимое повторно, а только ставит <code>ref-id="0"</code> — ссылку на элемент с <code>o-id="0"</code></li>
-</ul>
-<p>Этот механизм решает проблему циклических ссылок и дублирования. Пример: объект A содержит ссылку на объект B, а B содержит обратную ссылку на A. Без deduplication Writer ушёл бы в бесконечную рекурсию. С deduplication: A записывается с o-id=0, B с o-id=1, обратная ссылка на A — как ref-id=0.</p></div>
+<h2>API Methods</h2>
 
-<div class="c"><h2>Кэш записанных объектов — <code>writtenObjects</code></h2>
-<p><code>Map&lt;String, Element&gt;</code> где ключ — <code>className:hashCode</code> объекта (например <code>"org.projectforge.business.user.PFUserDO:987345678854"</code>). Это <strong>identity-based</strong> кэш (по хэш-коду), а не equals-based — два разных объекта с одинаковыми полями будут записаны оба, а один объект встреченный дважды — только один раз. Использование hashCode() для identity ненадёжно (коллизии возможны), но на практике для типичных размеров XML (сотни-тысячи объектов) вероятность коллизии пренебрежимо мала.</p></div>
+<div class="c">
+<table>
+<tr><th>Method</th><th>Direction</th><th>Returns</th></tr>
+<tr><td><code>put(Class, String)</code></td><td>Registration</td><td>void — populates both internal maps</td></tr>
+<tr><td><code>getAliasForClass(Class)</code></td><td>Class → alias</td><td>String or null if not registered</td></tr>
+<tr><td><code>getClassForAlias(String)</code></td><td>alias → Class</td><td>Class&gt;?&lt; or null if not registered</td></tr>
+<tr><td><code>containsAlias(String)</code></td><td>Membership test</td><td>boolean — checks aliasMap2</td></tr>
+</table>
+</div>
 
-<div class="c"><h2>Основной метод — <code>write(Branch parent, Object obj, String name, boolean asAttribute, boolean asCDATA)</code></h2>
-<p>Рекурсивный метод сериализации. Логика — та же цепочка проверок типа что и в Reader, но в обратном направлении:</p>
+<h2>Usage in the XmlStream Pipeline</h2>
+
+<div class="c">
 <ol>
-<li><strong>Определение имени тега:</strong> сначала AliasMap, потом @XmlObject.alias, потом XmlRegistry, потом fallback на полное имя класса</li>
-<li><strong>Проверка deduplication:</strong> если объект уже в <code>writtenObjects</code> — пишет <code>ref-id</code> вместо полного содержимого</li>
-<li><strong>Converter:</strong> если тип имеет зарегистрированный IConverter — вызывает <code>converter.toString()</code> и записывает результат как текст элемента или атрибут</li>
-<li><strong>Enum:</strong> записывает <code>enum.name()</code> (например "ACTIVE", "PAID")</li>
-<li><strong>Collection:</strong> создаёт элемент-обёртку и рекурсивно пишет каждый элемент коллекции</li>
-<li><strong>Complex object:</strong> создаёт элемент, регистрирует объект в <code>writtenObjects</code>, обходит все поля через reflection, для каждого НЕ-default поля вызывает <code>writeField()</code></li>
-</ol></div>
+<li><strong>Registration phase:</strong> <code>XmlRegistry</code> (<a href="759.html">#759</a>) and <code>XmlObjectReader.initialize()</code> populate AliasMap entries for all <code>@XmlObject</code>-annotated classes</li>
+<li><strong>Serialization (Writer):</strong> <code>XmlObjectWriter.write()</code> calls <code>aliasMap.getAliasForClass(type)</code> to determine the XML tag name. Falls back to <code>@XmlObject.alias()</code>, then XmlRegistry, then FQCN</li>
+<li><strong>Deserialization (Reader):</strong> <code>XmlObjectReader.getClass()</code> calls <code>aliasMap.getClassForAlias(elementName)</code> to find the Java class for an XML tag. Falls back to XmlRegistry, then Class.forName()</li>
+</ol>
+<p>This allows both local (per-reader/writer) and global (XmlRegistry-level) alias customization.</p>
+</div>
 
-<div class="c"><h2>Default-value skipping — ключевая фича</h2>
-<p>Метод <code>isDefaultType(ann, value)</code> проверяет: равно ли значение поля значению по умолчанию из аннотации <code>@XmlField.default*</code>? Если да — поле <strong>не записывается</strong>. Это то, ради чего создавался XmlStream:</p>
-<ul>
-<li><code>Boolean</code>: если аннотация не указана, по умолчанию <code>false</code> — все false-поля пропускаются. Если аннотация указана — сравнивается с <code>defaultBooleanValue()</code></li>
-<li><code>Double</code>: сравнивается с <code>defaultDoubleValue()</code> через <code>compareTo()</code>. Если аннотация не указана — проверка: <code>!Double.isNaN(ann.defaultDoubleValue())</code> (NaN = "не задано")</li>
-<li><code>Integer</code>: сравнивается с <code>defaultIntValue()</code>. Магическое число <code>MAGIC_INT_NUMBER</code> из <a href="753.html">XmlConstants</a> используется как sentinel "не задано"</li>
-<li><code>String / Enum</code>: сравнивается с <code>defaultStringValue()</code>. Магическая строка <code>MAGIC_STRING</code> — sentinel</li>
-</ul>
-<p><strong>hasDefaultType()</strong> проверяет, <em>задан ли</em> default в аннотации вообще (отличает "default не указан" от "default == false/0/null"). Для Boolean — всегда true (false — валидный default). Для остальных типов — сравнивает с MAGIC-значениями.</p></div>
+<h2>Why Not Guava BiMap?</h2>
 
-<div class="c"><h2>Определение атрибут vs элемент — <code>asAttributeAsDefault()</code></h2>
-<p>Некоторые типы по умолчанию сериализуются как <strong>атрибуты</strong> (компактно), а не как элементы. Логика:</p>
-<ul>
-<li><code>xmlRegistry.asAttributeAsDefault(type)</code> — глобальная настройка (например, все примитивные типы → атрибуты)</li>
-<li><code>Enum.class.isAssignableFrom(type)</code> — все enum'ы всегда как атрибуты (короткое имя типа "ACTIVE" хорошо смотрится в атрибуте)</li>
-<li>Аннотация <code>@XmlField.asAttribute=true</code> — переопределение для конкретного поля</li>
-<li>Аннотация <code>@XmlField.asElement=true</code> — принудительно как элемент (даже если тип по умолчанию атрибут)</li>
-</ul></div>
+<div class="c">
+Guava's <code>BiMap</code> provides a bidirectional map with value uniqueness guarantees and <code>inverse()</code> view. However, AliasMap predates widespread Guava adoption in ProjectForge, or the author chose to minimize dependencies. The two-HashMap approach is simpler, avoids an external dependency boundary, and the value uniqueness (no two classes should have the same alias) is enforced by the caller (XmlRegistry), not the data structure.
+</div>
 
-<div class="c"><h2>Игнорирование полей — <code>ignoreField(Field)</code></h2>
-<p>Статический метод, используется и Writer'ом и Reader'ом (<a href="757.html">#757</a>). Пропускает поля с модификаторами: <code>static</code> (константы класса), <code>final</code> (нельзя изменить после создания), <code>transient</code> (явно помечены как несериализуемые). Также есть protected-метод <code>ignoreField(Object, Field)</code> который подклассы могут переопределить для дополнительной фильтрации. Плюс аннотация <code>@XmlOmitField</code> — явный маркер пропуска независимо от модификаторов.</p></div>
+<h2>Git History</h2>
+<div class="hist">
+<pre>868d6abb7 2025 → 2026 (copyright year update)
+63081666f Source file headers: 2024→2025
+b6092df09 Copyright 2023 → 2024
+ab45d51fa Copyright 2001-2022 → 2001-2023
+5f7ef41b8 Copyright 2021 → 2022
+cd27dd997 package xstream → xmlstream
+ceb63e8a1 Source code header: (C) 2001-2021
+7c79f1922 Copyright of source header → 2020
+73a9755df Code cleanup (diamond operator)
+dd5ca38ac CopyRight of all java file-header updated or created
+9ebb88522 Initial commit</pre>
+</div>
 
-</body></html>
+<div class="c">
+The class has been remarkably stable. The only code change beyond copyright updates was <code>73a9755df</code> which modernized the generics syntax: <code>new HashMap&lt;Class, String&gt;()</code> → <code>new HashMap&lt;&gt;()</code> (diamond operator). The design of two parallel HashMaps for bidirectional mapping has proven durable and has not required modification since the initial commit.
+</div>
+
+</body>
+</html>

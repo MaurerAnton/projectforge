@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>#761: ProjectForgeRootElement [RU]</title>
+<style>
+  body { font-family: system-ui, sans-serif; max-width: 960px; margin: 2em auto; padding: 0 1em; background: #fafafa; color: #222; line-height: 1.6; }
+  h1 { border-bottom: 2px solid #333; padding-bottom: 0.3em; }
+  h2 { margin-top: 2.5em; border-bottom: 1px solid #ddd; padding-bottom: 0.2em; color: #333; }
+  h3 { margin-top: 2em; color: #444; }
+  a { color: #0366d6; }
+  .c { border-left: 3px solid #ddd; padding: .5em 1em; margin: 1em 0; background: #fff; }
+  .nav { font-size: .9em; color: #888; margin-bottom: 1em; }
+  .lang { font-size: .85em; color: #888; float: right; }
+  .lang a { color: #888; text-decoration: none; padding: 0 .3em; }
+  .lang a.active { color: #0366d6; font-weight: 600; text-decoration: underline; }
+  .meta { font-size: .9em; margin: 1em 0; color: #555; }
+  code { background: #f0f0f0; padding: 0 .2em; font-size: .93em; }
+  pre { background: #f5f5f5; padding: .8em 1em; border: 1px solid #ddd; border-radius: 4px; overflow-x: auto; font-size: .88em; line-height: 1.4; }
+  table { border-collapse: collapse; width: 100%; margin: 1em 0; }
+  th, td { border: 1px solid #ddd; padding: .5em .8em; text-align: left; font-size: .9em; }
+  th { background: #f5f5f5; font-weight: 600; }
+  .hist { font-size: .85em; color: #555; }
+</style>
+</head>
+<body>
+<div class="lang"><a href="761.html">EN</a> · <a href="761_de.html">DE</a> · <a href="761_ru.html" class="active">RU</a> · <a href="761_fr.html">FR</a> · <a href="761_es.html">ES</a></div>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="760.html">← Prev</a> · <a href="762.html">Next →</a></div>
+
+<h1>#761: <code>ProjectForgeRootElement.java</code></h1>
+<div class="meta"><strong>Строк:</strong> 98 · <strong>Автор:</strong> Kai Reinhard · <strong>Тип:</strong> Java abstract class · <strong>Пакет:</strong> <code>org.projectforge.framework.xmlstream</code></div>
+
+<div class="c"><h2>Что это и зачем</h2>
+<p>Абстрактный базовый класс для <strong>корневых элементов XML</strong> в собственной системе сериализации ProjectForge — <code>XmlStream</code>. Это не JAXB и не XStream, а <strong>свой легковесный XML-фреймворк</strong>, написанный с нуля для конкретных нужд проекта: экспорт/импорт данных между инстансами ProjectForge, сохранение пользовательских настроек, и сериализация конфигурации.</p>
+<p>Javadoc: <em>"For export and import it's useful to use an instance of this object to define for example the time zone, version etc."</em> — каждый экспортированный XML-файл должен нести метаданные: часовой пояс, версия ProjectForge, и дата создания. Без этой информации импорт на другом сервере может неправильно интерпретировать даты или не суметь применить миграции формата.</p></div>
+
+<div class="c"><h2>Три поля — три аспекта совместимости</h2>
+<ol>
+<li><strong><code>created</code> (Date):</strong> когда XML был создан. Сеттер <code>setCreated()</code> без аргументов автоматически устанавливает текущее время с точностью до <strong>секунд</strong> (миллисекунды обнулены — <code>withPrecision(DatePrecision.SECOND)</code> через <code>PFDateTime</code>). Импортёр использует эту метку чтобы понять, какие данные новее при конфликтах.</li>
+<li><strong><code>timeZone</code> (java.util.TimeZone):</strong> часовой пояс, использованный при экспорте. Критично для дат: если сервер в Берлине экспортирует "2025-05-15 09:00 Europe/Berlin", а импорт в Нью-Йорке, без таймзоны дата будет интерпретирована как 09:00 EST. Наличие явного <code>timeZone</code> предотвращает сдвиги дат.</li>
+<li><strong><code>version</code> (String, <code>@XmlField(asAttribute=true)</code>):</strong> версия ProjectForge, создавшая файл. Используется для миграции формата — если импортёр видит <code>version="7.4"</code>, применяет конвертеры 7.4 → 8.0. Аннотация <code>@XmlField(asAttribute=true)</code> означает запись как атрибут: <code>&lt;projectforge version="8.0"&gt;</code>.</li>
+</ol></div>
+
+<div class="c"><h2>Fluent API — все сеттеры возвращают <code>this</code></h2>
+<p>Каждый сеттер возвращает <code>ProjectForgeRootElement</code>, позволяя цепочечную инициализацию:</p>
+<pre>export.setTimeZone(userTZ).setCreated().setVersion("8.0.0");</pre></div>
+
+<div class="c"><h2>Место в иерархии XmlStream</h2>
+<p><code>ProjectForgeRootElement</code> — абстрактный базовый класс. Конкретные корневые элементы наследуют его. Вся система XmlStream состоит из:</p>
+<ul>
+<li><code>@XmlField</code> (<a href="752.html">#752</a>) / <code>@XmlOmitField</code> (<a href="757.html">#757</a>) — аннотации полей</li>
+<li><code>@XmlObject</code> (<a href="754.html">#754</a>) — аннотация класса</li>
+<li><code>XmlObjectReader</code> (<a href="755.html">#755</a>) / <code>XmlObjectWriter</code> (<a href="756.html">#756</a>) — движок чтения/записи</li>
+<li><code>Converter</code> иерархия — конвертеры типов</li>
+<li><code>AliasMap</code> (<a href="758.html">#758</a>) — маппинг Class↔XML-tag</li>
+<li><code>XmlRegistry</code> — реестр зарегистрированных XML-объектов</li>
+</ul>
+<p>Этот фреймворк <strong>существует параллельно</strong> с XStream в ProjectForge. XStream для пользовательских настроек, XmlStream — для экспорта/импорта данных.</p></div>
+
+<div class="c"><h2>Почему не XStream?</h2>
+<ul>
+<li><strong>Версионирование:</strong> XStream не поддерживает миграцию формата</li>
+<li><strong>Контроль схемы:</strong> XStream генерирует XML "как получится"</li>
+<li><strong>Безопасность:</strong> XStream может десериализовать произвольные Java-объекты (известная уязвимость)</li>
+</ul></div>
+
+<div class="c"><h2>Git History</h2>
+<div class="hist"><pre>868d6abb7 2025 → 2026
+63081666f Source file headers: 2024→2025
+5f9bbfbd3 Fix typos in projectforge-business directory
+b6092df09 Copyright 2023 → 2024
+ab45d51fa Copyright 2001-2022 → 2001-2023
+5f7ef41b8 Copyright 2021 → 2022
+cd27dd997 package xstream → xmlstream
+ceb63e8a1 Source code header: (C) 2001-2021
+7c79f1922 Copyright of source header → 2020
+24019a0f5 Eliminate DateHolder occurences
+32f634b88 Optimize imports
+dd5ca38ac CopyRight of all java file-header updated or created
+9ebb88522 Initial commit</pre></div>
+<p>Ключевые изменения: <code>24019a0f5</code> — удаление DateHolder, миграция на <code>PFDateTime</code>. <code>5f9bbfbd3</code> — исправление опечаток. Три основных поля (<code>created</code>, <code>timeZone</code>, <code>version</code>) и fluent API стабильны с начального коммита.</p></div>
+
+</body>
+</html>

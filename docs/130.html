@@ -1,3 +1,53 @@
-<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>#130</title><style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333}a{color:#0366d6}.m{font-size:.9em;margin:1em 0}.n{font-size:.9em;color:#888;margin-bottom:1em}</style></head><body><div class=n><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="129.html">← Prev</a> · <a href="131.html">Next →</a></div>
-<h1>130: <code>IHKPluginUserRightId.kt</code></h1><div class=m><p>Kotlin interface plugins ihk. Source: <code>plugins/org.projectforge.plugins.ihk/src/main/kotlin/org/projectforge/plugins/ihk/IHKPluginUserRightId.kt</code>.</p></div>
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>#130: IHKPluginUserRightId</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:2em;color:#444}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.lang{font-size:.85em;color:#888;float:right}.lang a{color:#888;text-decoration:none;padding:0 .3em}.lang a.active{color:#0366d6;font-weight:600;text-decoration:underline}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}.warn{background:#fff3cd;border-left:3px solid #ffc107;padding:.5em 1em;margin:1em 0}.tip{background:#d4edda;border-left:3px solid #28a745;padding:.5em 1em;margin:1em 0}</style></head>
+<body><div class="lang"><a href="130.html" class="active">EN</a> · <a href="130_de.html">DE</a> · <a href="130_ru.html">RU</a> · <a href="130_fr.html">FR</a> · <a href="130_es.html">ES</a></div>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="129.html">← Prev</a> · <a href="131.html">Next →</a></div>
+<h1>#130: <code>IHKPluginUserRightId.kt</code></h1>
+<div class="meta">Kotlin enum / user right identifier, <code>plugins/org.projectforge.plugins.ihk/src/main/kotlin/org/projectforge/plugins/ihk/IHKPluginUserRightId.kt</code></div>
+<div class="c">Kotlin enum implementing <code>IUserRightId</code> to define the IHK plugin's single access right. Provides a <code>ProviderService</code> inner class for Hibernate Search indexing and the right-right provider SPI.</div>
+
+<h2>Architecture</h2>
+
+<h3>Enum Definition</h3>
+<pre>@Indexed
+@TypeBinding(binder = TypeBinderRef(type = HibernateSearchUserRightIdTypeBinder::class))
+enum class IHKPluginUserRightId(
+    override val id: String,
+    override val orderString: String,
+    override val i18nKey: String
+) : IUserRightId {
+    IHK("PLUGIN_IHK", "plugin70", "plugins.ihk");
+}</pre>
+
+<table>
+  <tr><th>Parameter</th><th>Value</th><th>Meaning</th></tr>
+  <tr><td><code>id</code></td><td><code>"PLUGIN_IHK"</code></td><td>Unique identifier across all plugins; stored in the database for user-right assignments</td></tr>
+  <tr><td><code>orderString</code></td><td><code>"plugin70"</code></td><td>Sort key for the UserEditPage rights table; pluginnn pattern ensures plugins sort after built-in rights</td></tr>
+  <tr><td><code>i18nKey</code></td><td><code>"plugins.ihk"</code></td><td>Key for the right's display name in the UI; resolved via <code>IHKI18nResources.properties</code></td></tr>
+</table>
+
+<h3>Hibernate Search Integration</h3>
+<p>The <code>@Indexed</code> and <code>@TypeBinding</code> annotations bind this enum to <code>HibernateSearchUserRightIdTypeBinder</code>, enabling full-text search across user-right assignments. When a Hibernate Search query scans <code>PFUserDO</code> entities for rights, this type binder knows how to index enum-based right IDs.</p>
+
+<h3>ProviderService (SPI)</h3>
+<p>The inner class <code>ProviderService</code> implements <code>RightRightIdProviderService</code>, a Java SPI interface. Its <code>getUserRightIds()</code> method returns the enum entries via <code>Arrays.asList(*entries.toTypedArray())</code>. This is loaded by the ServiceLoader and contributes the IHK right to the global registry of all known user rights in the system.</p>
+
+<pre>class ProviderService : RightRightIdProviderService {
+    override fun getUserRightIds(): Collection&lt;IUserRightId&gt; {
+        return Arrays.asList&lt;IUserRightId&gt;(*entries.toTypedArray())
+    }
+}</pre>
+
+<h2>Design Decisions</h2>
+<ul>
+  <li><strong>Kotlin enum over Java enum:</strong> Written in Kotlin despite the rest of the IHK plugin being in Java. This aligns with ProjectForge's migration strategy of writing new enum/id types in Kotlin for concise syntax with <code>override val</code> constructor properties.</li>
+  <li><strong>SPI registration via META-INF/services:</strong> The <code>ProviderService</code> inner class is registered in <code>META-INF/services/org.projectforge.framework.persistence.api.RightRightIdProviderService</code> (not shown but implied by the pattern), making plugin rights automatically discoverable without explicit registration code.</li>
+  <li><strong>Single enum value:</strong> The IHK plugin is simple enough to need only one right (<code>PLUGIN_IHK</code>), unlike ToDo which has <code>PLUGIN_TODO</code>. The enum pattern scales cleanly if future sub-rights are needed (e.g., <code>PLUGIN_IHK_ADMIN</code>).</li>
+  <li><strong>Order string "plugin70":</strong> The naming convention <code>pluginNN</code> (where NN is an incrementing number) ensures deterministic ordering in the rights administration table. IHK uses 70, placing it after earlier plugins like ToDo (plugin10).</li>
+</ul>
+
+<h2>Git History</h2><div class="hist"><pre>868d6abb7 2025 -> 2026
+63081666f Source file headers: 2024-> 2025.
+067a4cbb1 Migration stuff in progress...
+b1560ca43 Migration stuff in progress...</pre></div>
 </body></html>

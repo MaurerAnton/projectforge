@@ -1,3 +1,49 @@
-<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>#127</title><style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333}a{color:#0366d6}.m{font-size:.9em;margin:1em 0}.n{font-size:.9em;color:#888;margin-bottom:1em}</style></head><body><div class=n><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="126.html">← Prev</a> · <a href="128.html">Next →</a></div>
-<h1>127: <code>IHKPlugin.java</code></h1><div class=m><p>Java interface plugins ihk. Source: <code>plugins/org.projectforge.plugins.ihk/src/main/java/org/projectforge/plugins/ihk/IHKPlugin.java</code>.</p></div>
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>#127: IHKPlugin</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:2em;color:#444}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.lang{font-size:.85em;color:#888;float:right}.lang a{color:#888;text-decoration:none;padding:0 .3em}.lang a.active{color:#0366d6;font-weight:600;text-decoration:underline}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}.warn{background:#fff3cd;border-left:3px solid #ffc107;padding:.5em 1em;margin:1em 0}.tip{background:#d4edda;border-left:3px solid #28a745;padding:.5em 1em;margin:1em 0}</style></head>
+<body><div class="lang"><a href="127.html" class="active">EN</a> · <a href="127_de.html">DE</a> · <a href="127_ru.html">RU</a> · <a href="127_fr.html">FR</a> · <a href="127_es.html">ES</a></div>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="126.html">← Prev</a> · <a href="128.html">Next →</a></div>
+<h1>#127: <code>IHKPlugin.java</code></h1>
+<div class="meta">Plugin entry point, <code>plugins/org.projectforge.plugins.ihk/src/main/java/org/projectforge/plugins/ihk/IHKPlugin.java</code></div>
+<div class="c">Main plugin class for the IHK (Industrie- und Handelskammer) module. Extends <code>AbstractPlugin</code> to register the plugin in ProjectForge's plugin system via the Java ServiceLoader mechanism. Provides week-based timesheet export as IHK-compliant training reports (<em>Ausbildungsnachweise</em>) for German vocational trainees.</div>
+
+<h2>Architecture</h2>
+<p><code>IHKPlugin</code> is the bootstrap class for the IHK plugin. It subclasses <code>AbstractPlugin</code> and is discovered through the META-INF/services file at <code>META-INF/services/org.projectforge.plugins.core.AbstractPlugin</code>, which contains the single line <code>org.projectforge.plugins.ihk.IHKPlugin</code>.</p>
+
+<h3>Plugin Registration Lifecycle</h3>
+<p>The constructor calls <code>super("ihk", "IHK", "...")</code>, passing the plugin ID, short name, and a German-language description. The <code>initialize()</code> method (called by AbstractPlugin's lifecycle) performs these registrations in order:</p>
+<ol>
+  <li><strong>DAO registration:</strong> <code>register(getId(), TimesheetDao.class, ...)</code> — makes the timesheet DAO available to the IHK module, scoped under <code>"plugins.ihk"</code>.</li>
+  <li><strong>Wicket web registration:</strong> <code>pluginWicketRegistrationService.registerWeb(getId())</code> — mounts the plugin's Wicket web resources.</li>
+  <li><strong>Menu registration:</strong> Registers an <em>IHK-Report</em> menu under the Misc menu (<code>MenuItemDefId.MISC</code>), pointing to <code>IHKPage.class</code> with i18n key <code>"plugins.ihk.menu"</code>.</li>
+  <li><strong>Access rights:</strong> <code>registerRight(new IHKRight())</code> — installs the plugin's access control (see #128).</li>
+  <li><strong>i18n resources:</strong> <code>addResourceBundle(RESOURCE_BUNDLE_NAME)</code> with bundle name <code>"IHKI18nResources"</code> — loads the default and <code>_de</code> locale property files.</li>
+</ol>
+
+<h3>Log Subscription Utility</h3>
+<p>The static method <code>ensureUserLogSubscription()</code> creates or retrieves a <code>LogSubscription</code> scoped to <code>"org.projectforge.plugins.ihk"</code> loggers, tied to the currently logged-in user. This enables the IHK page to offer a direct link to the log viewer for troubleshooting export operations.</p>
+
+<h2>Design Decisions</h2>
+<ul>
+  <li><strong>Explicit DAO registration</strong> vs. Spring auto-wiring: The plugin manually registers <code>TimesheetDao</code> through <code>WicketSupport.get()</code> rather than relying on <code>@Autowired</code>. This follows the AbstractPlugin pattern where DAO registrations map to scripting engine namespaces and dump/import ordering.</li>
+  <li><strong>Static log subscription:</strong> The subscription is created per-user on page load via <code>IHKPage</code>, not eagerly at plugin init. This avoids creating subscriptions for users who never visit the IHK page.</li>
+  <li><strong>No persistent entities:</strong> Unlike plugins such as ToDo or Memo, the IHK plugin doesn't define its own <code>PERSISTENT_ENTITIES</code> array — it operates entirely on existing <code>TimesheetDO</code> objects. The plugin is a pure read/export layer.</li>
+  <li><strong>Dual-license GPLv3:</strong> Licensed under GNU GPL v3 as part of ProjectForge Community Edition.</li>
+</ul>
+
+<h2>Key Constants</h2>
+<table>
+  <tr><th>Constant</th><th>Value</th><th>Purpose</th></tr>
+  <tr><td><code>RESOURCE_BUNDLE_NAME</code></td><td><code>"IHKI18nResources"</code></td><td>Base name for <code>.properties</code> and <code>_de.properties</code> i18n files</td></tr>
+</table>
+
+<h2>Git History</h2><div class="hist"><pre>868d6abb7 2025 -> 2026
+63081666f Source file headers: 2024-> 2025.
+3785f8347 Migration stuff in progress...
+67805f2fc ThreadLocalUserContext.user -> ThreadLocalUserContext.loggedInUser
+4efcbd0fb Migration stuff in progress...
+b6092df09 Copyright 2023 -> 2024
+ab45d51fa Copyright 2001-2022 -> 2001-2023.
+5f7ef41b8 Copyright 2021 -> 2022
+5d41efc41 LogViewer in IHK-Plugin.
+ceb63e8a1 Source code header: (C) 2001-2021.</pre></div>
 </body></html>

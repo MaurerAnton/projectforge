@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>#737 [DE]</title>
+<style>
+body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}
+h1{border-bottom:2px solid #333}
+h2{margin-top:1.5em}
+a{color:#0366d6}
+.meta{font-size:.9em;margin:1em 0}
+.nav{font-size:.9em;color:#888;margin-bottom:1em}
+.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}
+code{background:#f0f0f0;padding:0 .2em}
+pre{background:#f5f5f5;padding:.5em;margin:.5em 0;border-radius:3px;font-size:.85em;overflow-x:auto}
+</style>
+</head>
+<body>
+
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← Datei-Index</a> · <a href="736.html">← Vorherige</a> · <a href="738.html">Nächste →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/java/org/projectforge/framework/utils/KeyValuePairParser.java" target="_blank" title="Quelltext auf GitHub ansehen">📄 Quelle</a></div>
+
+<h1>#737: <code>KeyValuePairParser.java</code></h1>
+<div class="meta"><code>projectforge-business/src/main/java/org/projectforge/framework/utils/KeyValuePairParser.java</code> <strong>Zeilen:</strong> 301 · <strong>Autor:</strong> Kai Reinhard · <strong>Typ:</strong> Java handgeschriebener Lexer/Parser — keine Abhängigkeiten <span style="color:#888">301 Zeilen · 229 Code · 34 Kommentare · 38 leer</span></div>
+
+<div class="c"><h2>Zweck</h2>
+<p>Ein <strong>handgeschriebener Stream-Parser</strong>, der <code>Schlüssel=Wert</code>-Paare aus einem <code>java.io.Reader</code> liest, Zeichen für Zeichen. Kein Regex, keine Drittanbieter-Parser-Bibliothek — reines zustandsbasiertes Parsen Zeichen für Zeichen mit einem 5-Elemente-Pushback-Puffer. Diese Art von Code existierte, bevor Bibliotheken wie <a href="https://commons.apache.org/proper/commons-csv/">Apache Commons CSV</a> zum Standard wurden — oder wurde geschrieben, weil der Autor ohne Abhängigkeits-Overhead die genaue Kontrolle über Fehlermeldungen und Randfälle haben wollte.</p>
+<p>Der Parser unterstützt: <strong>in Anführungszeichen gesetzte Werte</strong> (mit <code>"</code>), <strong>escapte Anführungszeichen</strong> innerhalb von Zeichenketten in Anführungszeichen (<code>""</code> → ein literales <code>"</code>), <strong>konfigurierbares Trennzeichen</strong> (Standard aus <code>KeyValuePairWriter.DEFAULT_SEPARATOR_CHAR</code>), <strong>Zeilen-/Spaltenverfolgung</strong> für Fehlermeldungen und <strong>Überspringen von Leerzeichen</strong>. Eingabeformat: <code>schlüssel1=wert1,schlüssel2="zitierter Wert, mit Komma",schlüssel3=123</code>.</p></div>
+
+<div class="c"><h2>Architektur: ein Miniatur-Lexer</h2>
+<p>301 Zeilen. Der Parser ist als klassischer <strong>Zweiphasen-Lexer</strong> strukturiert:</p>
+<ol><li><strong>Zeichenleser (<code>read()</code> / <code>nextToken()</code> / <code>unread()</code>):</strong> liest ein Zeichen aus dem <code>Reader</code>, verfolgt Zeilen-/Spaltennummern, behandelt <code>\r\n</code> (Windows) und <code>\n</code> (Unix) Zeilenumbrüche und klassifiziert das Token als <code>EOF</code>, <code>EOL</code> oder <code>CHAR</code>. Die Methode <code>nextToken()</code> ist der Tokenizer</li>
+<li><strong>Parser (<code>parseKey()</code> / <code>parseValue()</code>):</strong> verbraucht Tokens, um Schlüssel- und Wert-Zeichenketten zu erstellen. <code>parse()</code> ist der Einstiegspunkt, der in einer Schleife parseKey+parseValue aufruft, bis EOF/EOL erreicht ist</li></ol>
+<p>Dies ist dieselbe Architektur wie ein <strong>Compiler-Frontend</strong> — Tokenizer + Parser — nur für Schlüssel=Wert-Daten anstelle von Programmiersprachen.</p></div>
+
+<div class="c"><h2>Pushback-Puffer</h2>
+<p>Ein 5-Elemente <code>int[] pushbackBuffer</code> mit Index <code>pushbackIndex</code>. Wenn der Parser ein Zeichen zu weit liest (z.B. in <code>skipWhitespaces()</code>), <strong>schiebt er das Zeichen zurück</strong> über <code>unread(int b)</code>. Der Puffer aktualisiert die Zeilen-/Spaltenzähler beim Zurückschieben von Zeilenumbrüchen — entscheidend für genaue Fehlermeldungen. 5 Elemente reichen für jedes Lookahead aus, das dieser Parser benötigt (maximales Lookahead beträgt 1-2 Zeichen). Dies ist die Standardimplementierung von <strong>1-Zeichen-Lookahead</strong> — die einfachste Form des Backtrackings.</p></div>
+
+<div class="c"><h2>Behandlung von Werten in Anführungszeichen — die komplexeste Logik</h2>
+<p><code>parseValue()</code> (Zeilen 141-189) implementiert einen vollständigen <strong>CSV-ähnlichen Parser für Felder in Anführungszeichen</strong>:</p>
+<ol><li>Überspringt Leerzeichen, liest das erste Zeichen</li>
+<li>Wenn das erste Zeichen <code>"</code> ist, wechselt in den <strong>Modus für Anführungszeichen</strong> (<code>quoted=true</code>)</li>
+<li>Im Modus für Anführungszeichen:
+<ul><li><code>""</code> → escaptes Anführungszeichen (fügt ein <code>"</code> zum Wert hinzu)</li>
+<li><code>"</code> gefolgt von Trennzeichen oder Leerzeichen+Trennzeichen → Ende des Werts</li>
+<li><code>"</code> gefolgt von etwas anderem → Fehler (<code>UNEXPECTED_CHARACTER_AFTER_QUOTATION_MARK</code>)</li>
+<li>Jedes andere Zeichen → an den Wert-Puffer angehängt</li></ul></li>
+<li>Im Modus ohne Anführungszeichen:
+<ul><li>Trennzeichen → Ende des Werts</li>
+<li><code>"</code> → Fehler (<code>UNEXPECTED_QUOTATIONMARK</code> — Anführungszeichen sind nur im Modus mit Anführungszeichen erlaubt)</li>
+<li>Jedes andere Zeichen → angehängt</li></ul></li>
+<li>Wenn EOF/EOL erreicht wird, während Anführungszeichen aktiv sind → Fehler (<code>QUOTATIONMARK_MISSED_AT_END_OF_CELL</code>)</li></ol>
+<p>Dies folgt der <a href="https://datatracker.ietf.org/doc/html/rfc4180">RFC 4180 CSV-Spezifikation</a> für Felder in Anführungszeichen, jedoch vereinfacht — keine mehrzeiligen Felder in Anführungszeichen, keine Header-Erkennung, keine Typinferenz.</p></div>
+
+<div class="c"><h2>Fehlerbehandlung — präzise Positionsinformationen</h2>
+<p>Jede Fehlermeldung enthält <strong>Zeilen- und Spaltennummer</strong> — z.B. <code>"Unerwartetes Anführungszeichen... Fehler in Zeile: 3 (14)"</code>. Dies ist entscheidend für das Debuggen von Konfigurationsdateien. Die statische Methode <code>createMessage()</code> formatiert Fehler mit dem Muster: <code>msg + " Fehler in Zeile: " + line + " (" + col + ")" + (s != null ? ": " + s : "")</code>. Die Zähler <code>lineno</code> und <code>colno</code> werden von <code>read()</code> (erhöht die Zeile bei <code>\n</code>) und <code>nextToken()</code> (erhöht die Spalte bei jedem Zeichen) verwaltet.</p></div>
+
+<div class="c"><h2>Verwendungskontext</h2>
+<p>Dieser Parser wird verwendet, um <strong>Konfigurationsdateien</strong> und <strong>Skript-Parametereingaben</strong> zu lesen — Orte, an denen Benutzer oder Administratoren Schlüssel=Wert-Daten in einfachen Textdateien schreiben. Beispiel für eine Datei, die von diesem Parser verarbeitet wird:</p>
+<pre>name=ProjectForge
+version="8.0.0"
+description="ERP-System mit Zeiterfassung, Kalender und Fibu"
+maxUsers=100</pre>
+<p>Der Parser liest Zeile für Zeile (<code>EOL</code> stoppt jeden <code>parse()</code>-Aufruf) und erzeugt eine <code>Map&lt;String, String&gt;</code>. Die Begleitklasse <a href="738.html">KeyValuePairWriter</a> macht das Gegenteil — schreibt Maps in das Schlüssel=Wert-Textformat.</p></div>
+
+</body>
+</html>

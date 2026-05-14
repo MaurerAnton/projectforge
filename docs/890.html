@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>#890: AuftragsCache.kt</title>
+<title>#890: AuftragAndRechnungDaoHelper.kt</title>
 <style>
 body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}
 h1{border-bottom:2px solid #333;padding-bottom:.3em}
@@ -22,110 +22,71 @@ th{background:#f5f5f5;font-weight:600}
 </style>
 </head>
 <body>
-<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="889.html">← Prev</a> · <a href="891.html">Next →</a></div>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="889.html">← Prev</a> · <a href="891.html">Next →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/kotlin/org/projectforge/business/fibu/AuftragAndRechnungDaoHelper.kt" target="_blank" title="View source on GitHub">📄 source</a></div>
 
-<h1>#890: <code>AuftragsCache.kt</code></h1>
+<h1>#890: <code>AuftragAndRechnungDaoHelper.kt</code></h1>
 
-<div class="meta">
-<p><strong>Type:</strong> Spring <code>@Service</code> — timed cache (<code>AbstractCache</code>)</p>
+<div class="meta"><code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/AuftragAndRechnungDaoHelper.kt</code> 
+<p><strong>Type:</strong> Utility object (Kotlin <code>object</code>)</p>
 <p><strong>Package:</strong> <code>org.projectforge.business.fibu</code></p>
-<p><strong>Full path:</strong> <code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/AuftragsCache.kt</code></p>
-</div>
+<p><strong>Full path:</strong> <code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/AuftragAndRechnungDaoHelper.kt</code></p>
+ <span style="color:#888">129 lines · 98 code · 23 comments · 8 blank</span></div>
 
 <div class="c">
-<p>Performance-critical timed cache that preloads and maintains all order (<em>Auftrag</em>) information for the order book. Extends <code>AbstractCache</code> with an 8-hour refresh cycle. Loads all non-deleted orders, their positions, and payment schedules into in-memory maps to avoid repeated database queries. Calculates invoiced sums, fully-invoiced status, "to be invoiced" flags, and tracks counts of orders needing invoicing. Listens for changes via <code>BaseDOModifiedListener</code> hooks on both <code>AuftragDO</code> and <code>RechnungDO</code> to invalidate cached data. Handles a cyclic dependency with <code>AuftragDao</code> via post-construction wiring.</p>
+<p>Shared utility object providing database filter criteria builders and validation logic used by both <code>AuftragDao</code> (orders) and <code>RechnungDao</code> (invoices). Centralizes common patterns like period-of-performance filtering, date range query construction, and invoice save-time validation (maturity calculation, payment date/amount consistency).</p>
 </div>
 
-<h2>Class Definition</h2>
-<pre>@Service
-class AuftragsCache : AbstractCache(8 * TICKS_PER_HOUR)</pre>
+<h2>Public Methods</h2>
 
-<h2>Dependencies</h2>
-<table>
-<tr><th>Dependency</th><th>Type</th><th>Notes</th></tr>
-<tr><td><code>auftragsCacheService</code></td><td><code>@Autowired AuftragsCacheService</code></td><td>Provides bulk SELECT queries for orders, positions, and payment schedules</td></tr>
-<tr><td><code>rechnungDao</code></td><td><code>@Autowired RechnungDao</code></td><td>Listened for invoice changes that invalidate order data</td></tr>
-<tr><td><code>auftragDao</code></td><td><code>@Autowired AuftragDao</code></td><td>Wired back to <code>AuftragDao.auftragsCache</code> via <code>init()</code>; listened for order changes</td></tr>
-</table>
-
-<h2>Internal Data Structures</h2>
-<table>
-<tr><th>Map</th><th>Key</th><th>Value</th><th>Description</th></tr>
-<tr><td><code>orderInfoMap</code></td><td><code>Long</code> (order ID)</td><td><code>OrderInfo</code></td><td>All cached order info by order ID</td></tr>
-<tr><td><code>orderPositionMapByPosId</code></td><td><code>Long</code> (position ID)</td><td><code>OrderPositionInfo</code></td><td>All cached position info by position ID</td></tr>
-<tr><td><code>toBeInvoicedCounter</code></td><td>—</td><td><code>Int?</code></td><td>Cached count of orders with <code>toBeInvoiced == true</code> (lazily calculated)</td></tr>
-</table>
-
-<h2>Initialization (<code>@PostConstruct init()</code>)</h2>
-<p>Sets the singleton <code>instance</code>, wires <code>this</code> into <code>auftragDao.auftragsCache</code>, and registers two change listeners:</p>
+<h3><code>createCriterionForPeriodOfPerformance(myFilter)</code></h3>
+<p><strong>Returns:</strong> <code>Optional&lt;DBPredicate&gt;</code></p>
+<p>Builds a predicate for filtering by period of performance overlap. Uses the filter's <code>periodOfPerformanceStartDate</code> and <code>periodOfPerformanceEndDate</code>. The logic checks for overlapping date ranges:</p>
 <ul>
-<li><strong>Invoice listener:</strong> Any insert/modify on <code>RechnungDO</code> calls <code>setExpired()</code> to invalidate the entire cache (since invoices affect order position invoiced sums)</li>
-<li><strong>Order listener:</strong> Any insert/modify on <code>AuftragDO</code> calls <code>setExpired()</code></li>
+<li>Both dates given → <code>popEnd >= startDate AND popBegin <= endDate</code></li>
+<li>Only startDate → <code>popEnd >= startDate</code></li>
+<li>Only endDate → <code>popBegin <= endDate</code></li>
+<li>Neither → empty</li>
 </ul>
 
-<h2>Public Lookup Methods</h2>
-<table>
-<tr><th>Method</th><th>Returns</th><th>Description</th></tr>
-<tr><td><code>getOrderInfo(orderId)</code></td><td><code>OrderInfo?</code></td><td>Get cached info by order ID</td></tr>
-<tr><td><code>getOrderInfo(order)</code></td><td><code>OrderInfo</code></td><td>Get cached info for an order object (falls back to empty <code>OrderInfo</code> if not found)</td></tr>
-<tr><td><code>findOrderInfoByNumber(orderNumber)</code></td><td><code>OrderInfo?</code></td><td>Lookup by <code>AuftragDO.nummer</code></td></tr>
-<tr><td><code>getOrderInfoByPositionId(positionInfoId)</code></td><td><code>OrderInfo?</code></td><td>Get the parent order info for a given position ID</td></tr>
-<tr><td><code>getOrderPositionInfo(positionId)</code></td><td><code>OrderPositionInfo?</code></td><td>Get cached position info by position ID</td></tr>
-<tr><td><code>getOrderPositionInfosByAuftragId(auftragId)</code></td><td><code>Collection&lt;OrderPositionInfo&gt;?</code></td><td>Get all position infos for an order</td></tr>
-<tr><td><code>setOrderInfo(order)</code></td><td><code>Unit</code></td><td>Fills <code>order.info</code> with cached calculated data</td></tr>
-<tr><td><code>getFakturiertSum(order)</code></td><td><code>BigDecimal</code></td><td>Convenience for <code>getOrderInfo(order).invoicedSum</code></td></tr>
-<tr><td><code>isVollstaendigFakturiert(order)</code></td><td><code>Boolean</code></td><td>Convenience for <code>getOrderInfo(order).isVollstaendigFakturiert</code></td></tr>
-<tr><td><code>isPositionAbgeschlossenUndNichtVollstaendigFakturiert(order)</code></td><td><code>Boolean</code></td><td>Convenience lookup</td></tr>
-<tr><td><code>isPaymentSchedulesReached(order)</code></td><td><code>Boolean</code></td><td>Convenience lookup</td></tr>
-<tr><td><code>getToBeInvoicedCounter()</code></td><td><code>Int</code></td><td>Lazily counts orders with <code>toBeInvoiced == true</code></td></tr>
-</table>
+<h3><code>createQueryFilterWithDateRestriction(myFilter)</code></h3>
+<p><strong>Returns:</strong> <code>QueryFilter</code></p>
+<p>Creates a <code>QueryFilter</code> from a <code>RechnungFilter</code>, adding date range constraints on the <code>"datum"</code> field (invoice date). Supports from-date, to-date, or both-range using <code>between</code>, <code>ge</code>, and <code>le</code> operators.</p>
 
-<h2>Cache Invalidation</h2>
+<h3><code>onSaveOrModify(rechnung)</code></h3>
+<p><strong>Parameter:</strong> <code>AbstractRechnungDO</code></p>
+<p>Master validation method called before persisting any invoice. Delegates to three private helpers:</p>
 <ul>
-<li><code>setExpired()</code> — Overrides <code>AbstractCache.setExpired()</code> to also reset <code>toBeInvoicedCounter</code> to null, forcing recalculation on next access</li>
-<li><code>setExpired(order)</code> — Same as above (formerly updated individual entries; now expires the full cache)</li>
-<li>Both listener implementations (<code>auftragListener</code>, <code>rechnungListener</code>) call <code>setExpired()</code> on any change</li>
+<li><code>checkAndCalculateFaelligkeit()</code> — Auto-calculates <code>faelligkeit</code> (due date) from <code>rechnungsDatum + zahlungsZielInTagen</code>, but only if due date is null and payment term is set</li>
+<li><code>checkAndCalculateDiscountMaturity()</code> — Auto-calculates <code>discountMaturity</code> from <code>rechnungsDatum + discountZahlungsZielInTagen</code>, only when discount percent is non-null/non-zero and discount maturity is null</li>
+<li><code>validateBezahlDatumAndZahlBetrag()</code> — Enforces mutual consistency: if <code>bezahlDatum</code> is set, <code>zahlBetrag</code> must be set (and non-zero), and vice versa. Throws <code>UserException</code> with specific i18n keys on violations</li>
 </ul>
-
-<h2>Refresh Logic (<code>refresh()</code>)</h2>
-<p>Called when the cache TTL expires (every 8 hours) or when manually expired:</p>
-<ol>
-<li>Logs refresh start with <code>LogDuration</code> timer</li>
-<li>Loads all non-deleted order positions via <code>auftragsCacheService.selectNonDeletedAuftragsPositions()</code>, groups by <code>auftrag.id</code></li>
-<li>Loads all orders via <code>auftragsCacheService.selectAuftragsList()</code></li>
-<li>Loads all non-deleted payment schedules via <code>auftragsCacheService.selectNonDeletedPaymentSchedules()</code>, groups by <code>auftrag.id</code></li>
-<li>Initializes <code>OrderInfo</code> objects for each order (calling <code>updateFields(order)</code> to copy basic data)</li>
-<li>Creates <code>OrderPositionInfo</code> objects for each position (note: constructor uses <code>AuftragsRechnungCache</code>, which in turn uses <code>AuftragsCache</code> — the cyclic dependency is resolved by running caches twice on initialization)</li>
-<li>Assigns positions and payment schedules to each order, calling <code>order.info.calculateAll(order, positions, paymentSchedules)</code></li>
-<li>Replaces the immutable maps atomically</li>
-<li>Resets <code>toBeInvoicedCounter</code> to null</li>
-<li>Logs completion time</li>
-</ol>
-
-<h2>Thread Safety</h2>
-<p>Maps (<code>orderInfoMap</code>, <code>orderPositionMapByPosId</code>) are replaced atomically with new immutable maps during refresh. The comment "No sync, immutable map" on all read accesses indicates a read-only snapshot pattern: on each <code>checkRefresh()</code> call, the cache may rebuild a fresh map and swap the reference.</p>
 
 <h2>Design Notes</h2>
 <ul>
-<li>The <code>checkRefresh</code> parameter on <code>getOrderInfo(order, checkRefresh)</code> exists to avoid deadlocks during cache initialization — when the cache is already being refreshed, recursive calls skip refresh</li>
-<li>The cyclic dependency between <code>AuftragsCache</code>, <code>AuftragsRechnungCache</code>, and <code>OrderPositionInfo</code> is documented in commit <code>51d352133</code> — resolved by running caches twice on initialization</li>
-<li>The <code>toBeInvoicedCounter</code> uses a lazy calculation pattern with debug logging of which order numbers are counted</li>
-<li>All convenience getter methods call <code>checkRefresh()</code> before access to ensure fresh data</li>
+<li>All methods are <code>@JvmStatic</code> for seamless Java interop</li>
+<li>Uses <code>SearchFilterWithPeriodOfPerformance</code> interface for polymorphic filter handling</li>
+<li>Maturity dates are computed using <code>PFDateTime</code> (for due date) and <code>PFDay</code> (for discount maturity)</li>
+<li>Discount maturity is only calculated when <code>discountPercent</code> is non-zero; if zero, no discount maturity is set</li>
 </ul>
 
 <h2>Git History</h2>
 <div class="hist"><pre>868d6abb7 2025 -> 2026
-51d352133 AuftragsCache / AuftragsRechnungsCache handling refactored (cyclic usage resolved by running caches twice on initialization)
-0043cbdb5 WIP Forecast
+f4540acfa WIP: Import of creditor invoices
 63081666f Source file headers: 2024-> 2025.
-ae2c04ee0 Migration stuff in progress... (all tests of all packages: OK).
-9aff90908 Migration stuff in progress... (all tests of all packages: OK).
-89ea9a532 Migration stuff in progress... (all tests of all packages: OK).
-d02c8a770 Migration stuff in progress...
-3159cfa6c Migration stuff in progress... (all tests of all packages: OK).
-ff2cc4cfa Migration stuff in progress... (all tests of all packages: OK).
-714452019 Migration stuff in progress... (all tests of all packages: OK).
-567ca70cd Migration in progress... spring.datasource.hikari.auto-commit=false
-(40+ commits spanning migration, refactoring, java.time conversion, Jakarta migration, etc.)</pre></div>
+cec9dd314 Invoices: discountMaturity fixed
+b6092df09 Copyright 2023 -> 2024
+ab45d51fa Copyright 2001-2022 -> 2001-2023.
+5f7ef41b8 Copyright 2021 -> 2022
+a7fceb731 Some compiler warnings fixed.
+db3b02da7 UserException moved from business to common package
+ceb63e8a1 Source code header: (C) 2001-2021.
+a0232cdba Code warnings.
+b209e00ba PFDay.from -> from, fromOrNow, fromOrNull, PFDateTime.from -> from, fromOrNow, fromOrNull
+611b20d4e WIP: java.sql.Date -> LocalDate.
+7c1c48782 Replacing more instance of java.sql.Date with java.time.LocalDate
+78b436d9e Replace instances of java.util.date and java.sql.Date with java.time.LocalDate
+7c79f1922 Copyright of source header -> 2020.
+a1c287b49 Week of year is now globally the same (independant from user's locale)
+61b23c3fd DateHelper methods removed (replaced by PFDay/PFDateTime).</pre></div>
 </body>
 </html>

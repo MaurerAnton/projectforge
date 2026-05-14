@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>#2257 [ES]</title>
+<style>
+body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}
+h1{border-bottom:2px solid #333;padding-bottom:.3em}
+h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}
+h3{margin-top:2em;color:#444}
+a{color:#0366d6}
+.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}
+.nav{font-size:.9em;color:#888;margin-bottom:1em}
+.meta{font-size:.9em;margin:1em 0;color:#555}
+code{background:#f0f0f0;padding:0 .2em;font-size:.93em}
+pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}
+table{border-collapse:collapse;width:100%;margin:1em 0}
+th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}
+th{background:#f5f5f5;font-weight:600}
+.hist{font-size:.85em;color:#555}
+</style>
+</head>
+<body>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Índice</a> · <a href="file-index.html">← Índice de archivos</a> · <a href="2256.html">← Anterior</a> · <a href="2258.html">Siguiente →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-rest/src/main/kotlin/org/projectforge/rest/importer/ImportStorage.kt" target="_blank" title="Ver fuente en GitHub">📄 fuente</a></div>
+<h1>#2257: <code>ImportStorage.kt</code></h1>
+<div class="meta"><code>projectforge-rest/src/main/kotlin/org/projectforge/rest/importer/ImportStorage.kt</code> Entidad abstracta — Capa REST de importación, <code>projectforge-rest/src/main/kotlin/org/projectforge/rest/importer/ImportStorage.kt</code> <span style="color:#888">240 líneas · 127 código · 79 comentarios · 34 en blanco</span></div>
+<div class="c">Clase base abstracta para todas las implementaciones de almacenamiento de importación. Gestiona la reconciliación de importaciones entre datos cargados y entidades de base de datos, mapeo/detección de columnas, ciclo de vida de pares de entrada con seguimiento de errores/advertencias y filtrado de visualización para interfaces de importación. Parametrizada por el tipo de entidad modificada <code>O</code> (que extiende <code>ImportPairEntry.Modified&lt;O&gt;</code>).</div>
+
+<h2>Arquitectura</h2>
+<h3>Jerarquía de clases</h3>
+<p><code>ImportStorage&lt;O : ImportPairEntry.Modified&lt;O&gt;&gt;</code> es la clase abstracta central en el subsistema de importación. Los importadores concretos extienden esta clase para definir cómo los datos cargados se asignan a las entidades de dominio. Opera junto con <code>ImportSettings</code>, <code>ImportPairEntry</code>, <code>AbstractImportJob</code> y <code>AbstractImportPageRest</code>.</p>
+
+<h3>Componentes clave</h3>
+<table>
+<tr><th>Componente</th><th>Tipo</th><th>Propósito</th></tr>
+<tr><td><code>importSettings</code></td><td>Parámetro del constructor</td><td>Configuración de importación inmutable (delimitador, codificación, etc.)</td></tr>
+<tr><td><code>pairEntries</code></td><td><code>MutableList&lt;ImportPairEntry&lt;O&gt;&gt;</code></td><td>Todas las entradas de importación que emparejan entidades leídas (cargadas) y almacenadas (base de datos)</td></tr>
+<tr><td><code>detectedColumns</code></td><td><code>MutableMap&lt;String, ImportFieldSettings&gt;</code></td><td>Columnas detectadas desde los encabezados del archivo cargado</td></tr>
+<tr><td><code>unknownColumns</code></td><td><code>MutableList&lt;String&gt;</code></td><td>Columnas encontradas en el archivo pero no mapeadas</td></tr>
+<tr><td><code>columnMapping</code></td><td><code>MutableMap&lt;Int, ImportFieldSettings&gt;</code></td><td>Mapeo de posición a campo para el análisis</td></tr>
+<tr><td><code>errors / warnings</code></td><td>Listas thread-safe</td><td>Mensajes globales de error y advertencia con acceso sincronizado</td></tr>
+<tr><td><code>displayOptions</code></td><td><code>DisplayOptions</code> (clase interna)</td><td>Alternar visibilidad de entradas nuevas/modificadas/sin cambios/importadas/eliminadas/erróneas/desconocidas</td></tr>
+<tr><td><code>targetEntity / targetEntityTitle</code></td><td>Campos opcionales</td><td>Para importaciones de múltiples entidades, identifica el objetivo actual y su título de visualización</td></tr>
+</table>
+
+<h3>Flujo de reconciliación</h3>
+<p>El mecanismo central de reconciliación sigue un patrón de método plantilla:</p>
+<ol>
+<li><code>reconcileImportStorage(rereadDatabaseEntries)</code> — método final, establece <code>hasBeenReconciled = true</code>, llama al hook, marca todas las entradas como reconciliadas</li>
+<li><code>doReconcileImportStorage(rereadDatabaseEntries)</code> — hook abierto protegido para implementación en subclases (sin operación por defecto)</li>
+<li>Después de la reconciliación, <code>pairEntries</code> muestra el estado por entrada: NUEVA, MODIFICADA, SIN CAMBIOS, IMPORTADA, ELIMINADA, ERRÓNEA</li>
+</ol>
+
+<h3>Ciclo de vida de entrada</h3>
+<table>
+<tr><th>Método</th><th>Propósito</th></tr>
+<tr><td><code>prepareEntity(): O</code></td><td>Abstracto — crea una nueva entidad en blanco para su población</td></tr>
+<tr><td><code>prepareImportPairEntry(): ImportPairEntry&lt;O&gt;</code></td><td>Crea una entrada de par con una entidad preparada, lista para analizar con seguimiento de errores</td></tr>
+<tr><td><code>addEntry(entry)</code></td><td>Añade a pairEntries con ID autoincremental</td></tr>
+<tr><td><code>setProperty(obj, fieldSettings, value): Boolean</code></td><td>Abierto — establecimiento de propiedad personalizada; devuelve true si se maneja, false para autoajuste</td></tr>
+<tr><td><code>commitEntity(obj: O)</code></td><td>Abstracto — almacena/omite la entidad después de que todas las propiedades están establecidas</td></tr>
+<tr><td><code>commitEntity(pairEntry)</code></td><td>Abierto — método de confirmación preferido usando par de entrada (llama a commitEntity con la entidad leída)</td></tr>
+<tr><td><code>createEntries(displayOptions)</code></td><td>Convierte pares de entrada en entradas de visualización, aplicando filtro de visualización y transfiriendo errores</td></tr>
+</table>
+
+<h3>Seguridad en hilos</h3>
+<p>Las listas <code>errors</code> y <code>warnings</code> están protegidas por bloques <code>synchronized</code>. El acceso de lectura público devuelve copias defensivas. La lista <code>pairEntries</code> también se sincroniza durante la asignación de ID.</p>
+
+<h3>Exportación de información</h3>
+<p><code>ImportStorageInfo</code> se genera sobre la marcha mediante la propiedad <code>info</code>, proporcionando una instantánea de conteos (nuevo, modificado, sin cambios, importado, eliminado, erróneo, desconocido) para la representación en la interfaz de usuario.</p>
+
+<h2>Subclases (en esta rama)</h2>
+<ul>
+<li><code>BankingImportStorage</code> — importaciones de transacciones bancarias (plugin Banking)</li>
+<li><code>AddressImportStorage</code> — importaciones CSV/Excel de direcciones/contactos</li>
+<li><code>EingangsrechnungImportStorage</code> — importaciones de facturas entrantes</li>
+<li><code>ImportStorage</code> en el paquete <code>rest/importer/</code></li>
+</ul>
+
+<h2>Historial Git</h2><div class="hist"><pre>868d6abb7 2025 -> 2026
+76f216b0f AbstractPagesRest: param request added to open functions, WIP. address vcf upload
+16ab7c6ef AbstractImportPage fix: Long - Integer comparison
+45479d226 WIP: Import of creditor invoices
+8717a58b8 WIP: Import of creditor invoices
+f4540acfa WIP: Import of creditor invoices
+fdd683ca7 WIP: Import of creditor invoices
+c9dff4cb8 WIP: Import of creditor invoices
+ffc71ab7e WIP: Import of creditor invoices
+95363546e WIP: Import of creditor invoices.
+f9f42dae1 WIP: ImportStorage
+63081666f Source file headers: 2024-> 2025.
+61f05ce90 Migration stuff in progress...
+b6092df09 Copyright 2023 -> 2024
+ab45d51fa Copyright 2001-2022 -> 2001-2023.
+1ea8d4062 WIP: Jobs and Bank account records.
+18cf43df0 WIP: Jobs and Bank account records.
+163492453 WIP: Jobs and Bank account records.
+09b3f0df7 WIP: Jobmonitor. ListStatisticsSupport -> MarkdownBuilder
+a1646e91a WIP: Banking plugin (and new import module).
+9ba1738ea WIP: Banking plugin (and new import module).
+c3331c88e WIP: Banking plugin (and new import module). DynamicDropArea: copy&paste bug fixed (function renamed)
+1b6b960a9 WIP: Banking plugin (and new import module).
+72a042463 WIP: Banking plugin (and new import module).
+6ec22a30d WIP: Banking plugin (and new import module).
+d38c01233 WIP: Banking plugin (and new import module).
+67333b119 WIP: Banking plugin (and new import module).
+750e60742 WIP: Banking plugin (and new import module).
+0936be3ed WIP: Banking plugin (and new import module).
+03796e3c6 WIP: Banking plugin (and new import module).
+e118c101d WIP: Banking plugin (and new import module).
+9ccbfdfc2 WIP: Banking plugin (and new import module).
+5f7ef41b8 Copyright 2021 -> 2022
+ceb63e8a1 Source code header: (C) 2001-2021.
+7c79f1922 Copyright of source header -> 2020.
+45cad02e9 IHK-Plugin added ( Will replace "Ihk-Export"-Plugin in the long run )
+dd5ca38ac CopyRight of all java file-header updated or created.
+9ebb88522 Initial commit</pre></div>
+</body>
+</html>

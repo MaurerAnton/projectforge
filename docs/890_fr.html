@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>#890: AuftragAndRechnungDaoHelper.kt [FR]</title>
+<style>
+body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}
+h1{border-bottom:2px solid #333;padding-bottom:.3em}
+h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}
+h3{margin-top:2em;color:#444}
+a{color:#0366d6}
+.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}
+.nav{font-size:.9em;color:#888;margin-bottom:1em}
+.meta{font-size:.9em;margin:1em 0;color:#555}
+code{background:#f0f0f0;padding:0 .2em;font-size:.93em}
+pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}
+table{border-collapse:collapse;width:100%;margin:1em 0}
+th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}
+th{background:#f5f5f5;font-weight:600}
+.hist{font-size:.85em;color:#555}
+</style>
+</head>
+<body>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← Index des fichiers</a> · <a href="889.html">← Précédent</a> · <a href="891.html">Suivant →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/kotlin/org/projectforge/business/fibu/AuftragAndRechnungDaoHelper.kt" target="_blank" title="Voir la source sur GitHub">📄 source</a></div>
+
+<h1>#890: <code>AuftragAndRechnungDaoHelper.kt</code></h1>
+
+<div class="meta"><code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/AuftragAndRechnungDaoHelper.kt</code> 
+<p><strong>Type :</strong> Objet utilitaire (objet Kotlin <code>object</code>)</p>
+<p><strong>Paquetage :</strong> <code>org.projectforge.business.fibu</code></p>
+<p><strong>Chemin complet :</strong> <code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/AuftragAndRechnungDaoHelper.kt</code></p>
+ <span style="color:#888">129 lignes · 98 lignes de code · 23 commentaires · 8 lignes vides</span></div>
+
+<div class="c">
+<p>Objet utilitaire partagé fournissant des constructeurs de critères de filtre de base de données et une logique de validation utilisés à la fois par <code>AuftragDao</code> (commandes) et <code>RechnungDao</code> (factures). Centralise les modèles courants comme le filtrage par période de performance, la construction de requêtes par plage de dates et la validation au moment de la sauvegarde des factures (calcul de l'échéance, cohérence date de paiement/montant).</p>
+</div>
+
+<h2>Méthodes publiques</h2>
+
+<h3><code>createCriterionForPeriodOfPerformance(myFilter)</code></h3>
+<p><strong>Retourne :</strong> <code>Optional&lt;DBPredicate&gt;</code></p>
+<p>Construit un prédicat pour filtrer par chevauchement de période de performance. Utilise les champs <code>periodOfPerformanceStartDate</code> et <code>periodOfPerformanceEndDate</code> du filtre. La logique vérifie les chevauchements de plages de dates :</p>
+<ul>
+<li>Les deux dates fournies → <code>popEnd >= startDate ET popBegin <= endDate</code></li>
+<li>Uniquement startDate → <code>popEnd >= startDate</code></li>
+<li>Uniquement endDate → <code>popBegin <= endDate</code></li>
+<li>Aucune des deux → vide</li>
+</ul>
+
+<h3><code>createQueryFilterWithDateRestriction(myFilter)</code></h3>
+<p><strong>Retourne :</strong> <code>QueryFilter</code></p>
+<p>Crée un <code>QueryFilter</code> à partir d'un <code>RechnungFilter</code>, en ajoutant des contraintes de plage de dates sur le champ <code>"datum"</code> (date de facture). Prend en charge la date de début, la date de fin, ou les deux plages en utilisant les opérateurs <code>between</code>, <code>ge</code> et <code>le</code>.</p>
+
+<h3><code>onSaveOrModify(rechnung)</code></h3>
+<p><strong>Paramètre :</strong> <code>AbstractRechnungDO</code></p>
+<p>Méthode de validation principale appelée avant la persistance de toute facture. Délègue à trois méthodes d'aide privées :</p>
+<ul>
+<li><code>checkAndCalculateFaelligkeit()</code> — Calcule automatiquement <code>faelligkeit</code> (date d'échéance) à partir de <code>rechnungsDatum + zahlungsZielInTagen</code>, mais uniquement si la date d'échéance est nulle et le délai de paiement est défini</li>
+<li><code>checkAndCalculateDiscountMaturity()</code> — Calcule automatiquement <code>discountMaturity</code> à partir de <code>rechnungsDatum + discountZahlungsZielInTagen</code>, uniquement lorsque le pourcentage de remise est non nul/non zéro et que l'échéance de remise est nulle</li>
+<li><code>validateBezahlDatumAndZahlBetrag()</code> — Impose une cohérence mutuelle : si <code>bezahlDatum</code> est défini, <code>zahlBetrag</code> doit être défini (et non nul), et vice versa. Lève une <code>UserException</code> avec des clés i18n spécifiques en cas de violation</li>
+</ul>
+
+<h2>Notes de conception</h2>
+<ul>
+<li>Toutes les méthodes sont <code>@JvmStatic</code> pour une interopérabilité transparente avec Java</li>
+<li>Utilise l'interface <code>SearchFilterWithPeriodOfPerformance</code> pour une gestion polymorphe des filtres</li>
+<li>Les dates d'échéance sont calculées à l'aide de <code>PFDateTime</code> (pour la date d'échéance) et <code>PFDay</code> (pour l'échéance de remise)</li>
+<li>L'échéance de remise n'est calculée que lorsque <code>discountPercent</code> est non nul ; si zéro, aucune échéance de remise n'est définie</li>
+</ul>
+
+<h2>Historique Git</h2>
+<div class="hist"><pre>868d6abb7 2025 -> 2026
+f4540acfa WIP : Importation de factures fournisseurs
+63081666f En-têtes des fichiers source : 2024 -> 2025.
+cec9dd314 Factures : correction de discountMaturity
+b6092df09 Copyright 2023 -> 2024
+ab45d51fa Copyright 2001-2022 -> 2001-2023.
+5f7ef41b8 Copyright 2021 -> 2022
+a7fceb731 Correction de certains avertissements du compilateur.
+db3b02da7 UserException déplacée du paquetage business vers common
+ceb63e8a1 En-tête du code source : (C) 2001-2021.
+a0232cdba Avertissements de code.
+b209e00ba PFDay.from -> from, fromOrNow, fromOrNull, PFDateTime.from -> from, fromOrNow, fromOrNull
+611b20d4e WIP : java.sql.Date -> LocalDate.
+7c1c48782 Remplacement de plusieurs instances de java.sql.Date par java.time.LocalDate
+78b436d9e Remplacement des instances de java.util.date et java.sql.Date par java.time.LocalDate
+7c79f1922 Copyright de l'en-tête source -> 2020.
+a1c287b49 La semaine de l'année est désormais globalement la même (indépendante des paramètres régionaux de l'utilisateur)
+61b23c3fd Méthodes DateHelper supprimées (remplacées par PFDay/PFDateTime).</pre></div>
+</body>
+</html>

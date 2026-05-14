@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>#897: AuftragsCache.kt [FR]</title>
+<style>
+body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}
+h1{border-bottom:2px solid #333;padding-bottom:.3em}
+h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}
+h3{margin-top:2em;color:#444}
+a{color:#0366d6}
+.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}
+.nav{font-size:.9em;color:#888;margin-bottom:1em}
+.meta{font-size:.9em;margin:1em 0;color:#555}
+code{background:#f0f0f0;padding:0 .2em;font-size:.93em}
+pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}
+table{border-collapse:collapse;width:100%;margin:1em 0}
+th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}
+th{background:#f5f5f5;font-weight:600}
+.hist{font-size:.85em;color:#555}
+</style>
+</head>
+<body>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← Index des fichiers</a> · <a href="896.html">← Précédent</a> · <a href="898.html">Suivant →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/kotlin/org/projectforge/business/fibu/AuftragsCache.kt" target="_blank" title="Voir la source sur GitHub">📄 source</a></div>
+
+<h1>#897 : <code>AuftragsCache.kt</code></h1>
+
+<div class="meta"><code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/AuftragsCache.kt</code> 
+<p><strong>Type :</strong> Spring <code>@Service</code> — cache temporisé (<code>AbstractCache</code>)</p>
+<p><strong>Package :</strong> <code>org.projectforge.business.fibu</code></p>
+<p><strong>Chemin complet :</strong> <code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/AuftragsCache.kt</code></p>
+ <span style="color:#888">252 lignes · 174 code · 48 commentaires · 30 vides</span></div>
+
+<div class="c">
+<p>Cache temporisé critique pour les performances qui précharge et maintient toutes les informations de commande (<em>Auftrag</em>) pour le carnet de commandes. Étend <code>AbstractCache</code> avec un cycle d'actualisation de 8 heures. Charge toutes les commandes non supprimées, leurs positions et les échéanciers de paiement dans des cartes en mémoire pour éviter des requêtes répétées à la base de données. Calcule les sommes facturées, le statut de facturation complète, les indicateurs « à facturer » et suit le nombre de commandes nécessitant une facturation. Écoute les modifications via les hooks <code>BaseDOModifiedListener</code> sur <code>AuftragDO</code> et <code>RechnungDO</code> pour invalider les données mises en cache. Gère une dépendance cyclique avec <code>AuftragDao</code> via un câblage post-construction.</p>
+</div>
+
+<h2>Définition de la classe</h2>
+<pre>@Service
+class AuftragsCache : AbstractCache(8 * TICKS_PER_HOUR)</pre>
+
+<h2>Dépendances</h2>
+<table>
+<tr><th>Dépendance</th><th>Type</th><th>Notes</th></tr>
+<tr><td><code>auftragsCacheService</code></td><td><code>@Autowired AuftragsCacheService</code></td><td>Fournit des requêtes SELECT en masse pour les commandes, positions et échéanciers de paiement</td></tr>
+<tr><td><code>rechnungDao</code></td><td><code>@Autowired RechnungDao</code></td><td>Écoute les modifications de factures qui invalident les données de commande</td></tr>
+<tr><td><code>auftragDao</code></td><td><code>@Autowired AuftragDao</code></td><td>Reconnecté à <code>AuftragDao.auftragsCache</code> via <code>init()</code> ; écoute les modifications de commande</td></tr>
+</table>
+
+<h2>Structures de données internes</h2>
+<table>
+<tr><th>Carte</th><th>Clé</th><th>Valeur</th><th>Description</th></tr>
+<tr><td><code>orderInfoMap</code></td><td><code>Long</code> (ID de commande)</td><td><code>OrderInfo</code></td><td>Toutes les informations de commande mises en cache par ID de commande</td></tr>
+<tr><td><code>orderPositionMapByPosId</code></td><td><code>Long</code> (ID de position)</td><td><code>OrderPositionInfo</code></td><td>Toutes les informations de position mises en cache par ID de position</td></tr>
+<tr><td><code>toBeInvoicedCounter</code></td><td>—</td><td><code>Int?</code></td><td>Nombre mis en cache de commandes avec <code>toBeInvoiced == true</code> (calculé paresseusement)</td></tr>
+</table>
+
+<h2>Initialisation (<code>@PostConstruct init()</code>)</h2>
+<p>Définit l'<code>instance</code> singleton, câble <code>this</code> dans <code>auftragDao.auftragsCache</code> et enregistre deux écouteurs de changement :</p>
+<ul>
+<li><strong>Écouteur de facture :</strong> Toute insertion/modification sur <code>RechnungDO</code> appelle <code>setExpired()</code> pour invalider l'ensemble du cache (car les factures affectent les sommes facturées des positions de commande)</li>
+<li><strong>Écouteur de commande :</strong> Toute insertion/modification sur <code>AuftragDO</code> appelle <code>setExpired()</code></li>
+</ul>
+
+<h2>Méthodes de recherche publiques</h2>
+<table>
+<tr><th>Méthode</th><th>Retourne</th><th>Description</th></tr>
+<tr><td><code>getOrderInfo(orderId)</code></td><td><code>OrderInfo?</code></td><td>Obtenir les informations mises en cache par ID de commande</td></tr>
+<tr><td><code>getOrderInfo(order)</code></td><td><code>OrderInfo</code></td><td>Obtenir les informations mises en cache pour un objet commande (revient à un <code>OrderInfo</code> vide si non trouvé)</td></tr>
+<tr><td><code>findOrderInfoByNumber(orderNumber)</code></td><td><code>OrderInfo?</code></td><td>Recherche par <code>AuftragDO.nummer</code></td></tr>
+<tr><td><code>getOrderInfoByPositionId(positionInfoId)</code></td><td><code>OrderInfo?</code></td><td>Obtenir les informations de la commande parente pour un ID de position donné</td></tr>
+<tr><td><code>getOrderPositionInfo(positionId)</code></td><td><code>OrderPositionInfo?</code></td><td>Obtenir les informations de position mises en cache par ID de position</td></tr>
+<tr><td><code>getOrderPositionInfosByAuftragId(auftragId)</code></td><td><code>Collection&lt;OrderPositionInfo&gt;?</code></td><td>Obtenir toutes les informations de position pour une commande</td></tr>
+<tr><td><code>setOrderInfo(order)</code></td><td><code>Unit</code></td><td>Remplit <code>order.info</code> avec les données calculées mises en cache</td></tr>
+<tr><td><code>getFakturiertSum(order)</code></td><td><code>BigDecimal</code></td><td>Raccourci pour <code>getOrderInfo(order).invoicedSum</code></td></tr>
+<tr><td><code>isVollstaendigFakturiert(order)</code></td><td><code>Boolean</code></td><td>Raccourci pour <code>getOrderInfo(order).isVollstaendigFakturiert</code></td></tr>
+<tr><td><code>isPositionAbgeschlossenUndNichtVollstaendigFakturiert(order)</code></td><td><code>Boolean</code></td><td>Raccourci de recherche</td></tr>
+<tr><td><code>isPaymentSchedulesReached(order)</code></td><td><code>Boolean</code></td><td>Raccourci de recherche</td></tr>
+<tr><td><code>getToBeInvoicedCounter()</code></td><td><code>Int</code></td><td>Compte paresseusement les commandes avec <code>toBeInvoiced == true</code></td></tr>
+</table>
+
+<h2>Invalidation du cache</h2>
+<ul>
+<li><code>setExpired()</code> — Remplace <code>AbstractCache.setExpired()</code> pour également réinitialiser <code>toBeInvoicedCounter</code> à null, forçant un recalcul lors du prochain accès</li>
+<li><code>setExpired(order)</code> — Identique à ci-dessus (mettait auparavant à jour des entrées individuelles ; maintenant expire le cache complet)</li>
+<li>Les deux implémentations d'écouteurs (<code>auftragListener</code>, <code>rechnungListener</code>) appellent <code>setExpired()</code> lors de tout changement</li>
+</ul>
+
+<h2>Logique d'actualisation (<code>refresh()</code>)</h2>
+<p>Appelée lorsque la TTL du cache expire (toutes les 8 heures) ou lors d'une expiration manuelle :</p>
+<ol>
+<li>Enregistre le début de l'actualisation avec le minuteur <code>LogDuration</code></li>
+<li>Charge toutes les positions de commande non supprimées via <code>auftragsCacheService.selectNonDeletedAuftragsPositions()</code>, regroupées par <code>auftrag.id</code></li>
+<li>Charge toutes les commandes via <code>auftragsCacheService.selectAuftragsList()</code></li>
+<li>Charge tous les échéanciers de paiement non supprimés via <code>auftragsCacheService.selectNonDeletedPaymentSchedules()</code>, regroupés par <code>auftrag.id</code></li>
+<li>Initialise les objets <code>OrderInfo</code> pour chaque commande (en appelant <code>updateFields(order)</code> pour copier les données de base)</li>
+<li>Crée des objets <code>OrderPositionInfo</code> pour chaque position (nota : le constructeur utilise <code>AuftragsRechnungCache</code>, qui à son tour utilise <code>AuftragsCache</code> — la dépendance cyclique est résolue en exécutant les caches deux fois lors de l'initialisation)</li>
+<li>Assigne les positions et les échéanciers de paiement à chaque commande, en appelant <code>order.info.calculateAll(order, positions, paymentSchedules)</code></li>
+<li>Remplace les cartes immuables de manière atomique</li>
+<li>Réinitialise <code>toBeInvoicedCounter</code> à null</li>
+<li>Enregistre l'heure de fin</li>
+</ol>
+
+<h2>Sécurité des threads</h2>
+<p>Les cartes (<code>orderInfoMap</code>, <code>orderPositionMapByPosId</code>) sont remplacées atomiquement par de nouvelles cartes immuables lors de l'actualisation. Le commentaire « No sync, immutable map » sur tous les accès en lecture indique un modèle d'instantané en lecture seule : à chaque appel <code>checkRefresh()</code>, le cache peut reconstruire une nouvelle carte et échanger la référence.</p>
+
+<h2>Notes de conception</h2>
+<ul>
+<li>Le paramètre <code>checkRefresh</code> sur <code>getOrderInfo(order, checkRefresh)</code> existe pour éviter les blocages lors de l'initialisation du cache — lorsque le cache est déjà en cours d'actualisation, les appels récursifs ignorent l'actualisation</li>
+<li>La dépendance cyclique entre <code>AuftragsCache</code>, <code>AuftragsRechnungCache</code> et <code>OrderPositionInfo</code> est documentée dans le commit <code>51d352133</code> — résolue en exécutant les caches deux fois lors de l'initialisation</li>
+<li>Le <code>toBeInvoicedCounter</code> utilise un modèle de calcul paresseux avec journalisation de débogage des numéros de commande comptés</li>
+<li>Toutes les méthodes d'accès pratiques appellent <code>checkRefresh()</code> avant l'accès pour garantir des données fraîches</li>
+</ul>
+
+<h2>Historique Git</h2>
+<div class="hist"><pre>868d6abb7 2025 -> 2026
+51d352133 AuftragsCache / AuftragsRechnungsCache gestion refactorisée (utilisation cyclique résolue en exécutant les caches deux fois lors de l'initialisation)
+0043cbdb5 WIP Forecast
+63081666f En-têtes de fichiers source : 2024 -> 2025.
+ae2c04ee0 Travail de migration en cours... (tous les tests de tous les packages : OK).
+9aff90908 Travail de migration en cours... (tous les tests de tous les packages : OK).
+89ea9a532 Travail de migration en cours... (tous les tests de tous les packages : OK).
+d02c8a770 Travail de migration en cours...
+3159cfa6c Travail de migration en cours... (tous les tests de tous les packages : OK).
+ff2cc4cfa Travail de migration en cours... (tous les tests de tous les packages : OK).
+714452019 Travail de migration en cours... (tous les tests de tous les packages : OK).
+567ca70cd Migration en cours... spring.datasource.hikari.auto-commit=false
+(40+ commits couvrant la migration, le refactoring, la conversion java.time, la migration Jakarta, etc.)</pre></div>
+</body>
+</html>

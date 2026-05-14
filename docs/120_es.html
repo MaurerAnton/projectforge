@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>#120 [ES]</title>
+<style>
+body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}
+h1{border-bottom:2px solid #333}
+a{color:#0366d6}
+.meta{font-size:.9em;margin:1em 0}
+.nav{font-size:.9em;color:#888;margin-bottom:1em}
+.commentary{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}
+code{background:#f0f0f0;padding:0 .2em;border-radius:2px}
+</style>
+</head>
+<body>
+
+<div class="nav">
+  <a href="https://maureranton.github.io/projectforge/">← Índice</a> ·
+  <a href="file-index.html">← Índice de archivos</a> ·
+  <a href="119.html">← Anterior</a> ·
+  <a href="121.html">Siguiente →</a> ·
+  <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/plugins/org.projectforge.plugins.datatransfer/src/test/kotlin/org/projectforge/plugins/datatransfer/DataTransferPublicAccessTest.kt" target="_blank" title="Ver código fuente en GitHub">📄 fuente</a>
+</div>
+
+<h1>#120: <code>DataTransferPublicAccessTest.kt</code></h1>
+<div class="meta">
+  <code>plugins/org.projectforge.plugins.datatransfer/src/test/kotlin/org/projectforge/plugins/datatransfer/DataTransferPublicAccessTest.kt</code>
+  <strong>Ruta:</strong> <code>plugins/...datatransfer/src/test/kotlin/.../DataTransferPublicAccessTest.kt</code> ·
+  <strong>Líneas:</strong> 227 ·
+  <strong>Tipo:</strong> Prueba de integración Kotlin JUnit 5
+  <span style="color:#888">227 líneas · 177 código · 24 comentarios · 26 en blanco</span>
+</div>
+
+<div class="commentary">
+  <p><strong>Prueba de integración para la capa REST pública (externa) de DataTransfer</strong> — la prueba más completa de DataTransfer con 227 líneas. Prueba el flujo de acceso anónimo: enlace externo → inicio de sesión → subida/descarga/eliminación → cierre de sesión, utilizando solicitudes HTTP simuladas y archivos JCR.</p>
+</div>
+
+<div class="commentary">
+  <h3>Componentes bajo prueba</h3>
+  <ul>
+    <li><code>DataTransferPublicSession</code> (<a href="101.html">#101</a>) — gestión de sesiones, protección contra fuerza bruta</li>
+    <li><code>DataTransferPublicPageRest</code> — devuelve JSON de diseño de página para la interfaz de usuario React anónima</li>
+    <li><code>DataTransferPublicServicesRest</code> (<a href="100.html">#100</a>) — endpoints de subida, descarga, eliminación y descarga múltiple</li>
+    <li><code>LoginProtection</code> — aplicación del desplazamiento temporal por fuerza bruta</li>
+  </ul>
+</div>
+
+<div class="commentary">
+  <h3>Escenarios de prueba (~10 métodos de prueba)</h3>
+  <ul>
+    <li><strong>Inicio de sesión con credenciales válidas:</strong> crea un área con <code>external_download_enabled=true</code>, <code>externalAccessToken</code>, <code>externalPassword</code>, llama a <code>DataTransferPublicSession.login()</code> — verifica que la sesión contenga datos del área</li>
+    <li><strong>Inicio de sesión con contraseña incorrecta:</strong> verifica que <code>LoginProtection</code> incremente los intentos fallidos, y después de fallos repetidos se active el desplazamiento temporal</li>
+    <li><strong>Bloqueo por fuerza bruta:</strong> después de suficientes fallos, <code>login()</code> devuelve el estado <code>LOGIN_TIME_OFFSET</code> — verificado llamando a login 3+ veces más rápido que la ventana de desplazamiento</li>
+    <li><strong>Buzón personal excluido del acceso público:</strong> las áreas <code>isPersonalBox()</code> siempre devuelven <code>LoginResultStatus.FAILED</code> — la comprobación de paranoia en <code>checkDataBaseEntry()</code></li>
+    <li><strong>Subida:</strong> simula <code>MultipartFile</code> (envoltorio de archivo subido de Spring), llama al endpoint REST de subida, verifica que el ID del archivo aparezca en la lista <code>ownedFiles</code></li>
+    <li><strong>Descarga:</strong> sube un archivo como usuario externo, luego lo descarga — verifica que el contenido de <code>InputStreamResource</code> coincida</li>
+    <li><strong>Eliminar archivo propio:</strong> verifica que <code>isOwnerOfFile()</code> devuelva verdadero y que la eliminación sea exitosa</li>
+    <li><strong>No se puede eliminar el archivo de otro:</strong> el usuario externo2 intenta eliminar la subida del usuario1 — verifica que <code>isOwnerOfFile()</code> devuelva falso</li>
+    <li><strong>Descarga múltiple:</strong> sube 3 archivos, descarga todos como ZIP — verifica que <code>ZipInputStream</code> contenga las 3 entradas</li>
+    <li><strong>Fijación de sesión:</strong> verifica que después del inicio de sesión, el <code>JSESSIONID</code> cambie (sesión antigua invalidada, nueva sesión creada con datos de área transferidos)</li>
+  </ul>
+</div>
+
+<div class="commentary">
+  <h3>Capa HTTP simulada</h3>
+  <p>Utiliza Mockito para simular <code>HttpServletRequest</code> y <code>HttpSession</code> — crítico porque <a href="101.html">DataTransferPublicSession</a> almacena datos directamente en atributos de sesión HTTP. La sesión simulada emula <code>getSession(false)</code>, <code>getSession(true)</code>, <code>getAttribute("transferAreas")</code>, <code>setAttribute()</code> e <code>invalidate()</code> — todo ejercitado en la prueba de fijación de sesión.</p>
+  <p>También simula <code>MultipartFile</code> para pruebas de subida y <code>HttpServletResponse</code> + <code>ServletOutputStream</code> → <code>ByteArrayOutputStream</code> para capturar contenido de descarga.</p>
+</div>
+
+</body>
+</html>

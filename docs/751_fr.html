@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>#751 : ProjectForgeRootElement [FR]</title>
+<style>
+  body { font-family: system-ui, sans-serif; max-width: 960px; margin: 2em auto; padding: 0 1em; background: #fafafa; color: #222; line-height: 1.6; }
+  h1 { border-bottom: 2px solid #333; padding-bottom: 0.3em; }
+  h2 { margin-top: 2.5em; border-bottom: 1px solid #ddd; padding-bottom: 0.2em; color: #333; }
+  h3 { margin-top: 2em; color: #444; }
+  a { color: #0366d6; }
+  .c { border-left: 3px solid #ddd; padding: .5em 1em; margin: 1em 0; background: #fff; }
+  .nav { font-size: .9em; color: #888; margin-bottom: 1em; }
+  .lang { font-size: .85em; color: #888; float: right; }
+  .lang a { color: #888; text-decoration: none; padding: 0 .3em; }
+  .lang a.active { color: #0366d6; font-weight: 600; text-decoration: underline; }
+  .meta { font-size: .9em; margin: 1em 0; color: #555; }
+  code { background: #f0f0f0; padding: 0 .2em; font-size: .93em; }
+  pre { background: #f5f5f5; padding: .8em 1em; border: 1px solid #ddd; border-radius: 4px; overflow-x: auto; font-size: .88em; line-height: 1.4; }
+  table { border-collapse: collapse; width: 100%; margin: 1em 0; }
+  th, td { border: 1px solid #ddd; padding: .5em .8em; text-align: left; font-size: .9em; }
+  th { background: #f5f5f5; font-weight: 600; }
+  .hist { font-size: .85em; color: #555; }
+</style>
+</head>
+<body>
+<div class="lang"><a href="761.html">EN</a> · <a href="761_de.html">DE</a> · <a href="761_ru.html">RU</a> · <a href="761_fr.html" class="active">FR</a> · <a href="761_es.html">ES</a></div>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← Index des fichiers</a> · <a href="750.html">← Précédent</a> · <a href="752.html">Suivant →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/java/org/projectforge/framework/xmlstream/ProjectForgeRootElement.java" target="_blank" title="Voir la source sur GitHub">📄 source</a></div>
+
+<h1>#751 : <code>ProjectForgeRootElement.java</code></h1>
+<div class="meta"><code>projectforge-business/src/main/java/org/projectforge/framework/xmlstream/ProjectForgeRootElement.java</code> <strong>Classe abstraite Java</strong> — classe de base pour tous les éléments racine d'exportation XML. 98 lignes. Source : <code>projectforge-business/src/main/java/org/projectforge/framework/xmlstream/ProjectForgeRootElement.java</code> <span style="color:#888">98 lignes · 45 code · 40 commentaires · 13 vides</span></div>
+
+<div class="c">
+<strong>Objectif :</strong> Une classe de base abstraite pour les <strong>éléments racine XML</strong> dans le système de sérialisation XmlStream personnalisé de ProjectForge. Il ne s'agit ni de JAXB ni de XStream — c'est un <strong>framework XML léger et personnalisé</strong> construit de toutes pièces pour des besoins spécifiques au projet : export/import de données entre instances ProjectForge, persistance des préférences utilisateur et sérialisation de configuration.
+
+Le Javadoc explique : <em>"Pour l'export et l'import, il est utile d'utiliser une instance de cet objet pour définir par exemple le fuseau horaire, la version, etc."</em> — chaque fichier XML exporté doit contenir des métadonnées : quel fuseau horaire a été utilisé lors de l'export, quelle version de ProjectForge a créé le fichier, et quand il a été créé. Sans ces informations, l'import sur un autre serveur pourrait mal interpréter les dates ou échouer à appliquer les migrations de format.
+</div>
+
+<h2>Trois champs — Trois aspects de compatibilité</h2>
+
+<div class="c">
+<ol>
+<li><strong><code>created</code> (Date) :</strong> quand le XML a été créé. Le <code>setCreated()</code> sans argument définit automatiquement l'heure actuelle avec une <strong>précision à la seconde</strong> (millisecondes mises à zéro — <code>withPrecision(DatePrecision.SECOND)</code> en utilisant <code>PFDateTime</code>). C'est important : si deux fichiers XML ont le même <code>created</code>, ils ont été exportés depuis le même lot. L'importateur utilise cet horodatage pour déterminer quelles données sont les plus récentes en cas de conflit.</li>
+<li><strong><code>timeZone</code> (java.util.TimeZone) :</strong> le fuseau horaire utilisé lors de l'export. Critique pour les dates : si un serveur à Berlin exporte "2025-05-15 09:00 Europe/Berlin" et que l'import a lieu à New York, sans fuseau horaire explicite, la date serait interprétée comme 09:00 EST au lieu de 03:00 EST. Un <code>timeZone</code> explicite empêche les décalages de date lors de l'import multiplateforme.</li>
+<li><strong><code>version</code> (String, annotée <code>@XmlField(asAttribute=true)</code>) :</strong> la version de ProjectForge qui a créé le fichier. Utilisée pour la migration de format — si l'importateur voit <code>version="7.4"</code>, il sait qu'il doit appliquer les convertisseurs pour le format 7.4 → 8.0. L'annotation <code>@XmlField(asAttribute=true)</code> signifie que la version est écrite comme un attribut de l'élément racine : <code>&lt;projectforge version="8.0"&gt;</code>, et non comme une balise imbriquée.</li>
+</ol>
+</div>
+
+<h2>API fluide — Tous les setters retournent <code>this</code></h2>
+
+<div class="c">
+<p>Chaque setter retourne <code>ProjectForgeRootElement</code>, permettant une initialisation en chaîne :</p>
+<pre>export.setTimeZone(userTZ).setCreated().setVersion("8.0.0");</pre>
+<p>C'est pratique pour créer des exports — toutes les métadonnées sont configurées en une seule ligne, et l'objet est prêt pour la sérialisation.</p>
+</div>
+
+<h2>Place dans la hiérarchie XmlStream</h2>
+
+<div class="c">
+<p><code>ProjectForgeRootElement</code> est la classe de base abstraite. Les éléments racine concrets (par exemple, <code>ProjectForgeData</code> avec la balise racine <code>&lt;projectforgeData&gt;</code>) l'étendent et ajoutent leurs propres champs enfants. L'ensemble du système XmlStream se compose de :</p>
+<ul>
+<li><code>@XmlField</code> (<a href="752.html">#752</a>) / <code>@XmlOmitField</code> (<a href="757.html">#757</a>) — annotations au niveau des champs (équivalentes à <code>@XStreamAlias</code>/<code>@XStreamOmitField</code> de XStream)</li>
+<li><code>@XmlObject</code> (<a href="754.html">#754</a>) — marqueur au niveau de la classe pour les objets sérialisables</li>
+<li><code>XmlObjectReader</code> (<a href="755.html">#755</a>) / <code>XmlObjectWriter</code> (<a href="756.html">#756</a>) — moteur de lecture/écriture</li>
+<li>Hiérarchie <code>Converter</code> — convertisseurs de types (Date→ISO, BigDecimal→String, etc.)</li>
+<li><code>AliasMap</code> (<a href="758.html">#758</a>) — mapping Classe↔balise XML</li>
+<li><code>XmlRegistry</code> — registre des objets XML enregistrés</li>
+</ul>
+<p>Ce framework <strong>coexiste en parallèle</strong> avec XStream dans ProjectForge. XStream est utilisé pour les préférences utilisateur (sérialisation de RecentQueue, UserPref), tandis que XmlStream est utilisé pour l'export/import de données entre instances (là où le contrôle du format, la validation et le versioning sont nécessaires).</p>
+</div>
+
+<h2>Pourquoi pas XStream ?</h2>
+
+<div class="c">
+<p>XStream est une excellente bibliothèque, mais elle a des limitations pour le cas d'usage de l'export de données :</p>
+<ul>
+<li><strong>Versioning :</strong> XStream ne supporte pas la migration de format. Si le format XML change entre les versions de ProjectForge, XStream échouerait simplement lors de la désérialisation. XmlStream stocke explicitement la version et permet d'appliquer des convertisseurs pendant la lecture.</li>
+<li><strong>Contrôle du schéma :</strong> XStream génère le XML "tel quel" — les noms de champs Java deviennent des noms de balises. XmlStream permet de définir explicitement des alias et la structure via des annotations, ce qui est important pour la rétrocompatibilité.</li>
+<li><strong>Sécurité :</strong> XStream peut désérialiser des objets Java arbitraires (une vulnérabilité connue). XmlStream fonctionne uniquement avec les types enregistrés dans <code>XmlRegistry</code>.</li>
+</ul>
+</div>
+
+<h2>Historique Git</h2>
+<div class="hist">
+<pre>868d6abb7 2025 → 2026 (mise à jour de l'année de copyright)
+63081666f En-têtes des fichiers source : 2024→2025
+5f9bbfbd3 Correction de fautes de frappe dans le répertoire projectforge-business
+b6092df09 Copyright 2023 → 2024
+ab45d51fa Copyright 2001-2022 → 2001-2023
+5f7ef41b8 Copyright 2021 → 2022
+cd27dd997 package xstream → xmlstream
+ceb63e8a1 En-tête du code source : (C) 2001-2021
+7c79f1922 Copyright de l'en-tête source → 2020
+24019a0f5 Élimination des occurrences de DateHolder
+32f634b88 Optimisation des imports
+dd5ca38ac Mise à jour ou création du copyright de tous les en-têtes de fichiers Java
+9ebb88522 Commit initial</pre>
+</div>
+
+<div class="c">
+Modifications notables : <code>24019a0f5</code> — a éliminé DateHolder (classe pré-Java-8) de cette classe, migrant la gestion des dates vers <code>PFDateTime</code> (propre wrapper date/heure de ProjectForge autour de <code>java.util.Date</code> et <code>java.time</code>). <code>5f9bbfbd3</code> — a corrigé des fautes de frappe dans la base de code (y compris probablement dans les commentaires ou Javadoc). <code>cd27dd997</code> — le paquetage a été renommé de <code>xstream</code> à <code>xmlstream</code> pour éviter toute confusion avec XStream. Les trois champs principaux (<code>created</code>, <code>timeZone</code>, <code>version</code>) et le modèle d'API fluide sont stables depuis le commit initial.
+</div>
+
+</body>
+</html>

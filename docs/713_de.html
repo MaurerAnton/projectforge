@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>#713 [DE]</title>
+<style>
+body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}
+h1{border-bottom:2px solid #333;padding-bottom:.3em}
+h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}
+h3{margin-top:2em;color:#444}
+a{color:#0366d6}
+.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}
+.nav{font-size:.9em;color:#888;margin-bottom:1em}
+.meta{font-size:.9em;margin:1em 0;color:#555}
+code{background:#f0f0f0;padding:0 .2em;font-size:.93em}
+pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}
+table{border-collapse:collapse;width:100%;margin:1em 0}
+th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}
+th{background:#f5f5f5;font-weight:600}
+.hist{font-size:.85em;color:#555}
+.warn{background:#fff3cd;border-left:3px solid #ffc107;padding:.5em 1em;margin:1em 0}
+.tip{background:#d4edda;border-left:3px solid #28a745;padding:.5em 1em;margin:1em 0}
+</style>
+</head>
+<body>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← Datei-Index</a> · <a href="712.html">← Vorherige</a> · <a href="714.html">Nächste →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/java/org/projectforge/framework/renderer/BatikImageRenderer.java" target="_blank" title="Quelltext auf GitHub ansehen">📄 Quelle</a></div>
+<h1>#713: <code>BatikImageRenderer.java</code></h1>
+<div class="meta"><code>projectforge-business/src/main/java/org/projectforge/framework/renderer/BatikImageRenderer.java</code> Renderer / SVG-zu-Raster-PDF-Konvertierung, projectforge-business/src/main/java/org/projectforge/framework/renderer/BatikImageRenderer.java <span style="color:#888">114 Zeilen · 69 Code · 37 Kommentare · 8 leer</span></div>
+<div class="c">Konvertiert SVG-DOM-Dokumente in Rasterbilder (PNG, JPEG), PDF oder rohe SVG-Byte-Arrays unter Verwendung von Apache Batik und Apache FOP-Transcodern. Fungiert als zustandsloses Dienstprogramm für die Multi-Format-SVG-Rendering.</div>
+
+<h2>Architektur &amp; Design</h2>
+<p><code>BatikImageRenderer</code> ist eine zustandslose Dienstprogrammklasse, die einen einzigen öffentlichen Einstiegspunkt <code>getByteArray(Document, int, ImageFormat)</code> bereitstellt. Intern delegiert sie je nach angefordertem <code>ImageFormat</code> an eine von drei privaten Methoden. Die Klasse verwendet die Transcoder-API von Apache Batik (<code>PNGTranscoder</code>, <code>JPEGTranscoder</code>) für die Rasterausgabe und den <code>PDFTranscoder</code> von Apache FOP für die Vektor-PDF-Ausgabe. SVG-Bytes werden durch Serialisierung des DOM über <code>XmlHelper.toString()</code> ohne Transcodierungsschritt gewonnen.</p>
+
+<h3>Öffentliche API</h3>
+<table>
+<tr><th>Methode</th><th>Beschreibung</th></tr>
+<tr><td><code>getByteArray(Document, int width, ImageFormat)</code></td><td>Haupt-Einstiegspunkt. Leitet basierend auf <code>ImageFormat</code> an formatspezifische Renderer weiter. Wirft <code>UnsupportedOperationException</code> für unbekannte Formate.</td></tr>
+</table>
+
+<h3>Private Rendering-Methoden</h3>
+<table>
+<tr><th>Methode</th><th>Format</th><th>Details</th></tr>
+<tr><td><code>getRasterImageByteArray(Document, int, ImageFormat)</code></td><td>PNG / JPEG</td><td>Erstellt eine <code>ImageTranscoder</code>-Instanz (PNG oder JPEG). JPEG verwendet den Hinweis <code>JPEGTranscoder.KEY_QUALITY</code> mit Wert 0,8. Beide wenden <code>KEY_WIDTH</code> für die Ausgabebreite an. TIFF-Unterstützung ist auskommentiert.</td></tr>
+<tr><td><code>getPDFByteArray(Document, int)</code></td><td>PDF</td><td>Verwendet <code>PDFTranscoder</code> mit deaktiviertem <code>KEY_AUTO_FONTS</code> und gesetztem <code>KEY_WIDTH</code>. Ausgabe in <code>ByteArrayOutputStream</code> über <code>TranscoderOutput</code>.</td></tr>
+<tr><td><code>getSVGByteArray(Document, int)</code></td><td>SVG</td><td>Serialisiert das DOM mit <code>XmlHelper.toString(document, true)</code> in einen XML-String und gibt dann UTF-8-Bytes zurück. Der Parameter <code>width</code> wird ignoriert.</td></tr>
+</table>
+
+<h3>Fehlerbehandlung</h3>
+<p>Alle Transcoder-Aufrufe sind in Try-Catch-Blöcke eingeschlossen, die <code>TranscoderException</code> abfangen. Fehler werden über SLF4J auf Fehlerebene protokolliert, die Ausnahme wird jedoch <strong>nicht erneut geworfen</strong> – der partielle Inhalt des <code>ByteArrayOutputStream</code> wird zurückgegeben. Das bedeutet, dass Aufrufer bei einem Fehler potenziell unvollständige oder leere Daten ohne jeglichen Hinweis erhalten.</p>
+
+<h3>Absicherung gegen nicht unterstützte Formate</h3>
+<p>Die Dispatch-Logik verwendet <code>ImageFormat.isIn(ImageFormat.PNG, ImageFormat.JPEG)</code> für den Raster-Zweig, dann Gleichheitsprüfungen gegen <code>ImageFormat.PDF</code> und <code>ImageFormat.SVG</code>. Jedes nicht erkannte Format löst eine <code>UnsupportedOperationException</code> aus. Beachten Sie das redundante Identitätsprüfungsmuster: <code>imageFormat == ImageFormat.PDF == true</code>, was semantisch identisch mit <code>imageFormat == ImageFormat.PDF</code> ist.</p>
+
+<h2>Abhängigkeiten</h2>
+<ul>
+<li><strong>Apache Batik</strong>: <code>TranscoderInput</code>, <code>TranscoderOutput</code>, <code>PNGTranscoder</code>, <code>JPEGTranscoder</code>, <code>ImageTranscoder</code>, <code>TranscoderException</code></li>
+<li><strong>Apache FOP</strong>: <code>PDFTranscoder</code> (aus <code>org.apache.fop.svg</code>)</li>
+<li><strong>Intern</strong>: <code>XmlHelper</code> für DOM-Serialisierung, <code>ImageFormat</code>-Enum für Format-Routing</li>
+<li><strong>W3C DOM</strong>: <code>org.w3c.dom.Document</code> als Eingabe</li>
+</ul>
+
+<h2>Git-Verlauf</h2>
+<div class="hist"><pre>868d6abb7 2026-01-01 2025 -> 2026
+63081666f 2025-01-01 Quelltext-Dateiköpfe: 2024 -> 2025.
+b6092df09 2024-01-09 Copyright 2023 -> 2024
+ab45d51fa 2023-01-01 Copyright 2001-2022 -> 2001-2023.
+5f7ef41b8 2022-02-18 Copyright 2021 -> 2022
+cd27dd997 2021-04-11 Paket xstream -> xmlstream. (sollte später durch xstream ersetzt werden).
+ceb63e8a1 2021-03-08 Quelltext-Dateikopf: (C) 2001-2021.
+7c79f1922 2020-01-03 Copyright des Quelltext-Kopfes -> 2020.
+73a9755df 2019-10-11 Weitere Code-Bereinigung: - Zusammengelegte Catch-Blöcke, die exakt dasselbe taten - ArrayList&lt;Class&gt; durch ArrayList&lt;&gt; ersetzt - StringBuffer durch StringBuilder ersetzt - Einige Verwendungen veralteter Klassen entfernt (hauptsächlich HSSFColors in Excel) - Collections.sort durch List.sort ersetzt
+32f634b88 2019-10-09 Importe optimieren
+000ca723d 2019-10-07 Sinnlose boolesche Ausdrücke entfernt (business)
+dd5ca38ac 2019-06-07 Copyright aller Java-Dateiköpfe aktualisiert oder erstellt.
+a5bbdca6a 2017-12-04 Logger auf slf4j umgestellt
+9ebb88522 2016-07-18 Erster Commit</pre></div>
+</body>
+</html>

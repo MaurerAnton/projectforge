@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>#1013 [RU]</title>
+<style>
+body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}
+h1{border-bottom:2px solid #333;padding-bottom:.3em}
+h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}
+h3{margin-top:2em;color:#444}
+a{color:#0366d6}
+.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}
+.nav{font-size:.9em;color:#888;margin-bottom:1em}
+.meta{font-size:.9em;margin:1em 0;color:#555}
+code{background:#f0f0f0;padding:0 .2em;font-size:.93em}
+pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}
+table{border-collapse:collapse;width:100%;margin:1em 0}
+th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}
+th{background:#f5f5f5;font-weight:600}
+.hist{font-size:.85em;color:#555}
+</style>
+</head>
+<body>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Индекс</a> · <a href="file-index.html">← Индекс файлов</a> · <a href="1012.html">← Назад</a> · <a href="1014.html">Вперёд →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/kotlin/org/projectforge/business/humanresources/HRPlanningDO.kt" target="_blank" title="Просмотреть исходный код на GitHub">📄 исходник</a></div>
+<h1>#1013: <code>HRPlanningDO.kt</code></h1>
+<div class="meta"><code>projectforge-business/src/main/kotlin/org/projectforge/business/humanresources/HRPlanningDO.kt</code> JPA-сущность (планирование HR), projectforge-business/src/main/kotlin/org/projectforge/business/humanresources/HRPlanningDO.kt <span style="color:#888">394 строки · 269 кода · 95 комментариев · 30 пустых</span></div>
+<div class="c">Центральная сущность для еженедельного планирования HR-ресурсов. Отображается на таблицу <code>T_HR_PLANNING</code>, уникальность обеспечивается комбинацией пользователь+неделя. Содержит список дочерних сущностей <code>HRPlanningEntryDO</code> и вычисляет агрегированные итоги по часам (ежедневные, неназначенные, выходные).</div>
+
+<h2>Дизайн сущности</h2>
+<p>Расширяет <code>DefaultBaseDO</code>. Ключевые связи:</p>
+<ul>
+<li><code>user</code> (PFUserDO, ManyToOne): Сотрудник, которому принадлежит эта неделя планирования. Сериализуется только как ID через <code>@IdOnlySerializer</code>.</li>
+<li><code>week</code> (LocalDate): Первый день недели (понедельник согласно Locale.GERMAN). Используется в ограничении уникальности вместе с пользователем.</li>
+<li><code>entries</code> (List<HRPlanningEntryDO>, OneToMany): Дочерние сущности для каждого назначения проекта/статуса на этой неделе. Отмечены <code>@PersistenceBehavior(autoUpdateCollectionEntries=true)</code> для автоматического управления каскадами.</li>
+</ul>
+
+<h3>Вычисляемые свойства</h3>
+<p>Все свойства <code>@Transient</code> вычисляют агрегаты из записей: <code>totalHours</code>, <code>totalUnassignedHours</code>, <code>totalMondayHours</code> через <code>totalWeekendHours</code>. Каждое пропускает удалённые записи через проверку <code>entry.deleted</code>. Свойство <code>formattedWeekOfYear</code> делегирует <code>DateTimeFormatter</code>.</p>
+
+<h3>Ключевые решения</h3>
+<ul>
+<li><strong>Начало недели = понедельник:</strong> Используется <code>PFDay.beginOfWeek</code> с Locale.GERMAN, что делает понедельник первым рабочим днём.</li>
+<li><strong>Мягкое удаление записей:</strong> <code>deleteEntry()</code> помечает записи как удалённые, а не удаляет их, что позволяет отменить действие через повторное добавление того же статуса/проекта.</li>
+<li><strong>Ленивая загрузка:</strong> Все связи используют <code>FetchType.LAZY</code> для избежания проблем с N+1 запросами.</li>
+</ul>
+
+<h2>История Git</h2><div class="hist"><pre>
+868d6abb7 2025 -> 2026
+63081666f Заголовки исходных файлов: 2024-> 2025.
+0237d5eba Рефакторинг JSON-сериализации: введены IdOnlySerializer и IdsOnlySerializer.
+4bc37b3a1 Работа над миграцией в процессе...
+c8f8ed935 Все сущности объявлены как FetchType.LAZY (было EAGER).
+fa194d7f8 Работа над миграцией в процессе...
+4c04cfd65 КРУПНОЕ ИЗМЕНЕНИЕ! Миграция целочисленных id на Long id (включая внешние ключи и т.д.)
+3cde2b1f6 Работа над миграцией в процессе...
+f5c09f87f Работа над миграцией в процессе...
+c04fb0d51 Работа над миграцией в процессе...
+06828f490 Работа над миграцией в процессе...
+b6092df09 Авторское право 2023 -> 2024
+ab45d51fa Авторское право 2001-2022 -> 2001-2023.
+5f7ef41b8 Авторское право 2021 -> 2022
+c0f2b9de0 Функциональность тенантов удалена везде (не тестировалось).
+ceb63e8a1 Заголовок исходного кода: (C) 2001-2021.
+daa67db68 HRPlanning(Entry): Добавлены DTO и исправлены идентификаторы колонок на соответствующих страницах списков.
+878cb7169 Исправлено множество предупреждений компилятора.
+ca0d5470e Удалены DateBridge из DO.
+00d898341 Добавлена точка REST для HRPlanningList
+7c1c48782 Замена многих экземпляров java.sql.Date на java.time.LocalDate
+7c79f1922 Авторское право в заголовке исходного кода -> 2020.
+a1c287b49 Номер недели в году теперь глобально одинаков.
+19b97fcc3 DateBridge: encoding = EncodingType.STRING для всех DateBridge.
+e92b3afd0 Jackson: JsonBackReference/JsonManagedReference -> JsonIdentityInfo
+8675a1dbe Обнаружена серьёзная проблема производительности: все Kotlin JPA-сущности и их свойства объявлены как open.
+39cdd224c Hibernate search: DateBridge...
+fe5a7c982 Большая работа в процессе: NamedQueries везде...
+29e3c0399 GanttChartDO, HRPlanningDO: добавлены PropertyInfos
+3223972db HRPlanningDO.java -> HRPlanningDO.kt
+</pre></div>
+</body></html>

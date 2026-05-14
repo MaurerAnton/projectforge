@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>#1049 [RU]</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:2em;color:#444}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}</style>
+</head>
+<body>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Индекс</a> · <a href="file-index.html">← Индекс файлов</a> · <a href="1048.html">← Предыдущий</a> · <a href="1050.html">Следующий →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/kotlin/org/projectforge/business/scripting/KotlinScriptExecutor.kt" target="_blank" title="Просмотреть исходник на GitHub">📄 исходник</a></div>
+<h1>#1049: <code>KotlinScriptExecutor.kt</code></h1>
+<div class="meta"><code>projectforge-business/src/main/kotlin/org/projectforge/business/scripting/KotlinScriptExecutor.kt</code> Исполнитель Kotlin-скриптов, projectforge-business/src/main/kotlin/org/projectforge/business/scripting/KotlinScriptExecutor.kt <span style="color:#888">139 строк · 106 кода · 25 комментариев · 8 пустых</span></div>
+<div class="c">Конкретный <code>ScriptExecutor</code> для Kotlin-скриптов. Компилирует и выполняет Kotlin-исходники с использованием API <code>kotlin.script.experimental</code>. Обрабатывает разрешение classpath для fat JAR через <code>JarExtractor</code>, привязку переменных через <code>KotlinScriptContext</code> и выполнение скрипта с таймаутом 300 секунд и надлежащей диагностикой ошибок.</div>
+
+<h2>Архитектура</h2>
+<h3>Конфигурация компиляции</h3>
+<p>Настраивает написание скриптов на Kotlin с:
+<ul>
+<li><strong>Classpath:</strong> При запуске в fat JAR используется <code>URLClassLoader</code> с <code>JarExtractor.classpathUrls</code> и <code>updateClasspath(JarExtractor.classpathFiles)</code>. В противном случае используется <code>dependenciesFromCurrentContext(wholeClasspath=true)</code>.</li>
+<li><strong>Предоставленные свойства:</strong> Регистрирует <code>"context"</code> как тип <code>KotlinScriptContext</code>, что позволяет использовать <code>context.getProperty("name")</code> в скриптах.</li>
+<li><strong>Параметры компилятора:</strong> <code>-nowarn</code> для подавления лишних предупреждений.</li>
+</ul>
+
+<h3>Выполнение с таймаутом</h3>
+<p>Использует <code>Executors.newSingleThreadExecutor()</code> с таймаутом 300 секунд через <code>Future.get(300, SECONDS)</code>. При таймауте отменяет future, логирует ошибку и устанавливает <code>scriptExecutionResult.exception</code>. Исполнитель всегда завершается в блоке <code>finally</code>.</p>
+
+<h3>Привязка переменных</h3>
+<p>Заполняет <code>KotlinScriptContext</code> всеми переменными и параметрами, после чего <code>KotlinScriptUtils.appendBlockAfterImports</code> генерирует для них объявления свойств Kotlin.</p>
+
+<h3>Стандартные импорты</h3>
+<p>Добавляет специфические для Kotlin импорты поверх базовых <code>STANDARD_IMPORTS</code>: функции локализации (<code>translate</code>, <code>translateMsg</code>), расширения форматирования чисел (<code>format</code>, <code>formatCurrency</code>, <code>formatBytes</code>) и <code>PfCaches.initialize</code>.</p>
+
+<h2>История Git</h2><div class="hist"><pre>
+868d6abb7 2025 -> 2026
+801bf7c63 Скриптинг: ScriptLogger добавлен в ThreadLocal.
+63081666f Заголовки исходных файлов: 2024 -> 2025.
+aeff942b5 Улучшено выполнение скриптов (логирование для конечного пользователя).
+22ccc4877 WIP: Скриптинг
+36c9acc50 Это была тяжёлая, очень тяжёлая работа, но Kotlin-скрипты запущены, да!
+921638f43 WIP
+de4d8d2af Борьба с KotlinExecutor в fat jar SpringBoot.
+302470ef9 Борьба с KotlinExecutor в fat jar SpringBoot.
+7617cf5da Борьба с KotlinExecutor в fat jar SpringBoot.
+31545575d Борьба с KotlinExecutor в fat jar SpringBoot.
+4c8365b88 Рефакторинг Kotlin-скриптинга (Все тесты OK)
+b6092df09 Авторские права 2023 -> 2024
+ab45d51fa Авторские права 2001-2022 -> 2001-2023.
+47aec0fc2 WIP: sudo скриптинг
+a10660bc8 WIP: скриптинг.
+52ef31ca5 WIP: скриптинг
+69121a1f8 WIP: скриптинг
+7059cacd4 WIP: Скриптинг: поддержка имён параметров, содержащих пробелы.
+de0d98425 WIP: скриптинг: исправление для нулевых значений скрипта.
+d37760c3e Рефакторинг скриптинга.
+0bd431bd9 WIP скриптинг...
+97e4bd526 Скриптинг: pantha rein. Добавлен редактор ACE.
+5f7ef41b8 Авторские права 2021 -> 2022
+ceb63e8a1 Заголовок исходного кода: (C) 2001-2021.
+d60de80b6 MyKotlinScriptEngineFactory теперь работает с fat jar Spring Boot.
+6fd010dd6 Kotlin-скриптинг теперь работает с уродливым обходным решением для fat jar Spring Boot.
+52d9c1d88 WIP: Kotlin-скрипты...
+c5aa8210b WIP: Добавлена поддержка Kotlin-скриптов в дополнение к Groovy...
+</pre></div>
+</body>
+</html>

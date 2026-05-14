@@ -1,0 +1,100 @@
+Here is the complete HTML translated into French, with the language set to `fr`, the French language active in the switcher, and the title updated with `[FR]`.
+
+```html
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<title>#898: AuftragsCacheService.kt [FR]</title>
+<style>
+body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}
+h1{border-bottom:2px solid #333;padding-bottom:.3em}
+h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}
+h3{margin-top:2em;color:#444}
+a{color:#0366d6}
+.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}
+.nav{font-size:.9em;color:#888;margin-bottom:1em}
+.meta{font-size:.9em;margin:1em 0;color:#555}
+code{background:#f0f0f0;padding:0 .2em;font-size:.93em}
+pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}
+table{border-collapse:collapse;width:100%;margin:1em 0}
+th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}
+th{background:#f5f5f5;font-weight:600}
+.hist{font-size:.85em;color:#555}
+</style>
+</head>
+<body>
+
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← Index des fichiers</a> · <a href="897.html">← Précédent</a> · <a href="899.html">Suivant →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/kotlin/org/projectforge/business/fibu/AuftragsCacheService.kt" target="_blank" title="Voir la source sur GitHub">📄 source</a></div>
+
+<h1>#898: <code>AuftragsCacheService.kt</code></h1>
+
+<div class="meta"><code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/AuftragsCacheService.kt</code> 
+  <strong>Type :</strong> Service Spring &middot;
+  <strong>Objectif :</strong> Requêtes rapides basées sur des tuples pour les données de commande &middot;
+  <strong>Package :</strong> <code>org.projectforge.business.fibu</code><br>
+  <strong>Chemin source :</strong> <code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/AuftragsCacheService.kt</code>
+ <span style="color:#888">167 lignes · 135 lignes de code · 25 commentaires · 7 lignes vides</span></div>
+
+<div class="c">
+  <strong>Objectif :</strong> Fournit un accès base de données en lecture seules hautes performances pour les commandes (<code>AuftragDO</code>), les positions de commande (<code>AuftragsPositionDO</code>) et les échéanciers de paiement (<code>PaymentScheduleDO</code>) en utilisant des requêtes JPQL natives par tuples. Évite l'hydratation complète des entités et la surcharge du chargement paresseux en sélectionnant uniquement les colonnes nécessaires au rendu des listes et au remplissage du cache.
+</div>
+
+<h2>Architecture &amp; Conception</h2>
+
+<h3>Déclaration du Service</h3>
+<p>La classe est annotée avec <code>@Service</code> et dépend de <code>PfPersistenceService</code> via <code>@Autowired</code>. Toutes les méthodes utilisent <code>runIsolatedReadOnly</code> pour exécuter les requêtes dans un contexte de persistance frais, empêchant ainsi la pollution du cache de session de l'appelant.</p>
+
+<table>
+  <tr><th>Dépendance</th><th>Type</th><th>Rôle</th></tr>
+  <tr><td><code>PfPersistenceService</code></td><td>Framework</td><td>Fournit des contextes JPA isolés en lecture seule pour des requêtes par tuples rapides</td></tr>
+</table>
+
+<h3>Méthodes</h3>
+
+<h4><code>selectAuftragsList() : List&lt;AuftragDO&gt;</code></h4>
+<p>Retourne toutes les commandes (y compris supprimées) avec un ensemble de colonnes sélectionnées. Mappe chaque <code>Tuple</code> vers un <code>AuftragDO</code> partiellement rempli en utilisant les accesseurs <code>TupleUtils</code>. Les clés étrangères (<code>kundeId</code>, <code>projektId</code>, <code>contactPersonId</code>) sont résolues via <code>em.getReference()</code> pour éviter des requêtes supplémentaires — Hibernate retourne un proxy paresseux sans accéder à la base de données.</p>
+
+<h4><code>selectNonDeletedAuftragsPositions() : List&lt;AuftragsPositionDO&gt;</code></h4>
+<p>Retourne les positions de commande non supprimées. Suit le même modèle de mappage par tuples avec une optimisation de performance supplémentaire : <code>bemerkung</code> (commentaire) est abrégé à 30 caractères via <code>abbreviate(30)</code>, réduisant ainsi l'empreinte mémoire pour les vues de liste. La référence de tâche (<code>taskId</code>) crée un objet <code>TaskDO</code> factice avec uniquement l'ID défini.</p>
+
+<h4><code>selectNonDeletedPaymentSchedules() : List&lt;PaymentScheduleDO&gt;</code></h4>
+<p>Retourne les échéanciers de paiement non supprimés, en créant des objets <code>AuftragDO</code> factices (ID uniquement) pour la référence de clé étrangère <code>auftragId</code>.</p>
+
+<h3>Définitions des Requêtes (Objet Compagnon)</h3>
+<p>Trois requêtes JPQL sont définies comme constantes <code>private val</code> dans l'objet compagnon, en utilisant l'interpolation <code>${AuftragDO::class.simpleName}</code> pour des références d'entité typées :</p>
+
+<table>
+  <tr><th>Constante</th><th>Entité cible</th><th>Filtre</th></tr>
+  <tr><td><code>SELECT_ORDERS</code></td><td><code>AuftragDO</code></td><td>Aucun (tous les enregistrements, y compris supprimés)</td></tr>
+  <tr><td><code>SELECT_POSITIONS</code></td><td><code>AuftragsPositionDO</code></td><td><code>WHERE deleted = false</code></td></tr>
+  <tr><td><code>SELECT_PAYMENTS_SCHEDULES</code></td><td><code>PaymentScheduleDO</code></td><td><code>WHERE deleted = false</code></td></tr>
+</table>
+
+<h3>Stratégie de Performance</h3>
+<ul>
+  <li>Les requêtes par tuples sélectionnent uniquement les colonnes nécessaires ; aucun graphe d'entité complet n'est chargé.</li>
+  <li><code>em.getReference()</code> crée des proxies paresseux pour les associations FK, évitant les JOINs.</li>
+  <li><code>runIsolatedReadOnly</code> garantit que chaque appel dispose d'un contexte de persistance propre, empêchant toute interférence avec la transaction active de l'appelant.</li>
+  <li>L'appel <code>abbreviate(30)</code> sur <code>bemerkung</code> minimise la pression sur le tas pour les grands champs de commentaires lors du rendu des listes.</li>
+</ul>
+
+<h2>Classes Associées</h2>
+<ul>
+  <li><strong>Consommé par :</strong> <code>AuftragsCache</code> — utilise ces résultats de tuples pour construire le cache du carnet de commandes en mémoire</li>
+  <li><strong>Utilise :</strong> <code>TupleUtils</code> — accesseurs de colonnes de tuples typés (<code>getLong</code>, <code>getString</code>, <code>getBigDecimal</code>, etc.)</li>
+  <li><strong>Utilise :</strong> <code>PfPersistenceService</code> — abstraction de persistance du framework</li>
+</ul>
+
+<h2>Historique Git</h2>
+<div class="hist"><pre>
+868d6abb7 2025 -> 2026
+49b1d6b8d Prévisions et carnet de commandes : type de prévision pour les commandes/positions ajouté (mois en cours ou mois suivant)
+7163b8c4e WIP : Instantanés du carnet de commandes, ForecastExport corrigé (nom du client et du projet manquants)
+63081666f En-têtes des fichiers source : 2024 -> 2025.
+ae2c04ee0 Travail de migration en cours... (tous les tests de tous les packages : OK).
+89ea9a532 Travail de migration en cours... (tous les tests de tous les packages : OK).
+</pre></div>
+
+</body>
+</html>

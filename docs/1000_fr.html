@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head><meta charset="UTF-8"><title>#1000: KostZuweisungDO.kt [FR]</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:2em;color:#444}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}</style></head>
+<body>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← Index des fichiers</a> · <a href="999.html">← Précédent</a> · <a href="1001.html">Suivant →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/kotlin/org/projectforge/business/fibu/kost/KostZuweisungDO.kt" target="_blank" title="Voir la source sur GitHub">📄 source</a></div>
+<h1>#1000: <code>KostZuweisungDO.kt</code></h1>
+<div class="meta"><code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/kost/KostZuweisungDO.kt</code> Type : Entité JPA (DO) · Objectif : Affectation des coûts liant factures/salaires à Kost1/Kost2 · Source : projectforge-business/src/main/kotlin/org/projectforge/business/fibu/kost/KostZuweisungDO.kt <span style="color:#888">266 lignes · 190 code · 55 commentaires · 21 vides</span></div>
+<div class="c">Représente une affectation de coûts (KostZuweisung) — l'allocation de montants de factures ou de paiements de salaires d'employés à des centres de coûts spécifiques (Kost1 et Kost2). Chaque affectation enregistre un montant net et est liée à exactement un des éléments suivants : une position de facture sortante, une position de facture entrante ou une entrée de salaire d'employé.</div>
+<h2>Conception de l'entité</h2>
+<table>
+<tr><th>Champ</th><th>Type</th><th>Colonne DB</th><th>Description</th></tr>
+<tr><td><code>index</code></td><td><code>Short</code></td><td>INT</td><td>Index dans la liste d'affectations de la position</td></tr>
+<tr><td><code>netto</code></td><td><code>BigDecimal?</code></td><td>DECIMAL(12,2)</td><td>Montant net alloué à ce centre de coûts</td></tr>
+<tr><td><code>kost1</code></td><td><code>Kost1DO?</code></td><td>FK kost1_fk</td><td>Centre de coûts niveau 1 (ManyToOne, lazy)</td></tr>
+<tr><td><code>kost2</code></td><td><code>Kost2DO?</code></td><td>FK kost2_fk</td><td>Centre de coûts niveau 2 (ManyToOne, lazy)</td></tr>
+<tr><td><code>rechnungsPosition</code></td><td><code>RechnungsPositionDO?</code></td><td>FK rechnungs_pos_fk</td><td>Position de facture sortante (nullable)</td></tr>
+<tr><td><code>eingangsrechnungsPosition</code></td><td><code>EingangsrechnungsPositionDO?</code></td><td>FK eingangsrechnungs_pos_fk</td><td>Position de facture entrante (nullable)</td></tr>
+<tr><td><code>employeeSalary</code></td><td><code>EmployeeSalaryDO?</code></td><td>FK employee_salary_fk</td><td>Entrée de salaire d'employé (nullable)</td></tr>
+<tr><td><code>comment</code></td><td><code>String?</code></td><td>VARCHAR(4000)</td><td>Commentaire optionnel</td></tr>
+</table>
+<h3>Propriétés calculées (transitoires)</h3>
+<table>
+<tr><th>Propriété</th><th>Type</th><th>Description</th></tr>
+<tr><td><code>brutto</code></td><td><code>BigDecimal</code></td><td>Montant brut calculé à partir du net + TVA de la position parente</td></tr>
+<tr><td><code>kost1Id</code></td><td><code>Long?</code></td><td>Raccourci pour kost1.id</td></tr>
+<tr><td><code>kost2Id</code></td><td><code>Long?</code></td><td>Raccourci pour kost2.id</td></tr>
+<tr><td><code>isEmpty</code></td><td><code>Boolean</code></td><td>Vrai si netto est nul ou zéro</td></tr>
+</table>
+<h2>Contrainte d'exclusion mutuelle</h2>
+<p>Une KostZuweisung doit être affectée à exactement un objet financier. Le setter pour chacune des trois références applique l'exclusivité mutuelle au niveau Java : définir <code>rechnungsPosition</code> lève une exception si <code>eingangsrechnungsPosition</code> ou <code>employeeSalary</code> est déjà défini, et vice versa. La méthode <code>hasErrors()</code> valide qu'exactement un est assigné (retourne une clé d'erreur i18n si violé).</p>
+<h2>Détails de persistance</h2>
+<ul>
+<li>Mappé à <code>T_FIBU_KOST_ZUWEISUNG</code></li>
+<li><strong>Trois contraintes uniques</strong>, une pour chaque type d'objet financier : (index, rechnungs_pos_fk, kost1_fk, kost2_fk), (index, eingangsrechnungs_pos_fk, kost1_fk, kost2_fk), (index, employee_salary_fk, kost1_fk, kost2_fk)</li>
+<li>Cinq index pour la performance des requêtes basées sur les FK</li>
+<li>Étend <code>DefaultBaseDO</code>, implémente <code>DisplayNameCapable</code></li>
+<li><code>@JsonBackReference</code> sur <code>rechnungsPosition</code> et <code>eingangsrechnungsPosition</code> empêche la récursion infinie lors de la sérialisation JSON</li>
+<li><code>@JsonSerialize(using = IdOnlySerializer)</code> sur toutes les références ManyToOne pour des réponses API compactes</li>
+</ul>
+<h2>Méthodes utilitaires</h2>
+<ul>
+<li><code>setAbstractRechnungsPosition(position)</code> — setter polymorphe dispatchant par type</li>
+<li><code>newClone()</code> — crée une copie profonde (sans IDs) pour le clonage de facture</li>
+<li>Equals/hashCode basé sur l'index + les IDs de la position parente (clé métier pour les trois types parents)</li>
+</ul>
+<h2>Code source (abrégé)</h2>
+<pre>@Entity @Indexed @Table(name = "T_FIBU_KOST_ZUWEISUNG", ...)
+open class KostZuweisungDO : DefaultBaseDO(), DisplayNameCapable {
+    open var index: Short = 0
+    open var netto: BigDecimal? = null
+    open var kost1: Kost1DO? = null
+    open var kost2: Kost2DO? = null
+    open var rechnungsPosition: RechnungsPositionDO? = null
+        set(value) { if (value != null && (eingangsrechnungsPosition != null
+            || employeeSalary != null)) throw IllegalStateException(...) }
+
+    val brutto: BigDecimal
+        @Transient get() {
+            val vat = when {
+                rechnungsPosition != null -> rechnungsPosition!!.vat
+                eingangsrechnungsPosition != null -> eingangsrechnungsPosition!!.vat
+                else -> null
+            }
+            return CurrencyHelper.getGrossAmount(netto, vat)
+        }
+    // newClone(), hasErrors(), setAbstractRechnungsPosition(), etc.
+}</pre>
+<h2>Historique Git</h2>
+<div class="hist"><pre>868d6abb7 2025 -> 2026
+63081666f En-têtes des fichiers source : 2024 -> 2025.
+0237d5eba Json : IdOnlySerializer et IdsOnlySerializer.
+db2599ab8 Historique dans le carnet d'ordres, les factures et les projets.
+c8f8ed935 Toutes les entités FetchType.LAZY.
+b04a74ffb DisplayHistoryEntry : nouveau concept.
+0b32a3f37 Trucs de migration...
+4c04cfd65 CHANGEMENT-MAJEUR ! IDs Integer vers IDs Long.
+f984352a0 JsonBackReference/JsonManagedReference : KostZuweisungDO
+ca27394ef Constantes refactorisées.
+b78b870bd ShortDisplayNameCapable -> DisplayNameCapable.
+8675a1dbe Entités JPA Kotlin déclarées open (correctif chargement paresseux)
+1cf12f943 Kostzuweisung : boucle infinie dans la sérialisation json corrigée.
+812b5b751 Gros WIP : refactoring du tueur de perf (Eingangs)Rechnung*
+339e017b4 @PropertyInfo supporté pour les méthodes getter.
+3bd2b6e9d RechnungRest : Ajouter liste de positions
+100cc30f0 KostZuweisungDO.java -> KostZuweisungDO.kt</pre></div>
+</body>
+</html>

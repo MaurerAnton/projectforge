@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>#657: AccessException.java [ES]</title>
+<style>
+body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}
+h1{border-bottom:2px solid #333;padding-bottom:.3em}
+h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}
+h3{margin-top:2em;color:#444}
+a{color:#0366d6}
+.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}
+.nav{font-size:.9em;color:#888;margin-bottom:1em}
+.lang{font-size:.85em;color:#888;float:right}
+.lang a{color:#888;text-decoration:none;padding:0 .3em}
+.lang a.active{color:#0366d6;font-weight:600;text-decoration:underline}
+.meta{font-size:.9em;margin:1em 0;color:#555}
+code{background:#f0f0f0;padding:0 .2em;font-size:.93em}
+pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}
+table{border-collapse:collapse;width:100%;margin:1em 0}
+th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}
+th{background:#f5f5f5;font-weight:600}
+.hist{font-size:.85em;color:#555}
+</style>
+</head>
+<body>
+<div class="lang">
+<a href="657.html">EN</a> · 
+<a href="657_de.html">DE</a> · 
+<a href="657_ru.html">RU</a> · 
+<a href="657_fr.html">FR</a> · 
+<a href="657_es.html" class="active">ES</a>
+</div>
+<div class="nav">
+<a href="https://maureranton.github.io/projectforge/">← Índice</a> · 
+<a href="file-index.html">← Índice de archivos</a> · 
+<a href="200.html">← Anterior</a> · 
+<a href="331.html">Siguiente →</a> · 
+<a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/java/org/projectforge/framework/access/AccessException.java" target="_blank" title="Ver fuente en GitHub">📄 fuente</a>
+</div>
+<h1>#657: <code>AccessException.java</code></h1>
+<div class="meta">
+<code>projectforge-business/src/main/java/org/projectforge/framework/access/AccessException.java</code> Tipo: Java · Rol: Componente · Fuente: projectforge-business/src/main/java/org/projectforge/framework/access/AccessException.java 
+<span style="color:#888">246 líneas · 160 código · 52 comentarios · 34 en blanco</span>
+</div>
+<div class="c">Archivo de código fuente en <code>projectforge-business/src/main/java/org/projectforge/framework/access/AccessException.java</code> que contiene código Java para la capa de Componente.</div>
+<h2>Estructura del código</h2>
+<p>Paquete: <code>org.projectforge.framework.access</code></p>
+<p>Clases: <code>AccessException</code></p>
+<p>Extiende: <code>UserException</code></p>
+<p>Métodos (11): <code>getUser</code>, <code>getTaskId</code>, <code>getAccessType</code>, <code>setAccessType</code>, <code>getTaskNode</code>, <code>setClazz</code>, <code>getOperationType</code>, <code>setOperationType</code>, <code>setMessage</code>, <code>setUser</code>, <code>toString</code></p>
+<p>Campos (7): <code>serialVersionUID</code>, <code>taskTree</code>, <code>user</code>, <code>taskId</code>, <code>accessType</code>, <code>message</code>, <code>operationType</code></p>
+<p>Importaciones: 10 paquetes</p>
+<h2>Código fuente (resumido)</h2>
+<pre>
+package org.projectforge.framework.access;
+
+import org.apache.commons.lang3.builder.ToStringBuilder;
+import org.projectforge.business.task.TaskDO;
+import org.projectforge.business.task.TaskNode;
+import org.projectforge.business.task.TaskTree;
+import org.projectforge.common.i18n.MessageParam;
+import org.projectforge.common.i18n.MessageParamType;
+import org.projectforge.common.i18n.UserException;
+import org.projectforge.framework.persistence.user.api.ThreadLocalUserContext;
+import org.projectforge.framework.persistence.user.entities.PFUserDO;
+
+import java.util.ResourceBundle;
+
+/**
+ * Esta clase será lanzada por AccessChecker si no se concede acceso para la acción solicitada por un usuario.
+ *
+ * @author Kai Reinhard (k.reinhard@micromata.de)
+ */
+public class AccessException extends UserException {
+  private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(AccessException.class);
+
+  private static final long serialVersionUID = 147795804616526958L;
+
+  public final static String I18N_KEY_STANDARD = &quot;access.exception.standard&quot;;
+
+  public final static String I18N_KEY_STANDARD_WITH_TASK = &quot;access.exception.standardWithTask&quot;;
+
+  private TaskTree taskTree;
+
+  protected PFUserDO user = null;
+
+  protected Long taskId = null;
+
+  protected AccessType accessType = null;
+
+  protected String message = null;
+
+  protected OperationType operationType = null;
+
+  protected Class&lt;?&gt; clazz = null;
+
+  public AccessException(final String i18nKey, final Object... params) {
+    this(ThreadLocalUserContext.getLoggedInUser(), i18nKey, params);
+  }
+
+  public AccessException(final PFUserDO user, final String i18nKey, final Object... params) {
+    super(i18nKey, params);
+    this.user = user;
+    log.info(&quot;AccessException: &quot; + this);
+  }
+
+  public AccessException(final AccessType accessType, final OperationType operationType) {
+    this(ThreadLocalUserContext.getLoggedInUser(), accessType, operationType);
+  }
+
+  public AccessException(final PFUserDO user, final AccessType accessType,
+                         final OperationType operationType) {
+    super(I18N_KEY_STANDARD, new MessageParam[]{new MessageParam(accessType), new MessageParam(operationType)});
+    this.user = user;
+    this.accessType = accessType;
+    this.operationType = operationType;
+    log.info(&quot;AccessException: &quot; + this);
+  }
+
+  public AccessException(final Long taskId, final AccessType accessType,
+                         final OperationType operationType) {
+    this(ThreadLocalUserContext.getLoggedInUser(), taskId, accessType, operationType);
+  }
+
+  public AccessException(final PFUserDO user, final Long taskId, final AccessType accessType,
+                         final OperationType operationType) {
+    super(I18N_KEY_STANDARD_WITH_TASK,
+        new MessageParam[]{new MessageParam(taskId), new MessageParam(accessType),
+            new MessageParam(operationType)});
+    this.user = user;
+    this.taskId = taskId;
+    this.accessType = accessType;
+    this.operationType = operationType;
+    log.info(&quot;AccessException: &quot; + this);
+  }
+
+  /**
+   * El orden de los argumentos es id de tarea, accessType y operationType.
+   *
+   * @return los argumentos para el formateador de mensajes de tipo Object[3].
+   */
+  public Object[] getMessageArgs(final ResourceBundle bundle) {
+    final Object[] result = new Object[3];
+    if (taskTree != null &amp;&amp; this.taskId != null) {
+      final TaskDO task = TaskTree.getInstance().getTaskById(taskId);
+      if (task != null) {
+        result[0] = task.getTitle();
+      } else {
+        result[0] = taskId;
+      }
+    } else {
+      result[0] = taskId;
+    }
+    if (accessType != null) {
+      result[1] = bundle.getString(accessType.getI18nKey());
+    }
+    if (operationType != null) {
+      result[2] = bundle.getString(operationType.getI18nKey());
+    }
+    return result;
+  }
+
+  public MessageParam[] getMessageArgs() {
+    final MessageParam[] result = new MessageParam[3];
+    if (taskTree != null &amp;&amp; this.taskId != null) {
+      final TaskDO task = TaskTree.getInstance().getTaskById(taskId);
+      if (task != null) {
+        result[0] = new MessageParam(task.getTitle());
+      } else {
+        result[0] = new MessageParam(taskId);
+      }
+    } else {
+      result[0] = new MessageParam(taskId);
+// ... (truncado, total 224 líneas)</pre>
+
+<h2>Historial Git</h2>
+<div class="hist">
+<pre>868d6abb7 2025 -&gt; 2026
+63081666f Encabezados de archivos fuente: 2024 -&gt; 2025.
+67805f2fc ThreadLocalUserContext.user -&gt; ThreadLocalUserContext.loggedInUser (renombrado para evitar malentendidos en el código).
+4c04cfd65 CAMBIO MAYOR: Migración de identificadores enteros a identificadores Long (incluyendo claves foráneas, etc.)
+b6092df09 Derechos de autor 2023 -&gt; 2024</pre>
+</div>
+</body>
+</html>

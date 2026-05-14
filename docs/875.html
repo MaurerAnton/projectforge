@@ -1,9 +1,8 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>#875: ExtractPFTradingPartners.kt</title>
+<meta charset="utf-8">
+<title>#875: HibernateSearchPhoneNumberBridge.kt — ProjectForge Docs</title>
 <style>
 body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}
 h1{border-bottom:2px solid #333;padding-bottom:.3em}
@@ -19,129 +18,56 @@ table{border-collapse:collapse;width:100%;margin:1em 0}
 th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}
 th{background:#f5f5f5;font-weight:600}
 .hist{font-size:.85em;color:#555}
+.warn{background:#fff3cd;border-left:3px solid #ffc107;padding:.5em 1em;margin:1em 0}
 </style>
 </head>
 <body>
-<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="874.html">← Prev</a> · <a href="876.html">Next →</a></div>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="874.html">← Prev</a> · <a href="876.html">Next →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/kotlin/org/projectforge/business/common/HibernateSearchPhoneNumberBridge.kt" target="_blank" title="View source on GitHub">📄 source</a></div>
+<h1>#875: <code>HibernateSearchPhoneNumberBridge.kt</code></h1>
+<div class="meta"><code>projectforge-business/src/main/kotlin/org/projectforge/business/common/HibernateSearchPhoneNumberBridge.kt</code> <strong>Type:</strong> Hibernate Search ValueBridge · <strong>Purpose:</strong> Phone number full-text indexing · <strong>Source:</strong> <code>projectforge-business/src/main/kotlin/org/projectforge/business/common/HibernateSearchPhoneNumberBridge.kt</code> <span style="color:#888">46 lines · 16 code · 26 comments · 4 blank</span></div>
+<div class="c">A Hibernate Search <code>ValueBridge&lt;String?, String&gt;</code> that transforms a phone number field into a rich searchable string by combining the original value, a digits-only normalized form, and a formatted extraction. Enables searches like "+49 30 123456", "4930123456", and "030/123456" to all match the same record.</div>
 
-<h1>#875: <code>ExtractPFTradingPartners.kt</code></h1>
-
-<div class="meta">
-<p><strong>Type:</strong> Spring <code>@Service</code> — Data extraction engine</p>
-<p><strong>Purpose:</strong> Extracts trading partners (vendors, customers) from ProjectForge's financial database tables and converts them into <code>TradingPartner</code> objects suitable for initial D-velop import.</p>
-<p><strong>Source path:</strong> <code>projectforge-business/src/main/kotlin/org/projectforge/business/dvelop/ExtractPFTradingPartners.kt</code></p>
-</div>
-
-<div class="c">
-<p>Acts as the <strong>bridge</strong> between ProjectForge's legacy financial data (incoming invoices, outgoing invoices, and customer master data) and D-velop's trading partner model. It scans 5 years of invoice data, deduplicates entities across accounts, handles the "divers" (miscellaneous) account pattern, parses free-text billing addresses into structured fields, and classifies entities as VENDOR, CUSTOMER, or PARTNER. Also provides Excel export functionality for reconciliation.</p>
-</div>
-
-<h2>Architecture</h2>
-
-<h3>Inner Class: <code>Context</code></h3>
-<p>A mutable accumulator that collects extracted trading partners during the multi-phase extraction process:</p>
-<table>
-<tr><th>Member</th><th>Description</th></tr>
-<tr><td><code>vendors</code></td><td><code>MutableList&lt;TradingPartner&gt;</code> — Creditor/vendor partners extracted from incoming invoices</td></tr>
-<tr><td><code>customers</code></td><td><code>MutableList&lt;TradingPartner&gt;</code> — Customer partners extracted from outgoing invoices + customer master</td></tr>
-<tr><td><code>sequence</code></td><td>Auto-incrementing counter starting at 7,000,000 for generating unique partner numbers</td></tr>
-<tr><td><code>allPartners</code></td><td>Combined, deduplicated, sorted list of all partners (vendors + customers)</td></tr>
-<tr><td><code>nextVal</code></td><td>Returns and increments the sequence counter</td></tr>
-<tr><td><code>getVendorByDatevKonto(konto)</code></td><td>Looks up a vendor by matching the konto number against <code>importCode</code></td></tr>
-<tr><td><code>cleanUp()</code></td><td>Clears the temporary <code>importCode</code> field if it matches the partner number (no longer needed post-migration)</td></tr>
-</table>
-
-<h3>Extraction Phases</h3>
-
-<h4>Phase 1: <code>extractTradingVendors(invoices)</code></h4>
-<p>Processes <code>EingangsrechnungDO</code> (incoming/creditor invoices):</p>
+<h2>Bridge Signature</h2>
+<pre>class HibernateSearchPhoneNumberBridge : ValueBridge&lt;String?, String&gt;</pre>
 <ul>
-<li>Skips invoices without a <code>kreditor</code> name or <code>konto</code> assignment</li>
-<li><strong>"Divers" accounts:</strong> If the konto description contains "divers", each unique kreditor name gets a new synthetic partner number (from <code>nextVal</code>) because multiple creditors share the same account</li>
-<li><strong>Normal accounts:</strong> One partner per konto number; the <code>importCode</code> is set to the konto number for cross-reference during later phases</li>
-<li>All vendors get <code>datevKonto</code> set to the konto number and remarks prepended with account info</li>
+<li><strong>Input type:</strong> nullable <code>String</code> (the raw phone number from the entity)</li>
+<li><strong>Indexed type:</strong> <code>String</code> (the composite string stored in the search index)</li>
 </ul>
 
-<h4>Phase 2: <code>extractTradingCustomersInvoices(invoices, context)</code></h4>
-<p>Processes <code>RechnungDO</code> (outgoing/customer invoices):</p>
-<ul>
-<li>If the invoice has a linked <code>kunde</code> (customer), delegates to <code>handleKunde()</code></li>
-<li>If no kunde but a konto exists, tries to match existing vendors (upgrading them to PARTNER) or creates new customer entries</li>
-<li>Skips "divers" accounts (no trading partner needed)</li>
-</ul>
-
-<h4>Phase 3: <code>extractTradingCustomers(customers, context)</code></h4>
-<p>Processes <code>KundeDO</code> (customer master data) for any customers not already captured via invoices. Calls <code>context.cleanUp()</code> at the end.</p>
-
-<h3>Core Deduplication Logic: <code>handleKunde()</code></h3>
-<p>The most complex method in this service. For each <code>KundeDO</code>:</p>
+<h2><code>toIndexedValue()</code></h2>
+<pre>override fun toIndexedValue(number: String?, context: ValueBridgeToIndexedValueContext): String</pre>
+<p>Produces a space-separated composite string containing three representations:</p>
 <ol>
-<li>Checks if a customer with the same number already exists → skips creation, optionally filling in <code>datevKonto</code></li>
-<li>Checks if the konto matches an existing vendor → upgrades vendor to PARTNER, reassigns the customer number as the primary number</li>
-<li>Otherwise creates a new customer; active customers are those with <code>ACQUISITION</code> or <code>ACTIVE</code> status (or null)</li>
+<li><strong>Original number:</strong> The raw input (e.g. <code>"+49 30 123456-78"</code>)</li>
+<li><strong>Normalized number:</strong> Digits only via <code>StringHelper.removeNonDigits(number)</code> (e.g. <code>"493012345678"</code>)</li>
+<li><strong>Formatted number:</strong> Extracted phone number via <code>NumberHelper.extractPhonenumber(number)</code></li>
 </ol>
+<p>Result example: <code>"+49 30 123456-78 493012345678 030/12345678"</code></p>
+<p>Hibernate Search's default analyzer tokenizes on whitespace, making all three forms independently searchable.</p>
 
-<h3>Address Parsing: <code>checkBillAddress()</code></h3>
-<p>Parses free-text billing addresses from invoice <code>customerAddress</code> strings using a bottom-up heuristic:</p>
-<ol>
-<li>Splits the address into non-blank lines</li>
-<li>Filters out leading lines matching known filler words ("Herr", "Frau", "Firma", "An", "Portal", "Klinikdienst")</li>
-<li>Last line: country or zip+city (tries <code>extractZipCodeCity()</code>)</li>
-<li>Second-to-last: street line</li>
-<li>Any remaining lines prepended to <code>billToAddressAdditional</code></li>
-</ol>
+<div class="warn">Null input returns an empty string (<code>""</code>), not <code>null</code>. This prevents NPEs in the search index writer.</div>
 
-<h3><code>extractZipCodeCity(line)</code></h3>
-<p>Uses a regex pattern <code>^[0-9 ]{5,10}</code> to extract a German-style 5+ digit postal code. Strips "D-" and "D " country prefixes. Returns <code>Pair&lt;String, String&gt;</code> of (zipCode, city) or null if no match.</p>
+<h2>Design Rationale</h2>
+<p>Phone numbers are notoriously difficult to search because users enter them in various formats: international (<code>+49 30 123456</code>), local (<code>030/123456</code>), compact (<code>4930123456</code>), or with punctuation. By indexing multiple normalized forms side-by-side in a single field, any user-entered search format can match.</p>
 
-<h3>Helper Methods</h3>
-<table>
-<tr><th>Method</th><th>Description</th></tr>
-<tr><td><code>appendRemarks(partner, remarks)</code></td><td>Appends text to <code>partner.remarks</code> with newline separator</td></tr>
-<tr><td><code>prependRemarks(partner, konto)</code></td><td>Prepends DATEV-Konto info (number + description) to remarks</td></tr>
-<tr><td><code>checkIfGiven(vararg str)</code></td><td>Returns <code>true</code> if any string is non-blank</td></tr>
-<tr><td><code>lineEquals(line, vararg strs)</code></td><td>Case-insensitive trimmed comparison</td></tr>
-<tr><td><code>createVendor(number, kreditor, konto)</code></td><td>Factory for vendor TradingPartners</td></tr>
-<tr><td><code>createCustomer(...)</code></td><td>Factory for customer TradingPartners</td></tr>
-</table>
-
-<h3>Excel Export: <code>extractTradingPartnersAsExcel()</code></h3>
-<p>Creates a two-sheet Excel workbook using <code>ExcelWorkbook</code>:</p>
-<ul>
-<li><strong>Sheet 1:</strong> "D.velop TradingPartners" — the list passed as parameter</li>
-<li><strong>Sheet 2:</strong> "ProjectForge TradingPartners" — freshly extracted list from the database</li>
-</ul>
-<p>Columns include number, datevKonto, importCode, type, company, shortName, remarks, active, and all billing address fields. Enum values (<code>contactType</code>, <code>type</code>, <code>active</code>) are resolved to their <code>value</code> string representation.</p>
-
-<h3>Injected Dependencies</h3>
-<table>
-<tr><th>Dao</th><th>Purpose</th></tr>
-<tr><td><code>EingangsrechnungDao</code></td><td>Query incoming/creditor invoices</td></tr>
-<tr><td><code>KundeDao</code></td><td>Query customer master data</td></tr>
-<tr><td><code>RechnungDao</code></td><td>Query outgoing/customer invoices</td></tr>
-</table>
+<p>The <code>onlyDigits</code> approach handles the most general case (any format reduces to the same digit sequence), while the <code>extractPhonenumber</code> approach preserves local formatting conventions for exact-match scenarios.</p>
 
 <h2>Git History</h2>
-<div class="hist"><pre>868d6abb7 2025 -> 2026
-78a38ca8f ExcelUtils.createFont and used by all font creating excel routines.
+<div class="hist"><pre>
+868d6abb7 2025 -> 2026
 63081666f Source file headers: 2024-> 2025.
-1b50060c3 BaseDao: renamed: get -> find, save -> insert, getList -> select, load -> select
-87aaf6a5a Migration stuff in progress... BaseDao refactored (not yet finished) internal* methods renamed.
-e33c8b9c2 Migration stuff in progress...
+7798dac85 Migration stuff in progress... (all tests of all packages: OK).
+974d70bec Migration stuff in progress...
+4f5a458c9 Migration stuff in progress...
+c04fb0d51 Migration stuff in progress...
 b6092df09 Copyright 2023 -> 2024
-b710c3267 WIP D.velop
-3ef41086d WIP D.velop
-be750e77e WIP D.velop
-5145a8199 WIP D.velop
-9ebb99c88 WIP D.velop
-cb2915283 WIP D.velop
-b46787d5f WIP D-velop
-2fe7d6f33 WIP D-velop
-975af1cd6 WIP D-velop
-1dee5f23f WIP D-velop
-3ec5c7354 WIP D-velop
-cb6d633f9 WIP D-velop
-eb005b878 WIP D-velop
+ab45d51fa Copyright 2001-2022 -> 2001-2023.
+5f7ef41b8 Copyright 2021 -> 2022
+ceb63e8a1 Source code header: (C) 2001-2021.
+7c79f1922 Copyright of source header -> 2020.
+000ca723d Remove pointless boolean expressions (business)
+dd5ca38ac CopyRight of all java file-header updated or created.
+9ebb88522 Initial commit
 </pre></div>
 </body>
 </html>

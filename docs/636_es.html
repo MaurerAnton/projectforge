@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html lang="es"><head><meta charset="utf-8"><title>#636 [ES]</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333}a{color:#0366d6}.meta{font-size:.9em;margin:1em 0}.nav{font-size:.9em;color:#888;margin-bottom:1em}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}code{background:#f0f0f0;padding:0 .2em}</style></head>
+<body>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Índice</a> · <a href="file-index.html">← Índice de archivos</a> · <a href="635.html">← Anterior</a> · <a href="637.html">Siguiente →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/java/org/projectforge/database/DatabaseSupport.java" target="_blank" title="Ver fuente en GitHub">📄 fuente</a></div>
+
+<h1>#636: <code>DatabaseSupport.java</code></h1>
+<div class="meta"><code>projectforge-business/src/main/java/org/projectforge/database/DatabaseSupport.java</code> <strong>Líneas:</strong> 101 · <strong>Autor:</strong> Kai Reinhard · <strong>Tipo:</strong> Singleton Java — paquete <code>org.projectforge.database</code> <span style="color:#888">101 líneas · 47 código · 42 comentarios · 12 en blanco</span></div>
+
+<div class="c"><p><strong>Capa de abstracción de dialecto de base de datos.</strong> Singleton (static <code>getInstance()</code> + <code>setInstance()</code> — se establece durante el inicio de la aplicación). Contiene el <code>DatabaseDialect</code> detectado (PostgreSQL o HSQL) y proporciona optimizaciones específicas del dialecto. 101 líneas.</p>
+
+<p><strong>Constructor:</strong> <code>DatabaseSupport(DatabaseDialect dialect)</code> — registra el dialecto detectado a nivel INFO: <em>"Estableciendo dialecto de base de datos a: PostgreSQL"</em>. El dialecto es determinado por <code>ConfigurationService</code> a partir de la URL JDBC al iniciar.</p>
+
+<p><strong>Método clave — <code>getIntervalInSeconds(fromProperty, toProperty)</code>:</strong> Este es el método crítico de rendimiento. Para calcular la duración (ej. <code>stopTime - startTime</code> de una hoja de tiempos), en lugar de obtener todas las filas en Java y calcular diferencias en memoria (<code>O(n)</code> memoria + CPU), genera un <strong>SUM del lado de la base de datos en SQL</strong>:</p>
+<pre>PostgreSQL: "SUM(EXTRACT(EPOCH FROM toProperty) - EXTRACT(EPOCH FROM fromProperty))"</pre>
+<p>Esto devuelve los segundos totales como un único agregado de base de datos — tamaño de resultado <code>O(1)</code> independientemente del número de filas. Crítico para instalaciones con muchas entradas de hoja de tiempos. La alternativa comentada <code>EXTRACT(EPOCH FROM SUM(to - from))</code> fue considerada pero se eligió el cálculo por fila para mayor precisión.</p>
+<p><strong>Alternativa:</strong> Si la base de datos no es PostgreSQL (es decir, HSQL para pruebas), devuelve <code>null</code>. Quien lo invoque debe entonces obtener todas las filas y calcular la suma en Java. Se registra una <strong>advertencia única</strong> (protegida por <code>static boolean errorMessageShown</code>) pidiendo contactar al desarrollador si la instalación tiene más de 10,000 entradas de hoja de tiempos — la agregación del lado de Java se vuelve lenta a gran escala.</p>
+
+<p><strong><code>getShutdownDatabaseStatement()</code>:</strong> Llamado por <code>WicketApplication</code> al apagar. Para HSQL (base de datos de prueba embebida), devuelve <code>"SHUTDOWN COMPACT"</code> — cierra de forma segura la base de datos embebida y compacta el archivo de datos. Para PostgreSQL, devuelve <code>null</code> — el pool de conexiones maneja el apagado.</p>
+
+<p><strong>Nota de diseño:</strong> Este es el <strong>único</strong> lugar en el código base donde se genera SQL específico de la base de datos. Todo el demás SQL es generado por Hibernate/HQL, que es independiente de la base de datos. Esta clase existe específicamente para la optimización de intervalos que HQL no puede expresar de manera portátil.</p></div>
+
+</body></html>

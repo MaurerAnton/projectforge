@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>#889: AbstractRechnungsStatistik.kt [FR]</title>
+<style>
+body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}
+h1{border-bottom:2px solid #333;padding-bottom:.3em}
+h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}
+h3{margin-top:2em;color:#444}
+a{color:#0366d6}
+.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}
+.nav{font-size:.9em;color:#888;margin-bottom:1em}
+.meta{font-size:.9em;margin:1em 0;color:#555}
+code{background:#f0f0f0;padding:0 .2em;font-size:.93em}
+pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}
+table{border-collapse:collapse;width:100%;margin:1em 0}
+th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}
+th{background:#f5f5f5;font-weight:600}
+.hist{font-size:.85em;color:#555}
+</style>
+</head>
+<body>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← Index des fichiers</a> · <a href="888.html">← Précédent</a> · <a href="890.html">Suivant →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/kotlin/org/projectforge/business/fibu/AbstractRechnungsStatistik.kt" target="_blank" title="Voir la source sur GitHub">📄 source</a></div>
+
+<h1>#889: <code>AbstractRechnungsStatistik.kt</code></h1>
+
+<div class="meta"><code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/AbstractRechnungsStatistik.kt</code> 
+<p><strong>Type :</strong> Classe générique abstraite (<code>Serializable</code>)</p>
+<p><strong>Paquetage :</strong> <code>org.projectforge.business.fibu</code></p>
+<p><strong>Chemin complet :</strong> <code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/AbstractRechnungsStatistik.kt</code></p>
+ <span style="color:#888">223 lignes · 148 code · 53 commentaires · 22 vides</span></div>
+
+<div class="c">
+<p>Calculateur abstrait de statistiques pour les factures. Agrège les indicateurs financiers d'un ensemble de factures (sortantes ou entrantes) : brut (<code>brutto</code>), net (<code>netto</code>), avec escompte (<code>bruttoMitSkonto</code>), payé (<code>gezahlt</code>), ouvert (<code>offen</code>), en retard (<code>ueberfaellig</code>) et montants d'escompte (<code>skonto</code>). Suit également les moyennes des délais de paiement et fournit une sortie formatée en Markdown pour l'affichage dans l'interface Wicket. Prend en charge la conversion multi-devises avec suivi des avertissements.</p>
+</div>
+
+<h2>Paramètre de type</h2>
+<p><code>T : AbstractRechnungDO?</code> — Le type concret de facture (par ex., <code>RechnungDO</code> ou <code>EingangsrechnungDO</code>).</p>
+
+<h2>Propriétés agrégées</h2>
+<table>
+<tr><th>Propriété</th><th>Type</th><th>Description</th></tr>
+<tr><td><code>brutto</code></td><td><code>BigDecimal</code></td><td>Somme brute totale de toutes les factures</td></tr>
+<tr><td><code>netto</code></td><td><code>BigDecimal</code></td><td>Somme nette totale</td></tr>
+<tr><td><code>bruttoMitSkonto</code></td><td><code>BigDecimal</code></td><td>Total brut avec escompte appliqué</td></tr>
+<tr><td><code>gezahlt</code></td><td><code>BigDecimal</code></td><td>Montant total payé</td></tr>
+<tr><td><code>offen</code></td><td><code>BigDecimal</code></td><td>Total impayé (pas encore payé)</td></tr>
+<tr><td><code>ueberfaellig</code></td><td><code>BigDecimal</code></td><td>Montant total en retard</td></tr>
+<tr><td><code>skonto</code></td><td><code>BigDecimal</code></td><td>Écart accepté (escomptes accordés par le client)</td></tr>
+<tr><td><code>counter</code></td><td><code>Int</code></td><td>Nombre total de factures comptabilisées</td></tr>
+<tr><td><code>counterBezahlt</code></td><td><code>Int</code></td><td>Nombre de factures entièrement payées</td></tr>
+</table>
+
+<h2>Méthode principale : <code>add(rechnung: T)</code></h2>
+<p>Le point d'entrée principal. Pour chaque facture ajoutée :</p>
+<ol>
+<li>Récupère les informations de facture mises en cache via <code>rechnungCache.getRechnungInfo(rechnung)</code></li>
+<li>Convertit tous les montants dans la devise configurée du système à l'aide de <code>currencyConversionService.convert()</code></li>
+<li>Si la conversion de devise échoue pour une facture, un message d'avertissement est accumulé dans <code>currencyConversionWarnings</code> et le montant d'origine (non converti) est utilisé comme solution de repli</li>
+<li>Accumule les montants brut, net, brut avec escompte, ainsi que les montants payés/ouverts/en retard</li>
+<li>Calcule l'escompte (<code>skonto</code>) lorsque le montant payé est inférieur au brut</li>
+<li>Effectue le suivi des moyennes des délais de paiement : contractuel (<code>zahlungsZielSum</code>) et réel (<code>tatsaechlichesZahlungsZiel</code>)</li>
+<li>Détecte les factures en retard via <code>rechnungInfo.isUeberfaellig</code></li>
+</ol>
+
+<h2>Conversion de devise</h2>
+<p>La méthode privée <code>convertToSystemCurrency()</code> gère les scénarios multi-devises :</p>
+<ul>
+<li>Ignore la conversion si les devises source et cible correspondent (insensible à la casse)</li>
+<li>Utilise <code>useFallbackToOldestRate = true</code> pour les factures historiques où un taux de change exact peut ne pas exister</li>
+<li>Construit des messages d'avertissement pour l'affichage au format : <code>"invoiceRef (date) : USD → EUR"</code></li>
+<li>Revient au montant d'origine lorsque la conversion n'est pas disponible</li>
+</ul>
+
+<h2>Propriétés calculées</h2>
+<table>
+<tr><th>Propriété</th><th>Type</th><th>Description</th></tr>
+<tr><td><code>zahlungszielAverage</code></td><td><code>Int</code></td><td>Délai de paiement contractuel moyen en jours</td></tr>
+<tr><td><code>tatsaechlichesZahlungzielAverage</code></td><td><code>Int</code></td><td>Durée moyenne pondérée réelle de paiement en jours</td></tr>
+<tr><td><code>asMarkdown</code></td><td><code>String</code></td><td>Tableau Markdown avec tous les indicateurs financiers, coloré pour les montants ouverts (bleu) et en retard (rouge)</td></tr>
+<tr><td><code>hasCurrencyConversionWarnings</code></td><td><code>Boolean</code></td><td>Vrai si des échecs de conversion de devise se sont produits</td></tr>
+<tr><td><code>currencyConversionWarningsList</code></td><td><code>List&lt;String&gt;</code></td><td>Liste des messages d'avertissement pour l'affichage Wicket</td></tr>
+</ul>
+
+<h2>Dépendances de l'objet compagnon</h2>
+<p>L'objet compagnon contient des références de service <code>lateinit</code> qui doivent être définies de manière externe avant utilisation :</p>
+<ul>
+<li><code>rechnungCache: RechnungCache</code> — fournit <code>RechnungInfo</code> pour chaque facture</li>
+<li><code>currencyConversionService: CurrencyConversionService</code> — gère la conversion des montants multi-devises</li>
+<li><code>configurationService: ConfigurationService</code> — fournit la devise par défaut du système</li>
+</ul>
+
+<h2>Historique Git</h2>
+<div class="hist"><pre>868d6abb7 2025 -> 2026
+472fbc977 WIP : conversion de devise avec Claude Code.
+8c2bf04f0 WIP : conversion de devise avec Claude Code.
+6be9c2b84 WIP : conversion de devise avec Claude Code.
+63081666f En-têtes des fichiers source : 2024 -> 2025.
+b47c21af6 Refonte de la mise en cache et des calculs avec les factures (pas encore terminée)
+ccb7ca64d Travaux de migration en cours...
+b6092df09 Copyright 2023 -> 2024
+ab45d51fa Copyright 2001-2022 -> 2001-2023.
+09b3f0df7 WIP : Jobmonitor. ListStatisticsSupport -> MarkdownBuilder
+0b835b27e Prise en charge des statistiques ou autres informations sur le jeu de résultats dans la page de liste.
+a286007ee Mise à jour massive des factures créditrices : implémentation de la gestion des escomptes.
+832934b14 WIP : mise à jour massive</pre></div>
+</body>
+</html>

@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>#887: AbstractRechnungDO.kt [RU]</title>
+<style>
+body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}
+h1{border-bottom:2px solid #333;padding-bottom:.3em}
+h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}
+h3{margin-top:2em;color:#444}
+a{color:#0366d6}
+.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}
+.nav{font-size:.9em;color:#888;margin-bottom:1em}
+.meta{font-size:.9em;margin:1em 0;color:#555}
+code{background:#f0f0f0;padding:0 .2em;font-size:.93em}
+pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}
+table{border-collapse:collapse;width:100%;margin:1em 0}
+th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}
+th{background:#f5f5f5;font-weight:600}
+.hist{font-size:.85em;color:#555}
+</style>
+</head>
+<body>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Индекс</a> · <a href="file-index.html">← Индекс файлов</a> · <a href="886.html">← Предыдущий</a> · <a href="888.html">Следующий →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/kotlin/org/projectforge/business/fibu/AbstractRechnungDO.kt" target="_blank" title="Просмотреть исходный код на GitHub">📄 исходник</a></div>
+
+<h1>#887: <code>AbstractRechnungDO.kt</code></h1>
+
+<div class="meta"><code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/AbstractRechnungDO.kt</code> 
+<p><strong>Тип:</strong> Kotlin <code>@MappedSuperclass</code> абстрактная JPA-сущность — Базовый класс для всех объектов предметной области «счёт»</p>
+<p><strong>Назначение:</strong> Определяет общую схему базы данных и бизнес-логику как для исходящих счетов клиентам (<code>RechnungDO</code>), так и для входящих счетов кредиторов (<code>EingangsrechnungDO</code>), предоставляя общие поля, индексацию Hibernate Search, вычисляемые свойства и управление позициями.</p>
+<p><strong>Путь к исходнику:</strong> <code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/AbstractRechnungDO.kt</code></p>
+ <span style="color:#888">227 строк · 138 кода · 59 комментариев · 30 пустых</span></div>
+
+<div class="c">
+<p><strong>Фундамент общей модели данных</strong> для всех типов счетов в ProjectForge. Расширяет <code>DefaultBaseDO</code> (базовую сущность фреймворка с полями аудита, такими как <code>created</code>, <code>lastUpdate</code>, <code>deleted</code>) и реализует <code>IRechnung</code> (общий интерфейс счёта) и <code>DisplayNameCapable</code> (для отображения в UI). Использует JPA <code>@MappedSuperclass</code>, поэтому его поля наследуются конкретными таблицами сущностей без создания отдельной таблицы. Все свойства объявлены как <code>open</code> для поддержки механизма прокси-объектов Hibernate с ленивой загрузкой.</p>
+</div>
+
+<h2>Иерархия классов</h2>
+<pre>
+DefaultBaseDO &lt;- AbstractRechnungDO &lt;- RechnungDO
+                                    &lt;- EingangsrechnungDO
+IRechnung, DisplayNameCapable (интерфейсы, реализованные AbstractRechnungDO)
+</pre>
+
+<h2>Поля базы данных</h2>
+
+<h3>Основные поля счёта</h3>
+<table>
+<tr><th>Свойство</th><th>Колонка БД</th><th>Тип</th><th>Ограничения / Аннотации</th></tr>
+<tr><td><code>datum</code></td><td>—</td><td><code>LocalDate?</code></td><td><code>@Column(nullable = false)</code>, <code>@GenericField</code> (Hibernate Search)</td></tr>
+<tr><td><code>betreff</code></td><td>—</td><td><code>String?</code></td><td><code>@Column(length = 4000)</code>, <code>@FullTextField</code></td></tr>
+<tr><td><code>bemerkung</code></td><td>—</td><td><code>String?</code></td><td><code>@Column(length = 4000)</code>, <code>@FullTextField</code></td></tr>
+<tr><td><code>besonderheiten</code></td><td>—</td><td><code>String?</code></td><td><code>@Column(length = 4000)</code>, <code>@FullTextField</code></td></tr>
+<tr><td><code>faelligkeit</code></td><td>—</td><td><code>LocalDate?</code></td><td><code>@GenericField</code></td></tr>
+<tr><td><code>bezahlDatum</code></td><td><code>bezahl_datum</code></td><td><code>LocalDate?</code></td><td><code>@GenericField</code></td></tr>
+<tr><td><code>zahlBetrag</code></td><td><code>zahl_betrag</code></td><td><code>BigDecimal?</code></td><td><code>scale = 2, precision = 12</code>; фактически уплаченная валовая сумма</td></tr>
+<tr><td><code>currency</code></td><td>—</td><td><code>String?</code></td><td><code>@Column(length = 10)</code>, <code>@FullTextField</code></td></tr>
+</table>
+
+<h3>Связь с Konto (Счёт)</h3>
+<table>
+<tr><th>Свойство</th><th>Тип</th><th>Аннотации</th></tr>
+<tr><td><code>konto</code></td><td><code>KontoDO?</code></td><td><code>@ManyToOne(fetch = LAZY)</code>, <code>@JoinColumn(name = "konto_id")</code>, <code>@IndexedEmbedded(includeDepth = 1)</code>, <code>@JsonSerialize(using = IdOnlySerializer::class)</code>, <code>@IndexingDependency(reindexOnUpdate = SHALLOW)</code></td></tr>
+</table>
+<p>Счёт DATEV, связанный с этим счётом. Для исходящих счетов по умолчанию используется счёт, назначенный клиенту или проекту. Для входящих счетов представляет запись плана счетов кредитора.</p>
+
+<h3>Поля скидки / Skonto</h3>
+<table>
+<tr><th>Свойство</th><th>Тип</th><th>Описание</th></tr>
+<tr><td><code>discountPercent</code></td><td><code>BigDecimal?</code></td><td>Процент скидки за досрочную оплату (например, 2 для 2%)</td></tr>
+<tr><td><code>discountMaturity</code></td><td><code>LocalDate?</code></td><td>Дата, до которой действует скидка</td></tr>
+</table>
+
+<h2>Транзиентные / Вычисляемые поля</h2>
+
+<h3>Год</h3>
+<pre>open val year: Int
+    get() = datum?.year ?: 0</pre>
+<p>Производное от <code>datum</code>. Индексируется через <code>@GenericField</code> + <code>@IndexingDependency(derivedFrom = ...)</code> для обеспечения запросов Hibernate Search по году без хранения в базе данных.</p>
+
+<h3>Условия оплаты (вычисляемые)</h3>
+<table>
+<tr><th>Свойство</th><th>Тип</th><th>Описание</th></tr>
+<tr><td><code>zahlungsZielInTagen</code></td><td><code>Int?</code></td><td>Количество дней между датой счёта и сроком оплаты</td></tr>
+<tr><td><code>discountZahlungsZielInTagen</code></td><td><code>Int?</code></td><td>Количество дней между датой счёта и датой окончания скидки</td></tr>
+</table>
+<p>Оба вычисляются методом <code>recalculate()</code> с использованием <code>PFDateTime.daysBetween()</code>. Они <code>@Transient</code> (не сохраняются).</p>
+
+<h3><code>uiStatus</code> / <code>uiStatusAsXml</code></h3>
+<p>Состояние пользовательского интерфейса сохраняется как XML в <code>uiStatusAsXml</code> (<code>@Column(length = 10000)</code>) и лениво десериализуется в экземпляр <code>RechnungUIStatus</code> через <code>XmlObjectReader</code>. Геттер кэширует десериализованный объект. Аннотирован <code>@NoHistory</code> для исключения из отслеживания истории.</p>
+
+<h3><code>info</code> (<code>RechnungInfo</code>)</h3>
+<pre>@Transient @CandHIgnore lateinit var info: RechnungInfo</pre>
+<p>Вычисляемая сводка по счёту (итоги нетто/брутто, разбивка НДС, распределение затрат). Инициализируется <code>RechnungCalculator</code> и кэшируется <code>AbstractRechnungCache</code>. Помечен <code>@CandHIgnore</code> для предотвращения обработки историей/аудитом. Проверка <code>isInfoInitialized</code> предотвращает повторную инициализацию.</p>
+
+<h3><code>ensuredInfo</code></h3>
+<pre>val ensuredInfo: RechnungInfo
+    get() {
+        if (!isInfoInitialized) { RechnungCalculator.calculate(this) }
+        return info
+    }</pre>
+<p>Гарантированный доступ — если <code>info</code> ещё не был вычислен (например, после десериализации или когда кэш не заполнил его), принудительно вычисляет по требованию.</p>
+
+<h2>Hibernate Search / Стратегия индексации</h2>
+<table>
+<tr><th>Аннотация</th><th>Использование</th></tr>
+<tr><td><code>@GenericField</code></td><td>Поля дат и чисел — точная фильтрация, не анализируемый полнотекстовый поиск</td></tr>
+<tr><td><code>@FullTextField</code></td><td>Текстовые поля (<code>betreff</code>, <code>bemerkung</code>, <code>besonderheiten</code>, <code>currency</code>) — анализируемый полнотекстовый поиск</td></tr>
+<tr><td><code>@IndexedEmbedded(includeDepth = 1)</code></td><td><code>konto</code> — индексация вложенной сущности с ограниченной глубиной</td></tr>
+<tr><td><code>@IndexingDependency(reindexOnUpdate = SHALLOW)</code></td><td><code>konto</code> — переиндексация только при изменении самого счёта (не его вложенных дочерних элементов)</td></tr>
+<tr><td><code>@IndexingDependency(derivedFrom = ...)</code></td><td><code>year</code> — прозрачно производное от поля <code>datum</code></td></tr>
+</table>
+
+<h2>Абстрактные методы (реализуются подклассами)</h2>
+<table>
+<tr><th>Метод</th><th>Описание</th></tr>
+<tr><td><code>abstractPositionen: List&lt;AbstractRechnungsPositionDO&gt;?</code></td><td>Возвращает коллекцию позиций/строк для этого счёта</td></tr>
+<tr><td><code>isValid: Boolean</code></td><td>True, если счёт выставлен, не отменён, не удалён и не только запланирован</td></tr>
+<tr><td><code>addPositionWithoutCheck(position)</code></td><td>Добавляет позицию во внутреннюю коллекцию без проверки</td></tr>
+<tr><td><code>setAbstractRechnung(position)</code></td><td>Устанавливает обратную ссылку от позиции на этот счёт</td></tr>
+<tr><td><code>ensureAndGetPositionen()</code></td><td>Лениво инициализирует и возвращает коллекцию позиций</td></tr>
+</table>
+
+<h2>Ключевые бизнес-методы</h2>
+
+<h3><code>recalculate()</code></h3>
+<p>Вычисляет <code>zahlungsZielInTagen</code> и <code>discountZahlungsZielInTagen</code> из <code>datum</code>, <code>faelligkeit</code> и <code>discountMaturity</code>. Если <code>datum</code> равен null, устанавливает оба значения в null.</p>
+
+<h3><code>addPosition(position: AbstractRechnungsPositionDO)</code></h3>
+<p>Добавляет новую позицию в счёт с автоматическим назначением номера:
+<ol>
+<li>Проверяет, что список позиций существует</li>
+<li>Находит максимальный существующий номер позиции и увеличивает его на 1 (или использует 1 для первой позиции)</li>
+<li>Устанавливает обратную ссылку через <code>setAbstractRechnung()</code></li>
+<li>Добавляет во внутреннюю коллекцию через <code>addPositionWithoutCheck()</code></li>
+</ol></p>
+
+<h3><code>hasKostZuweisungen(): Boolean</code></h3>
+<p>Возвращает <code>true</code>, если любая позиция в этом счёте имеет назначения затрат (<code>kostZuweisungen</code>).</p>
+
+<h3><code>getAbstractPosition(idx: Int): AbstractRechnungsPositionDO?</code></h3>
+<p>Возвращает позицию по указанному 0-индексированному индексу или null, если индекс выходит за пределы.</p>
+
+<h2>Архитектурные заметки</h2>
+<ul>
+<li><strong>Все свойства и методы объявлены как <code>open</code></strong> — это критически важно для механизма прокси CGLIB Hibernate и взаимодействия Kotlin-JPA. Коммит <code>8675a1dbe</code> определил это как серьёзную проблему производительности, где не-open свойства Kotlin препятствовали ленивой загрузке, вызывая тысячи ненужных SQL-запросов</li>
+<li><strong>Сериализация JSON только по ID:</strong> Связь <code>konto</code> использует <code>@JsonSerialize(using = IdOnlySerializer::class)</code> для избежания глубокой сериализации вложенных сущностей в REST-ответах</li>
+<li><strong>Исключение из истории:</strong> <code>uiStatusAsXml</code> аннотирован <code>@NoHistory</code>, так как изменения состояния UI не должны отслеживаться в журнале аудита</li>
+<li><strong>Исключение CanH:</strong> <code>info</code> помечен <code>@CandHIgnore</code>, так как это вычисляемое кэшированное значение, которое может быть ещё не инициализировано</li>
+<li>Аннотации <code>@PropertyInfo</code> предоставляют ключи i18n и метаданные типов для автоматически генерируемых форм UI</li>
+<li>Мигрирован с Java на Kotlin поэтапно — см. историю ниже</li>
+</ul>
+
+<h2>Git-история</h2>
+<div class="hist"><pre>868d6abb7 2025 -> 2026
+5d8d7db72 WIP: валюта во входящих счетах.
+8c2bf04f0 WIP: конвертация валют с Claude Code.
+16b87b4ce WIP: Импорт счетов кредиторов
+175d72c14 WIP: Импорт счетов кредиторов
+4d4c6b449 Поле валюты добавлено в счета (входящие и исходящие)
+aa20b7708 NewGroupSelectPanel исправлен (используется в мастере). (Eingangs)RechnungsPositionDO: @get:JoinColumn -> mappedBy.
+1e0e7225b Экспорт Kostzuweisungs счетов теперь игнорирует недействительные счета и позиции 0.00.
+63081666f Заголовки исходных файлов: 2024-> 2025.
+b3782c8a8 Миграция в процессе...
+b810d1c78 Миграция в процессе... (все тесты всех пакетов: OK).
+ba2479571 Миграция в процессе...
+b47c21af6 Рефакторинг кэширования и вычислений со счетами (ещё не завершён)
+ccb7ca64d Миграция в процессе...
+67a66479e Миграция в процессе...
+4c04cfd65 MAJOR-CHANGE! Миграция целочисленных id на Long id (включая внешние ключи и т.д.)
+ad9ac6b63 Миграция в процессе...
+f5c09f87f Миграция в процессе...
+c04fb0d51 Миграция в процессе...
+06828f490 Миграция в процессе...
+b6092df09 Copyright 2023 -> 2024
+ab45d51fa Copyright 2001-2022 -> 2001-2023.
+6307a3dbe *RechnungPagesRest: показать kost с подсказкой.
+2dc192b7a AG grid: автоформатирование валюты, Formatter теперь работает также с AG grid (рейтинг, даты, временные метки). Добавлено отображение валюты клиентом (Formatter.jsx).
+68402a26b Eingangsrechnungsliste: дата скидки пользователя и срок оплаты.
+a286007ee Массовое обновление счетов кредиторов: реализована обработка скидок.
+5f7ef41b8 Copyright 2021 -> 2022
+a7fceb731 Исправлены некоторые предупреждения компилятора.
+cd27dd997 package xstream -> xmlstream. (должен быть заменён на xstream позже).
+ceb63e8a1 Заголовок исходного кода: (C) 2001-2021.
+07cb34acb Введены IRechnung, IRechnungsPosition. Добавлены DTO для Eingangsrechnung{sPosition}DO.
+552603f75 Переименование методов setter в RechnungDO для избежания конфликтов с Jackson
+92112cdb1 Добавлен InvoicePositionComponent
+5064afcec Исправлен LocalDate Bridge для hibernate search.
+b209e00ba PFDay.from -> from, fromOrNow, fromOrNull, PFDateTime.from -> from, fromOrNow, fromOrNull
+7c1c48782 Замена дополнительных экземпляров java.sql.Date на java.time.LocalDate Замена экземпляров java.sql.Timestamp на java.util.Date
+78b436d9e Замена экземпляров java.util.date и java.sql.Date на java.time.LocalDate
+7c79f1922 Copyright заголовка исходника -> 2020.
+13cfb0330 WIP: Миграция на PFDate и PFDateTime.
+24019a0f5 Устранение вхождений DateHolder
+1dc951c03 Удаление экземпляров DayHolder
+e4cdd8d4b Откат "More Holder replacements"
+f604a1afe Дополнительные замены Holder
+19b97fcc3 DateBridge: encoding = EncodingType.STRING для всех DateBridges во всех DO.
+fbe4381e7 DateBridge: строковое кодирование снова удалено.
+76c5c6955 WIP: MultiFieldQueryParser
+8675a1dbe Обнаружена серьёзная проблема производительности: Объявлены все Kotlin JPA сущности и их свойства как open. Ленивая загрузка не поддерживалась Hibernate и приводила к тысячам JPA-запросов...
+d36fe6ad9 Большой WIP: рефакторинг
+a55ef0c14 Большой WIP: рефакторинг (Eingangs)Rechnung*. Обнаружен серьёзный убийца производительности!!!!!
+812b5b751 Большой WIP: рефакторинг (Eingangs)Rechnung*. Обнаружен серьёзный убийца производительности!!!!!
+39cdd224c Hibernate search: DateBridge...
+339e017b4 ElementRegistry: @PropertyInfo теперь также поддерживается для методов getter read-only vals.
+f2b55f6aa RechnungsPositionDO.java - RechnungsPositionDO.kt EingangsrechnungsPositionDO.java -> EingangsrechnungsPositionDO.kt AbstractRechnungsPositionDO.java -> AbstractRechnungsPositionDO.kt
+050a5ccd7 @NoHistory требуется как аннотация поля: @field:NoHistory.
+05244ff19 Обновлён или создан CopyRight всех Kotlin файлов-заголовков.
+f55615812 Kotlin миграция {Abstract|Eingangs}RechnungDO...
+39a2bd24f AbstractRechnungDO: Больше открытых атрибутов
+bd9803e81 AbstractRechnungDO: Добавлен open к ранее защищённым атрибутам.
+103e4f592 AbstractRechnungDO.java -> AbstractRechnungDO.kt
+</pre></div>
+</body>
+</html>

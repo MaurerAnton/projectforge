@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>#1878: CanonicalFileUtils.java [DE]</title>
+<style>
+body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}
+h1{border-bottom:2px solid #333;padding-bottom:.3em}
+h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}
+h3{margin-top:2em;color:#444}
+a{color:#0366d6}
+.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}
+.nav{font-size:.9em;color:#888;margin-bottom:1em}
+.lang{font-size:.85em;color:#888;float:right}
+.lang a{color:#888;text-decoration:none;padding:0 .3em}
+.lang a.active{color:#0366d6;font-weight:600;text-decoration:underline}
+.meta{font-size:.9em;margin:1em 0;color:#555}
+code{background:#f0f0f0;padding:0 .2em;font-size:.93em}
+pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}
+table{border-collapse:collapse;width:100%;margin:1em 0}
+th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}
+th{background:#f5f5f5;font-weight:600}
+.hist{font-size:.85em;color:#555}
+.warn{background:#fff3cd;border-left:3px solid #ffc107;padding:.5em 1em;margin:1em 0}
+.tip{background:#d4edda;border-left:3px solid #28a745;padding:.5em 1em;margin:1em 0}
+</style>
+</head>
+<body>
+<div class="lang"><a href="1878.html">EN</a> · <a href="1878_de.html" class="active">DE</a> · <a href="1878_ru.html">RU</a> · <a href="1878_fr.html">FR</a> · <a href="1878_es.html">ES</a></div>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← Datei-Index</a> · <a href="1877.html">← Vorherige</a> · <a href="1879.html">Nächste →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-common/src/main/java/org/projectforge/common/CanonicalFileUtils.java" target="_blank" title="Quelltext auf GitHub ansehen">📄 Quelle</a></div>
+<h1>#1878: <code>CanonicalFileUtils.java</code></h1>
+<div class="meta"><code>projectforge-common/src/main/java/org/projectforge/common/CanonicalFileUtils.java</code> Hilfsklasse — Paket org.projectforge.common, projectforge-common/src/main/java/org/projectforge/common/CanonicalFileUtils.java <span style="color:#888">67 Zeilen · 34 Code · 27 Kommentare · 6 leer</span></div>
+<div class="c">Dienstprogramm zur Normalisierung von Dateipfaden, das symbolische Verknüpfungen auflöst, <code>..</code>- und <code>.</code>-Pfadkomponenten eliminiert und Pfadtrennzeichen über <code>File.getCanonicalPath()</code> normalisiert. Behandelt E/A-Fehler elegant durch Rückgriff auf <code>getAbsolutePath()</code>. Bietet sowohl zeichenkettenbasierte als auch File-Objekt-basierte Überladungen für die Pfadauflösung. Wird überall dort verwendet, wo ProjectForge Dateipfade vergleichen oder eine konsistente Pfaddarstellung sicherstellen muss.</div>
+<h2>Architektur</h2>
+<div class="c">
+<h3>Importe</h3>
+<ul>
+<li><code>java.io.File</code> — JDK-Dateiabstraktion</li>
+<li><code>java.io.IOException</code> — Geprüfte Ausnahme von <code>getCanonicalPath()</code></li>
+<li><code>org.slf4j.Logger</code> — Fehlerprotokollierung für E/A-Fehler</li>
+</ul>
+
+<h3>Kernoperationen</h3>
+
+<h4>1. absolutePath(File file) → String</h4>
+<p>Gibt den kanonischen Pfad einer Datei als Zeichenkette zurück. Wenn <code>getCanonicalPath()</code> eine <code>IOException</code> auslöst (z. B. wenn die Datei nicht existiert und das Dateisystem ihre kanonische Form nicht auflösen kann), wird auf <code>getAbsolutePath()</code> zurückgegriffen und der Fehler protokolliert.</p>
+
+<h4>2. absolute(File file) → File</h4>
+<p>Gleiche Logik, gibt aber ein <code>File</code>-Objekt über <code>getCanonicalFile()</code> / <code>getAbsoluteFile()</code> zurück.</p>
+
+<h4>3. absolute(String path) → File</h4>
+<p>Bequemlichkeitsüberladung, die einen Zeichenkettenpfad in <code>new File(path)</code> kapselt und an <code>absolute(File)</code> delegiert.</p>
+
+<h3>Warum kanonischer Pfad?</h3>
+<p>Javas <code>File.getCanonicalPath()</code> bietet mehrere Garantien, die <code>getAbsolutePath()</code> nicht bietet:</p>
+<ul>
+<li><strong>Auflösung symbolischer Verknüpfungen</strong>: Auf Unix-Systemen werden Symlinks zu ihren Zielen aufgelöst</li>
+<li><strong>Normalisierung</strong>: <code>.</code> (aktuelles Verzeichnis) und <code>..</code> (übergeordnetes Verzeichnis) werden aufgelöst</li>
+<li><strong>Dateisystem-Groß-/Kleinschreibungsnormalisierung</strong>: Auf Dateisystemen ohne Berücksichtigung der Groß-/Kleinschreibung (Windows, macOS) entspricht die Pfadschreibweise dem tatsächlichen Dateisystemeintrag</li>
+<li><strong>Entfernung redundanter Trennzeichen</strong>: <code>//</code> wird zusammengezogen</li>
+</ul>
+<p>Dies ist entscheidend für sicherheitsrelevante Operationen, bei denen Pfade aus Benutzereingaben mit erlaubten Pfaden verglichen werden müssen – zwei unterschiedliche Zeichenkettenrepräsentationen könnten auf dieselbe Datei verweisen (z. B. <code>/home/user/../user/file</code> und <code>/home/user/file</code>).</p>
+
+<h3>Fehlerbehandlungsstrategie</h3>
+<p>Die Klasse verwendet ein <strong>Muster der eleganten Degradierung</strong>: Wenn die kanonische Auflösung fehlschlägt (IOException), wird auf den absoluten Pfad zurückgegriffen und der Fehler protokolliert. Dies ist wichtig, da <code>getCanonicalPath()</code> aus Gründen, die außerhalb der Kontrolle der Anwendung liegen (z. B. Dateisystemberechtigungen, NFS-Mount-Probleme oder nicht vorhandene Datei), eine IOException auslösen kann. Der Rückgriff stellt sicher, dass die Anwendung weiterhin funktioniert, wenn auch mit einem potenziell nicht normalisierten Pfad.</p>
+
+<h3>Null-Behandlung</h3>
+<p>Alle Methoden behandeln <code>null</code>-Eingaben elegant – sie geben <code>null</code> zurück, ohne eine NullPointerException auszulösen. Dies vereinfacht den Aufrufercode, da keine Null-Prüfungen vor dem Aufruf des Dienstprogramms erforderlich sind.</p>
+
+<h3>Verwendungskontext in ProjectForge</h3>
+<p>CanonicalFileUtils wird in Szenarien wie diesen verwendet:</p>
+<ul>
+<li><strong>Datei-Upload/Download</strong>: Normalisierung benutzerdefinierter Dateipfade für die Speicherung</li>
+<li><strong>Laden von Konfigurationsdateien</strong>: Auflösen von Konfigurationsdateipfaden, die relative Referenzen enthalten können</li>
+<li><strong>Pfadvergleich</strong>: Feststellen, ob zwei Pfade auf dieselbe Datei verweisen (z. B. Erkennen doppelter Datei-Uploads)</li>
+<li><strong>Sicherheitsprüfungen</strong>: Sicherstellen, dass ein angeforderter Dateipfad nicht über einen <code>..</code>-Durchgriff aus einem Basisverzeichnis ausbricht</li>
+<li><strong>Einrichtungsassistent</strong>: Auflösen benutzerausgewählter Verzeichnisse (die Klasse erscheint in der Git-Historie im Zusammenhang mit dem Einrichtungsassistenten)</li>
+</ul>
+
+<div class="warn">Die Protokollmeldung „<code>Interner Fehler beim Versuch, den kanonischen Pfad zu ermitteln</code>“ ist etwas irreführend – eine IOException von <code>getCanonicalPath()</code> ist nicht unbedingt ein „interner Fehler“, sondern oft eine Umgebungsbedingung (fehlende Datei, fehlende Berechtigung). Der Rückgriff auf <code>getAbsolutePath()</code> akzeptiert stillschweigend einen potenziell nicht normalisierten Pfad.</div>
+
+<div class="tip">Die Klasse ist bewusst minimal gehalten (3 Methoden, ~30 Logikzeilen). Sie extrahiert ein sehr spezifisches Anliegen – Pfadnormalisierung mit elegantem Rückgriff – aus der breiteren <code>FileHelper</code>-Klasse. Dies folgt dem Prinzip der einzigen Verantwortung (Single Responsibility Principle) und hält Dienstprogramme fokussiert und testbar.</div>
+</div>
+<h2>Git-Verlauf</h2>
+<div class="hist"><pre>868d6abb7 2025 -> 2026
+63081666f Quelltextdatei-Header: 2024 -> 2025.
+b6092df09 Copyright 2023 -> 2024
+ab45d51fa Copyright 2001-2022 -> 2001-2023.
+5f7ef41b8 Copyright 2021 -> 2022
+ceb63e8a1 Quelltext-Header: (C) 2001-2021.
+7c79f1922 Copyright des Quelltext-Headers -> 2020.
+bd25a85fb WIP: Einrichtungsassistent (Swing und Lanterna)</pre></div>
+</body>
+</html>

@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>#15: BuildPropertiesGenerator.kt [RU]</title>
+<style>
+  body { font-family: system-ui, sans-serif; max-width: 960px; margin: 2em auto; padding: 0 1em; background: #fafafa; color: #222; line-height: 1.6; }
+  h1 { border-bottom: 2px solid #333; }
+  h2 { margin-top: 2.5em; border-bottom: 1px solid #ddd; padding-bottom: 0.2em; }
+  h3 { margin-top: 2em; }
+  a { color: #0366d6; text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  .meta { background: #f0f0f0; border-radius: 6px; padding: 1em; margin: 1em 0; font-size: 0.9em; }
+  .code-block { background: #f8f8f8; border: 1px solid #ddd; border-radius: 4px; padding: 0.5em; margin: 0.5em 0; overflow-x: auto; }
+  .code-block pre { margin: 0; font-family: 'Consolas', monospace; font-size: 0.85em; line-height: 1.5; }
+  .commentary { margin: 1em 0; line-height: 1.7; background: #fff; padding: 0.5em 1em; border-radius: 6px; border-left: 4px solid #ddd; }
+  table { border-collapse: collapse; width: 100%; margin: 1em 0; font-size: 0.9em; }
+  th, td { border: 1px solid #ddd; padding: 0.5em; text-align: left; }
+  th { background: #f0f0f0; }
+  code { background: #e8e8e8; border-radius: 3px; padding: 0.1em 0.3em; font-size: 0.9em; }
+  .nav { font-size: 0.9em; color: #888; margin-bottom: 1em; }
+  .output-sample { background: #f0f4f0; border: 1px solid #ccc; border-radius: 4px; padding: 0.5em; font-family: 'Consolas', monospace; font-size: 0.85em; }
+</style>
+</head>
+<body>
+
+<div class="nav">
+  <a href="https://maureranton.github.io/projectforge/">← Документация</a> ·
+  <a href="file-index.html">← Список файлов</a> ·
+  <a href="14.html">← Назад</a> · Вперёд → · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/buildSrc/src/main/kotlin/org.projectforge/BuildPropertiesGenerator.kt" target="_blank" title="Посмотреть исходник на GitHub">📄 исходник</a></div>
+
+<h1>#15: <code>BuildPropertiesGenerator.kt</code></h1>
+
+<div class="meta"><code>buildSrc/src/main/kotlin/org.projectforge/BuildPropertiesGenerator.kt</code> 
+  <p><strong>Путь:</strong> <code>./buildSrc/src/main/kotlin/org.projectforge/BuildPropertiesGenerator.kt</code></p>
+  <p><strong>Тип:</strong> Класс Kotlin — пользовательская задача Gradle</p>
+  <p><strong>Строк:</strong> 57</p>
+  <p><strong>Назначение:</strong> Генерирует файл <code>build.properties</code> с информацией о коммите git, ветке, времени сборки и версии — внедряется в приложение во время выполнения</p>
+  <p><strong>Исходник:</strong> <a href="https://github.com/micromata/projectforge/blob/9ed5fbe0f/buildSrc/src/main/kotlin/org.projectforge/BuildPropertiesGenerator.kt">GitHub</a></p>
+ <span style="color:#888">57 строк · 48 кода · 4 комментария · 5 пустых</span></div>
+
+<h2>Что делает</h2>
+
+<div class="commentary">
+  <p>Каждый раз при сборке ProjectForge эта задача выполняет <strong>пять команд git</strong> и записывает результаты в файл <code>.properties</code>. Затем этот файл упаковывается в JAR и считывается во время выполнения для отображения информации о версии (диалог «О программе», конечная точка статуса системы и т.д.).</p>
+  <p>Сгенерированный вывод выглядит так:</p>
+  <div class="output-sample"><span style="color:#888"># Сгенерировано Gradle</span>
+gradle.version=<strong>8.2-SNAPSHOT</strong>
+gradle.build.date=2026-05-10
+gradle.build.timestamp=2026-05-10T12:34:56Z
+git.branch=<strong>fix/vite-eslint-upgrade</strong>
+git.commit.id.abbrev=<strong>e67067a</strong>
+git.commit.id.full=<strong>e67067aa7f00b3a6b6afc7ffe9af69718e277fc1</strong>
+git.commit.time=2026-05-10 12:30:00 +0100
+git.dirty=<strong>true</strong></div>
+  <p style="margin-top:0.5em">Поле <code>git.dirty=true</code> особенно полезно — оно показывает, была ли сборка выполнена из чистых исходников или с незакоммиченными изменениями.</p>
+</div>
+
+<h2>Построчный разбор</h2>
+
+<h3>Строки 1–15: Объявление класса</h3>
+
+<div class="code-block"><pre><span style="color:#999"> 1</span> package org.projectforge
+<span style="color:#999"> 2</span> 
+<span style="color:#999"> 3</span> import java.io.File
+<span style="color:#999"> 4</span> import java.time.OffsetDateTime
+<span style="color:#999"> 5</span> import java.time.ZoneOffset
+<span style="color:#999"> 6</span> import java.time.format.DateTimeFormatter
+<span style="color:#999"> 7</span> 
+<span style="color:#999"> 8</span> /** Генерирует файл свойств, содержащий информацию о git, а также информацию о gradle */
+<span style="color:#999"> 9</span> class BuildPropertiesGenerator(
+<span style="color:#999">10</span>     private val rootDirPath: String,        // ← корень проекта (где находится .git/)
+<span style="color:#999">11</span>     private val outputFilePath: String,     // ← куда записать файл .properties
+<span style="color:#999">12</span>     private val projectVersion: String      // ← например "8.2-SNAPSHOT"
+<span style="color:#999">13</span> ) {</pre></div>
+
+<div class="commentary">
+  <p><strong>Три параметра конструктора</strong> — передаются задачей Gradle, которая вызывает этот класс:</p>
+  <table>
+    <tr><th>Параметр</th><th>Источник</th><th>Пример</th></tr>
+    <tr><td><code>rootDirPath</code></td><td><code>project.rootDir</code> из Gradle</td><td><code>/home/dev/projectforge</code></td></tr>
+    <tr><td><code>outputFilePath</code></td><td>Настраиваемый путь в скрипте сборки</td><td><code>build/resources/main/build.properties</code></td></tr>
+    <tr><td><code>projectVersion</code></td><td>Из <a href="4.html">плагина соглашений</a> строка 18</td><td><code>8.2-SNAPSHOT</code></td></tr>
+  </table>
+  <p>Этот класс <strong>не</strong> является задачей Gradle — это обычный класс Kotlin, вызываемый задачей Gradle, зарегистрированной в <code>build.gradle.kts</code> каждого подпроекта.</p>
+</div>
+
+<h3>Строки 16–29: Метод <code>generate()</code> — опрос git</h3>
+
+<div class="code-block"><pre><span style="color:#999">20</span> val branch = "git rev-parse --abbrev-ref HEAD".runCommand(rootDir) ?: "unknown"
+<span style="color:#999">21</span> val commitIdFull = "git rev-parse HEAD".runCommand(rootDir) ?: "unknown"
+<span style="color:#999">22</span> val commitIdAbbrev = commitIdFull.take(7)
+<span style="color:#999">23</span> val commitTime = "git show -s --format=%ci HEAD".runCommand(rootDir) ?: "unknown"
+<span style="color:#999">24</span> val isDirty = "git status --porcelain".runCommand(rootDir)?.isNotBlank().toString()
+<span style="color:#999">25</span> val now = OffsetDateTime.now(ZoneOffset.UTC)
+<span style="color:#999">26</span> val buildDate = now.format(DateTimeFormatter.ISO_OFFSET_DATE)
+<span style="color:#999">27</span> val buildTimeStamp = now.format(DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss'Z'"))</pre></div>
+
+<div class="commentary">
+  <p>Пять команд git, выполняемых через <code>runCommand()</code>:</p>
+  <table>
+    <tr><th>Строка</th><th>Команда Git</th><th>Назначение</th><th>Пример вывода</th></tr>
+    <tr><td>20</td><td><code>git rev-parse --abbrev-ref HEAD</code></td><td>Текущее имя ветки</td><td><code>fix/vite-eslint-upgrade</code></td></tr>
+    <tr><td>21</td><td><code>git rev-parse HEAD</code></td><td>Полный SHA коммита</td><td><code>e67067aa7f00...</code></td></tr>
+    <tr><td>22</td><td><code>.take(7)</code> от полного SHA</td><td>Короткий SHA коммита (7 символов)</td><td><code>e67067a</code></td></tr>
+    <tr><td>23</td><td><code>git show -s --format=%ci HEAD</code></td><td>Временная метка коммита</td><td><code>2026-05-10 12:30:00 +0100</code></td></tr>
+    <tr><td>24</td><td><code>git status --porcelain</code></td><td>Есть ли незакоммиченные изменения?</td><td><code>true</code> или <code>false</code></td></tr>
+  </table>
+
+  <p><strong>Строка 24 — флаг dirty:</strong> <code>git status --porcelain</code> возвращает пустую строку для чистой рабочей директории и непустую для грязной. <code>.isNotBlank()</code> преобразует это в логическое значение, <code>.toString()</code> — в <code>"true"</code>/<code>"false"</code>. Это самое полезное поле для отладки: сборка с <code>git.dirty=true</code> означает, что запущенный код не соответствует в точности ни одному коммиту.</p>
+
+  <p><strong>Строки 25–27:</strong> Временная метка сборки — фиксируется во время сборки, а не коммита. Используется <a href="https://docs.oracle.com/en/java/javase/17/docs/api/java.base/java/time/OffsetDateTime.html"><code>OffsetDateTime.now(UTC)</code></a> для единообразного часового пояса.</p>
+</div>
+
+<h3>Строки 29–43: Вывод в файл</h3>
+
+<div class="code-block"><pre><span style="color:#999">29</span> outputFile.parentFile.mkdirs()
+<span style="color:#999">30</span> outputFile.writeText(
+<span style="color:#999">31</span>     """
+<span style="color:#999">32</span>     # Сгенерировано Gradle
+<span style="color:#999">33</span>     gradle.version=$projectVersion
+<span style="color:#999">34</span>     gradle.build.date=$buildDate
+<span style="color:#999">35</span>     gradle.build.timestamp=$buildTimeStamp
+<span style="color:#999">36</span>     git.branch=$branch
+<span style="color:#999">37</span>     git.commit.id.abbrev=$commitIdAbbrev
+<span style="color:#999">38</span>     git.commit.id.full=$commitIdFull
+<span style="color:#999">39</span>     git.commit.time=$commitTime
+<span style="color:#999">40</span>     git.dirty=$isDirty
+<span style="color:#999">41</span>     """.trimIndent()
+<span style="color:#999">42</span> )</pre></div>
+
+<div class="commentary">
+  <p><strong>Строка 29:</strong> Создает родительские директории, если их нет — важно для CI, где директория вывода сборки может еще не существовать.</p>
+  <p><strong>Строки 31–41:</strong> <a href="https://kotlinlang.org/docs/strings.html#raw-strings">Сырая строка Kotlin</a> (<code>"""</code>) с <code>trimIndent()</code> — удаляет начальные пробелы из каждой строки для чистого вывода.</p>
+  <p><strong>Строка 43:</strong> Выводит подтверждение в лог сборки: <code>Git properties written to /path/to/build.properties</code>.</p>
+</div>
+
+<h3>Строки 46–56: <code>runCommand()</code> — исполнитель команд оболочки</h3>
+
+<div class="code-block"><pre><span style="color:#999">46</span> private fun String.runCommand(workingDir: File): String? {
+<span style="color:#999">47</span>     return try {
+<span style="color:#999">48</span>         val process = ProcessBuilder(*split(" ").toTypedArray())
+<span style="color:#999">49</span>             .directory(workingDir)
+<span style="color:#999">50</span>             .redirectErrorStream(true)
+<span style="color:#999">51</span>             .start()
+<span style="color:#999">52</span>         process.inputStream.bufferedReader().readText().trim()
+<span style="color:#999">53</span>             .takeIf { process.waitFor() == 0 }
+<span style="color:#999">54</span>     } catch (e: Exception) { null }
+<span style="color:#999">55</span> }</pre></div>
+
+<div class="commentary">
+  <p><strong>Функция-расширение</strong> для <code>String</code> — позволяет вызывать команды git с естественным синтаксисом: <code>"git rev-parse HEAD".runCommand(rootDir)</code>.</p>
+
+  <p><strong>Строка 48:</strong> <code>ProcessBuilder(*split(" ").toTypedArray())</code> — разбивает строку команды по пробелам на аргументы. <code>ProcessBuilder</code> — это стандартный способ Java для запуска внешних процессов.</p>
+
+  <p><strong>Строка 49:</strong> <code>.directory(workingDir)</code> — устанавливает рабочую директорию для команды git. Должна указывать на корень проекта (где находится <code>.git/</code>).</p>
+
+  <p><strong>Строка 50:</strong> <code>.redirectErrorStream(true)</code> — объединяет stderr с stdout. Зачем? Если бы stderr был отдельным и не читался, процесс мог бы зависнуть в ожидании освобождения буфера.</p>
+
+  <p><strong>Строка 53:</strong> <code>.takeIf { process.waitFor() == 0 }</code> — возвращает вывод только если процесс завершился с кодом 0 (успех). Если git завершается ошибкой (например, не git-репозиторий), возвращает <code>null</code> → вызывающий код использует <code>?: "unknown"</code> как запасной вариант.</p>
+
+  <p><strong>Строка 54:</strong> <code>catch (e: Exception) { null }</code> — подавляет все исключения. Если git не установлен, сборка не падает — просто получает значения <code>"unknown"</code>.</p>
+</div>
+
+<h2>Где используется результат</h2>
+
+<div class="commentary">
+  <p>Сгенерированный <code>build.properties</code> считывается во время выполнения с помощью <a href="https://docs.spring.io/spring-boot/docs/current/reference/html/features.html#features.external-config"><code>@PropertySource</code></a> Spring Boot или подстановки плейсхолдеров <code>application.properties</code>. ProjectForge использует его для:</p>
+  <ul>
+    <li><strong>REST-конечная точка статуса системы:</strong> <code>GET /rs/userStatus</code> возвращает <code>{ systemData: { version, buildTimestamp } }</code> — фронтенд на React отображает это в подвале</li>
+    <li><strong>Диалог «О программе»:</strong> Отображает версию, дату сборки и SHA коммита</li>
+    <li><strong>Проверка версии:</strong> Приложение сравнивает свою версию с последним релизом на GitHub для уведомления администраторов об обновлениях</li>
+  </ul>
+</div>
+
+<h2>Ключевые выводы</h2>
+
+<div class="commentary">
+  <ul>
+    <li><strong>57 строк, одна задача:</strong> Опрос git и запись файла свойств.</li>
+    <li><strong><code>git.dirty</code> — золото:</strong> Мгновенно показывает, включает ли сборка незакоммиченные изменения.</li>
+    <li><strong>Отказоустойчивость:</strong> Все команды git имеют запасной вариант <code>"unknown"</code> — сборка никогда не ломается из-за отсутствия git.</li>
+    <li><strong>Не задача Gradle:</strong> Это обычный класс Kotlin, вызываемый из блока <code>doLast { }</code> в скриптах сборки подпроектов.</li>
+    <li><strong>Одна сборка — один файл свойств:</strong> Несколько подпроектов могут вызывать этот класс, каждый со своим <code>outputFilePath</code>.</li>
+  </ul>
+</div>
+
+<div class="nav" style="margin-top:2em; padding-top:1em; border-top:1px solid #ddd">
+  <a href="4.html">← #4: buildlogic.pf-module-conventions.gradle.kts</a> ·
+  Далее: <a href="file-index.html">Список файлов</a>
+</div>
+
+</body>
+</html>

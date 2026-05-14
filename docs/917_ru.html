@@ -1,0 +1,114 @@
+Here is the HTML translated into Russian, with all tags preserved, `lang="ru"`, and `[RU]` added to the title.
+
+```html
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>#917: EingangsrechnungDao.kt [RU]</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:2em;color:#444}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}</style>
+</head>
+<body>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Индекс</a> · <a href="file-index.html">← Индекс файлов</a> · <a href="916.html">← Предыдущий</a> · <a href="918.html">Следующий →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/kotlin/org/projectforge/business/fibu/EingangsrechnungDao.kt" target="_blank" title="Просмотреть исходник на GitHub">📄 исходник</a></div>
+
+<h1>#917: <code>EingangsrechnungDao.kt</code></h1>
+
+<div class="meta"><code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/EingangsrechnungDao.kt</code> 
+  <strong>Тип:</strong> DAO (Объект доступа к данным) / Spring Сервис<br>
+  <strong>Пакет:</strong> <code>org.projectforge.business.fibu</code><br>
+  <strong>Путь:</strong> <code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/EingangsrechnungDao.kt</code><br>
+  <strong>Автор:</strong> Kai Reinhard (k.reinhard@micromata.de)
+ <span style="color:#888">270 строк · 185 кода · 52 комментария · 33 пустых</span></div>
+
+<div class="c">
+  <p>DAO для <strong>EingangsrechnungDO</strong> (входящие счета). Расширяет <code>BaseDao&lt;EingangsrechnungDO&gt;</code>, предоставляя CRUD, фильтрованный список, слияние истории и фильтрацию по статусу оплаты. Взаимодействует с <code>EingangsrechnungCache</code> для высокопроизводительных запросов статуса оплаты и <code>CurrencyConversionService</code> для мультивалютной статистики.</p>
+</div>
+
+<h2>Архитектура</h2>
+
+<h3>Наследование</h3>
+<ul>
+  <li><strong>BaseDao&lt;EingangsrechnungDO&gt;</strong> — стандартный DAO с фильтрацией, сортировкой, историей, проверками доступа</li>
+</ul>
+
+<h3>Зависимости</h3>
+<table>
+  <tr><th>Зависимость</th><th>Роль</th></tr>
+  <tr><td><code>EingangsrechnungCache</code></td><td>Кэшированный поиск статуса оплаты через <code>RechnungJdbcService</code></td></tr>
+  <tr><td><code>KontoDao</code></td><td>Устанавливает счёт (Konto) для записей входящих счетов</td></tr>
+  <tr><td><code>CurrencyConversionService</code></td><td>Конвертация валют для статистики</td></tr>
+  <tr><td><code>ConfigurationService</code></td><td>Системная валюта по умолчанию для статистики</td></tr>
+</table>
+
+<h3>Контроль доступа</h3>
+<p>Защищён с помощью <code>UserRightId.FIBU_EINGANGSRECHNUNGEN</code>, установленного в <code>init</code>.</p>
+
+<h2>Ключевые методы</h2>
+
+<h3>Диапазон лет</h3>
+<p>Свойство <code>years</code> выполняет именованный запрос <code>EingangsrechnungDO.SELECT_MIN_MAX_DATE</code> (выбирает <code>min(datum)</code> и <code>max(datum)</code>) и преобразует результат в <code>IntArray</code> через <code>getYearsByTupleOfLocalDate()</code>.</p>
+
+<h3>Статистика</h3>
+<p><code>buildStatistik(list)</code> создаёт аккумулятор <code>EingangsrechnungsStatistik</code> и добавляет в него каждый счёт. Перед обработкой инициализирует статические <code>currencyConversionService</code> и <code>configurationService</code> в общем базовом классе <code>AbstractRechnungsStatistik</code> (шаблон внедрения зависимостей через объект-компаньон).</p>
+
+<h3>Назначение счёта</h3>
+<p><code>setKonto(eingangsrechnung, kontoId)</code> ищет <code>KontoDO</code> через <code>kontoDao.findOrLoad()</code> и назначает его. Если <code>kontoId</code> равен null, счёт устанавливается в null.</p>
+
+<h3>Фильтрованный список (<code>select</code>)</h3>
+<p>При необходимости оборачивает фильтр в <code>EingangsrechnungListFilter</code>. Создаёт <code>QueryFilter</code> с ограничениями по дате и фильтрами по типу оплаты. Сортирует по <code>datum DESC</code>, затем <code>kreditor DESC</code>. После запроса применяет <strong>пост-фильтрацию по статусу оплаты</strong> на основе <code>RechnungInfo</code> из кэша:</p>
+<ul>
+  <li><code>isShowUnbezahlt</code> — фильтр неоплаченных счетов</li>
+  <li><code>isShowBezahlt</code> — фильтр оплаченных счетов</li>
+  <li><code>isShowUeberFaellig</code> — фильтр просроченных счетов</li>
+</ul>
+
+<h3>Хуки жизненного цикла</h3>
+<table>
+  <tr><th>Хук</th><th>Поведение</th></tr>
+  <tr><td><code>afterLoad(obj)</code></td><td>Устанавливает <code>obj.info</code> из кэша через <code>rechnungCache.ensureRechnungInfo(obj)</code></td></tr>
+  <tr><td><code>onInsertOrModify(obj, opType)</code></td><td>Делегирует <code>AuftragAndRechnungDaoHelper.onSaveOrModify()</code>; масштабирует <code>zahlBetrag</code> до 2 знаков после запятой; вызывает <code>recalculate()</code>; гарантирует наличие хотя бы одной позиции (выбрасывает <code>UserException</code>, если пусто); удаляет конечные пустые позиции; записывает статус UI в XML.</td></tr>
+  <tr><td><code>afterInsertOrModify(obj, opType)</code></td><td>Вызывает <code>rechnungCache.update(obj)</code> для обновления кэша</td></tr>
+</table>
+
+<h3>Слияние истории</h3>
+<p><code>addOwnHistoryEntries()</code> перебирает все позиции и их назначения затрат (<code>KostZuweisungDO</code>), объединяя историю каждого дочернего элемента в родительский контекст. <code>getHistoryPropertyPrefix()</code> предоставляет контекстные префиксы: номера позиций и <code>"kost #N"</code> для назначений затрат.</p>
+
+<h3>Дополнительные запросы</h3>
+<table>
+  <tr><th>Метод</th><th>Описание</th></tr>
+  <tr><td><code>findNewestByKreditor(kreditor)</code></td><td>Находит самый последний (по <code>created</code> убыв.) неудалённый счёт для заданного кредитора</td></tr>
+  <tr><td><code>getByDateRange(from, until)</code></td><td>Находит все неудалённые счета в диапазоне дат, отсортированные по дате и кредитору. Используется для сверки импорта.</td></tr>
+  <tr><td><code>contains(idSet, entry)</code></td><td>Проверяет, содержится ли какой-либо идентификатор позиции в заданном наборе (для массового выбора)</td></tr>
+</table>
+
+<h3>Дополнительные поля поиска</h3>
+<p>Включает <code>"positionen.text"</code> в поисковые запросы, обеспечивая полнотекстовый поиск по строкам счёта.</p>
+
+<h3>Дополнительные объекты поиска по истории</h3>
+<p>Включает <code>EingangsrechnungsPositionDO</code> для поиска по истории между сущностями.</p>
+
+<h3>Автодополнение</h3>
+<p>Включено для <code>"kreditor"</code> (имя кредитора).</p>
+
+<h2>История Git</h2>
+<div class="hist"><pre>
+868d6abb7 2025 -> 2026
+6be9c2b84 WIP: конвертация валют с Claude Code.
+363d3b836 WIP: Импорт счетов кредиторов.
+63081666f Заголовки исходных файлов: 2024 -> 2025.
+db2599ab8 История в книге заказов, входящих/исходящих счетах и проектах.
+18bf92219 WIP: Обработка записей истории. VisitorBookDao.
+b71b5073d Миграция в процессе... (все тесты всех пакетов: OK).
+bbc198d03 Миграция в процессе... (все тесты всех пакетов: OK).
+ba2479571 Миграция в процессе...
+b47c21af6 Рефакторинг кэширования и расчётов со счетами (ещё не завершено)
+9e3c523c7 Миграция в процессе... (все тесты всех пакетов: OK).
+c97135a57 Миграция в процессе...
+d18c899b5 Рефакторинг записей истории, FlatDisplayHistoryEntries и DisplayHistoryEntries...
+b79a1edca Миграция в процессе... (все тесты всех пакетов: OK).
+d67bce18b Миграция в процессе...
+</pre></div>
+
+</body>
+</html>

@@ -1,30 +1,85 @@
-<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>1207</title>
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>#1207</title>
 <style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:2em;color:#444}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}</style></head>
-<body><div class="nav"><a href="https://maureranton.github.io/projectforge/">&#8592; Index</a> &#183; <a href="file-index.html">&#8592; File index</a> &#183; <a href="1206.html">&#8592; Prev</a> &#183; <a href="1208.html">Next &#8594;</a></div>
-<h1>1207: <code>IdsOnlySerializer.kt</code></h1>
-<div class="meta">JSON Serializer, projectforge-business/src/main/kotlin/org/projectforge/framework/json/IdsOnlySerializer.kt</div>
-<div class="c">Jackson <code>JsonSerializer&lt;Collection&lt;*&gt;&gt;</code> that serializes collections of <code>IdObject</code> entities as arrays of <code>{"id": ...}</code> objects. Uses <code>HibernateUtils.isFullyInitialized()</code> to check if the collection is loaded; writes null if not, preventing accidental database fetches during JSON serialization.</div>
+<body><div class="nav"><a href="https://maureranton.github.io/projectforge/">&#8592; Index</a> &#183; <a href="file-index.html">&#8592; File index</a> &#183; <a href="1200.html">&#8592; Prev</a> &#183; <a href="1202.html">Next &#8594;</a></div>
+<h1>#1207: <code>AbstractJob.kt</code></h1>
+<div class="meta"><code>projectforge-business/src/main/kotlin/org/projectforge/framework/jobs/AbstractJob.kt</code> Job Framework, projectforge-business/src/main/kotlin/org/projectforge/framework/jobs/AbstractJob.kt <span style="color:#888">429 lines · 280 code · 93 comments · 56 blank</span></div>
+<div class="c">Abstract base class for background jobs in ProjectForge. Supports queuing strategies (none, per-queue, per-queue-and-user, refuse), optional timeout (default 120s), progress tracking (total/processed count), and cancellation via Kotlin coroutines. Jobs have a lifecycle and expose <code>readAccess</code> / <code>writeAccess</code> for permission checks. Integrates with <code>UserGroupCache</code> for owner display.</div>
 
 <h2>Architecture</h2>
-<h3>Serialization Logic</h3>
+<h3>Class Hierarchy</h3>
+<ul>
+  <li><strong>AbstractJob</strong> — abstract class implementing <code>Comparable&lt;AbstractJob&gt;</code></li>
+  <li>Subclasses must implement <code>suspend fun run()</code></li>
+</ul>
+
+<h3>Key Enums</h3>
+<table>
+  <tr><th>Enum</th><th>Values</th><th>Purpose</th></tr>
+  <tr><td><code>QueueStrategy</code></td><td>NONE, PER_QUEUE, PER_QUEUE_AND_USER, REFUSE_PER_QUEUE, REFUSE_PER_QUEUE_AND_USER</td><td>Controls whether job blocks/refuses new jobs in the same area</td></tr>
+  <tr><td><code>Status</code></td><td>RUNNING, WAITING, FINISHED, FAILED, CANCELLED, REFUSED</td><td>Implements <code>I18nEnum</code>; drives ordering in job list</td></tr>
+  <tr><td><code>ErrorCode</code></td><td>TIMEOUT_WHILE_WAITING, REFUSED_BY_ANOTHER_RUNNING_JOB</td><td>Reason for failure/refusal</td></tr>
+</table>
+
+<h3>Job Lifecycle</h3>
+<p>The lifecycle is managed by <code>JobHandler</code>:</p>
 <ol>
-  <li><code>value == null</code>: write null</li>
-  <li><code>!HibernateUtils.isFullyInitialized(value)</code>: write null (prevents lazy fetch)</li>
-  <li>Otherwise: iterate items; <code>IdObject</code> items use <code>IdOnlySerializer.writeObject()</code>, others use default serialization</li>
+  <li><code>addJob()</code> — job added to handler, status = WAITING</li>
+  <li>Queue check — compares against running jobs via <code>isBlocking()</code></li>
+  <li><code>onBeforeStart()</code> — hook before execution</li>
+  <li><code>start()</code> — sets status to RUNNING, calls <code>run()</code></li>
+  <li>On success: <code>onFinish()</code> → <code>onAfterFinish()</code> → <code>onAfterTermination()</code></li>
+  <li>On cancellation: <code>cancel()</code> → <code>onBeforeCancel()</code> → <code>onAfterCancel()</code> → <code>onAfterTermination()</code></li>
+  <li>On failure: <code>markJobAsFailed()</code> → <code>onAfterException()</code> → <code>onAfterTermination()</code></li>
 </ol>
 
-<h3>Key Details</h3>
+<h3>Key Properties</h3>
+<table>
+  <tr><th>Property</th><th>Type</th><th>Description</th></tr>
+  <tr><td><code>title</code></td><td>String</td><td>Human-readable title for display/logging</td></tr>
+  <tr><td><code>area</code></td><td>String?</td><td>Groups jobs; queue strategy scoped to same area</td></tr>
+  <tr><td><code>ownerId</code></td><td>Long?</td><td>User who started the job</td></tr>
+  <tr><td><code>id</code></td><td>Int</td><td>Auto-incrementing unique job ID</td></tr>
+  <tr><td><code>timeout</code></td><td>Int</td><td>Timeout in ms (from constructor param in seconds)</td></tr>
+  <tr><td><code>timeoutReached</code></td><td>Boolean</td><td>True if job exceeded timeout while RUNNING</td></tr>
+  <tr><td><code>isActive</code></td><td>Boolean</td><td>Convenience: status==RUNNING && coroutineJob.isActive</td></tr>
+  <tr><td><code>progressPercentage</code></td><td>Int</td><td>Computed from processedNumber/totalNumber</td></tr>
+  <tr><td><code>terminatedForDeletion</code></td><td>Boolean</td><td>True if terminated > 1 hour ago (cleanup)</td></tr>
+  <tr><td><code>info</code></td><td>String</td><td>Markdown-formatted status info (owner, times, status, title)</td></tr>
+</table>
+
+<h3>Permissions</h3>
 <ul>
-  <li><code>HibernateUtils.isFullyInitialized()</code> is preferred over <code>Hibernate.isInitialized()</code> because Some ManyToOne lazy objects may not be fully loaded even when Hibernate reports them as initialized</li>
-  <li>Delegates individual IdObject item serialization to <code>IdOnlySerializer.writeObject()</code> (shared companion method)</li>
+  <li><code>readAccess(user)</code> — delegates to <code>writeAccess(user)</code> by default</li>
+  <li><code>writeAccess(user)</code> — abstract, must be implemented by subclass</li>
+  <li><code>isOwner</code> — checks if current logged-in user matches <code>ownerId</code></li>
+</ul>
+
+<h3>Integration Points</h3>
+<ul>
+  <li><strong>JobHandler</strong> — manages jobs, calls lifecycle methods</li>
+  <li><strong>JobHandlerScheduler</strong> — triggers <code>tidyUp()</code> every minute</li>
+  <li><strong>AccessChecker</strong> — injected via <code>@Autowired</code></li>
+  <li><strong>Coroutines</strong> — <code>Job</code> handle stored as <code>coroutinesJob</code></li>
+  <li><strong>I18n</strong> — status labels via <code>I18nEnum.i18nKey</code></li>
 </ul>
 
 <h2>Git History</h2><div class="hist"><pre>
 868d6abb7 2025 -> 2026
-2df5e78ad IdsOnlySerializer fixed. Has caused json serialization errors e.g. on PFUserDO.
-6a32032d6 Hibernate.isInitialized(obj) -> HibernateUtils.isFullyInitialized(obj).
 63081666f Source file headers: 2024-> 2025.
-59519ee50 Json serialization refactored: IdOnlySerializer and IdsOnlySerializer introduced.
-0237d5eba Json serialization refactored: IdOnlySerializer and IdsOnlySerializer introduced.
+cba940301 Migration stuff in progress...
+67805f2fc ThreadLocalUserContext.user -> ThreadLocalUserContext.loggedInUser (renamed)
+4c04cfd65 MAJOR-CHANGE! Migration of integer id's to Long id's (including fk's etc.)
+b6092df09 Copyright 2023 -> 2024
+ab45d51fa Copyright 2001-2022 -> 2001-2023.
+163492453 WIP: Jobs and Bank account records.
+232a91c5a BaseUserGroupRightUtils implemented. WIP BankingPlugin and jobs-handling.
+38bec971a ThreadLocal -> Kotlin
+09b3f0df7 WIP: Jobmonitor. ListStatisticsSupport -> MarkdownBuilder
+fcc4c67f6 WIP: Jobmonitor.
+a1646e91a WIP: Banking plugin (and new import module).
+d93f61491 WIP: Banking plugin (and new import module).
+cd69cc40f WIP: Banking plugin (and new import module).
+f68cda98e Jobmonitor.
+67eed70e4 WIP: Banking plugin (and new import module). JobHandler/monitor started.
 </pre></div>
 </body></html>

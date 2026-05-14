@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>#1948 [DE]</title>
+<style>
+body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}
+h1{border-bottom:2px solid #333;padding-bottom:.3em}
+h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}
+h3{margin-top:2em;color:#444}
+a{color:#0366d6}
+.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}
+.nav{font-size:.9em;color:#888;margin-bottom:1em}
+.meta{font-size:.9em;margin:1em 0;color:#555}
+code{background:#f0f0f0;padding:0 .2em;font-size:.93em}
+pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}
+table{border-collapse:collapse;width:100%;margin:1em 0}
+th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}
+th{background:#f5f5f5;font-weight:600}
+.hist{font-size:.85em;color:#555}
+</style>
+</head>
+<body>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">&#8592; Index</a> &#183; <a href="file-index.html">&#8592; Dateiindex</a> &#183; <a href="1200.html">&#8592; Vorherige</a> &#183; <a href="1202.html">Nächste &#8594;</a></div>
+<h1>#1948: <code>AbstractJob.kt</code></h1>
+<div class="meta"><code>projectforge-common/src/main/kotlin/org/projectforge/jobs/AbstractJob.kt</code> Job-Framework, projectforge-business/src/main/kotlin/org/projectforge/framework/jobs/AbstractJob.kt <span style="color:#888">43 Zeilen · 14 Code · 25 Kommentare · 4 leer</span></div>
+<div class="c">Abstrakte Basisklasse für Hintergrund-Jobs in ProjectForge. Unterstützt Warteschlangenstrategien (keine, pro Warteschlange, pro Warteschlange und Benutzer, verweigern), optionales Timeout (Standard 120s), Fortschrittsverfolgung (Gesamt-/Verarbeitet-Anzahl) und Abbruch über Kotlin-Coroutinen. Jobs haben einen Lebenszyklus und exponieren <code>readAccess</code> / <code>writeAccess</code> für Berechtigungsprüfungen. Integriert mit <code>UserGroupCache</code> für die Besitzeranzeige.</div>
+
+<h2>Architektur</h2>
+<h3>Klassenhierarchie</h3>
+<ul>
+  <li><strong>AbstractJob</strong> — abstrakte Klasse, die <code>Comparable&lt;AbstractJob&gt;</code> implementiert</li>
+  <li>Unterklassen müssen <code>suspend fun run()</code> implementieren</li>
+</ul>
+
+<h3>Wichtige Enums</h3>
+<table>
+  <tr><th>Enum</th><th>Werte</th><th>Zweck</th></tr>
+  <tr><td><code>QueueStrategy</code></td><td>NONE, PER_QUEUE, PER_QUEUE_AND_USER, REFUSE_PER_QUEUE, REFUSE_PER_QUEUE_AND_USER</td><td>Steuert, ob ein Job neue Jobs im selben Bereich blockiert/verweigert</td></tr>
+  <tr><td><code>Status</code></td><td>RUNNING, WAITING, FINISHED, FAILED, CANCELLED, REFUSED</td><td>Implementiert <code>I18nEnum</code>; steuert die Sortierung in der Jobliste</td></tr>
+  <tr><td><code>ErrorCode</code></td><td>TIMEOUT_WHILE_WAITING, REFUSED_BY_ANOTHER_RUNNING_JOB</td><td>Grund für Fehler/Verweigerung</td></tr>
+</table>
+
+<h3>Job-Lebenszyklus</h3>
+<p>Der Lebenszyklus wird von <code>JobHandler</code> verwaltet:</p>
+<ol>
+  <li><code>addJob()</code> — Job zum Handler hinzugefügt, Status = WAITING</li>
+  <li>Warteschlangenprüfung — vergleicht mit laufenden Jobs über <code>isBlocking()</code></li>
+  <li><code>onBeforeStart()</code> — Hook vor der Ausführung</li>
+  <li><code>start()</code> — setzt Status auf RUNNING, ruft <code>run()</code> auf</li>
+  <li>Bei Erfolg: <code>onFinish()</code> → <code>onAfterFinish()</code> → <code>onAfterTermination()</code></li>
+  <li>Bei Abbruch: <code>cancel()</code> → <code>onBeforeCancel()</code> → <code>onAfterCancel()</code> → <code>onAfterTermination()</code></li>
+  <li>Bei Fehler: <code>markJobAsFailed()</code> → <code>onAfterException()</code> → <code>onAfterTermination()</code></li>
+</ol>
+
+<h3>Wichtige Eigenschaften</h3>
+<table>
+  <tr><th>Eigenschaft</th><th>Typ</th><th>Beschreibung</th></tr>
+  <tr><td><code>title</code></td><td>String</td><td>Lesbarer Titel für Anzeige/Protokollierung</td></tr>
+  <tr><td><code>area</code></td><td>String?</td><td>Gruppiert Jobs; Warteschlangenstrategie auf denselben Bereich beschränkt</td></tr>
+  <tr><td><code>ownerId</code></td><td>Long?</td><td>Benutzer, der den Job gestartet hat</td></tr>
+  <tr><td><code>id</code></td><td>Int</td><td>Auto-inkrementierende eindeutige Job-ID</td></tr>
+  <tr><td><code>timeout</code></td><td>Int</td><td>Timeout in ms (aus Konstruktorparameter in Sekunden)</td></tr>
+  <tr><td><code>timeoutReached</code></td><td>Boolean</td><td>True, wenn der Job das Timeout während RUNNING überschritten hat</td></tr>
+  <tr><td><code>isActive</code></td><td>Boolean</td><td>Komfort: status==RUNNING && coroutineJob.isActive</td></tr>
+  <tr><td><code>progressPercentage</code></td><td>Int</td><td>Berechnet aus processedNumber/totalNumber</td></tr>
+  <tr><td><code>terminatedForDeletion</code></td><td>Boolean</td><td>True, wenn vor > 1 Stunde beendet (Bereinigung)</td></tr>
+  <tr><td><code>info</code></td><td>String</td><td>Markdown-formatierte Statusinformationen (Besitzer, Zeiten, Status, Titel)</td></tr>
+</table>
+
+<h3>Berechtigungen</h3>
+<ul>
+  <li><code>readAccess(user)</code> — delegiert standardmäßig an <code>writeAccess(user)</code></li>
+  <li><code>writeAccess(user)</code> — abstrakt, muss von Unterklasse implementiert werden</li>
+  <li><code>isOwner</code> — prüft, ob der aktuell angemeldete Benutzer mit <code>ownerId</code> übereinstimmt</li>
+</ul>
+
+<h3>Integrationspunkte</h3>
+<ul>
+  <li><strong>JobHandler</strong> — verwaltet Jobs, ruft Lebenszyklusmethoden auf</li>
+  <li><strong>JobHandlerScheduler</strong> — löst jede Minute <code>tidyUp()</code> aus</li>
+  <li><strong>AccessChecker</strong> — injiziert über <code>@Autowired</code></li>
+  <li><strong>Coroutinen</strong> — <code>Job</code>-Handle gespeichert als <code>coroutinesJob</code></li>
+  <li><strong>I18n</strong> — Statusbezeichnungen über <code>I18nEnum.i18nKey</code></li>
+</ul>
+
+<h2>Git-Verlauf</h2><div class="hist"><pre>
+868d6abb7 2025 -> 2026
+63081666f Quelltextdatei-Header: 2024 -> 2025.
+cba940301 Migration läuft...
+67805f2fc ThreadLocalUserContext.user -> ThreadLocalUserContext.loggedInUser (umbenannt)
+4c04cfd65 GROSSE-ÄNDERUNG! Migration von Integer-IDs zu Long-IDs (inkl. Fremdschlüssel etc.)
+b6092df09 Copyright 2023 -> 2024
+ab45d51fa Copyright 2001-2022 -> 2001-2023.
+163492453 WIP: Jobs und Bankkontodatensätze.
+232a91c5a BaseUserGroupRightUtils implementiert. WIP BankingPlugin und Job-Handling.
+38bec971a ThreadLocal -> Kotlin
+09b3f0df7 WIP: Jobmonitor. ListStatisticsSupport -> MarkdownBuilder
+fcc4c67f6 WIP: Jobmonitor.
+a1646e91a WIP: Banking-Plugin (und neues Importmodul).
+d93f61491 WIP: Banking-Plugin (und neues Importmodul).
+cd69cc40f WIP: Banking-Plugin (und neues Importmodul).
+f68cda98e Jobmonitor.
+67eed70e4 WIP: Banking-Plugin (und neues Importmodul). JobHandler/Monitor gestartet.
+</pre></div>
+</body>
+</html>

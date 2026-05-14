@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>#1860: AddressService.kt [RU]</title>
+<style>
+  body { font-family: system-ui, sans-serif; max-width: 960px; margin: 2em auto; padding: 0 1em; background: #fafafa; color: #222; line-height: 1.6; }
+  h1 { border-bottom: 2px solid #333; padding-bottom: 0.3em; }
+  h2 { margin-top: 2.5em; border-bottom: 1px solid #ddd; padding-bottom: 0.2em; color: #333; }
+  h3 { margin-top: 2em; color: #444; }
+  a { color: #0366d6; }
+  .c { border-left: 3px solid #ddd; padding: .5em 1em; margin: 1em 0; background: #fff; }
+  .nav { font-size: .9em; color: #888; margin-bottom: 1em; }
+  .meta { font-size: .9em; margin: 1em 0; color: #555; }
+  code { background: #f0f0f0; padding: 0 .2em; font-size: .93em; }
+  pre { background: #f5f5f5; padding: .8em 1em; border: 1px solid #ddd; border-radius: 4px; overflow-x: auto; font-size: .88em; line-height: 1.4; }
+  table { border-collapse: collapse; width: 100%; margin: 1em 0; }
+  th, td { border: 1px solid #ddd; padding: .5em .8em; text-align: left; font-size: .9em; }
+  th { background: #f5f5f5; font-weight: 600; }
+  .hist { font-size: .85em; color: #555; }
+  .warn { background: #fff3cd; border-left: 3px solid #ffc107; padding: .5em 1em; margin: 1em 0; }
+  .tip { background: #d4edda; border-left: 3px solid #28a745; padding: .5em 1em; margin: 1em 0; }
+</style>
+</head>
+<body>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Индекс</a> · <a href="file-index.html">← Индекс файлов</a> · <a href="1859.html">← Предыдущий</a> · <a href="1861.html">Следующий →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-carddav/src/main/kotlin/org/projectforge/carddav/service/AddressService.kt" target="_blank" title="Просмотреть исходный код на GitHub">📄 исходник</a></div>
+
+<h1>#1860: <code>AddressService.kt</code></h1>
+<div class="meta"><code>projectforge-carddav/src/main/kotlin/org/projectforge/carddav/service/AddressService.kt</code> <strong>Kotlin Spring <code>@Service</code></strong> — Фасад сервиса адресной книги CardDAV. Предоставляет контакты ProjectForge (только избранные) через протокол CardDAV для синхронизации с внешними адресными книгами (Apple Контакты, Thunderbird, DAVx⁵ и др.). Расположение: <code>projectforge-carddav/src/main/kotlin/org/projectforge/carddav/service/AddressService.kt</code> <span style="color:#888">101 строка · 66 кода · 26 комментариев · 9 пустых</span></div>
+
+<div class="c">
+<strong>Назначение:</strong> CardDAV — это расширение адресной книги для WebDAV (RFC 6352). Данный сервис выступает в роли моста между HTTP-эндпоинтами модуля <code>projectforge-carddav</code> и данными адресов бизнес-уровня. Он преобразует доменные объекты адресов ProjectForge в модель <code>Contact</code> CardDAV, обеспечивая политику доступа <strong>только избранные</strong>.
+</div>
+
+<h2>Архитектура</h2>
+
+<div class="c">
+Сервис следует шаблону <strong>фасада только для чтения</strong>. Операции создания и обновления закомментированы и возвращают пустые объекты <code>Contact()</code> — реализация CardDAV доступна только для чтения. Метод <code>deleteContact()</code> на самом деле не удаляет адрес; он только <strong>удаляет адрес из избранного пользователя</strong> (устанавливает <code>isFavoriteCard = false</code> в PersonalAddressDO). Это связано с тем, что:
+<ul>
+<li>Удаление фактического адреса повлияло бы на других пользователей, которые также добавили его в избранное</li>
+<li>Клиенты CardDAV ожидают «удаления» контактов из своей личной адресной книги, а не из общего корпоративного справочника</li>
+<li>Операции записи сложны: синтаксический анализ vCard, разрешение конфликтов и семантика синхронизации потребовали бы значительной дополнительной работы</li>
+</ul>
+</div>
+
+<h3>Граф зависимостей</h3>
+<pre>
+AddressService (@Service)
+  ├── AddressDAVCache (@Service + AbstractCache)
+  │     ├── AddressDao (основное хранилище адресов)
+  │     ├── AddressImageCache (фотографии контактов)
+  │     └── VCardUtils (преобразование адреса в vCard)
+  └── PersonalAddressDao (список избранного пользователя)
+</pre>
+
+<div class="c">
+<code>AddressDAVCache</code> (<a href="844.html">контекст #844</a>) оборачивает дорогостоящую генерацию vCard (которая включает кодирование фотографий контактов в base64, сопоставление полей и сериализацию формата) в кэш с TTL. Без этого кэша каждая синхронизация клиента CardDAV заново генерировала бы vCard для всех контактов — операция, интенсивно использующая ЦП для адресных книг с сотнями записей и фотографий.
+</div>
+
+<h3>Поверхность API</h3>
+<table>
+<tr><th>Метод</th><th>Возвращает</th><th>Статус</th><th>Поведение</th></tr>
+<tr><td><code>getContactList(userDO)</code></td><td><code>List&lt;Contact&gt;</code></td><td>Активен</td><td>Возвращает все избранные адреса как объекты <code>Contact</code> vCard, упорядоченные по имени</td></tr>
+<tr><td><code>getContact(id)</code></td><td><code>Contact?</code></td><td>Закомментирован</td><td>Возвращал бы один контакт по ID, если он в избранном</td></tr>
+<tr><td><code>createContact(ab, vcard)</code></td><td><code>Contact</code> (пустой)</td><td>Закомментирован</td><td>Создание контакта не поддерживается — возвращает пустой Contact</td></tr>
+<tr><td><code>updateContact(contact, vcard)</code></td><td><code>Contact</code> (пустой)</td><td>Закомментирован</td><td>Обновление контакта не поддерживается — возвращает пустой Contact</td></tr>
+<tr><td><code>deleteContact(contactId)</code></td><td><code>Boolean</code></td><td>Активен</td><td>Удаляет адрес из избранного (<code>isFavoriteCard = false</code>), возвращает true при успехе</td></tr>
+</table>
+
+<h2>Контекст протокола CardDAV</h2>
+<div class="c">
+Клиенты CardDAV (например, Apple Контакты на iOS/macOS, Thunderbird с CardBook, DAVx⁵ на Android) отправляют HTTP-запросы к эндпоинтам <code>/{username}/addressBooks/</code>. Сервис вызывается слоем сервлета/обработчика CardDAV, когда:<br><br>
+1. <strong>PROPFIND / address-query REPORT:</strong> Клиент выводит список всех контактов → <code>getContactList()</code><br>
+2. <strong>GET /addressBooks/{uid}.vcf:</strong> Клиент получает один контакт → <code>getContact()</code> (в настоящее время закомментирован)<br>
+3. <strong>DELETE /addressBooks/{uid}.vcf:</strong> Клиент удаляет из адресной книги → <code>deleteContact()</code><br>
+4. <strong>PUT:</strong> Создание/обновление — не поддерживается<br><br>
+Политика «только избранные» означает, что пользователь должен явно отметить контакты как избранные в веб-интерфейсе ProjectForge, чтобы они появились в его синхронизированной адресной книге. Это служит намеренным ограничением — полный корпоративный справочник обычно слишком велик для личных адресных книг (1000+ записей переполнили бы приложение контактов на телефоне).
+</div>
+
+<h2>История Git</h2>
+<div class="hist">
+<pre>868d6abb7 2025 → 2026 (обновление года авторского права)
+63081666f Заголовки исходных файлов: 2024→2025
+49cddf9a0 WIP: Carddav (итерации разработки)
+3527445db WIP: Carddav
+d0aed59ed Переименование модуля: projectforge-caldav → projectforge-carddav
+8fc0c831f WIP: CardDav
+27692785d CardDav (только чтение) запущен; библиотека Milton удалена (проблема стоимости лицензии)
+40e721b9c VCardUtils начальная фиксация
+685cfc9bf caldav: AddressCache переименован в AddressDAVCache
+878cb7169 Исправления предупреждений компилятора
+ab1776d2a CardDAV.AddressService: удален неиспользуемый код
+dc92ae34c CardDav: AddressCache реализован (генерация vcard очень медленная, требовался кэш)
+24b4d2e5f WIP: CalDAV (начальная работа над CardDAV)
+562515f18 projectforge-caldav рефакторинг; введен RestAuthenticationUtils
+</pre>
+</div>
+
+<h3>Ключевая фиксация: <code>dc92ae34c</code></h3>
+<div class="c">
+Эта фиксация представила <code>AddressDAVCache</code> после обнаружения, что генерация vCard была «очень медленной» — критическое исправление производительности. Генерация vCard включает манипуляции со строками, кодирование изображений в base64 и форматирование дат для каждого контакта. Без кэширования каждый запрос синхронизации CardDAV (который может происходить каждые несколько минут с мобильных устройств) заново генерировал бы все vCard с нуля.
+</div>
+
+<h3>Ключевая фиксация: <code>d0aed59ed</code> — Переименование модуля</h3>
+<div class="c">
+Модуль изначально назывался <code>projectforge-caldav</code> (Календарь + Контакты вместе), но был переименован в <code>projectforge-carddav</code>, когда реализации CalDAV (синхронизация календаря) и CardDAV (синхронизация контактов) были разделены на отдельные модули. Это отражает эволюцию от монолитного модуля DAV к отдельным, протокол-специфичным реализациям.
+</div>
+
+<h3>Ключевая фиксация: <code>27692785d</code> — Удаление Milton</h3>
+<div class="c">
+Первоначальная реализация использовала библиотеку <strong>Milton</strong> Java WebDAV, но она была удалена из-за стоимости лицензии. Реализация протокола DAV была переписана с использованием пользовательского легковесного подхода. Это распространенная проблема в реализациях WebDAV/CardDAV с открытым исходным кодом — доступные библиотеки Java (Milton, Bedework) либо имеют ограничительные лицензии, либо недостаточную поддержку CardDAV.
+</div>
+
+<div class="warn"><strong>Засада — удаление Milton:</strong> Библиотека Milton предлагала удобные аннотации (<code>@AddressBooks</code>, <code>@AddressBook</code>) для сопоставления эндпоинтов CardDAV. После ее удаления эндпоинты CardDAV пришлось реализовывать вручную, используя необработанную обработку сервлетов или пользовательские аннотации. Это увеличило сложность реализации для соответствия протоколу CardDAV (особенно запросов <code>addressbook-query</code> REPORT и ответов <code>PROPFIND</code> со свойствами <code>addressbook-description</code>).</div>
+
+<div class="tip"><strong>Обоснование политики «только избранные»:</strong> CardDAV в основном используется для синхронизации контактов с мобильными устройствами и настольными почтовыми клиентами. Предоставление доступа ко всему корпоративному справочнику (потенциально тысячи контактов) для каждого устройства было бы непрактичным. Пользователи выборочно добавляют в избранное нужные им контакты, создавая персонализированный поднабор. Метод <code>deleteContact()</code> учитывает многопользовательскую природу адресной книги, удаляя только маркер избранного пользователя, а не основную запись адреса.</div>
+
+</body>
+</html>

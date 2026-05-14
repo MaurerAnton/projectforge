@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>#704 [RU]</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:2em;color:#444}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}.warn{background:#fff3cd;border-left:3px solid #ffc107;padding:.5em 1em;margin:1em 0}.tip{background:#d4edda;border-left:3px solid #28a745;padding:.5em 1em;margin:1em 0}</style>
+</head>
+<body>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Индекс</a> · <a href="file-index.html">← Индекс файлов</a> · <a href="703.html">← Предыдущий</a> · <a href="705.html">Следующий →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/java/org/projectforge/framework/persistence/xstream/HibernateCollectionConverter.java" target="_blank" title="Просмотреть исходник на GitHub">📄 исходник</a></div>
+<h1>#704: <code>HibernateCollectionConverter.java</code></h1>
+<div class="meta"><code>projectforge-business/src/main/java/org/projectforge/framework/persistence/xstream/HibernateCollectionConverter.java</code> Конвертер XStream — преобразует постоянные коллекции Hibernate в коллекции JDK во время маршалинга, <code>projectforge-business/src/main/java/org/projectforge/framework/persistence/xstream/HibernateCollectionConverter.java</code> <span style="color:#888">130 строк · 69 кода · 45 комментариев · 16 пустых</span></div>
+<div class="c">Реализует <code>com.thoughtworks.xstream.converters.Converter</code> для перехвата каждого экземпляра <code>PersistentCollection</code> до того, как XStream его сериализует. Принудительно инициализирует лениво загружаемые коллекции, извлекает базовую коллекцию <code>java.util</code> (обрабатывая особенность внутреннего представления Hibernate множеств в виде карт) и делегирует фактическую запись XML соответствующему стандартному конвертеру XStream. Это конвертер <em>уровня значений</em> — <a href="703.html">HibernateCollectionsMapper</a> обрабатывает сопоставление на уровне имён, а этот конвертер обрабатывает фактические данные коллекции.</div>
+
+<h2>Архитектура</h2>
+
+<h3>Регистрация конвертера</h3>
+<p>Конвертеры XStream образуют цепочку. Когда XStream встречает объект для сериализации, он перебирает зарегистрированные конвертеры, вызывая <code>canConvert(Class)</code>. <code>HibernateCollectionConverter</code> обрабатывает любой класс, приводимый к <code>org.hibernate.collection.spi.PersistentCollection</code> — это охватывает <code>PersistentBag</code>, <code>PersistentList</code>, <code>PersistentSet</code>, <code>PersistentSortedSet</code>, <code>PersistentMap</code> и <code>PersistentSortedMap</code>. Поскольку XStream проверяет конвертеры в порядке регистрации, этот конвертер должен быть зарегистрирован <em>до</em> конвертеров по умолчанию. Это делается с помощью <a href="704.html">HibernateMapper</a> при настройке экземпляров XStream.</p>
+
+<h3>Конструктор: кэширование конвертеров</h3>
+<p>Конструктор принимает <code>ConverterLookup</code> и немедленно разрешает и кэширует пять ссылок на конвертеры:</p>
+<table>
+<tr><th>Поле</th><th>Преобразованный тип</th><th>Назначение</th></tr>
+<tr><td><code>listSetConverter</code></td><td><code>ArrayList.class</code></td><td>Обрабатывает вывод List и Set</td></tr>
+<tr><td><code>mapConverter</code></td><td><code>HashMap.class</code></td><td>Обрабатывает вывод Map</td></tr>
+<tr><td><code>treeMapConverter</code></td><td><code>TreeMap.class</code></td><td>Обрабатывает вывод отсортированной карты</td></tr>
+<tr><td><code>treeSetConverter</code></td><td><code>TreeSet.class</code></td><td>Обрабатывает вывод отсортированного множества</td></tr>
+<tr><td><code>defaultConverter</code></td><td><code>Object.class</code></td><td>Запасной вариант для нераспознанных типов</td></tr>
+</table>
+
+<h3>Алгоритм marshal()</h3>
+<ol>
+  <li><strong>Приведение к PersistentCollection:</strong> Проверяет, является ли <code>source</code> экземпляром <code>PersistentCollection</code>. Если да, вызывает <code>forceInitialization()</code> для запуска ленивой загрузки, затем извлекает <code>getStoredSnapshot()</code> — базовую коллекцию JDK, которую Hibernate использует внутри. (Примечание: комментарий TODO ссылается на <code>getCollectionSnapshot()</code> как на потенциальную альтернативу.)</li>
+  <li><strong>Обходной путь для PersistentSortedSet:</strong> Hibernate хранит отсортированные множества внутри как <code>HashMap</code>, где ключи являются элементами множества. Конвертер извлекает <code>.values()</code> и оборачивает их в новый <code>TreeSet</code> для восстановления правильной семантики множества.</li>
+  <li><strong>Обходной путь для PersistentSet:</strong> Та же проблема — хранится внутри как <code>HashMap</code>. Извлекает <code>.values()</code> и оборачивает в новый <code>HashSet</code>.</li>
+  <li><strong>Диспетчеризация конвертера:</strong> Проверяет конечный класс коллекции по кэшированным конвертерам в порядке: <code>listSetConverter</code> (для <code>ArrayList</code>/<code>HashSet</code>/<code>TreeSet</code>), <code>mapConverter</code>, <code>treeMapConverter</code>, <code>treeSetConverter</code>. В случае неудачи использует <code>defaultConverter</code>.</li>
+</ol>
+
+<h3>unmarshal() — не реализован</h3>
+<div class="warn"><code>unmarshal()</code> возвращает <code>null</code>. Этот конвертер однонаправленный — он обрабатывает только сериализацию (Java→XML). Десериализация (XML→Java) создаёт стандартные коллекции JDK, которые затем присваиваются полям сущности. Hibernate заменяет их постоянными обёртками, когда сущность позже присоединяется к сессии.</div>
+
+<h2>Точки интеграции</h2>
+<ul>
+  <li>Регистрируется в экземплярах XStream через <a href="704.html">HibernateMapper</a> или прямые вызовы <code>xstream.registerConverter()</code>.</li>
+  <li>Работает совместно с <a href="703.html">HibernateCollectionsMapper</a>: маппер переводит <em>имена типов</em> коллекций в XML, в то время как этот конвертер переводит <em>содержимое</em> коллекций во время маршалинга.</li>
+  <li>Используется подсистемой экспорта XML (<a href="710.html">XStreamMarshallingStrategy</a>), которая сериализует графы сущностей для файлов резервного копирования/конфигурации XML.</li>
+</ul>
+
+<h2>Проектные решения и подводные камни</h2>
+<ul>
+  <li><strong>forceInitialization():</strong> Это вызывает запрос к базе данных, если коллекция была лениво загружена, но ещё не запрошена. Для экспорта XML больших графов сущностей это может вызвать каскад запросов. Вызывающий код (обычно метод экспорта сервисного слоя) должен гарантировать, что сессия Hibernate остаётся открытой, и в идеале предварительно загружать ассоциации с помощью запросов <code>JOIN FETCH</code>.</li>
+  <li><strong>Особенность Hibernate «Set-как-Map»:</strong> Hibernate 3.x/4.x внутренне представляет как <code>PersistentSet</code>, так и <code>PersistentSortedSet</code> с использованием структур <code>HashMap</code>. Конвертер должен явно разворачивать их. Если эту логику удалить, XStream будет сериализовать множества как XML-карты (с элементами-ключами), создавая неразбираемый вывод.</li>
+  <li><strong>Снимок vs. Коллекция:</strong> Комментарий TODO в строке ~66 предлагает использовать <code>getCollectionSnapshot().getSnapshot()</code> вместо <code>getStoredSnapshot()</code>. Текущий подход работает, потому что <code>forceInitialization()</code> гарантирует существование сохранённого снимка, но это хрупко для разных версий Hibernate.</li>
+  <li><strong>Потокобезопасность:</strong> Кэшированные ссылки на конвертеры неизменяемы после создания. Экземпляр эффективно потокобезопасен для операций конвертера только для чтения.</li>
+  <li><strong>Авторство:</strong> Первоначально написан Костином Леу (Costin Leau), известным участником экосистемы интеграции Spring/Hibernate.</li>
+</ul>
+
+<h2>История Git</h2><div class="hist"><pre>868d6abb7 2025 -> 2026
+63081666f Заголовки исходных файлов: 2024-> 2025.
+c1d14ecdb Работа по миграции в процессе...
+b6092df09 Авторские права 2023 -> 2024
+ab45d51fa Авторские права 2001-2022 -> 2001-2023.
+5f7ef41b8 Авторские права 2021 -> 2022
+ceb63e8a1 Заголовок исходного кода: (C) 2001-2021.
+7c79f1922 Авторские права заголовка исходного кода -> 2020.
+32f634b88 Оптимизация импортов
+dd5ca38ac Обновлены или созданы авторские права всех заголовков Java-файлов.
+9ebb88522 Первоначальный коммит</pre></div>
+</body>
+</html>

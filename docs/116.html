@@ -1,36 +1,44 @@
 <!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>#116</title>
 <style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333}a{color:#0366d6}.meta{font-size:.9em;margin:1em 0}.nav{font-size:.9em;color:#888;margin-bottom:1em}.commentary{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}code{background:#f0f0f0;padding:0 .2em;border-radius:2px}</style></head>
 <body>
-<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="115.html">← Prev</a> · <a href="117.html">Next →</a></div>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="115.html">← Prev</a> · <a href="117.html">Next →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/plugins/org.projectforge.plugins.datatransfer/src/test/kotlin/org/projectforge/plugins/datatransfer/DataTransferAuditDaoTest.kt" target="_blank" title="View source on GitHub">📄 source</a></div>
 
-<h1>#116: <code>DataTransferJCRCleanUpJobTest.kt</code></h1>
-<div class="meta"><strong>Path:</strong> <code>plugins/...datatransfer/src/test/kotlin/.../DataTransferJCRCleanUpJobTest.kt</code> · <strong>Lines:</strong> 100 · <strong>Type:</strong> Kotlin JUnit 5 integration test</div>
+<h1>#116: <code>DataTransferAuditDaoTest.kt</code></h1>
+<div class="meta"><code>plugins/org.projectforge.plugins.datatransfer/src/test/kotlin/org/projectforge/plugins/datatransfer/DataTransferAuditDaoTest.kt</code> <strong>Path:</strong> <code>plugins/...datatransfer/src/test/kotlin/.../DataTransferAuditDaoTest.kt</code> · <strong>Lines:</strong> 151 · <strong>Type:</strong> Kotlin JUnit 5 integration test <span style="color:#888">151 lines · 117 code · 23 comments · 11 blank</span></div>
 
 <div class="commentary">
-<p><strong>Integration test for <code>DataTransferJCRCleanUpJob</code></strong> — the scheduled job that deletes files whose expiry date has passed. Tests file lifecycle: create → expire → verify deletion. Uses JCR test repository via <code>initJCRTestRepo(MODUL_NAME, "cleanUpTestRepo")</code>.</p>
+<p><strong>Integration test for <code>DataTransferAuditDao</code></strong> — verifies the audit log DAO's queue management, notification tracking, and entry retrieval. Extends <code>AbstractTestBase</code> with Spring autowired DAOs and <code>recreateDataBase()</code> for test isolation.</p>
 </div>
 
 <div class="commentary">
-<h3>Test flow</h3>
-<ol>
-<li>Sets up test user with an area configured with <code>expiryDays</code></li>
-<li>Uploads test files to the area via JCR <code>RepoService</code></li>
-<li>Simulates time passing — sets file creation dates in the past beyond the expiry threshold</li>
-<li>Runs <code>DataTransferJCRCleanUpJob.execute()</code></li>
-<li>Verifies expired files are removed from JCR and <code>attachments_counter</code> decremented</li>
-<li>Verifies non-expired files remain untouched</li>
-</ol>
-</div>
-
-<div class="commentary">
-<h3>Key dependencies</h3>
+<h3>Test methods (from source analysis)</h3>
 <ul>
-<li><code>DataTransferJCRCleanUpJob</code> — the scheduled job under test (implements <code>JobHandler</code>)</li>
-<li><code>RepoService</code> — JCR (Apache Jackrabbit) repository for file storage</li>
-<li><code>DataTransferAreaDao</code>, <code>DataTransferAreaDO</code> — area data (holds <code>expiryDays</code>)</li>
-<li><code>DataTransferAreaPagesRest</code> — REST controller used to query files</li>
-<li><code>FileObject</code> — JCR domain object representing a stored file</li>
+<li><code>removeFromQueueTest()</code> — creates audit entries with different timestamps, verifies <code>internalGetEntriesByAreaId()</code> returns all 3, then tests queue retrieval logic: entries older than a threshold should be eligible for notification, recent entries should remain queued</li>
+<li>Tests use <code>PFDateTime.now().minus(D, ChronoUnit.DAYS/MINUTES)</code> to simulate time-shifted audit entries</li>
+<li><code>internalGetQueuedEntriesByAreaId()</code> — filtered query returning only entries pending notification</li>
+<li>Verifies the <code>notified</code> flag transition: queued → notified → removed from queue</li>
 </ul>
+</div>
+
+<div class="commentary">
+<h3>Test setup</h3>
+<ul>
+<li><code>@Autowired DataTransferAuditDao</code> — the DAO under test (manages <code>t_plugin_datatransfer_audit</code> table)</li>
+<li><code>@Autowired DataTransferAreaDao</code> — injected only to satisfy <code>DataTransferAuditDao.dataTransferAreaDao</code> dependency</li>
+<li><code>override fun beforeAll()</code> — calls <code>recreateDataBase()</code> to wipe any test data from other test classes</li>
+<li><code>init { DataTransferTestService.addPluginEntitiesForTestMode() }</code> — registers plugin entities with the persistence layer</li>
+</ul>
+</div>
+
+<div class="commentary">
+<h3>Audit queue system</h3>
+<p>The audit queue is the mechanism for observer notifications (see <a href="112.html">mail template #112</a>):</p>
+<ol>
+<li>File actions (upload/download/delete) call <code>dataTransferAuditDao.insert()</code> with <code>notified=false</code></li>
+<li>A scheduled job calls <code>internalGetQueuedEntriesByAreaId()</code> to find un-notified entries</li>
+<li>After sending emails, the job marks entries as <code>notified=true</code> (via <code>removeFromQueue()</code>)</li>
+<li>Old entries (>30 days) are periodically purged</li>
+</ol>
 </div>
 
 </body></html>

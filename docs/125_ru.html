@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>#125 [RU]</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333}a{color:#0366d6}.meta{font-size:.9em;margin:1em 0}.nav{font-size:.9em;color:#888;margin-bottom:1em}.commentary{border-left:3px solid #ddd;padding:1em;margin:1em 0;background:#fff}code{background:#f0f0f0;padding:0 .2em;border-radius:2px}</style>
+</head>
+<body>
+
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Индекс</a> · <a href="file-index.html">← Индекс файлов</a> · <a href="124.html">← Назад</a> · <a href="126.html">Вперёд →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/plugins/org.projectforge.plugins.ihk/src/main/java/org/projectforge/plugins/ihk/IHKExporter.java" target="_blank" title="Посмотреть исходник на GitHub">📄 исходник</a></div>
+
+<h1>#125: <code>IHKExporter.java</code></h1>
+<div class="meta"><code>plugins/org.projectforge.plugins.ihk/src/main/java/org/projectforge/plugins/ihk/IHKExporter.java</code> <strong>Путь:</strong> <code>plugins/...ihk/src/main/java/.../IHKExporter.java</code> · <strong>Строк:</strong> 292 · <strong>Тип:</strong> Движок экспорта Excel на Java <span style="color:#888">292 строки · 201 код · 39 комментариев · 52 пустых</span></div>
+
+<div class="commentary">
+<p><strong>Генератор Excel-отчётов для еженедельных отчётов IHK о стажировке.</strong> Основная логика плагина — берёт данные табеля учёта рабочего времени за неделю, конфигурацию стажёра (<a href="123.html">IHKCommentObject</a>) и шаблон Excel от <a href="https://github.com/micromata/merlin">Merlin</a>, и создаёт форматированный <code>.xlsx</code> файл, соответствующий требованиям IHK. 292 строки на Java.</p>
+
+<h3>Архитектура</h3>
+<p>Использует <strong>Merlin</strong> (движок шаблонов Excel от Micromata, см. <a href="221.html">#221+</a>) — загружает <code>.xlsx</code> шаблон из classpath (<code>ClassPathResource("merlin/ihk/ihk.xlsx")</code>), программно заполняет данные и возвращает <code>ByteArrayOutputStream</code> для скачивания.</p>
+
+<h3>Ключевые потоки данных</h3>
+<ol>
+<li><strong>Расчёт года обучения:</strong> <code>Period.between(ausbildungsbeginn, now).getYears()</code> → автоматически вычисляет год обучения, если <code>ausbildungsjahr</code> не установлен вручную</li>
+<li><strong>Фильтрация табеля:</strong> запрашивает <code>TimesheetDO</code> для записей стажёра за выбранную неделю, сгруппированных по дням</li>
+<li><strong>Агрегация часов:</strong> суммирует рабочие часы по дням, форматирует с помощью <code>DecimalFormat("0.00")</code></li>
+<li><strong>Заполнение Excel через Merlin:</strong>
+  <ul>
+    <li>Читает шаблон книги из <code>merlin/ihk/ihk.xlsx</code></li>
+    <li>Заполняет заголовок: имя стажёра, отдел (<code>teamname</code>), год обучения, календарная неделя, диапазон дат</li>
+    <li>Заполняет строки по дням: день недели, дата, описание темы/деятельности из табеля, отработанные часы, места для подписей</li>
+    <li>Применяет форматирование ячеек: границы, размеры шрифта, объединённые ячейки для блока заголовка</li>
+  </ul></li>
+<li><strong>Вывод:</strong> записывает заполненную книгу в <code>ByteArrayOutputStream</code>, возвращает массив байтов для HTTP-скачивания с именем файла <code>Berichtsheft_KW{week}_{name}.xlsx</code></li>
+</ol>
+
+<h3>Структура шаблона Excel</h3>
+<p>IHK требует определённый формат отчёта, содержащий:</p>
+<ul>
+<li>Заголовок: название компании, имя стажёра, год обучения, календарная неделя, диапазон дат</li>
+<li>Раздел отдела/руководителя</li>
+<li>Строки по дням: темы/выполненные работы, рабочие часы, поля для подписей</li>
+<li>Строка еженедельного итога с общим количеством часов</li>
+<li>Разделы для подписей стажёра и руководителя</li>
+</ul>
+<p>Шаблон Merlin (<code>ihk.xlsx</code>) содержит эти структурные элементы; экспортёр заполняет динамические данные.</p>
+
+<h3>Зависимости</h3>
+<ul>
+<li><code>de.micromata.merlin.excel.*</code> — Merlin Excel API для генерации Excel на основе шаблонов</li>
+<li><code>TimesheetDO</code> — записи табеля с описанием, временем начала/окончания, датой</li>
+<li><code>PFDateTime</code>, <code>PFDay</code>, <code>LocalDate</code> — обработка даты/времени для границ недели</li>
+<li><code>JsonUtils</code> — десериализует <a href="123.html">IHKCommentObject</a> из комментария адреса</li>
+<li><code>AddressDO</code> / <code>ThreadLocalUserContext.getLoggedInUser()</code> — получает контакт стажёра для конфигурации</li>
+</ul>
+</div>
+
+</body>
+</html>

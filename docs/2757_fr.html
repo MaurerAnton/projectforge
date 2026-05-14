@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>#2757 : rest.js [FR]</title>
+<style>
+body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}
+h1{border-bottom:2px solid #333;padding-bottom:.3em}
+h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}
+h3{margin-top:2em;color:#444}
+a{color:#0366d6}
+.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}
+.nav{font-size:.9em;color:#888;margin-bottom:1em}
+.lang{font-size:.85em;color:#888;float:right}
+.lang a{color:#888;text-decoration:none;padding:0 .3em}
+.lang a.active{color:#0366d6;font-weight:600;text-decoration:underline}
+.meta{font-size:.9em;margin:1em 0;color:#555}
+code{background:#f0f0f0;padding:0 .2em;font-size:.93em}
+pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}
+table{border-collapse:collapse;width:100%;margin:1em 0}
+th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}
+th{background:#f5f5f5;font-weight:600}
+.hist{font-size:.85em;color:#555}
+.warn{background:#fff3cd;border-left:3px solid #ffc107;padding:.5em 1em;margin:1em 0}
+.tip{background:#d4edda;border-left:3px solid #28a745;padding:.5em 1em;margin:1em 0}
+</style>
+</head>
+<body>
+<div class="lang"><a href="2757.html">EN</a> · <a href="2757_de.html">DE</a> · <a href="2757_ru.html">RU</a> · <a href="2757_fr.html" class="active">FR</a> · <a href="2757_es.html">ES</a></div>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← Index des fichiers</a> · <a href="2756.html">← Précédent</a> · <a href="2758.html">Suivant →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-webapp/src/utilities/rest.js" target="_blank" title="Voir la source sur GitHub">📄 source</a></div>
+
+<h1>#2757 : <code>rest.js</code></h1>
+<div class="meta"><code>projectforge-webapp/src/utilities/rest.js</code> <strong>Utilitaire JavaScript / React</strong> — client central de l'API REST pour le frontend React de ProjectForge. Source : <code>projectforge-webapp/src/utilities/rest.js</code> <span style="color:#888">88 lignes · 68 lignes de code · 7 commentaires · 13 lignes vides</span></div>
+
+<div class="c">Chaque composant React qui communique avec le backend ProjectForge passe par ce module. Il fournit une fine couche d'abstraction autour de l'API <code>fetch</code> avec construction d'URL tenant compte de l'environnement, authentification par cookie de session (<code>credentials: 'include'</code>), débouncing adaptatif pour les connexions lentes, et gestion des requêtes/réponses JSON. C'est le <strong>point de contact unique</strong> entre la SPA React et la couche REST Spring Boot — il n'existe aucun autre client HTTP dans le frontend.</div>
+
+<h2>Architecture</h2>
+
+<h3>Pipeline de construction d'URL</h3>
+<div class="c">Le module construit les URL REST via un pipeline en trois étapes, chacune gérant une préoccupation :<br><br>
+<strong>Étape 1 — baseURL :</strong> Résout l'origine du serveur. En développement (<code>import.meta.env.DEV</code>), pointe vers <code>http://localhost:8080</code> — le serveur de développement Spring Boot. En production, retourne une chaîne vide, rendant toutes les URL relatives à l'origine de la page (pas de CORS nécessaire). La garde <code>MODE !== 'test'</code> empêche l'URL du serveur de test de fuiter dans les tests Jest.<br><br>
+<strong>Étape 2 — getServiceURL / baseRestURL :</strong> Ajoute le préfixe REST. Si l'URL du service commence par <code>/</code> (absolue depuis la racine), utilise <code>baseURL</code> directement. Sinon, utilise <code>baseRestURL</code> qui ajoute <code>/rs</code> — le préfixe standard des endpoints REST de ProjectForge. Cela permet à la fois <code>getServiceURL('/some/path')</code> (absolu) et <code>getServiceURL('user/list')</code> (relatif à /rs).<br><br>
+<strong>Étape 3 — evalServiceURL / createQueryParams :</strong> Ajoute les paramètres de requête. Filtre les valeurs <code>undefined</code>, encode chaque valeur, et utilise correctement <code>?</code> vs <code>&amp;</code> selon que l'URL contient déjà une chaîne de requête.</div>
+
+<h3>Stratégie de débouncing — Sensibilité à saveData</h3>
+<div class="c">La constante <code>debouncedWaitTime</code> s'adapte en fonction de l'indication client <strong>Save-Data</strong> (<a href="https://developer.mozilla.org/en-US/docs/Web/API/NetworkInformation/saveData">MDN</a>). Lorsque l'utilisateur a activé le mode d'économie de données (courant sur mobile), le temps d'attente passe de 250 ms à 1000 ms — réduisant la fréquence des requêtes sur les connexions facturées. Ceci est utilisé par les composants d'auto-complétion (recherche d'adresse, recherche d'utilisateur, recherche de tâche) pour limiter les appels API pendant la saisie.<br><br>
+La conception est défensive : <code>navigator && navigator.connection && navigator.connection.saveData</code> — trois gardes avant d'accéder à la propriété, car <code>navigator.connection</code> n'est pas disponible dans tous les navigateurs (Firefox, Safari).</div>
+
+<h2>API exportée</h2>
+<table>
+<tr><th>Export</th><th>Type</th><th>Objectif</th></tr>
+<tr><td><code>debouncedWaitTime</code></td><td>const (250 ou 1000)</td><td>Débouncing adaptatif pour les champs d'auto-complétion basé sur l'en-tête Save-Data</td></tr>
+<tr><td><code>baseURL</code></td><td>const (chaîne)</td><td>Origine du serveur — localhost:8080 en dev, vide en prod</td></tr>
+<tr><td><code>baseRestURL</code></td><td>const (chaîne)</td><td>baseURL + "/rs" — préfixe standard des endpoints REST</td></tr>
+<tr><td><code>createQueryParams(obj)</code></td><td>fonction → chaîne</td><td>Construit <code>key=val&amp;key=val</code> à partir d'un objet, filtre les valeurs undefined</td></tr>
+<tr><td><code>evalServiceURL(url, params)</code></td><td>fonction → chaîne</td><td>Ajoute les paramètres de requête à l'URL, gère le ? existant vs &amp;</td></tr>
+<tr><td><code>getServiceURL(url, params)</code></td><td>fonction → chaîne</td><td>Constructeur d'URL complet — ajoute base + préfixe REST, ajoute les paramètres</td></tr>
+<tr><td><code>handleHTTPErrors(res)</code></td><td>fonction → Response</td><td>Lève une erreur sur les réponses non-2xx, transmet la réponse en cas de succès</td></tr>
+<tr><td><code>fetchJsonGet(url, params, cb)</code></td><td>fonction → Promise</td><td>GET avec réponse JSON, analysée et transmise au callback</td></tr>
+<tr><td><code>fetchJsonPost(url, body, cb)</code></td><td>fonction → Promise</td><td>POST avec corps JSON-stringifié et réponse JSON</td></tr>
+<tr><td><code>fetchGet(url, params, cb)</code></td><td>fonction → Promise</td><td>GET simple avec callback optionnel (pas d'analyse JSON)</td></tr>
+<tr><td><code>getObjectFromQuery(str)</code></td><td>fonction → objet</td><td>Inverse de createQueryParams — analyse <code>?key=val&amp;...</code> en objet</td></tr>
+</table>
+
+<h2>Gestion des erreurs</h2>
+<div class="c">Les trois fonctions de fetch utilisent le même modèle de gestion d'erreur : <code>.catch((error) => alert('Erreur interne : ' + error))</code>. La directive <code>/* eslint-disable no-alert */</code> en haut du fichier reconnaît que <code>alert()</code> est normalement interdit par ESLint mais est intentionnellement utilisé ici comme notification utilisateur de dernier recours.<br><br>
+C'est un <strong>compromis délibéré</strong> : un système de notification d'erreur approprié (piloté par Redux, compatible i18n) serait une meilleure UX, mais <code>rest.js</code> est au bas du graphe de dépendances — il ne peut pas importer de composants Redux ou React. Utiliser <code>alert()</code> signifie que le gestionnaire d'erreurs a zéro dépendance et fonctionne dans n'importe quel contexte (même en dehors du cycle de vie de React). La directive <code>/* eslint-disable no-alert */</code> a été ajoutée dans le commit <code>ac30e55f7</code> pour supprimer l'avertissement de linting concernant ce choix intentionnel.</div>
+
+<h2>Authentification</h2>
+<div class="c">Tous les appels fetch utilisent <code>credentials: 'include'</code> — cela ordonne au navigateur d'envoyer les cookies de session HTTP-only avec chaque requête. C'est le mécanisme d'authentification standard pour les SPA servies depuis la même origine que l'API. Le cookie de session est défini par le backend Spring Boot lors de la connexion et est automatiquement inclus par le navigateur. Il n'y a pas de gestion de token, pas d'en-tête Authorization, et pas de logique de session côté client — le navigateur gère tout de manière transparente via le flag <code>credentials</code>.</div>
+
+<h2>Utilisation dans le frontend</h2>
+<div class="c">Ce module est importé par pratiquement tous les composants React qui récupèrent des données. Exemples d'utilisation typique :</div>
+<pre>// Dans un composant React :
+import { fetchJsonGet, fetchJsonPost } from '../utilities/rest';
+
+// Charger une liste
+fetchJsonGet('user/list', { search: 'kai' }, (data) => setUsers(data));
+
+// Sauvegarder une entité
+fetchJsonPost('user/save', { id: 1, username: 'kai' }, (data) => console.log('sauvegardé', data));
+
+// GET simple pour un téléchargement de fichier
+fetchGet('export/excel', { id: 123 }, () => setDownloading(false));</pre>
+
+<h2>Consommateurs</h2>
+<div class="c">Le module est importé dans l'ensemble du frontend React — carnet d'adresses, calendrier, feuilles de temps, gestion des utilisateurs, sondages, scripts, et toutes les IUs des plugins. Au moment de la rédaction, environ 40+ composants React importent depuis ce fichier. Tout changement dans la logique de construction d'URL (par exemple, changer le préfixe REST de <code>/rs</code> vers autre chose) affecterait chaque appel API de l'application.</div>
+
+<h2>Historique Git</h2>
+<div class="hist">
+<table>
+<tr><th>Commit</th><th>Ce qui a changé dans ce fichier</th></tr>
+<tr><td><code>bf988bc6d</code></td><td><strong>Migration React-scripts→Vite.</strong> La détection d'environnement est passée de <code>process.env.NODE_ENV === 'development'</code> (convention CRA) à <code>import.meta.env.DEV && import.meta.env.MODE !== 'test'</code> (convention Vite). La garde ajoutée <code>MODE !== 'test'</code> empêche Jest de pointer vers localhost:8080 pendant les exécutions de test — un bug courant lors de la migration de CRA vers Vite où le mode de l'environnement de test est 'test', pas 'development'.</td></tr>
+<tr><td><code>823ef0992</code></td><td><strong>Garde défensive du callback dans <code>fetchGet</code>.</strong> Passé de <code>.then(() => callback())</code> à <code>.then(() => { if (typeof callback === 'function' && callback()); })</code>. La fonction <code>fetchGet</code> a un callback optionnel — lorsqu'elle est appelée sans (par exemple, requêtes de type fire-and-forget), l'ancien code levait <code>TypeError: callback is not a function</code>. La garde ignore silencieusement le callback quand ce n'est pas une fonction.</td></tr>
+<tr><td><code>253b9f38b</code></td><td><strong>Passage de formatage du code.</strong> Les chaînes d'appels fetch multi-lignes ont été aplaties en appels sur une seule ligne. Avant : <code>fetch(\n    getServiceURL(...), {\n        method: 'GET',\n        ...</code>. Après : <code>fetch(getServiceURL(...), { method: 'GET', ...</code>. Bruit visuel réduit, aucun changement de comportement.</td></tr>
+<tr><td><code>ac30e55f7</code></td><td><strong>Ajout de la suppression ESLint.</strong> Insertion de <code>/* eslint-disable no-alert */</code> en haut du fichier. Les gestionnaires d'erreur utilisent <code>alert()</code> pour les erreurs visibles par l'utilisateur, ce que la configuration recommandée d'ESLint interdit. La suppression reconnaît que c'est intentionnel — un mécanisme de notification d'erreur sans dépendance pour un module au bas du graphe de dépendances.</td></tr>
+<tr><td><code>bbd81edc3</code></td><td><strong>Formatage piloté par ESLint.</strong> Les fonctions fléchées sont passées de <code>params => ...</code> à <code>(params) => ...</code> (paramètre unique entre parenthèses). Le corps de fonction redondant dans <code>getServiceURL</code> a été supprimé — la fonction était précédemment définie avec <code>function getServiceURL(...) { ... }</code> et la réécriture était un changement de formatage uniquement.</td></tr>
+</table>
+</div>
+
+<h2>Décisions de conception</h2>
+<table>
+<tr><th>Décision</th><th>Pourquoi</th><th>Compromis</th></tr>
+<tr><td>Pas d'Axios, <code>fetch</code> simple</td><td>Zéro dépendance. Le module fait ~80 lignes et couvre tous les besoins du frontend. Ajouter Axios (~14KB gzippé) pour des intercepteurs et l'analyse JSON automatique n'est pas justifié pour trois méthodes HTTP.</td><td>Pas d'intercepteurs requête/réponse — le renouvellement de token d'authentification nécessiterait du code personnalisé. Actuellement pas nécessaire car l'authentification est basée sur les cookies.</td></tr>
+<tr><td>Basé sur des callbacks plutôt que retournant des promesses</td><td>Historique. Quand ce module a été écrit (2019), le frontend utilisait des composants de classe avec <code>this.setState</code> dans les callbacks. Retourner des promesses nécessiterait <code>.then(data => this.setState(...))</code> dans chaque consommateur — le modèle de callback était plus simple à l'époque.</td><td>Plus difficile à chaîner, plus difficile à utiliser avec async/await. Les consommateurs doivent passer des callbacks même lorsqu'ils veulent juste les données. Une réécriture moderne retournerait des promesses.</td></tr>
+<tr><td><code>alert()</code> pour la gestion des erreurs</td><td>Zéro dépendance, fonctionne dans n'importe quel contexte. Un système de notification approprié nécessiterait d'importer React/Redux — créant un risque de dépendance circulaire.</td><td>Moche, pas compatible i18n, bloque le thread UI. Un émetteur d'événements d'erreur différé serait mieux : <code>window.dispatchEvent(new CustomEvent('rest:error', {detail: error}))</code> — consommé par une boundary d'erreur React ou un composant de notification.</td></tr>
+<tr><td>Débouncing sensible à <code>saveData</code></td><td>Amélioration progressive. Les utilisateurs avec des connexions facturées (mobile, pays en développement) obtiennent un débouncing plus lent — moins d'appels API, moins d'utilisation de données. Les utilisateurs avec des connexions non facturées obtiennent un débouncing plus rapide — auto-complétion plus réactive.</td><td>La prise en charge du navigateur est limitée — <code>navigator.connection</code> est uniquement Chromium. Les utilisateurs de Firefox/Safari obtiennent toujours la valeur par défaut de 250 ms. La dégradation progressive fonctionne correctement.</td></tr>
+</table>
+
+</body>
+</html>

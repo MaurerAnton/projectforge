@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>#757: XmlOmitField</title>
+<title>#757: XmlObjectReader</title>
 <style>
   body { font-family: system-ui, sans-serif; max-width: 960px; margin: 2em auto; padding: 0 1em; background: #fafafa; color: #222; line-height: 1.6; }
   h1 { border-bottom: 2px solid #333; padding-bottom: 0.3em; }
@@ -24,72 +24,129 @@
 </style>
 </head>
 <body>
-<div class="lang"><a href="757.html" class="active">EN</a> · <a href="757_de.html">DE</a> · <a href="757_ru.html">RU</a> · <a href="757_fr.html">FR</a> · <a href="757_es.html">ES</a></div>
-<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="756.html">← Prev</a> · <a href="758.html">Next →</a></div>
+<div class="lang"><a href="755.html" class="active">EN</a> · <a href="755_de.html">DE</a> · <a href="755_ru.html">RU</a> · <a href="755_fr.html">FR</a> · <a href="755_es.html">ES</a></div>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="756.html">← Prev</a> · <a href="758.html">Next →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/java/org/projectforge/framework/xmlstream/XmlObjectReader.java" target="_blank" title="View source on GitHub">📄 source</a></div>
 
-<h1>#757: <code>XmlOmitField.java</code></h1>
-<div class="meta"><strong>Java marker annotation</strong> — excludes a field from XmlStream XML serialization. 39 lines. @Target(FIELD), @Retention(RUNTIME). Source: <code>projectforge-business/src/main/java/org/projectforge/framework/xmlstream/XmlOmitField.java</code></div>
-
-<div class="c">
-<strong>Purpose:</strong> A zero-parameter marker annotation that tells the XmlStream framework to skip a field during XML serialization and deserialization. It is the XmlStream equivalent of Java's <code>transient</code> keyword and JAXB's <code>@XmlTransient</code>, but scoped exclusively to the ProjectForge XmlStream framework — leaving the field intact for Java serialization, JPA persistence, and other subsystems.
-</div>
-
-<h2>Architecture</h2>
+<h1>#757: <code>XmlObjectReader.java</code></h1>
+<div class="meta"><code>projectforge-business/src/main/java/org/projectforge/framework/xmlstream/XmlObjectReader.java</code> <strong>Java deserialization engine</strong> — the heart of XmlStream reading. 514 lines. Uses dom4j. Source: <code>projectforge-business/src/main/java/org/projectforge/framework/xmlstream/XmlObjectReader.java</code> <span style="color:#888">514 lines · 402 code · 74 comments · 38 blank</span></div>
 
 <div class="c">
-The annotation itself is minimal — 3 lines of body code. Its power comes from the <em>consumers</em> that check for its presence:<br><br>
-• <strong><code>XmlObjectWriter.writeField()</code></strong> (<a href="756.html">#756</a>): <code>if (field.isAnnotationPresent(XmlOmitField.class)) continue;</code><br>
-• <strong><code>XmlObjectReader.read()</code></strong> (<a href="755.html">#755</a>): skips fields annotated with <code>@XmlOmitField</code> during deserialization<br><br>
-There is no logic in the annotation itself — it's a pure marker consumed reflectively by the reader/writer pair.
+<strong>Purpose:</strong> The <strong>deserialization core</strong> of the XmlStream framework — converts XML (as dom4j <code>Element</code> trees) back into Java objects with populated fields. 514 lines. This is the <strong>largest file</strong> in the XmlStream framework. Javadoc: <em>"Parses objects serialized by the XmlObjectWriter. Uses the dom4j."</em> Works in pair with <a href="756.html">XmlObjectWriter</a> — Writer serializes objects to XML, Reader deserializes XML back to objects.
 </div>
 
-<h2>Why a Separate Annotation Instead of <code>transient</code>?</h2>
+<h2>Architecture — State Machine with Backtracking</h2>
 
 <div class="c">
-Java's <code>transient</code> keyword excludes a field from <strong>all</strong> serialization mechanisms — Java Serialization, XStream, XmlStream, JSON mappers, everything. This is often too broad:<br><br>
-<strong>Scenario:</strong> A field like <code>computedHash</code> should be cached in the HTTP session (Java serialization) but must not appear in XML exports (wasteful, misleading).<br><br>
-<strong>Solution:</strong> Make the field non-transient (so it participates in Java session serialization) and annotate it with <code>@XmlOmitField</code> (so XmlStream skips it). This gives <em>per-framework</em> control over serialization visibility.<br><br>
-<strong>Security example:</strong> <code>password</code> in <code>PFUserDO</code>. The field is <code>transient</code> (session safety) AND annotated with <code>@XmlOmitField</code> (XML safety). Even if someone removes <code>transient</code> for debugging, the annotation provides a second barrier preventing passwords from leaking into XML exports.
+<p>Reader is a <strong>stateful object</strong> (unlike the stateless Writer). It holds state during a single read session:</p>
+<ul>
+<li><code>processedElements</code> (Set&lt;Element&gt;) — which XML elements were successfully read. After completion, elements NOT in this set are considered "ignored" and appear in warnings</li>
+<li><code>processedAttributes</code> (Map&lt;Element, Set&lt;String&gt;&gt;) — which attributes per element were read. Same purpose for warnings</li>
+<li><code>referenceObjects</code> (Map&lt;String, Object&gt;) — cache of deserialized objects keyed by <code>o-id</code>. Used for deduplication: if two XML elements reference the same object, it's deserialized once and returned from cache the second time</li>
+<li><code>warnings</code> (String) — accumulated warnings about ignored elements/attributes</li>
+</ul>
 </div>
 
-<h2>Contrast with <code>@XmlField(defaultValue=...)</code></h2>
-
-<table>
-<tr><th>Mechanism</th><th>When field is skipped</th><th>Use case</th></tr>
-<tr><td><code>@XmlOmitField</code></td><td><strong>Always</strong> — regardless of value</td><td>Passwords, computed fields, temporary state, sensitive data</td></tr>
-<tr><td><code>@XmlField(defaultIntValue=0)</code></td><td><strong>Conditionally</strong> — only when value equals the default</td><td>Size optimization: omit zero-values, empty strings, nulls</td></tr>
-</table>
+<h2>Entry Points — Two <code>read()</code> Methods</h2>
 
 <div class="c">
-The difference is semantic: <code>@XmlOmitField</code> says "this field has no business being in XML", while <code>@XmlField(defaultValue=...)</code> says "this field is sometimes redundant — skip it when it is". One is a hard policy, the other is a soft optimization.
+<h3><code>read(String xml)</code> — public API</h3>
+<p>Takes a raw XML string. Parses it via <code>XmlHelper.fromString()</code> → dom4j <code>Element</code>. Clears state (processedElements, processedAttributes, warnings). Calls internal <code>read(Element)</code>. After reading, runs <code>checkForIgnoredElements()</code> — if any XML tags/attributes weren't processed, they appear in warnings. Returns the root deserialized object.</p>
+
+<h3><code>read(Element el)</code> — internal API</h3>
+<p>Takes a dom4j Element, finds the class by tag name (via <code>getClass()</code>), and calls recursive <code>read(Class, Element, ...)</code>. If class not found — returns <code>null</code>.</p>
 </div>
 
-<h2>XmlStream Annotation Trio</h2>
+<h2>Three-Level Class Resolution — <code>getClass(String elementName)</code></h2>
 
-<table>
-<tr><th>Annotation</th><th>File</th><th>Role</th></tr>
-<tr><td><code>@XmlField</code></td><td><a href="752.html">#752</a></td><td>Declares a field for serialization with name, type, default value, format</td></tr>
-<tr><td><code>@XmlObject</code></td><td><a href="754.html">#754</a></td><td>Declares a class as XML-serializable with alias</td></tr>
-<tr><td><code>@XmlOmitField</code></td><td><strong>#757</strong></td><td>Excludes a field from serialization entirely</td></tr>
-</table>
+<div class="c">
+<p>When encountering an XML tag, Reader searches for the corresponding Java class in three places (in priority order):</p>
+<ol>
+<li><strong>Own AliasMap:</strong> <code>this.aliasMap.getClassForAlias(name)</code> — if explicitly set via <code>setAliasMap()</code></li>
+<li><strong>Global XmlRegistry:</strong> <code>xmlRegistry.getClassForAlias(name)</code> — classes registered at startup</li>
+<li><strong>Class.forName() (fallback):</strong> attempt to load by FQCN. If class is an interface, checks <code>implementationMapping</code>. If not found, logs error and returns <code>null</code> (element will be ignored)</li>
+</ol>
+<p>This three-level system allows flexible mapping management: AliasMap for local overrides, XmlRegistry for global rules, Class.forName for backward compatibility with old XML files where tags were FQCNs.</p>
+</div>
+
+<h2>Core Recursive Method — <code>read(Class, Element, attrName, attrValue)</code></h2>
+
+<div class="c">
+<p>The <strong>heart</strong> of Reader. Takes a field type, XML element, and optional attribute name/value. Logic is a chain of type checks:</p>
+<ol>
+<li><strong>Reference check:</strong> if element has attribute <code>o-ref-id</code> — it's a reference to an already-deserialized object. Looks up in <code>referenceObjects</code> and returns cached object (deduplication). If ref-id not found — logs error</li>
+<li><strong>Converter check:</strong> if type has a registered <code>IConverter</code> (via <code>xmlRegistry.getConverter(clazz)</code>) — calls <code>converter.fromString()</code>. For simple types: String, Integer, Date, BigDecimal, Boolean</li>
+<li><strong>Enum check:</strong> if class is enum, calls <code>enumFromString()</code>. Tries <code>Enum.valueOf(clazz, val)</code>. On <code>IllegalArgumentException</code>, does <strong>a second attempt with <code>toUpperCase()</code></strong> — backward compatibility with old XML where enums were lowercase. Value <code>"null"</code> is treated as <code>null</code></li>
+<li><strong>Collection check:</strong> if class is Collection (List/Set/SortedSet), creates the appropriate implementation (ArrayList/HashSet/TreeSet), and recursively reads all child XML elements as collection items. If <code>ignoreEmptyCollections=true</code> and collection is empty — leaves field <code>null</code></li>
+<li><strong>Complex object:</strong> for all other types (classes with <code>@XmlObject</code>) — creates instance via <code>BeanHelper.newInstance()</code>, checks <code>o-id</code> attribute (saves in <code>referenceObjects</code> for future ref-id lookups), and calls <code>read(obj, el)</code> for recursive field population</li>
+</ol>
+</div>
+
+<h2>Field Population — <code>read(Object obj, Element el)</code></h2>
+
+<div class="c">
+<p>Iterates all fields of the object (via <code>BeanHelper.getAllDeclaredFields()</code> — including inherited), makes them accessible (reflection), and for each XML attribute and child element finds the corresponding field:</p>
+<ul>
+<li>First checks <code>@XmlOmitField</code> — if present, field is skipped</li>
+<li>Looks for <code>@XmlField</code> annotation. Compares tag/attribute name with field name (case-sensitive) and with alias from annotation</li>
+<li>If field found — calls <code>read(field.getType(), element, key, attrValue)</code> for deserialization, then <code>field.set(obj, value)</code> for assignment</li>
+<li>If field NOT found — logs warning <code>"Field '...' not found."</code> Element remains unmarked in <code>processedElements</code> and will appear in warnings</li>
+</ul>
+<p><strong>Important:</strong> the <code>o-id</code> and <code>ref-id</code> fields (Writer's XML attributes) are explicitly skipped — they are not searched among object fields.</p>
+</div>
+
+<h2>Warnings — <code>checkForIgnoredElements()</code></h2>
+
+<div class="c">
+<p>After reading all XML, Reader checks: were all elements from the source XML tree marked as <code>processed</code>? If not — the XML contains tags for which no fields were found in the Java class. This may indicate:</p>
+<ul>
+<li>XML was created by a newer ProjectForge version (new fields in XML but not in code)</li>
+<li>Typo in field name or alias</li>
+<li>Class was modified (field removed or renamed)</li>
+</ul>
+<p>All unmarked elements and attributes are collected into a <code>warnings</code> string. If the string exceeds 500 characters — truncated (<code>ABBREVIATE_WARNING=500</code>) to avoid spamming logs.</p>
+</div>
+
+<h2>Template Method Hooks for Subclasses</h2>
+
+<div class="c">
+<p>Three protected methods can be overridden in subclasses:</p>
+<ul>
+<li><code>newInstance(Class, Element, String, String)</code> — intercepts object creation. If returns <code>Status.IGNORE</code>, the object is skipped. Default returns <code>null</code> (standard creation)</li>
+<li><code>addCollectionEntry(Collection, Object, Element)</code> — intercepts collection addition. If returns <code>true</code>, object is NOT auto-added. Default is <code>false</code></li>
+<li><code>setField(Field, Object, Object, Element, String, String)</code> — intercepts field assignment. Default calls <code>field.set(obj, value)</code></li>
+</ul>
+<p>These hooks allow subclasses to modify behavior without rewriting the entire logic — e.g., skip certain fields, filter collections, or post-process objects.</p>
+</div>
+
+<h2><code>initialize(Class)</code> — Pre-scanning</h2>
+
+<div class="c">
+<p>Can be called before reading to <strong>pre-register</strong> all @XmlObject classes in AliasMap. Recursively walks the type tree: for a class with <code>@XmlObject</code>, registers the alias, then for each non-primitive field recursively calls <code>initialize()</code>. Uses a <code>processed</code> Set to prevent infinite recursion on circular references. This allows passing just the root class — Reader itself finds all nested types.</p>
+</div>
 
 <h2>Git History</h2>
 <div class="hist">
 <pre>868d6abb7 2025 → 2026 (copyright year update)
 63081666f Source file headers: 2024→2025
+a72903e36 *.java, *.kt: StringBuffer → StringBuilder
 b6092df09 Copyright 2023 → 2024
 ab45d51fa Copyright 2001-2022 → 2001-2023
+73b0be50b org.apache.commons.collections → org.apache.commons.collections4
 5f7ef41b8 Copyright 2021 → 2022
-cd27dd997 package xstream → xmlstream (renamed to avoid XStream library confusion)
+cd27dd997 package xstream → xmlstream
 ceb63e8a1 Source code header: (C) 2001-2021
 7c79f1922 Copyright of source header → 2020
+73a9755df More code cleanup (StringBuffer→StringBuilder, diamond operator, etc.)
 32f634b88 Optimize imports
+000ca723d Remove pointless boolean expressions (business)
 dd5ca38ac CopyRight of all java file-header updated or created
+a5bbdca6a Change logger to slf4j
+f979e8a42 MGC-UPDATE: Update auf Version 3.0.0-SNAPSHOT
 9ebb88522 Initial commit</pre>
 </div>
 
 <div class="c">
-The annotation has remained unchanged since the initial commit — only copyright headers and one package rename (<code>xstream</code> → <code>xmlstream</code>). This stability reflects its design: a marker annotation with no parameters has no moving parts to break. The only meaningful change was <code>cd27dd997</code> which renamed the package to avoid namespace collision with the XStream library.
+Key changes: <code>73b0be50b</code> migrated from commons-collections 3 to commons-collections4 — affecting <code>CollectionUtils</code> usage. <code>a72903e36</code> and <code>73a9755df</code> both replaced <code>StringBuffer</code> with <code>StringBuilder</code> (non-thread-safe but faster, since Reader is single-threaded per session). <code>a5bbdca6a</code> switched to SLF4J logging.
 </div>
 
 </body>

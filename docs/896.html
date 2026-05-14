@@ -2,7 +2,8 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>#896: AuftragsPositionsPaymentTypeFilter.kt</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>#896: AuftragRight.kt</title>
 <style>
 body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}
 h1{border-bottom:2px solid #333;padding-bottom:.3em}
@@ -21,47 +22,92 @@ th{background:#f5f5f5;font-weight:600}
 </style>
 </head>
 <body>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="895.html">← Prev</a> · <a href="897.html">Next →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/kotlin/org/projectforge/business/fibu/AuftragRight.kt" target="_blank" title="View source on GitHub">📄 source</a></div>
 
-<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="895.html">← Prev</a> · <a href="897.html">Next →</a></div>
+<h1>#896: <code>AuftragRight.kt</code></h1>
 
-<h1>#896: <code>AuftragsPositionsPaymentTypeFilter.kt</code></h1>
-
-<div class="meta">
-  <strong>Type:</strong> CustomResultFilter implementation &middot;
-  <strong>Purpose:</strong> Filters orders by payment type of their positions &middot;
-  <strong>Package:</strong> <code>org.projectforge.business.fibu</code><br>
-  <strong>Source path:</strong> <code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/AuftragsPositionsPaymentTypeFilter.kt</code>
-</div>
+<div class="meta"><code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/AuftragRight.kt</code> 
+<p><strong>Type:</strong> Access right class (<code>UserRightAccessCheck&lt;AuftragDO?&gt;</code>)</p>
+<p><strong>Package:</strong> <code>org.projectforge.business.fibu</code></p>
+<p><strong>Full path:</strong> <code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/AuftragRight.kt</code></p>
+ <span style="color:#888">174 lines · 113 code · 54 comments · 7 blank</span></div>
 
 <div class="c">
-  A <code>CustomResultFilter&lt;AuftragDO&gt;</code> that matches orders when at least one of their (non-deleted) positions has a <code>AuftragsPositionsPaymentType</code> matching one of the configured filter values. An empty value list matches all orders. Offers two factory methods: one from a single enum value, one from a string array with error-tolerant parsing.
+<p>Defines the access control rules for the order book (<em>Auftragsbuch</em>). Extends <code>UserRightAccessCheck&lt;AuftragDO?&gt;</code> and provides fine-grained, multi-level access control based on user group membership and user role assignment. Manages visibility for contact persons, project managers, project assistants, controlling staff, and finance group members, with special rules for fully invoiced orders and the <code>vollstaendigFakturiert</code> flag protection.</p>
 </div>
 
-<h2>Filter Logic</h2>
+<h2>Class Definition</h2>
+<pre>class AuftragRight : UserRightAccessCheck&lt;AuftragDO?&gt;(
+    UserRightId.PM_ORDER_BOOK, UserRightCategory.PM,
+    *UserRightServiceImpl.FALSE_READONLY_PARTLYREADWRITE_READWRITE
+)</pre>
+
+<h2>Right Values</h2>
+<p>Available values: <code>FALSE</code>, <code>READONLY</code>, <code>PARTLYREADWRITE</code>, <code>READWRITE</code>.</p>
+<p><strong>PARTLYREADWRITE special behavior:</strong> Users who are members of FIBU_ORGA_GROUPS <em>and</em> PROJECT_MANAGER/PROJECT_ASSISTANT have only access to their own projects (assigned by project manager groups). Choosing <code>READWRITE</code> grants full access to all orders.</p>
+
+<h2><code>hasSelectAccess(user): Boolean</code></h2>
+<p>Returns <code>true</code> if the user has READONLY, PARTLYREADWRITE, or READWRITE right on the <code>PM_ORDER_BOOK</code> right ID. This determines if the order book is visible as a module at all.</p>
+
+<h2><code>hasAccess(user, obj, oldObj, operationType): Boolean</code></h2>
+<p>The core access decision method with layered checks:</p>
+
+<h3>Layer 1: Controlling Group</h3>
+<p>Members of <code>CONTROLLING_GROUP</code> have unconditional SELECT access. Other operation types proceed to the next layer.</p>
+
+<h3>Layer 2: Basic Right Check</h3>
 <ul>
-  <li>If <code>values</code> is empty → matches all orders</li>
-  <li>Iterates <code>element.positionenExcludingDeleted</code>, returns <code>true</code> if any position's <code>paymentType</code> matches a filter value</li>
+<li>SELECT: requires READONLY, PARTLYREADWRITE, or READWRITE</li>
+<li>INSERT/UPDATE/DELETE: requires PARTLYREADWRITE or READWRITE</li>
 </ul>
 
-<h2>Companion Object</h2>
+<h3>Layer 3: <code>vollstaendigFakturiert</code> Flag Protection</h3>
+<p>Only members of <code>FINANCE_GROUP</code> may change the <code>vollstaendigFakturiert</code> flag on order positions:</p>
 <ul>
-  <li><code>create(value: AuftragsPositionsPaymentType?)</code> (<code>@JvmStatic</code>) — wraps a single enum value; null input produces a pass-through filter</li>
-  <li><code>create(valuesAsStrings: Array&lt;String&gt;)</code> — parses string array, logs unknown values, returns filter with matched enum set</li>
+<li>On INSERT: any position with <code>vollstaendigFakturiert == true</code> triggers <code>AccessException</code></li>
+<li>On UPDATE: comparing each position with its database version (<code>oldObj</code>), any change to <code>vollstaendigFakturiert</code> triggers <code>AccessException</code></li>
+<li>Deleted positions are skipped</li>
+<li>Newly added positions (no <code>dbPosition</code>) are checked as in INSERT</li>
 </ul>
+
+<h3>Layer 4: Project-Based Access</h3>
+<p>For users who are NOT in FIBU_ORGA_GROUPS with READONLY/READWRITE right (i.e., project managers, project assistants, or PARTLYREADWRITE users):</p>
+<ul>
+<li><strong>Direct assignment:</strong> User is the order's <code>contactPerson</code> → access granted</li>
+<li><strong>Project membership:</strong> User belongs to the project's <code>projektManagerGroup</code>, is the project's <code>headOfBusinessManager</code>, or is the project's <code>salesManager</code> → access granted</li>
+<li><strong>Fully invoiced restriction:</strong> If the order is <strong>fully invoiced</strong> (<code>isVollstaendigFakturiert</code>), access is limited to orders whose period-of-performance end date (or quote date as fallback) is within <code>MAX_DAYS_OF_VISIBILITY_4_PROJECT_MANGER</code> (1800 days ≈ 5 years)</li>
+<li><strong>Not fully invoiced:</strong> Full access is granted</li>
+<li>If none of the above conditions match, access is denied</li>
+</ul>
+
+<h2>Group Right Initialization (<code>init</code> block)</h2>
+<table>
+<tr><th>Group</th><th>Default / Available Values</th></tr>
+<tr><td>FIBU_ORGA_PM_GROUPS</td><td>FALSE, READONLY, PARTLYREADWRITE, READWRITE (default for project managers and organization groups)</td></tr>
+<tr><td><code>PROJECT_MANAGER</code></td><td>PARTLYREADWRITE (default set)</td></tr>
+<tr><td><code>PROJECT_ASSISTANT</code></td><td>FALSE, PARTLYREADWRITE</td></tr>
+<tr><td>Controlling users</td><td>READONLY (via <code>setReadOnlyForControlling()</code>)</td></tr>
+</table>
+
+<h2>Constants</h2>
+<table>
+<tr><th>Constant</th><th>Value</th><th>Description</th></tr>
+<tr><td><code>MAX_DAYS_OF_VISIBILITY_4_PROJECT_MANGER</code></td><td><code>1800</code></td><td>Orders older than ~5 years are hidden from project managers when fully invoiced</td></tr>
+</table>
 
 <h2>Git History</h2>
-<div class="hist"><pre>
-868d6abb7 2025 -> 2026
+<div class="hist"><pre>868d6abb7 2025 -> 2026
 63081666f Source file headers: 2024-> 2025.
-0d183e5df Migration stuff in progress...
-923f5c64b Migration stuff in progress...
+61f05ce90 Migration stuff in progress...
+87dd5b87c AuftragsCache refactored, migration stuff... (all tests OK)
+4efcbd0fb Migration stuff in progress...
+06828f490 Migration stuff in progress...
 b6092df09 Copyright 2023 -> 2024
 ab45d51fa Copyright 2001-2022 -> 2001-2023.
 73b0be50b org.apache.commons.collections -> org.apache.commons.collections4
+d628fc93f Order book: access for head of business unit and sales manager.
 5f7ef41b8 Copyright 2021 -> 2022
-ceb63e8a1 Source code header: (C) 2001-2021.
-33aac841b WIP: Auftrag -> React (AuftragDao modified).
-</pre></div>
-
+9aefe1981 AuftragRight: visibility for project managers improved for outdated orders.
+7429a0554 AuftragRight -> Kotlin</pre></div>
 </body>
 </html>

@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>#120 [DE]</title>
+<style>
+body {
+    font-family: system-ui, sans-serif;
+    max-width: 960px;
+    margin: 2em auto;
+    padding: 0 1em;
+    background: #fafafa;
+    color: #222;
+    line-height: 1.6
+}
+h1 {
+    border-bottom: 2px solid #333
+}
+a {
+    color: #0366d6
+}
+.meta {
+    font-size: .9em;
+    margin: 1em 0
+}
+.nav {
+    font-size: .9em;
+    color: #888;
+    margin-bottom: 1em
+}
+.commentary {
+    border-left: 3px solid #ddd;
+    padding: .5em 1em;
+    margin: 1em 0;
+    background: #fff
+}
+code {
+    background: #f0f0f0;
+    padding: 0 .2em;
+    border-radius: 2px
+}
+</style>
+</head>
+<body>
+
+<div class="nav">
+    <a href="https://maureranton.github.io/projectforge/">← Index</a> · 
+    <a href="file-index.html">← Datei-Index</a> · 
+    <a href="119.html">← Vorherige</a> · 
+    <a href="121.html">Nächste →</a> · 
+    <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/plugins/org.projectforge.plugins.datatransfer/src/test/kotlin/org/projectforge/plugins/datatransfer/DataTransferPublicAccessTest.kt" target="_blank" title="Quellcode auf GitHub ansehen">📄 Quelle</a>
+</div>
+
+<h1>#120: <code>DataTransferPublicAccessTest.kt</code></h1>
+
+<div class="meta">
+    <code>plugins/org.projectforge.plugins.datatransfer/src/test/kotlin/org/projectforge/plugins/datatransfer/DataTransferPublicAccessTest.kt</code> 
+    <strong>Pfad:</strong> <code>plugins/...datatransfer/src/test/kotlin/.../DataTransferPublicAccessTest.kt</code> · 
+    <strong>Zeilen:</strong> 227 · 
+    <strong>Typ:</strong> Kotlin JUnit 5 Integrationstest 
+    <span style="color:#888">227 Zeilen · 177 Code · 24 Kommentare · 26 leer</span>
+</div>
+
+<div class="commentary">
+    <p><strong>Integrationstest für die öffentliche (externe) DataTransfer-REST-Schicht</strong> – der umfassendste DataTransfer-Test mit 227 Zeilen. Testet den anonymen Zugriffsablauf: Externer Link → Login → Hochladen/Herunterladen/Löschen → Logout, unter Verwendung von simulierten HTTP-Anfragen und JCR-Dateien.</p>
+</div>
+
+<div class="commentary">
+    <h3>Getestete Komponenten</h3>
+    <ul>
+        <li><code>DataTransferPublicSession</code> (<a href="101.html">#101</a>) – Sitzungsverwaltung, Brute-Force-Schutz</li>
+        <li><code>DataTransferPublicPageRest</code> – gibt Seitenlayout-JSON für die anonyme React-Benutzeroberfläche zurück</li>
+        <li><code>DataTransferPublicServicesRest</code> (<a href="100.html">#100</a>) – Upload-, Download-, Lösch- und MultiDownload-Endpunkte</li>
+        <li><code>LoginProtection</code> – Durchsetzung des Brute-Force-Zeitversatzes</li>
+    </ul>
+</div>
+
+<div class="commentary">
+    <h3>Testszenarien (~10 Testmethoden)</h3>
+    <ul>
+        <li><strong>Login mit gültigen Anmeldedaten:</strong> Erstellt einen Bereich mit <code>external_download_enabled=true</code>, <code>externalAccessToken</code>, <code>externalPassword</code>, ruft <code>DataTransferPublicSession.login()</code> auf – überprüft, ob die Sitzung Bereichsdaten enthält</li>
+        <li><strong>Login mit falschem Passwort:</strong> Überprüft, ob <code>LoginProtection</code> die fehlgeschlagenen Versuche erhöht und nach wiederholten Fehlversuchen der Zeitversatz greift</li>
+        <li><strong>Brute-Force-Sperre:</strong> Nach ausreichend Fehlversuchen gibt <code>login()</code> den Status <code>LOGIN_TIME_OFFSET</code> zurück – überprüft durch 3+ schnellere Login-Aufrufe als das Zeitversatzfenster</li>
+        <li><strong>Persönlicher Bereich vom öffentlichen Zugriff ausgeschlossen:</strong> <code>isPersonalBox()</code>-Bereiche geben immer <code>LoginResultStatus.FAILED</code> zurück – die Paranoia-Prüfung in <code>checkDataBaseEntry()</code></li>
+        <li><strong>Hochladen:</strong> Simuliert <code>MultipartFile</code> (Springs Wrapper für hochgeladene Dateien), ruft den Upload-REST-Endpunkt auf, überprüft, ob die Datei-ID in der <code>ownedFiles</code>-Liste erscheint</li>
+        <li><strong>Herunterladen:</strong> Lädt eine Datei als externer Benutzer hoch und lädt sie dann herunter – überprüft, ob der Inhalt von <code>InputStreamResource</code> übereinstimmt</li>
+        <li><strong>Eigene Datei löschen:</strong> Überprüft, ob <code>isOwnerOfFile()</code> true zurückgibt und das Löschen erfolgreich ist</li>
+        <li><strong>Fremde Datei kann nicht gelöscht werden:</strong> Externer Benutzer2 versucht, den Upload von Benutzer1 zu löschen – überprüft, ob <code>isOwnerOfFile()</code> false zurückgibt</li>
+        <li><strong>Multi-Download:</strong> Lädt 3 Dateien hoch, lädt alle als ZIP herunter – überprüft, ob <code>ZipInputStream</code> alle 3 Einträge enthält</li>
+        <li><strong>Sitzungsfixierung:</strong> Überprüft, ob sich nach dem Login die <code>JSESSIONID</code> ändert (alte Sitzung ungültig, neue Sitzung mit übertragenen Bereichsdaten erstellt)</li>
+    </ul>
+</div>
+
+<div class="commentary">
+    <h3>Simulierte HTTP-Schicht</h3>
+    <p>Verwendet Mockito, um <code>HttpServletRequest</code> und <code>HttpSession</code> zu simulieren – entscheidend, da <a href="101.html">DataTransferPublicSession</a> Daten direkt in HTTP-Sitzungsattributen speichert. Die simulierte Sitzung bildet <code>getSession(false)</code>, <code>getSession(true)</code>, <code>getAttribute("transferAreas")</code>, <code>setAttribute()</code> und <code>invalidate()</code> ab – alles wird im Sitzungsfixierungstest verwendet.</p>
+    <p>Ebenfalls simuliert werden <code>MultipartFile</code> für Upload-Tests sowie <code>HttpServletResponse</code> + <code>ServletOutputStream</code> → <code>ByteArrayOutputStream</code> zur Erfassung von Download-Inhalten.</p>
+</div>
+
+</body>
+</html>

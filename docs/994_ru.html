@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>994: Kost1Dao.kt [RU]</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:1.5em;color:#444;font-size:1em}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.lang{font-size:.85em;color:#888;float:right}.lang a{color:#888;text-decoration:none;padding:0 .3em}.lang a.active{color:#0366d6;font-weight:600;text-decoration:underline}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}pre.diff{background:#fff;font-size:.82em;max-height:300px;overflow-y:auto}</style>
+</head>
+<body>
+<div class="lang"><a href="994.html">EN</a> · <a href="994_de.html">DE</a> · <a href="994_ru.html" class="active">RU</a> · <a href="994_fr.html">FR</a> · <a href="994_es.html">ES</a></div>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Индекс</a> · <a href="file-index.html">← Индекс файлов</a> · <a href="669.html">← Предыдущий</a> · <a href="432.html">Следующий →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/kotlin/org/projectforge/business/fibu/kost/Kost1Dao.kt" target="_blank" title="Просмотреть исходный код на GitHub">📄 Исходник</a></div>
+<h1>#994: <code>Kost1Dao.kt</code></h1>
+<div class="meta"><code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/kost/Kost1Dao.kt</code> Класс Kotlin, <code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/kost/Kost1Dao.kt</code> <span style="color:#888">144 строки · 101 код · 28 комментариев · 15 пустых</span></div>
+<div class="c"><strong>Назначение:</strong> Исходный файл: business/fibu/kost/Kost1Dao.kt. Kost1Dao.kt является частью приложения управления проектами с открытым исходным кодом ProjectForge.</div>
+<h2>Исходный код (первые 100 строк)</h2>
+<pre>/////////////////////////////////////////////////////////////////////////////
+//
+// Project ProjectForge Community Edition
+//         www.projectforge.org
+//
+// Copyright (C) 2001-2026 Micromata GmbH, Germany (www.micromata.com)
+//
+// ProjectForge is dual-licensed.
+//
+// This community edition is free software; you can redistribute it and/or
+// modify it under the terms of the GNU General Public License as published
+// by the Free Software Foundation; version 3 of the License.
+//
+// This community edition is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General
+// Public License for more details.
+//
+// You should have received a copy of the GNU General Public License along
+// with this program; if not, see http://www.gnu.org/licenses/.
+//
+/////////////////////////////////////////////////////////////////////////////
+
+package org.projectforge.business.fibu.kost
+
+import org.projectforge.business.fibu.kost.KostHelper.parseKostString
+import org.projectforge.business.user.UserRightId
+import org.projectforge.common.i18n.UserException
+import org.projectforge.framework.access.OperationType
+import org.projectforge.framework.persistence.api.BaseDao
+import org.projectforge.framework.persistence.api.BaseSearchFilter
+import org.projectforge.framework.persistence.api.QueryFilter
+import org.projectforge.framework.persistence.api.QueryFilter.Companion.eq
+import org.projectforge.framework.persistence.api.QueryFilter.Companion.isNull
+import org.projectforge.framework.persistence.api.QueryFilter.Companion.ne
+import org.projectforge.framework.persistence.api.QueryFilter.Companion.or
+import org.projectforge.framework.persistence.api.SortProperty.Companion.asc
+import org.springframework.beans.factory.annotation.Autowired
+import org.springframework.stereotype.Service
+
+@Service
+class Kost1Dao : BaseDao&lt;Kost1DO&gt;(Kost1DO::class.java) {
+    @Autowired
+    private lateinit var kostCache: KostCache
+
+    init {
+        userRightId = USER_RIGHT_ID
+    }
+
+    /**
+     * @param kostString Поддерживается формат ######## или #.###.##.##.
+     * @see .getKost1
+     */
+    fun getKost1(kostString: String?): Kost1DO? {
+        val kost = parseKostString(kostString) ?: return null
+        return getKost1(kost[0], kost[1], kost[2], kost[3])
+    }
+
+    fun getKost1(
+        nummernkreis: Int,
+        bereich: Int,
+        teilbereich: Int,
+        endziffer: Int,
+    ): Kost1DO? {
+        return persistenceService.selectNamedSingleResult(
+            Kost1DO.FIND_BY_NK_BEREICH_TEILBEREICH_ENDZIFFER,
+            Kost1DO::class.java,
+            Pair("nummernkreis", nummernkreis),
+            Pair("bereich", bereich),
+            Pair("teilbereich", teilbereich),
+            Pair("endziffer", endziffer)
+        )
+    }
+
+    override fun select(filter: BaseSearchFilter): List&lt;Kost1DO&gt; {
+        val myFilter = if (filter is KostFilter) {
+            filter
+        } else {
+            KostFilter(filter)
+        }
+        val queryFilter = QueryFilter(myFilter)
+        if (myFilter.isActive) {
+            queryFilter.add(eq("kostentraegerStatus", KostentraegerStatus.ACTIVE))
+        } else if (myFilter.isNonActive) {
+            queryFilter.add(eq("kostentraegerStatus", KostentraegerStatus.NONACTIVE))
+        } else if (myFilter.isEnded) {
+            queryFilter.add(eq("kostentraegerStatus", KostentraegerStatus.ENDED))
+        } else if (myFilter.isNotEnded) {
+            queryFilter.add(
+                or(
+                    ne("kostentraegerStatus", KostentraegerStatus.ENDED),
+                    isNull("kostentraegerStatus")
+                )
+            )
+        }
+        queryFilter.addOrder(asc("nummernkreis")).addOrder(asc("bereich")).addOrder(asc("teilbereich"))
+            .addOrder(asc("endziffer"))
+        return select(queryFilter)
+    }</pre>
+<h2>История Git</h2>
+<div class="hist">
+<pre>868d6abb7 2025 -> 2026
+63081666f Заголовки исходных файлов: 2024-> 2025.
+5989b32fd BaseDao: рефакторинг механизма onChangeLister.
+1b50060c3 BaseDao: переименовано: get -> find, save -> insert, getList -> select, load -> select
+3aeda5ef5 Большое изменение: все save|update|...InTrans переименованы (InTrans удалён). PfPesistenceContext больше не нужен в качестве параметра (вместо него используется ThreadLocal). (все тесты всех пакетов: OK).</pre>
+<h3>868d6abb7</h3><div class="c"><strong>2025 -> 2026</strong><pre class="diff">868d6abb75cd191a892911ac8e45058932cf9074
+diff --git a/projectforge-business/src/main/kotlin/org/projectforge/business/fibu/kost/Kost1Dao.kt b/projectforge-business/src/main/kotlin/org/projectforge/business/fibu/kost/Kost1Dao.kt
+index fce1ee11f..aa10de90c 100644
+--- a/projectforge-business/src/main/kotlin/org/projectforge/business/fibu/kost/Kost1Dao.kt
++++ b/projectforge-business/src/main/kotlin/org/projectforge/business/fibu/kost/Kost1Dao.kt
+@@ -3,7 +3,7 @@
+ // Project ProjectForge Community Edition
+ //         www.projectforge.org
+ //
+-// Copyright (C) 2001-2025 Micromata GmbH, Germany (www.micromata.com)
++// Copyright (C) 2001-2026 Micromata GmbH, Germany (www.micromata.com)
+ //
+ // ProjectForge is dual-licensed.
+ //</pre></div><h3>63081666f</h3><div class="c"><strong>Заголовки исходных файлов: 2024-> 2025.</strong><pre class="diff">63081666f620fb87315f01b817e560e0b2f6a33a
+diff --git a/projectforge-business/src/main/kotlin/org/projectforge/business/fibu/kost/Kost1Dao.kt b/projectforge-business/src/main/kotlin/org/projectforge/business/fibu/kost/Kost1Dao.kt
+index 43e80a4a5..fce1ee11f 100644
+--- a/projectforge-business/src/main/kotlin/org/projectforge/business/fibu/kost/Kost1Dao.kt
++++ b/projectforge-business/src/main/kotlin/org/projectforge/business/fibu/kost/Kost1Dao.kt
+@@ -3,7 +3,7 @@
+ // Project ProjectForge Community Edition
+ //         www.projectforge.org
+ //
+-// Copyright (C) 2001-2024 Micromata GmbH, Germany (www.micromata.com)
++// Copyright (C) 2001-2025 Micromata GmbH, Germany (www.micromata.com)
+ //
+ // ProjectForge is dual-licensed.
+ //</pre></div><h3>5989b32fd</h3><div class="c"><strong>BaseDao: рефакторинг механизма onChangeLister.</strong><pre class="diff">5989b32fdbe63a7ade7eabba11a8c2b042ecd66b
+diff --git a/projectforge-business/src/main/kotlin/org/projectforge/business/fibu/kost/Kost1Dao.kt b/projectforge-business/src/main/kotlin/org/projectforge/business/fibu/kost/Kost1Dao.kt
+index 4847407b5..43e80a4a5 100644
+--- a/projectforge-business/src/main/kotlin/org/projectforge/business/fibu/kost/Kost1Dao.kt
++++ b/projectforge-business/src/main/kotlin/org/projectforge/business/fibu/kost/Kost1Dao.kt
+@@ -26,6 +26,7 @@ package org.projectforge.business.fibu.kost
+ import org.projectforge.business.fibu.kost.KostHelper.parseKostString
+ import org.projectforge.business.user.UserRightId
+ import org.projectforge.common.i18n.UserException
++import org.projectforge.framework.access.OperationType
+ import org.projectforge.framework.persistence.api.BaseDao
+ import org.projectforge.framework.persistence.api.BaseSearchFilter
+ import org.projectforge.framework.persistence.api.QueryFilter
+@@ -40,7 +41,7 @@ import org.springframework.stereotype.Service
+ @Service
+ class Kost1Dao : BaseDao&lt;Kost1DO&gt;(Kost1DO::class.java) {
+     @Autowired
+-    private val kostCache: KostCache? = null
++    private lateinit var kostCache: KostCache
+ 
+     init {
+         userRightId = USER_RIGHT_ID
+@@ -97,7 +98,7 @@ class Kost1Dao : BaseDao&lt;Kost1DO&gt;(Kost1DO::class.java) {
+         return select(queryFilter)
+     }
+ 
+-    override fun onInsertOrModify(obj: Kost1DO) {
++    override fun onInsertOrModify(obj: Kost1DO, operationType: OperationType) {
+         verifyKost(obj)
+         val other = if (obj.id == null) {
+             // New entry
+@@ -129,9 +130,8 @@ class Kost1Dao : BaseDao&lt;Kost1DO&gt;(Kost1DO::class.java) {
+         if (obj.endziffer &lt; 0 || obj.endziffer &gt; 99) throw UserException("fibu.kost.error.invalidKost")
+     }
+ 
+-    override fun afterInsertOrModify(kost1: Kost1DO) {
+-        super.afterInsertOrModify(kost1)
+-        kostCache!!.updateKost1(kost1)
++    override fun afterInsertOrModify(obj: Kost1DO, operationType: OperationType) {
++        kostCache.updateKost1(obj)
+     }
+ 
+     override fun newInstance(): Kost1DO {</pre></div><h3>1b50060c3</h3><div class="c"><strong>BaseDao: переименовано: get -> find, save -> insert, getList -> select, load -> select</strong><pre class="diff">1b50060c3a4b099ec07fd85d28f514b101da4d29
+diff --git a/projectforge-business/src/main/kotlin/org/projectforge/business/fibu/kost/Kost1Dao.kt b/projectforge-business/src/main/kotlin/org/projectforge/business/fibu/kost/Kost1Dao.kt
+index d74b3ab1b..4847407b5 100644
+--- a/projectforge-business/src/main/kotlin/org/projectforge/business/fibu/kost/Kost1Dao.kt
++++ b/projectforge-business/src/main/kotlin/org/projectforge/business/fibu/kost/Kost1Dao.kt
+@@ -71,7 +71,7 @@ class Kost1Dao : BaseDao&lt;Kost1DO&gt;(Kost1DO::class.java) {
+         )
+     }
+ 
+-    override fun getList(filter: BaseSearchFilter): List&lt;Kost1DO&gt; {
++    override fun select(filter: BaseSearchFilter): List&lt;Kost1DO&gt; {
+         val myFilter = if (filter is KostFilter) {
+             filter
+         } else {
+@@ -94,10 +94,10 @@ class Kost1Dao : BaseDao&lt;Kost1DO&gt;(Kost1DO::class.java) {
+         }
+         queryFilter.addOrder(asc("nummernkreis")).addOrder(asc("bereich")).addOrder(asc("teilbereich"))
+             .addOrder(asc("endziffer"))
+-        return getList(queryFilter)
++        return select(queryFilter)
+     }
+ 
+-    override fun onSaveOrModify(obj: Kost1DO) {
++    override fun onInsertOrModify(obj: Kost1DO) {
+         verifyKost(obj)
+         val other = if (obj.id == null) {
+             // New entry
+@@ -129,8 +129,8 @@ class Kost1Dao : BaseDao&lt;Kost1DO&gt;(Kost1DO::class.java) {
+         if (obj.endziffer &lt; 0 || obj.endziffer &gt; 99) throw UserException("fibu.kost.error.invalidKost")
+     }
+ 
+-    override fun afterSaveOrModify(kost1: Kost1DO) {
+-        super.afterSaveOrModify(kost1)
++    override fun afterInsertOrModify(kost1: Kost1DO) {
++        super.afterInsertOrModify(kost1)
+         kostCache!!.updateKost1(kost1)
+     }
+ </pre></div><h3>3aeda5ef5</h3><div class="c"><strong>Большое изменение: все save|update|...InTrans переименованы (InTrans удалён). PfPesistenceContext больше не нужен в качестве параметра (вместо него используется ThreadLocal). (все тесты всех пакетов: OK).</strong><pre class="diff">3aeda5ef5aaaa8a4d627d7f2e771ef0516001a52
+diff --git a/projectforge-business/src/main/kotlin/org/projectforge/business/fibu/kost/Kost1Dao.kt b/projectforge-business/src/main/kotlin/org/projectforge/business/fibu/kost/Kost1Dao.kt
+index fc94b3948..d74b3ab1b 100644
+--- a/projectforge-business/src/main/kotlin/org/projectforge/business/fibu/kost/Kost1Dao.kt
++++ b/projectforge-business/src/main/kotlin/org/projectforge/business/fibu/kost/Kost1Dao.kt
+@@ -34,7 +34,6 @@ import org.projectforge.framework.persistence.api.QueryFilter.Companion.isNull
+ import org.projectforge.framework.persistence.api.QueryFilter.Companion.ne
+ import org.projectforge.framework.persistence.api.QueryFilter.Companion.or
+ import org.projectforge.framework.persistence.api.SortProperty.Companion.asc
+-import org.projectforge.framework.persistence.jpa.PfPersistenceContext
+ import org.springframework.beans.factory.annotation.Autowired
+ import org.springframework.stereotype.Service
+ 
+@@ -52,18 +51,8 @@ class Kost1Dao : BaseDao&lt;Kost1DO&gt;(Kost1DO::class.java) {
+      * @see .getKost1
+      */
+     fun getKost1(kostString: String?): Kost1DO? {
+-        return persistenceService.runReadOnly { context -&gt;
+-            getKost1(kostString, context)
+-        }
+-    }
+-
+-    /**
+-     * @param kostString Поддерживается формат ######## или #.###.##.##.
+-     * @see .getKost1
+-     */
+-    fun getKost1(kostString: String?, context: PfPersistenceContext): Kost1DO? {
+         val kost = parseKostString(kostString) ?: return null
+-        return getKost1(kost[0], kost[1], kost[2], kost[3], context)
++        return getKost1(kost[0], kost[1], kost[2], kost[3])
+     }
+ 
+     fun getKost1(
+@@ -71,9 +60,8 @@ class Kost1Dao : BaseDao&lt;Kost1DO&gt;(Kost1DO::class.java) {
+         bereich: Int,
+         teilbereich: Int,
+         endziffer: Int,
+-        context: PfPersistenceContext
+     ): Kost1DO? {
+-        return context.selectNamedSingleResult(
++        return persistenceService.selectNamedSingleResult(
+             Kost1DO.FIND_BY_NK_BEREICH_TEILBEREICH_ENDZIFFER,
+             Kost1DO::class.java,
+             Pair("nummernkreis", nummernkreis),
+@@ -83,7 +71,7 @@ class Kost1Dao : BaseDao&lt;Kost1DO&gt;(Kost1DO::class.java) {
+         )
+     }
+ 
+-    override fun getList(filter: BaseSearchFilter, context: PfPersistenceContext): List&lt;Kost1DO&gt; {
++    override fun getList(filter: BaseSearchFilter): List&lt;Kost1DO&gt; {
+         val myFilter = if (filter is KostFilter) {
+             filter
+         } else {
+@@ -106,17 +94,17 @@ class Kost1Dao : BaseDao&lt;Kost1DO&gt;(Kost1DO::class.java) {
+         }
+         queryFilter.addOrder(asc("nummernkreis")).addOrder(asc("bereich")).addOrder(asc("teilbereich"))
+             .addOrder(asc("endziffer"))
+-        return getList(queryFilter, context)
++        return getList(queryFilter)
+     }</pre></div>
+</div>
+</body></html>

@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>#885: TradingPartner.kt [RU]</title>
+<style>
+body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}
+h1{border-bottom:2px solid #333;padding-bottom:.3em}
+h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}
+h3{margin-top:2em;color:#444}
+a{color:#0366d6}
+.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}
+.nav{font-size:.9em;color:#888;margin-bottom:1em}
+.meta{font-size:.9em;margin:1em 0;color:#555}
+code{background:#f0f0f0;padding:0 .2em;font-size:.93em}
+pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}
+table{border-collapse:collapse;width:100%;margin:1em 0}
+th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}
+th{background:#f5f5f5;font-weight:600}
+.hist{font-size:.85em;color:#555}
+</style>
+</head>
+<body>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Индекс</a> · <a href="file-index.html">← Индекс файлов</a> · <a href="884.html">← Предыдущий</a> · <a href="886.html">Следующий →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/kotlin/org/projectforge/business/dvelop/TradingPartner.kt" target="_blank" title="Просмотреть исходный код на GitHub">📄 исходный код</a></div>
+
+<h1>#885: <code>TradingPartner.kt</code></h1>
+
+<div class="meta"><code>projectforge-business/src/main/kotlin/org/projectforge/business/dvelop/TradingPartner.kt</code> 
+<p><strong>Тип:</strong> Класс Kotlin — доменная модель D-velop</p>
+<p><strong>Назначение:</strong> Представляет торгового партнера (поставщика, клиента или оба) в платформе D-velop. Это основная сущность, передаваемая между ProjectForge и D-velop во время синхронизации.</p>
+<p><strong>Путь к исходнику:</strong> <code>projectforge-business/src/main/kotlin/org/projectforge/business/dvelop/TradingPartner.kt</code></p>
+ <span style="color:#888">201 строка · 103 кода · 72 комментария · 26 пустых</span></div>
+
+<div class="c">
+<p><strong>Центральная доменная модель</strong> для интеграции с D-velop. Торговый партнер представляет собой бизнес-сущность (компанию или физическое лицо), с которой ProjectForge обменивается счетами: поставщики (вендоры), клиенты или сущности, являющиеся и тем, и другим. Этот класс напрямую отображается на структуру JSON REST API D-velop для торговых партнеров и включает все поля, необходимые для управления адресами (платежный, отгрузочный и физический адреса), контактной информацией, организационной принадлежностью, а также механизм пользовательских полей, который связывает номер счета DATEV из ProjectForge с API пользовательских полей D-velop.</p>
+</div>
+
+<h2>Обертки значений перечислений</h2>
+<p>D-velop использует объекты значений, подобные перечислениям, а не простые строки. ProjectForge оборачивает их как внутренние классы:</p>
+
+<table>
+<tr><th>Внутренний класс</th><th>Значения перечисления</th><th>Структура JSON</th></tr>
+<tr><td><code>Type</code></td><td><code>VENDOR</code>, <code>CUSTOMER</code>, <code>PARTNER</code></td><td><code>{ "value": "VENDOR" }</code></td></tr>
+<tr><td><code>ContactType</code></td><td><code>COMPANY</code>, <code>PRIVATE</code></td><td><code>{ "value": "COMPANY" }</code></td></tr>
+<tr><td><code>Active</code></td><td><code>TRUE</code>, <code>FALSE</code></td><td><code>{ "value": "TRUE" }</code></td></tr>
+<tr><td><code>Organization</code></td><td><code>id</code>, <code>number?</code>, <code>name?</code></td><td><code>{ "id": "...", "number": null, "name": null }</code></td></tr>
+</table>
+
+<p><code>Organization</code> реализует <code>equals()</code> и <code>hashCode()</code> исключительно на основе <code>id</code> для дедупликации на основе множеств.</p>
+
+<h2>Объект-компаньон</h2>
+<pre>companion object {
+    var datevKontoFieldId: String? = null
+}</pre>
+<p><code>datevKontoFieldId</code> — это глобально кэшированный идентификатор определения пользовательского поля D-velop для "datevKonto". Он устанавливается один раз во время начальной загрузки D-velop (путем обнаружения определений пользовательских полей), а затем используется свойством <code>customFields</code> для сериализации/десериализации номера счета DATEV через механизм пользовательских полей D-velop.</p>
+
+<h2>Основные свойства</h2>
+<table>
+<tr><th>Свойство</th><th>Тип</th><th>Обязательно?</th><th>Описание</th></tr>
+<tr><td><code>id</code></td><td><code>String?</code></td><td>—</td><td>Уникальный идентификатор, присваиваемый D-velop после создания</td></tr>
+<tr><td><code>number</code></td><td><code>String?</code></td><td>Обязательно</td><td>Номер делового партнера (внешний идентификатор)</td></tr>
+<tr><td><code>name</code></td><td><code>String?</code></td><td>Только чтение</td><td>Вычисляется D-velop из названия компании или имени+фамилии</td></tr>
+<tr><td><code>shortName</code></td><td><code>String?</code></td><td>—</td><td>Краткий идентификатор для отображения в списках</td></tr>
+<tr><td><code>contactType</code></td><td><code>ContactType?</code></td><td>Обязательно</td><td>COMPANY или PRIVATE</td></tr>
+<tr><td><code>firstName</code></td><td><code>String?</code></td><td>—</td><td>Имя (для контактов PRIVATE)</td></tr>
+<tr><td><code>lastName</code></td><td><code>String?</code></td><td>Если PRIVATE</td><td>Фамилия (обязательно, если contactType=PRIVATE)</td></tr>
+<tr><td><code>company</code></td><td><code>String?</code></td><td>Если COMPANY</td><td>Название компании (обязательно, если contactType=COMPANY)</td></tr>
+<tr><td><code>type</code></td><td><code>Type?</code></td><td>Обязательно</td><td>VENDOR, CUSTOMER или PARTNER</td></tr>
+<tr><td><code>active</code></td><td><code>Active?</code></td><td>Обязательно</td><td>Активен ли партнер</td></tr>
+<tr><td><code>organization</code></td><td><code>Organization?</code></td><td>Обязательно</td><td>Организация D-velop, к которой принадлежит этот партнер</td></tr>
+</table>
+
+<h2>Свойства адреса (Физический адрес)</h2>
+<table>
+<tr><th>Свойство</th><th>Тип</th></tr>
+<tr><td><code>street</code></td><td><code>String?</code></td></tr>
+<tr><td><code>zip</code></td><td><code>String?</code></td></tr>
+<tr><td><code>city</code></td><td><code>String?</code></td></tr>
+<tr><td><code>region</code></td><td><code>String?</code></td></tr>
+<tr><td><code>country</code></td><td><code>String?</code></td></tr>
+<tr><td><code>postBoxZip</code></td><td><code>String?</code></td></tr>
+<tr><td><code>postBox</code></td><td><code>String?</code></td></tr>
+<tr><td><code>addressAdditional</code></td><td><code>String?</code></td></tr>
+</table>
+
+<h2>Свойства платежного адреса (<code>billTo*</code>)</h2>
+<table>
+<tr><th>Свойство</th><th>Тип</th><th>Описание</th></tr>
+<tr><td><code>billToStreet</code></td><td><code>String?</code></td><td>Улица платежного адреса</td></tr>
+<tr><td><code>billToZip</code></td><td><code>String?</code></td><td>Почтовый индекс платежного адреса</td></tr>
+<tr><td><code>billToCity</code></td><td><code>String?</code></td><td>Город платежного адреса</td></tr>
+<tr><td><code>billToRegion</code></td><td><code>String?</code></td><td>Регион/штат платежного адреса</td></tr>
+<tr><td><code>billToCountry</code></td><td><code>String?</code></td><td>Страна платежного адреса</td></tr>
+<tr><td><code>billToAddressAdditional</code></td><td><code>String?</code></td><td>Дополнительные строки платежного адреса</td></tr>
+<tr><td><code>isBillToAddressEmpty</code></td><td><code>Boolean</code> (вычисляемое)</td><td>True, если все поля billTo пусты</td></tr>
+</table>
+
+<h2>Свойства адреса доставки (<code>shipTo*</code>)</h2>
+<table>
+<tr><th>Свойство</th><th>Тип</th></tr>
+<tr><td><code>shipToStreet</code></td><td><code>String?</code></td></tr>
+<tr><td><code>shipToZip</code></td><td><code>String?</code></td></tr>
+<tr><td><code>shipToCity</code></td><td><code>String?</code></td></tr>
+<tr><td><code>shipToRegion</code></td><td><code>String?</code></td></tr>
+<tr><td><code>shipToCountry</code></td><td><code>String?</code></td></tr>
+<tr><td><code>shipToAddressAdditional</code></td><td><code>String?</code></td></tr>
+</table>
+
+<h2>Контакты и метаданные</h2>
+<table>
+<tr><th>Свойство</th><th>Тип</th><th>Описание</th></tr>
+<tr><td><code>phoneNumber</code></td><td><code>String?</code></td><td>Номер телефона</td></tr>
+<tr><td><code>faxNumber</code></td><td><code>String?</code></td><td>Номер факса</td></tr>
+<tr><td><code>eMail</code></td><td><code>String?</code></td><td>Адрес электронной почты</td></tr>
+<tr><td><code>website</code></td><td><code>String?</code></td><td>URL веб-сайта</td></tr>
+<tr><td><code>remarks</code></td><td><code>String?</code></td><td>Заметки в свободной форме</td></tr>
+<tr><td><code>responsible</code></td><td><code>String?</code></td><td>ID пользователя ответственного лица</td></tr>
+<tr><td><code>relationSince</code></td><td><code>String?</code></td><td>Дата начала деловых отношений (формат: "2022-05-11 00:00:00")</td></tr>
+<tr><td><code>relationUntil</code></td><td><code>String?</code></td><td>Дата окончания деловых отношений</td></tr>
+<tr><td><code>importCode</code></td><td><code>String?</code></td><td>Ведущий ID во внешней системе (используется во время миграции)</td></tr>
+</table>
+
+<h2>Механизм пользовательских полей</h2>
+<p>Свойство <code>customFields</code> с пользовательским геттером/сеттером является мостом между полем <code>datevKonto</code> ProjectForge и общим API пользовательских полей D-velop:</p>
+
+<h3>Геттер</h3>
+<pre>get() {
+    if (datevKonto == null || datevKontoFieldId == null) return null
+    return mapOf(datevKontoFieldId!! to CustomField(
+        configID = datevKontoFieldId!!,
+        name = "datevKonto",
+        value = datevKonto
+    ))
+}</pre>
+<p>Если номер счета DATEV установлен и <code>datevKontoFieldId</code> известен, создается карта с одной записью, содержащей обертку пользовательского поля.</p>
+
+<h3>Сеттер</h3>
+<pre>set(value) {
+    value?.values?.find { it.name == "datevKonto" }?.value?.let {
+        datevKonto = it as Int?
+    }
+    if (value == null) { datevKonto = null }
+}</pre>
+<p>При десериализации ответов JSON от D-velop находит пользовательское поле "datevKonto" и извлекает его целочисленное значение.</p>
+
+<h2>Архитектурные заметки</h2>
+<ul>
+<li><code>@JsonIgnore</code> на <code>datevKonto</code> предотвращает его прямую сериализацию — он должен проходить через механизм <code>customFields</code></li>
+<li>Все значения перечислений обернуты в объекты-контейнеры (<code>Type(value)</code>) для соответствия структуре JSON D-velop <code>{"value": "..."}</code></li>
+<li><code>isBillToAddressEmpty</code> аннотирован <code>@JsonIgnore</code> для предотвращения сериализации</li>
+<li>Класс использует обычные свойства <code>var</code> (а не data class), поскольку имеет пользовательские геттеры/сеттеры и логику объекта-компаньона</li>
+<li>Адрес разделен на три отдельные группы: физический (<code>street/zip/city</code>), платежный (<code>billTo*</code>) и отгрузочный (<code>shipTo*</code>)</li>
+</ul>
+
+<h2>История Git</h2>
+<div class="hist"><pre>868d6abb7 2025 -> 2026
+63081666f Заголовки исходных файлов: 2024-> 2025.
+b6092df09 Авторское право 2023 -> 2024
+510974f0f D-velop: тест исправлен.
+adc61b60b Ничего реального
+bf2e51373 WIP D.velop
+be750e77e WIP D.velop
+9ebb99c88 WIP D.velop
+cb2915283 WIP D.velop
+aec5b4be0 Ничего реального.
+cb6d633f9 WIP D-velop
+6a4ee1932 WIP D-velop
+50926baa8 WIP D-velop
+912400e42 WIP D-velop
+c2418da24 Пакет dvelop перемещен из projectforge-business в projectforge-rest.
+f993107db Начальная ревизия. Spring boot 2.7.6->2.7.7
+</pre></div>
+</body>
+</html>

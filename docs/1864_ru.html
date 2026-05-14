@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>#1864: CardDavXmlUtilsTest [RU]</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:2em;color:#444}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.lang{font-size:.85em;color:#888;float:right}.lang a{color:#888;text-decoration:none;padding:0 .3em}.lang a.active{color:#0366d6;font-weight:600;text-decoration:underline}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}.warn{background:#fff3cd;border-left:3px solid #ffc107;padding:.5em 1em;margin:1em 0}.tip{background:#d4edda;border-left:3px solid #28a745;padding:.5em 1em;margin:1em 0}</style>
+</head>
+<body>
+<div class="lang"><a href="1864.html">EN</a> · <a href="1864_de.html">DE</a> · <a href="1864_ru.html" class="active">RU</a> · <a href="1864_fr.html">FR</a> · <a href="1864_es.html">ES</a></div>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Индекс</a> · <a href="file-index.html">← Индекс файлов</a> · <a href="1863.html">← Пред.</a> · <a href="1865.html">След. →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-carddav/src/test/kotlin/org/projectforge/carddav/CardDavXmlUtilsTest.kt" target="_blank" title="Просмотреть исходный код на GitHub">📄 исходник</a></div>
+<h1>#1864: <code>CardDavXmlUtilsTest.kt</code></h1>
+<div class="meta"><code>projectforge-carddav/src/test/kotlin/org/projectforge/carddav/CardDavXmlUtilsTest.kt</code> Модульный тест — пакет org.projectforge.carddav, projectforge-carddav/src/test/kotlin/org/projectforge/carddav/CardDavXmlUtilsTest.kt <span style="color:#888">99 строк · 70 кода · 22 комментария · 7 пустых</span></div>
+<div class="c">Комплексный набор тестов для XML-утилит в <code>CardDavXmlUtils</code>: извлечение корневого элемента, парсинг идентификаторов контактов из multiget-запросов, извлечение имени/значения XML-элемента с поддержкой пространств имён и экранирование XML-сущностей. Эти утилиты образуют основу парсинга XML для обработчика протокола CardDAV.</div>
+<h2>Архитектура</h2>
+<div class="c">
+<p><code>CardDavXmlUtils</code> предоставляет лёгкий парсинг XML без полноценного DOM/SAX-парсера — используя извлечение на основе регулярных выражений для специфических XML-нагрузок CardDAV. Такой подход выбран, поскольку XML-нагрузки CardDAV структурно предсказуемы (определены RFC 4918, 6352) и критичны к производительности.</p>
+
+<h3>Импорты</h3>
+<ul>
+<li><strong>org.junit.jupiter.api.Assertions</strong> — утверждения JUnit 5</li>
+<li><strong>org.junit.jupiter.api.Test</strong> — аннотация теста JUnit 5</li>
+</ul>
+
+<h3>Тестируемые методы</h3>
+
+<h4>1. getRootElement(xml) — Извлечение корневого элемента</h4>
+<p>Извлекает имя корневого XML-элемента из строки, обрабатывая опциональное XML-объявление (<code>&lt;?xml ... ?&gt;</code>) и элементы с префиксом пространства имён (<code>d:multistatus</code>). Тесты покрывают:</p>
+<ul>
+<li>XML с префиксом пространства имён: <code>&lt;d:multistatus xmlns:d="DAV:"&gt;</code> → <code>multistatus</code></li>
+<li>XML с объявлением + пространством имён: удаляет <code>&lt;?xml version="1.0"?&gt;</code>, возвращает <code>multistatus</code></li>
+</ul>
+<p>Это критически важно для обработчика ответов PROPFIND/REPORT, чтобы направлять запрос к правильному построителю ответов на основе типа корневого элемента.</p>
+
+<h4>2. extractContactIds(xml) — Извлечение ID контактов из multiget</h4>
+<p>Парсит тело запроса CardDAV <code>addressbook-multiget</code> REPORT для извлечения ID контактов ProjectForge из элементов <code>&lt;d:href&gt;</code>. Тесты парсят реалистичную XML-нагрузку с тремя записями <code>&lt;d:href&gt;{путь}/ProjectForge-{id}.vcf&lt;/d:href&gt;</code> и проверяют корректное извлечение ID <strong>7833476, 7858940, 7859171</strong>.</p>
+<p>Метод использует сопоставление с регулярным выражением для шаблона имени файла <code>ProjectForge-{id}.vcf</code> внутри элементов href. Результат — <code>Sequence&lt;Int&gt;</code> (ленивое вычисление через <code>.toList()</code>).</p>
+
+<h4>3. getElementName(xml, name) — Разрешение имени элемента с учётом пространства имён</h4>
+<p>Находит именованный элемент в XML и возвращает его <em>квалифицированное</em> имя, включая префикс пространства имён:
+<ul>
+<li>Поиск "prop" в XML без префикса → возвращает <code>prop</code></li>
+<li>Поиск "prop" в XML с префиксом пространства имён → возвращает <code>d:prop</code></li>
+</ul>
+Используется, когда серверу необходимо знать точное квалифицированное имя для генерации элемента ответа.</p>
+
+<h4>4. extractElementValue(xml, name) — Извлечение содержимого элемента</h4>
+<p>Извлекает текстовое содержимое именованного элемента из XML, обрабатывая:
+<ul>
+<li>Элементы с текстовым содержимым: <code>&lt;etag&gt;  &lt;/etag&gt;</code> → <code>"  "</code> (сохраняет пробелы)</li>
+<li>Вложенные элементы: извлечение "prop" возвращает внутренний XML, включая дочерние элементы</li>
+<li>Самозакрывающиеся элементы: <code>&lt;etag /&gt;</code> → <strong>null</strong> (нет текстового содержимого)</li>
+<li>Самозакрывающиеся с префиксом пространства имён: <code>&lt;d:etag /&gt;</code> → <strong>null</strong></li>
+<li>Имена элементов с дефисом: <code>&lt;d:sync-token&gt;123456&lt;/d:sync-token&gt;</code> → <code>123456</code></li>
+</ul>
+</p>
+
+<h4>5. escapeXml(xml) — Экранирование XML-сущностей</h4>
+<p>Экранирует пять специальных XML-символов в соответствии со спецификацией XML 1.0:
+<ul>
+<li><code>&lt;</code> → <code>&amp;lt;</code></li>
+<li><code>&gt;</code> → <code>&amp;gt;</code> (обрабатывается; тестовый ввод содержит <code>&gt;</code>)</li>
+<li><code>"</code> → <code>&amp;quot;</code></li>
+<li><code>&amp;</code> → <code>&amp;amp;</code></li>
+<li><code>'</code> → <code>&amp;apos;</code></li>
+</ul>
+Тестовый ввод <code>&lt;hurzel test="dkfsld"&gt;  &amp; '</code> экранируется в <code>&amp;lt;hurzel test=&amp;quot;dkfsld&amp;quot;&amp;gt;  &amp;amp; &amp;apos;</code>.</p>
+
+<div class="warn">Подход на основе регулярных выражений быстр, но хрупок — он не может обрабатывать произвольный XML с секциями CDATA, инструкциями по обработке или глубоко вложенными структурами. Он корректно работает только для предсказуемых XML-схем CardDAV, определённых в соответствующих RFC.</div>
+
+<h3>Шаблон тестовых данных</h3>
+<p>Все тесты используют функцию области видимости Kotlin <code>let</code> с сырыми строковыми литералами (<code>"""..."""</code>) для XML-тестовых данных. <code>trimIndent()</code> и <code>trimMargin()</code> используются для очистки многострочных тестовых фикстур с сохранением структуры XML.</p>
+</div>
+<h2>История Git</h2><div class="hist"><pre>868d6abb7 2025 -> 2026
+63081666f Заголовки исходных файлов: 2024-> 2025.
+5167dab99 WIP: Carddav
+6c1daac93 WIP: Carddav
+0d7a81f91 WIP: Carddav
+dc3936193 WIP: Carddav (Thunderbird работает, только чтение, включая изображения и т.д.)
+caee35750 WIP: Carddav
+2ad0cfe66 WIP: Carddav</pre></div>
+</body>
+</html>

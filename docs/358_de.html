@@ -1,0 +1,111 @@
+<!DOCTYPE html><html lang="de"><head><meta charset="utf-8"><title>#358: CollectionPropertyDelta.java [DE]</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:2em;color:#444}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.lang{font-size:.85em;color:#888;float:right}.lang a{color:#888;text-decoration:none;padding:0 .3em}.lang a.active{color:#0366d6;font-weight:600;text-decoration:underline}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}</style></head>
+<body><div class="lang"><a href="358.html">EN</a> · <a href="358_de.html" class="active">DE</a> · <a href="358_ru.html">RU</a> · <a href="358_fr.html">FR</a> · <a href="358_es.html">ES</a></div>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← Dateiindex</a> · <a href="1496.html">← Vorherige</a> · <a href="2757.html">Nächste →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/java/de/micromata/hibernate/history/delta/CollectionPropertyDelta.java" target="_blank" title="Quellcode auf GitHub anzeigen">📄 Quelle</a></div>
+<h1>#358: <code>CollectionPropertyDelta.java</code></h1>
+<div class="meta"><code>projectforge-business/src/main/java/de/micromata/hibernate/history/delta/CollectionPropertyDelta.java</code> Typ: Java · Rolle: Komponente · Quelle: projectforge-business/src/main/java/de/micromata/hibernate/history/delta/CollectionPropertyDelta.java <span style="color:#888">112 Zeilen · 65 Code · 33 Kommentare · 14 leer</span></div>
+<div class="c">Quellcodedatei unter <code>projectforge-business/src/main/java/de/micromata/hibernate/history/delta/CollectionPropertyDelta.java</code> mit Java-Code für die Komponentenschicht.</div>
+<h2>Codestruktur</h2>
+<p>Paket: <code>de.micromata.hibernate.history.delta</code></p>
+<p>Klassen: <code>CollectionPropertyDelta</code></p>
+<p>Erweitert: <code>PropertyDelta</code></p>
+<p>Methoden (5): <code>calculateAdditionsAndRemovals</code>, <code>toString</code>, <code>getNewObjectValue</code>, <code>splitElements</code>, <code>getOldObjectValue</code></p>
+<p>Importe: 4 Pakete</p>
+<h2>Quellcode (gekürzt)</h2>
+<pre>
+package de.micromata.hibernate.history.delta;
+
+import org.apache.commons.lang3.ClassUtils;
+import org.apache.commons.lang3.StringUtils;
+import org.hibernate.Session;
+
+import java.util.*;
+
+/**
+ * Legacy für XML-Persistenz der DB.
+ * 
+ * @author Wolfgang Jung (w.jung@micromata.de)
+ * 
+ */
+public class CollectionPropertyDelta extends PropertyDelta
+{
+
+  private transient Set&lt;Object&gt; additions = new HashSet&lt;&gt;();
+
+  private transient Set&lt;Object&gt; removals = new HashSet&lt;&gt;();
+
+  protected CollectionPropertyDelta()
+  {
+    // nichts tun
+  }
+
+  public CollectionPropertyDelta(String propertyName, Class&lt;?&gt; propertyType, Collection&lt;Object&gt; oldValue,
+      Collection&lt;Object&gt; newValue)
+  {
+    this.propertyName = propertyName;
+    this.propertyType = ClassUtils.getShortClassName(propertyType);
+    calculateAdditionsAndRemovals(oldValue, newValue);
+    this.oldValue = StringUtils.join(removals.iterator(), &quot;,&quot;);
+    this.newValue = StringUtils.join(additions.iterator(), &quot;,&quot;);
+  }
+
+  private void calculateAdditionsAndRemovals(Collection&lt;Object&gt; oldValue, Collection&lt;Object&gt; newValue)
+  {
+    // //////////////////////////////////////////////////////////////////////
+    // Zuerst Hinzufügungen ermitteln
+    if (newValue != null) {
+      additions.addAll(newValue);
+    }
+    if (oldValue != null) {
+      additions.removeAll(oldValue);
+    }
+
+    // //////////////////////////////////////////////////////////////////////
+    // Dann Entfernungen ermitteln
+    if (oldValue != null) {
+      removals.addAll(oldValue);
+    }
+    if (newValue != null) {
+      removals.removeAll(newValue);
+    }
+  }
+
+  @Override
+  public String toString()
+  {
+    return &quot;Änderungen von &quot; + propertyName + &quot; neu=&quot; + newValue + &quot; alt=&quot; + oldValue;
+  }
+
+  @Override
+  public Object getNewObjectValue(final Session session)
+  {
+    return splitElements(getNewValue(), session);
+  }
+
+  private List&lt;Object&gt; splitElements(final String keyList, final Session session)
+  {
+    List&lt;Object&gt; entityList = new ArrayList&lt;&gt;();
+    if (!StringUtils.isEmpty(keyList)) {
+      for (String key : keyList.split(&quot;,&quot;)) {
+        if (StringUtils.isEmpty(key)) {
+          continue;
+        }
+        entityList.add(loadItem(propertyType, key, session));
+      }
+    }
+    return entityList;
+  }
+
+  @Override
+  public Object getOldObjectValue(final Session session)
+  {
+    return splitElements(getOldValue(), session);
+  }
+}</pre>
+
+<h2>Git-Verlauf</h2><div class="hist"><pre>868d6abb7 2025 -> 2026
+63081666f Quellcode-Dateiköpfe: 2024 -> 2025.
+b6092df09 Copyright 2023 -> 2024
+ab45d51fa Copyright 2001-2022 -> 2001-2023.
+5f7ef41b8 Copyright 2021 -> 2022</pre></div>
+</body></html>

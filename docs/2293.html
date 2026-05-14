@@ -1,135 +1,18 @@
-<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>#2293</title>
-<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}.hist{font-size:.85em;color:#555}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}</style></head>
-<body><div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="2292.html">← Prev</a> · <a href="2294.html">Next →</a></div>
-<h1>#2293: <code>SendTextMessagePageRest.kt</code></h1>
-<div class="meta">REST Controller, <code>projectforge-rest/src/main/kotlin/org/projectforge/rest/SendTextMessagePageRest.kt</code> (118 lines)</div>
-<div class="c">Source file: SendTextMessagePageRest.kt - rest controller in ProjectForge REST module.</div>
-<h2>Source Code</h2><pre>/////////////////////////////////////////////////////////////////////////////
-//
-// Project ProjectForge Community Edition
-//         www.projectforge.org
-//
-// Copyright (C) 2001-2026 Micromata GmbH, Germany (www.micromata.com)
-//
-// ProjectForge is dual-licensed.
-//
-// This community edition is free software; you can redistribute it and/or
-// modify it under the terms of the GNU General Public License as published
-// by the Free Software Foundation; version 3 of the License.
-//
-// This community edition is distributed in the hope that it will be useful,
-// but WITHOUT ANY WARRANTY; without even the implied warranty of
-// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General
-// Public License for more details.
-//
-// You should have received a copy of the GNU General Public License along
-// with this program; if not, see http://www.gnu.org/licenses/.
-//
-/////////////////////////////////////////////////////////////////////////////
-
-package org.projectforge.rest
-
-import org.projectforge.business.address.AddressDao
-import org.projectforge.business.configuration.ConfigurationService
-import org.projectforge.business.user.service.UserPrefService
-import org.projectforge.framework.i18n.translate
-import org.projectforge.framework.persistence.user.api.ThreadLocalUserContext
-import org.projectforge.framework.utils.RecentQueue
-import org.projectforge.rest.config.Rest
-import org.projectforge.rest.core.PagesResolver
-import org.projectforge.rest.dto.FormLayoutData
-import org.projectforge.sms.SmsSenderConfig
-import org.projectforge.ui.*
-import org.springframework.beans.factory.annotation.Autowired
-import org.springframework.web.bind.annotation.GetMapping
-import org.springframework.web.bind.annotation.RequestMapping
-import org.springframework.web.bind.annotation.RestController
-
-private const val USER_PREF_KEY_RECENTS = "messagingReceivers"
-
-@RestController
-@RequestMapping("${Rest.URL}/sendTextMessage")
-class SendTextMessagePageRest {
-  @Autowired
-  private lateinit var addressDao: AddressDao
-
-  @Autowired
-  private lateinit var configurationService: ConfigurationService
-
-  @Autowired
-  private lateinit var smsSenderConfig: SmsSenderConfig
-
-  @Autowired
-  private lateinit var userPrefService: UserPrefService
-
-  class Data(
-    var message: String? = null,
-    var phoneNumber: String? = null
-  )
-
-  @GetMapping("dynamic")
-  fun getForm(): FormLayoutData {
-    val layout = UILayout("address.sendSms.title")
-    val lc = LayoutContext(Data::class.java)
-
-    val buttonCol = UICol(6)
-    buttonCol.add(
-      UIButton.createDefaultButton(
-        "send", title = "send",
-        responseAction = ResponseAction(PagesResolver.getEditPageUrl(VacationPagesRest::class.java, absolute = true))
-      )
-    )
-    val numberField = UISelect&lt;String&gt;(
-      "cellPhoneNumber", lc,
-      label = translate("address.sendSms.phoneNumber"),
-      tooltip = translate("address.sendSms.phoneNumber.info"),
-      autoCompletion = AutoCompletion&lt;String&gt;(url = "address/acLang?search=:search")
-    )
-    layout.add(
-      UIFieldset(12)
-        .add(
-          UIRow()
-            .add(
-              UICol(UILength(md = 6, sm = 12))
-                .add(numberField)
-                .add(
-                  UICol(UILength(md = 6, sm = 12))
-                    .add(UITextArea("message", lc, label = translate("address.sendSms.message")))
-                )
-            )
-        )
-        .add(UIRow().add(buttonCol))
-    )
-
-    LayoutUtils.process(layout)
-
-    return FormLayoutData(null, layout, null)
-  }
-
-  protected fun getRecentSearchTermsQueue(): RecentQueue&lt;String&gt; {
-    @Suppress("UNCHECKED_CAST")
-    var recentSearchTermsQueue =
-      userPrefService.getEntry("address", USER_PREF_KEY_RECENTS, RecentQueue::class.java) as? RecentQueue&lt;String&gt;
-    if (recentSearchTermsQueue == null) {
-      recentSearchTermsQueue = RecentQueue&lt;String&gt;()
-      userPrefService.putEntry("address", USER_PREF_KEY_RECENTS, recentSearchTermsQueue, true)
-    }
-    return recentSearchTermsQueue
-  }
-
-  fun getInitalMessageText(): String? {
-    return "${ThreadLocalUserContext.loggedInUser?.getFullname()}. ${translate("address.sendSms.doNotReply")}"
-  }
-
-}</pre>
-<h2>Git History</h2><div class="hist"><pre>868d6abb7 2025 -&gt; 2026
-63081666f Source file headers: 2024-&gt; 2025.
-67805f2fc ThreadLocalUserContext.user -&gt; ThreadLocalUserContext.loggedInUser (renamed for avoiding mis-understandings in code).
-b6092df09 Copyright 2023 -&gt; 2024
-ab45d51fa Copyright 2001-2022 -&gt; 2001-2023.
-38bec971a ThreadLocal -&gt; Kotlin
-39d0a2db7 UIButtons will now be created by UIButton class to have same button styles. ExpiringSessionAttributes refreshes now attributes on usage.
-5f7ef41b8 Copyright 2021 -&gt; 2022
-ceb63e8a1 Source code header: (C) 2001-2021.
-02e96d3ea fix response action url</pre></div>
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="utf-8"><title>#2293: PreQuestion.kt</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333}a{color:#0366d6}.meta{background:#f0f0f0;border-radius:6px;padding:1em;margin:1em 0;font-size:.9em}.commentary{margin:.8em 0;background:#fff;padding:.5em 1em;border-radius:6px;border-left:4px solid #ddd;line-height:1.7}table{border-collapse:collapse;width:100%;margin:.8em 0;font-size:.9em}th,td{border:1px solid #ddd;padding:.4em .6em}th{background:#f0f0f0}code{background:#e8e8e8;border-radius:3px;padding:.1em .3em;font-size:.9em}.nav{font-size:.9em;color:#888;margin-bottom:1em}.history{background:#fffbe6;border-radius:6px;padding:1em;margin:1em 0;font-size:.9em;border-left:4px solid #ffc107}</style></head>
+<body><div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="2292.html">← Prev</a> · <a href="2294.html">Next →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-rest/src/main/kotlin/org/projectforge/rest/poll/types/PreQuestion.kt" target="_blank" title="View source on GitHub">📄 source</a></div>
+<h1>#2293: <code>PreQuestion.kt</code></h1>
+<div class="meta"><code>projectforge-rest/src/main/kotlin/org/projectforge/rest/poll/types/PreQuestion.kt</code> <p><strong>Path:</strong> <code>projectforge-rest/src/main/kotlin/org/projectforge/rest/poll/types/PreQuestion.kt</code> · <strong>Type:</strong> Kotlin class</p><p><strong>Purpose:</strong> Part of the ProjectForge types module.</p><p><strong>Source:</strong> <a href="https://github.com/micromata/projectforge/blob/develop/projectforge-rest/src/main/kotlin/org/projectforge/rest/poll/types/PreQuestion.kt">GitHub</a></p> <span style="color:#888">49 lines total</span></div>
+<div class="history"><table><tr><th>Commit</th><th>Date</th><th>Message</th></tr><tr><td><code>868d6abb</code></td><td></td><td>2025 -&amp;gt; 2026</td></tr>
+<tr><td><code>63081666</code></td><td></td><td>Source file headers: 2024-&amp;gt; 2025.</td></tr>
+<tr><td><code>d5858cd2</code></td><td></td><td>Fixes</td></tr>
+<tr><td><code>50e95124</code></td><td></td><td>Pull Request fixes</td></tr>
+</table></div>
+<h2>What it does</h2>
+<div class="commentary"><p>Kotlin class. Key methods: <code>toObject()</code>, <code>toJson()</code>. Package: <code>org.projectforge.rest.poll.types</code>.</p></div>
+<h2>Key takeaways</h2>
+<div class="commentary"><ul><li><strong>4 commits:</strong> <code>868d6abb</code>: 2025 -&amp;gt; 2026; <code>63081666</code>: Source file headers: 2024-&amp;gt; 2025.; <code>d5858cd2</code>: Fixes; <code>50e95124</code>: Pull Request fixes.</li></ul></div>
+<div class="nav" style="margin-top:2em"><a href="2292.html">← Prev</a> · <a href="2294.html">Next →</a></div>
 </body></html>

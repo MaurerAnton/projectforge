@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>#899: AuftragsRechnungCache.kt</title>
+<title>#899: AuftragsOrderState.kt</title>
 <style>
 body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}
 h1{border-bottom:2px solid #333;padding-bottom:.3em}
@@ -22,106 +22,47 @@ th{background:#f5f5f5;font-weight:600}
 </head>
 <body>
 
-<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="898.html">← Prev</a> · <a href="900.html">Next →</a></div>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="898.html">← Prev</a> · <a href="900.html">Next →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/kotlin/org/projectforge/business/fibu/AuftragsOrderState.kt" target="_blank" title="View source on GitHub">📄 source</a></div>
 
-<h1>#899: <code>AuftragsRechnungCache.kt</code></h1>
+<h1>#899: <code>AuftragsOrderState.kt</code></h1>
 
-<div class="meta">
-  <strong>Type:</strong> Spring Component (AbstractCache) &middot;
-  <strong>Purpose:</strong> Caches the assignment of invoice positions to order positions &middot;
+<div class="meta"><code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/AuftragsOrderState.kt</code> 
+  <strong>Type:</strong> Enum &middot;
+  <strong>Purpose:</strong> Categorizes the business state of an order or order position &middot;
   <strong>Package:</strong> <code>org.projectforge.business.fibu</code><br>
-  <strong>Source path:</strong> <code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/AuftragsRechnungCache.kt</code>
-</div>
+  <strong>Source path:</strong> <code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/AuftragsOrderState.kt</code>
+ <span style="color:#888">36 lines · 7 code · 26 comments · 3 blank</span></div>
 
 <div class="c">
-  An in-memory cache that maps invoice positions (<code>RechnungPosInfo</code>) to their associated order positions and orders. This enables fast lookups for the order book to display which invoices are linked to each order, and for the invoice view to show which orders are covered. Handles a cyclic dependency with <code>AuftragsCache</code> by running both caches twice on initialization (a "ready" flag mechanism).
+  A three-value enum that classifies orders/positions into business categories: <strong>POTENTIAL</strong> (acquisition phase), <strong>COMMISSIONED</strong> (confirmed/ordered), or <strong>LOST</strong> (not won). Used for summarization in order book statistics and forecast views. Renamed from "ORDERED" to "COMMISSIONED" to better reflect business terminology.
 </div>
 
-<h2>Architecture &amp; Design</h2>
-
-<h3>Class Hierarchy</h3>
-<p>Extends <code>AbstractCache</code>, which provides the <code>refresh()</code>/<code>setExpired()</code>/<code>forceReload()</code> lifecycle. Registered as a Spring <code>@Component</code>.</p>
-
-<h3>Dependencies</h3>
+<h2>Enum Values</h2>
 <table>
-  <tr><th>Dependency</th><th>Type</th><th>Role</th></tr>
-  <tr><td><code>AuftragsCache</code></td><td>Component</td><td>Provides order-to-position mapping; mutual refresh during init</td></tr>
-  <tr><td><code>RechnungCache</code></td><td>Component</td><td>Provides <code>RechnungInfo</code> and <code>RechnungPosInfo</code> objects</td></tr>
-  <tr><td><code>RechnungDao</code></td><td>DAO</td><td>Registered for <code>BaseDOModifiedListener</code> to invalidate cache on invoice changes</td></tr>
-  <tr><td><code>RechnungJdbcService</code></td><td>Service</td><td>Fast JDBC query for invoice-position-to-order-position assignments</td></tr>
+  <tr><th>Value</th><th>Meaning</th></tr>
+  <tr><td><code>POTENTIAL</code></td><td>Order/position is in the acquisition/pipeline phase — not yet confirmed</td></tr>
+  <tr><td><code>COMMISSIONED</code></td><td>Order/position has been officially commissioned/ordered by the customer</td></tr>
+  <tr><td><code>LOST</code></td><td>Order/position was not won</td></tr>
 </table>
 
-<h3>Internal Data Structures</h3>
-<table>
-  <tr><th>Map</th><th>Key</th><th>Value</th><th>Purpose</th></tr>
-  <tr><td><code>invoicePositionMapByAuftragId</code></td><td><code>Long</code> (order ID)</td><td><code>MutableSet&lt;Long&gt;</code> (invoice position IDs)</td><td>Lookup invoice position IDs by order</td></tr>
-  <tr><td><code>invoicePositionMapByAuftragsPositionId</code></td><td><code>Long</code> (order position ID)</td><td><code>MutableSet&lt;RechnungPosInfo&gt;</code></td><td>Lookup invoice positions by order position</td></tr>
-  <tr><td><code>invoicePositionMapByRechnungId</code></td><td><code>Long</code> (invoice ID)</td><td><code>MutableSet&lt;RechnungPosInfo&gt;</code></td><td>Lookup order-related invoice positions by invoice</td></tr>
-</table>
-
-<h3>Lifecycle &amp; Initialization</h3>
-<p><code>@PostConstruct init()</code> registers two listeners:</p>
+<h2>Methods</h2>
 <ul>
-  <li><strong><code>rechnungListener</code></strong> — a <code>BaseDOModifiedListener&lt;RechnungDO&gt;</code> that calls <code>setExpired()</code> whenever an invoice is inserted or modified. This ensures the cache stays fresh when invoices are created, edited, or deleted.</li>
-  <li><strong><code>auftragsCacheListener</code></strong> — a <code>CacheListener</code> registered on <code>AuftragsCache</code>. Implements the mutual-refresh pattern: when <code>AuftragsCache</code> finishes its refresh, this listener detects it and triggers a second refresh cycle for both caches to resolve cross-references.</li>
-</ul>
-
-<h3>Mutual Refresh Pattern (Cyclic Dependency Resolution)</h3>
-<p><code>AuftragsCache</code> and <code>AuftragsRechnungCache</code> depend on each other's data. The solution uses a <code>ready</code> flag:</p>
-<ol>
-  <li>First <code>AuftragsCache.refresh()</code> runs — this cache's data is still empty</li>
-  <li><code>onAfterCacheRefresh</code> fires, sets <code>ready = true</code>, unregisters the listener</li>
-  <li><code>AuftragsRechnungCache.forceReload()</code> runs — now has <code>AuftragsCache</code> data available</li>
-  <li><code>AuftragsCache.forceReload()</code> runs again — now has this cache's data available</li>
-  <li>Both caches are fully populated</li>
-</ol>
-
-<h3>Public Methods</h3>
-
-<h4><code>getRechnungsPosInfoByAuftragId(auftragId: Long?): List&lt;RechnungPosInfo&gt;?</code></h4>
-<p>Returns invoice positions assigned to a given order. Results are sorted by invoice number, then position number. Returns <code>null</code> if <code>auftragId</code> is null. Calls <code>checkRefresh()</code> to trigger lazy cache population if needed.</p>
-
-<h4><code>getRechnungsPosInfosByAuftragsPositionId(auftragsPositionId: Long?): Set&lt;RechnungPosInfo&gt;?</code></h4>
-<p>Returns invoice positions assigned to a specific order position. Returns <code>null</code> for null input.</p>
-
-<h3>Refresh Logic</h3>
-<p><code>refresh()</code> queries <code>rechnungJdbcService.selectRechnungsPositionenWithAuftragPosition()</code> for the raw JDBC result set (faster than JPA for this bulk operation), then:</p>
-<ul>
-  <li>Iterates all invoice-position-to-order-position links</li>
-  <li>Skips deleted records and null references, logging errors for missing order positions</li>
-  <li>Populates three <code>TreeSet</code>-backed maps (auto-sorted) for each dimension</li>
-  <li>Assigns the new maps atomically to the instance fields</li>
-  <li>Logs initialization duration in seconds</li>
-</ul>
-
-<h3>Invalidation</h3>
-<p>When any <code>RechnungDO</code> is inserted or modified, <code>rechnungListener</code> calls <code>setExpired()</code>. The next call to a public getter method will trigger <code>checkRefresh()</code> → <code>refresh()</code>, lazily rebuilding the cache mapping.</p>
-
-<h2>Related Classes</h2>
-<ul>
-  <li><strong>Peer:</strong> <code>AuftragsCache</code> — mutual refresh partner; provides <code>getOrderInfoByPositionId()</code></li>
-  <li><strong>Peer:</strong> <code>RechnungCache</code> — provides <code>getRechnungInfo()</code> and <code>ensureRechnungPosInfo()</code></li>
-  <li><strong>Service:</strong> <code>RechnungJdbcService</code> — raw JDBC query for performance</li>
-  <li><strong>Data:</strong> <code>RechnungPosInfo</code> — value object representing an invoice position in the cache</li>
-  <li><strong>Framework:</strong> <code>AbstractCache</code> — base class providing <code>checkRefresh()</code>/<code>setExpired()</code>/<code>forceReload()</code></li>
+  <li><code>isIn(vararg state: AuftragsOrderState): Boolean</code> — checks if this value matches any of the given states. Used in conditional logic throughout order processing.</li>
 </ul>
 
 <h2>Git History</h2>
 <div class="hist"><pre>
 868d6abb7 2025 -> 2026
-51d352133 AuftragsCache / AuftragsRechnungsCache handling refactored (cyclic usage resolved by running caches twice on initialization)
 63081666f Source file headers: 2024-> 2025.
-22ccc4877 WIP: Scripting
-884ff2c70 Debug message added (missing debitor invoices in orders in production only).
-c9508769a Clone of invoices.
+42dc9fa16 Orders: ordered -> commissioned.
 d02c8a770 Migration stuff in progress...
-ff2cc4cfa Migration stuff in progress... (all tests of all packages: OK).
-f31e8064e Migration stuff in progress...
-2e9839891 Migration stuff in progress...
-973fbf518 Migration stuff in progress...
-ba2479571 Migration stuff in progress...
-b3293f0cc PersistenceService/Context: stats handling improved.
-b47c21af6 Refactored caching and calculations with invoices (not yet finished)
+b6092df09 Copyright 2023 -> 2024
+ab45d51fa Copyright 2001-2022 -> 2001-2023.
+5f7ef41b8 Copyright 2021 -> 2022
+ceb63e8a1 Source code header: (C) 2001-2021.
+7c79f1922 Copyright of source header -> 2020.
+dd5ca38ac CopyRight of all java file-header updated or created.
+9ebb88522 Initial commit
 </pre></div>
 
 </body>

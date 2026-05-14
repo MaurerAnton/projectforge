@@ -1,86 +1,25 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>#968: AddressPagesRest</title>
-<style>
-body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:2em;color:#444}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}
-</style>
-</head>
-<body>
-<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="967.html">← Prev</a> · <a href="969.html">Next →</a></div>
-<h1>#968: <code>AddressPagesRest</code></h1>
-<div class="meta">
-<strong>Type:</strong> REST Controller (Spring) &nbsp;|&nbsp; <strong>Purpose:</strong> Address book CRUD, import/export, VCF parsing, duplicate detection, image handling<br>
-<strong>Source:</strong> <code>projectforge-rest/src/main/kotlin/org/projectforge/rest/AddressPagesRest.kt</code><br>
-<strong>Extends:</strong> <code>AbstractDTOPagesRest&lt;AddressDO, Address, AddressDao&gt;</code><br>
-<strong>Endpoint:</strong> <code>/rs/address</code>
-</div>
-<div class="c">
-<p>The <strong>primary REST controller</strong> for the address book module — one of the largest and most feature-rich controllers in ProjectForge. Handles full CRUD, duplicate detection, VCF (vCard) import/export, address text parsing, image upload/preview, favorite management, filter-based Excel export, and CardDAV integration. This is the most actively developed controller with 200+ commits in its history.</p>
-</div>
-
-<h2>Architecture &amp; Design</h2>
-
-<h3>Class Hierarchy</h3>
-<pre>AbstractPagesRest
-  └─ AbstractDTOPagesRest&lt;AddressDO, Address, AddressDao&gt;
-       └─ AddressPagesRest</pre>
-
-<h3>Dependency Injection</h3>
-<table>
-<tr><th>Dependency</th><th>Type</th><th>Purpose</th></tr>
-<tr><td><code>addressDao</code></td><td><code>AddressDao</code></td><td>Primary data access (provided via <code>baseDao</code>)</td></tr>
-<tr><td><code>personalAddressDao</code></td><td><code>PersonalAddressDao</code></td><td>User-specific favorite/ownership data</td></tr>
-<tr><td><code>addressImageDao</code></td><td><code>AddressImageDao</code></td><td>Image storage and retrieval</td></tr>
-<tr><td><code>addressImageCache</code></td><td>Cache</td><td>Cached image lookups for list performance</td></tr>
-<tr><td><code>addressTextImportService</code></td><td>Service</td><td>Email signature / text parsing engine</td></tr>
-<tr><td><code>addressExport</code></td><td>Excel exporter</td><td>Excel export of address data</td></tr>
-<tr><td><code>addressServicesRest</code></td><td>REST service</td><td>Image upload, VCF processing, language lists</td></tr>
-<tr><td><code>sipgateConfiguration</code></td><td>Config</td><td>Phone call integration availability</td></tr>
-<tr><td><code>smsSenderConfig</code></td><td>Config</td><td>SMS integration availability</td></tr>
-<tr><td><code>carddavServerEnabled</code></td><td>Config</td><td>CardDAV server feature flag</td></tr>
-</table>
-
-<h3>Key Features</h3>
-<ul>
-<li><strong>Duplicate Detection:</strong> <code>onWatchFieldsUpdate()</code> monitors <code>name</code>/<code>firstName</code> changes and queries the DAO for potential duplicates. Uses markdown-formatted alert messages.</li>
-<li><strong>VCF Import Reconciliation:</strong> <code>reconcileImportStorageAfterAddressChange()</code> synchronizes the import storage state after CRUD operations, marking entries as IMPORTED.</li>
-<li><strong>Modal Edit Flow:</strong> <code>onAfterEdit()</code> returns <code>CLOSE_MODAL</code> when editing in modal context, with updated import entries for VCF import context.</li>
-<li><strong>Text Parser:</strong> <code>parseText()</code> endpoint delegates to <code>AddressTextImportService</code> to parse email signatures/address blocks. <code>applyParsedData()</code> applies selected parsed fields to the address DTO.</li>
-<li><strong>Image Handling:</strong> <code>onAfterSaveOrUpdate()</code> manages image lifecycle — deleting when <code>imageDeleted</code> flag is set, uploading from session attributes when provided.</li>
-<li><strong>VCF Image Support:</strong> <code>applyParsedData()</code> handles Base64-encoded VCF images forwarded to the frontend for upload.</li>
-<li><strong>Excel Export:</strong> <code>exportAsExcel()</code> generates an Excel file of address data including favorite information.</li>
-<li><strong>Validation:</strong> Requires at least one of <code>name</code>, <code>firstName</code>, or <code>organization</code>; requires at least one address book assignment.</li>
-<li><strong>Magic Filters:</strong> Supports <code>myFavorites</code>, <code>doublets</code>, <code>images</code>, and <code>myEntries</code> as synthetic custom result filters.</li>
-</ul>
-
-<h3>List Layout (AG-Grid)</h3>
-<p>Uses <code>AGGridSupport.prepareUIGrid4ListPage()</code> with columns: edit icon (modal), isFavoriteCard (star), name, firstName, lastUpdate, addressStatus, contactStatus, imagePreview, organization, email, phoneNumbers (custom renderer), addressbookList. Multi-row selection support for mass operations. Row click opens the address view page in a modal.</p>
-
-<h3>Edit Layout</h3>
-<p>Complex multi-fieldset layout with business/private/postal address sections, text parser collapse panel, duplicate warning alert, image upload component, and public key fields. Watch fields on <code>name</code>/<code>firstName</code> trigger duplicate checks.</p>
-
-<h3>Menu Items</h3>
-<p>Injects CardDAV info, vCard export, vCard import, Apple Script download, and custom GEO context menu entries into the layout menu.</p>
-
-<h2>Git History</h2>
-<div class="hist"><pre>
-868d6abb7 2025 -> 2026
-69c8d9d00 AddressImportUploadPageRest: handling of deletion, undeletion and forced deletion.
-c4c2b2a51 DynamicAGGrid: autoscrolling to highlighted row (also for address list and view)
-bbf6b792c VCard upload: special handling of form field.
-eeaafe0df Adresses: image-handling: minimizing images approx. 100k with JPEG, recalculation of images and previews for admins.
-b3f6d19b3 WIP: address vcards import: image handling.
-a5be6fdda Fix endless spinner after 2FA redirect on list pages
-4a418b988 WIP: AddressImportUploadPage
-4650706f7 WIP: vcards import
-d4fd0baea WIP: AddressTextParser
-76f216b0f AbstractPagesRest: param request added to open functions, WIP. address vcf upload
-30ec0db73 AddressImportReconciler
-... (+190 more commits, abridged for space)
-9ebb88522 Initial commit
-</pre></div>
-</body>
-</html>
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>#968</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}.hist{font-size:.85em;color:#555}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}</style></head>
+<body><div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="967.html">← Prev</a> · <a href="969.html">Next →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/kotlin/org/projectforge/business/fibu/ProjektDao.kt" target="_blank" title="View source on GitHub">📄 source</a></div>
+<h1>#968: <code>ProjektDao.kt</code></h1>
+<div class="meta"><code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/ProjektDao.kt</code> Data Access Object (DAO), projectforge-business/src/main/kotlin/org/projectforge/business/fibu/ProjektDao.kt <span style="color:#888">228 lines · 158 code · 45 comments · 25 blank</span></div>
+<div class="c">Spring <code>@Service</code> DAO extending <code>BaseDao&lt;ProjektDO&gt;</code> for CRUD operations on projects. Manages project-kunde, project-task, and project-manager-group relationships. Supports full-text search across kunde, division, manager names. Handles filtering by ended/not-ended status and provides methods for <code>setKunde</code>, <code>setTask</code>, <code>setProjektManagerGroup</code>, and <code>getProjekt</code> by kunde+nummer or internKost2_4+nummer. Integrates history entries from <code>Kost2DO</code> children. Access controlled via <code>UserRightId.PM_PROJECT</code>.</div>
+<h2>Git History</h2><div class="hist"><pre>868d6abb7 2026-01-01 Kai Reinhard: 2025 -> 2026
+63081666f 2025-01-01 Kai Reinhard: Source file headers: 2024-> 2025.
+db2599ab8 2024-12-24 Kai Reinhard: History in orderbook, incming/outgoing invoices and projects.
+b810d1c78 2024-11-09 Kai Reinhard: Migration stuff in progress... (all tests of all packages: OK).
+5989b32fd 2024-10-16 Kai Reinhard: BaseDao: mechanism of onChangeLister refactored.
+1b50060c3 2024-10-15 Kai Reinhard: BaseDao: renamed: get -> find, save -> insert, getList -> select, load -> select
+87aaf6a5a 2024-10-15 Kai Reinhard: Migration stuff in progress... BaseDao refactored (not yet finished) internal* methods renamed.
+3aeda5ef5 2024-10-13 Kai Reinhard: Big change: all save|update|...InTrans renamed (InTrans removed). PfPesistenceContext as param not needed anymore (ThreadLocal is used instead). (all tests of all packages: OK).
+e66d5f5f7 2024-10-13 Kai Reinhard: Migration stuff in progress... TaskTree -> Kotlin and runs now in isolated entity manager
+b095e6f7d 2024-10-01 Kai Reinhard: !!!!! Big change of Transaction handling: Re-uses PfPersistenceContext as much as possible (not yet finished). Tests doesn't yet run.
+4c04cfd65 2024-09-14 Kai Reinhard: MAJOR-CHANGE! Migration of integer id's to Long id's (including fk's etc.)
+5bafe7941 2024-08-24 Kai Reinhard: @Repository -> @Service. @Transactional-Annotations removed.
+ee7b7fe15 2024-08-24 Kai Reinhard: Migration stuff in progress...
+f2f7cff74 2024-08-24 Kai Reinhard: Migration stuff in progress...
+9d8b94352 2024-08-19 Kai Reinhard: Migration stuff in progress...
+a2f3f99b2 2024-08-19 Kai Reinhard: Migration stuff in progress...
+67ce75fe9 2024-08-19 Kai Reinhard: Migration stuff in progress...
+e33c8b9c2 2024-08-16 Kai Reinhard: Migration stuff in progress...</pre></div>
+</body></html>

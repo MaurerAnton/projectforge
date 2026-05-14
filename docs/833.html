@@ -1,2 +1,127 @@
-<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>#833</title><style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333}a{color:#0366d6}.meta{font-size:.9em;margin:1em 0}.nav{font-size:.9em;color:#888;margin-bottom:1em}</style></head><body><div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="832.html">← Prev</a> · <a href="834.html">Next →</a></div>
-<h1>833: AddressUpdatedResultFilter.kt</h1><div class=m><p>Kotlin address filter — filters addresses that were recently modified.</p></div>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>#833: AddressbookDao.kt</title>
+<style>
+body { font-family: system-ui, sans-serif; max-width: 960px; margin: 2em auto; padding: 0 1em; background: #fafafa; color: #222; line-height: 1.6; }
+h1 { border-bottom: 2px solid #333; padding-bottom: 0.3em; }
+h2 { margin-top: 2.5em; border-bottom: 1px solid #ddd; padding-bottom: 0.2em; color: #333; }
+h3 { margin-top: 2em; color: #444; }
+a { color: #0366d6; }
+.c { border-left: 3px solid #ddd; padding: .5em 1em; margin: 1em 0; background: #fff; }
+.nav { font-size: .9em; color: #888; margin-bottom: 1em; }
+.meta { font-size: .9em; margin: 1em 0; color: #555; }
+code { background: #f0f0f0; padding: 0 .2em; font-size: .93em; }
+pre { background: #f5f5f5; padding: .8em 1em; border: 1px solid #ddd; border-radius: 4px; overflow-x: auto; font-size: .88em; line-height: 1.4; }
+table { border-collapse: collapse; width: 100%; margin: 1em 0; }
+th, td { border: 1px solid #ddd; padding: .5em .8em; text-align: left; font-size: .9em; }
+th { background: #f5f5f5; font-weight: 600; }
+.hist { font-size: .85em; color: #555; }
+</style>
+</head>
+<body>
+
+<div class="nav">
+  <a href="https://maureranton.github.io/projectforge/">← Index</a> ·
+  <a href="file-index.html">← File index</a> ·
+  <a href="832.html">← Prev</a> ·
+  <a href="834.html">Next →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/kotlin/org/projectforge/business/address/AddressbookDao.kt" target="_blank" title="View source on GitHub">📄 source</a></div>
+
+<h1>#833: <code>AddressbookDao.kt</code></h1>
+
+<div class="meta"><code>projectforge-business/src/main/kotlin/org/projectforge/business/address/AddressbookDao.kt</code> 
+  <strong>Type:</strong> Data Access Object (DAO) — Spring-managed service<br>
+  <strong>Purpose:</strong> Persistence and access-control layer for address book entities<br>
+  <strong>Location:</strong> <code>projectforge-business/src/main/kotlin/org/projectforge/business/address/AddressbookDao.kt</code>
+ <span style="color:#888">174 lines · 120 code · 38 comments · 16 blank</span></div>
+
+<div class="c">
+  <strong>Summary:</strong> <code>AddressbookDao</code> is the primary data-access object for <code>AddressbookDO</code> entities. It extends <code>BaseDao</code> to inherit standard CRUD operations (save, update, delete, find, getList, markAsDeleted, undelete) and overrides <code>select()</code> to enforce per-user access-control filtering via <code>AddressbookRight</code>. It is annotated as a Spring <code>@Service</code> singleton and is one of the oldest files in the codebase, present since the initial commit.
+</div>
+
+<h2>Architecture &amp; Position in the System</h2>
+
+<h3>Class Hierarchy</h3>
+<p><code>AddressbookDao</code> extends <code>BaseDao&lt;AddressbookDO&gt;</code>, which itself is a generic Hibernate DAO providing:</p>
+<ul>
+  <li><code>save(obj)</code> / <code>update(obj)</code> — persist or merge an entity</li>
+  <li><code>delete(obj)</code> / <code>markAsDeleted(obj)</code> — hard or soft-delete</li>
+  <li><code>select(filter)</code> — filtered list queries (overridden here)</li>
+  <li><code>find(id)</code> / <code>getList(filter)</code> — single-retrieval and paginated lists</li>
+  <li><code>undelete(obj)</code> — restore a soft-deleted entity</li>
+</ul>
+
+<h3>Access-Control Integration</h3>
+<p>The DAO participates in ProjectForge's rights-management system in two ways:</p>
+<table>
+  <tr><th>Mechanism</th><th>Description</th></tr>
+  <tr>
+    <td><code>UserRightId.MISC_ADDRESSBOOK</code></td>
+    <td>Set in the <code>init</code> block. This right is checked by <code>BaseDao</code> before any mutating operation (save, update, delete, etc.) to ensure the caller holds the <em>MISC_ADDRESSBOOK</em> permission.</td>
+  </tr>
+  <tr>
+    <td><code>AddressbookRight</code></td>
+    <td>Used inside the overridden <code>select()</code> method. Builds an HQL query that joins onto the user/group rights tables and restricts results to address books the current user can read, based on the ownership and group-access rules inherited from <code>BaseUserGroupRightsDO</code>.</td>
+  </tr>
+</table>
+
+<h3>Dependencies</h3>
+<table>
+  <tr><th>Dependency</th><th>Role</th></tr>
+  <tr><td><code>UserDao</code></td><td>Autowired; used by <code>setOwner()</code> to resolve a <code>PFUserDO</code> by its numeric ID before assigning it as the owner of an address book.</td></tr>
+  <tr><td><code>HistoryFormatUtils</code></td><td>Autowired; provides formatting helpers for audit-log (history) entries, likely used via <code>BaseDao</code> when recording changes.</td></tr>
+</table>
+
+<h3>Key Methods</h3>
+
+<h4><code>setOwner(ab: AddressbookDO, userId: Long)</code></h4>
+<p>Resolves a <code>PFUserDO</code> via <code>UserDao</code> and assigns it to the address book's <code>owner</code> field. This is a convenience method that centralises the owner-lookup pattern used by UI controllers.</p>
+
+<h4><code>override fun select(filter: BaseSearchFilter): List&lt;AddressbookDO&gt;</code></h4>
+<p>Overrides the base implementation to cast the generic filter into an <code>AddressbookFilter</code> and incorporate <code>AddressbookRight</code>-based filtering. The generated HQL adds JOIN clauses on the rights tables so that only address books visible to the current user (by ownership, group membership, or explicit access grants) are returned. Users without <code>MISC_ADDRESSBOOK</code> may see an empty list.</p>
+
+<h4><code>override fun newInstance(): AddressbookDO</code></h4>
+<p>Factory method required by the generic DAO infrastructure; returns a plain new <code>AddressbookDO()</code>.</p>
+
+<h4><code>override val additionalSearchFields: Array&lt;String&gt;</code></h4>
+<p>Returns <code>ADDITIONAL_SEARCH_FIELDS</code>, a constant array listing the entity properties that should be included in full-text / Hibernate Search queries beyond the default fields inherited from <code>BaseDO</code>.</p>
+
+<h2>Git History</h2>
+<div class="hist">
+  <table>
+    <tr><th>Commit</th><th>Description</th></tr>
+    <tr><td><code>868d6abb7</code></td><td>Copyright year bump: 2025 → 2026</td></tr>
+    <tr><td><code>63081666f</code></td><td>Source file headers: 2024 → 2025</td></tr>
+    <tr><td><code>4c04cfd65</code></td><td>MAJOR: Migration of integer IDs to Long IDs (changed all <code>Integer</code>-based keys to <code>Long</code>)</td></tr>
+    <tr><td><code>b6092df09</code></td><td>Copyright 2023 → 2024</td></tr>
+    <tr><td><code>ab45d51fa</code></td><td>Copyright 2001-2022 → 2001-2023</td></tr>
+    <tr><td><code>5f7ef41b8</code></td><td>Copyright 2021 → 2022</td></tr>
+    <tr><td><code>ceb63e8a1</code></td><td>Source code header: (C) 2001-2021</td></tr>
+    <tr><td><code>7c79f1922</code></td><td>Copyright of source header → 2020</td></tr>
+    <tr><td><code>dd5ca38ac</code></td><td>CopyRight of all java file-headers updated or created</td></tr>
+    <tr><td><code>2d86a8cd6</code></td><td>PROJECTFORGE-2306: Refactorings for keeping access check at update time (ensured <code>UserRightId</code> checks are honoured on every write path)</td></tr>
+    <tr><td><code>9ebb88522</code></td><td>Initial commit — one of the original files from the project's founding import</td></tr>
+  </table>
+</div>
+
+<h2>Design Rationale</h2>
+
+<h3>Why a separate DAO class?</h3>
+<p>ProjectForge follows the standard DAO-per-entity pattern. Each business entity gets its own DAO so that cross-cutting concerns (access control, auditing, full-text indexing) can be customised per entity. The generic <code>BaseDao</code> handles boilerplate CRUD and the per-entity subclass injects entity-specific rules — here the address-book access logic.</p>
+
+<h3>Why override <code>select()</code> rather than use Spring Security annotations?</h3>
+<p>ProjectForge predates Spring Security's widespread adoption and uses its own rights-management layer built on HQL JOINs. Overriding <code>select()</code> allows the access checks to be compiled directly into the database query, avoiding the N+1 problem that would arise from loading all rows and then filtering in application code. This approach also lets the filter combine access-control predicates with user-supplied search criteria in a single HQL statement.</p>
+
+<h3>Why is an <code>AddressbookRight</code> class used instead of inline HQL?</h3>
+<p>The <code>AddressbookRight</code> class encapsulates the user/group permission model defined by <code>BaseUserGroupRightsDO</code>. By delegating to a separate class, the same access logic can be reused in reporting, export, and REST endpoints without duplicating the multi-JOIN pattern. It also makes the access model easier to test in isolation.</p>
+
+<h3>Why <code>@Service</code> instead of <code>@Repository</code>?</h3>
+<p>While Spring's <code>@Repository</code> stereotype is typical for DAOs, ProjectForge uses <code>@Service</code> throughout its DAO layer. This likely reflects a convention established before <code>@Repository</code>'s exception-translation feature was widely adopted, or a deliberate choice to treat DAOs as transactional service components. The functional difference is negligible since both are Spring-managed singletons.</p>
+
+<h3>Longevity</h3>
+<p>This file has been in the codebase since the initial commit (<code>9ebb88522</code>) and has survived every major refactoring — the integer-to-Long migration, multiple copyright updates, and the access-check refactoring of PROJECTFORGE-2306 — attesting to the stability of the DAO abstraction.</p>
+
+</body>
+</html>

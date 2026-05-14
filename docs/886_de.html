@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>#886: AbstractRechnungCache.kt [DE]</title>
+<style>
+body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}
+h1{border-bottom:2px solid #333;padding-bottom:.3em}
+h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}
+h3{margin-top:2em;color:#444}
+a{color:#0366d6}
+.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}
+.nav{font-size:.9em;color:#888;margin-bottom:1em}
+.meta{font-size:.9em;margin:1em 0;color:#555}
+code{background:#f0f0f0;padding:0 .2em;font-size:.93em}
+pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}
+table{border-collapse:collapse;width:100%;margin:1em 0}
+th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}
+th{background:#f5f5f5;font-weight:600}
+.hist{font-size:.85em;color:#555}
+</style>
+</head>
+<body>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← Dateiindex</a> · <a href="885.html">← Vorherige</a> · <a href="887.html">Nächste →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/kotlin/org/projectforge/business/fibu/AbstractRechnungCache.kt" target="_blank" title="Quelle auf GitHub ansehen">📄 Quelle</a></div>
+
+<h1>#886: <code>AbstractRechnungCache.kt</code></h1>
+
+<div class="meta"><code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/AbstractRechnungCache.kt</code> 
+<p><strong>Typ:</strong> Kotlin-abstrakte Klasse, die <code>AbstractCache</code> erweitert — Cache-Schicht für Rechnungsberechnungen</p>
+<p><strong>Zweck:</strong> Zwischenspeichert vorberechnete Rechnungssummen (<code>RechnungInfo</code>) und Positionsberechnungen (<code>RechnungPosInfo</code>), um redundante Neuberechnungen zu vermeiden. Unterstützt sowohl ausgehende Rechnungen (<code>RechnungDO</code>) als auch eingehende Rechnungen (<code>EingangsrechnungDO</code>) über seinen generischen Typparameter.</p>
+<p><strong>Quellpfad:</strong> <code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/AbstractRechnungCache.kt</code></p>
+ <span style="color:#888">136 Zeilen · 79 Code · 44 Kommentare · 13 leer</span></div>
+
+<div class="c">
+<p>Eine <strong>In-Memory-Performance-Cache</strong>-Schicht auf Basis des <code>AbstractCache</code>-Frameworks. Rechnungsberechnungen (Netto-/Bruttosummen, Umsatzsteueraufschlüsselung, Kostenverteilung) sind aufwändig, da sie das Durchlaufen des gesamten Positionsbaums mit Kostenzuordnungsabfragen erfordern. Dieser Cache speichert vorberechnete <code>RechnungInfo</code>- und <code>RechnungPosInfo</code>-Objekte, die nach Entitäts-ID indiziert sind, mit automatischer Aktualisierung über den <code>CacheHelper</code>-Scheduling-Mechanismus. Der Cache wurde von <code>synchronized</code>-Blöcken auf <code>ConcurrentHashMap</code> umgestellt, um einen Deadlock zu beseitigen.</p>
+</div>
+
+<h2>Typparameter &amp; Konstruktor</h2>
+<pre>abstract class AbstractRechnungCache(
+    val entityClass: KClass&lt;out AbstractRechnungDO&gt;,
+    protected val rechnungJdbcService: RechnungJdbcService,
+) : AbstractCache()</pre>
+
+<table>
+<tr><th>Parameter</th><th>Beschreibung</th></tr>
+<tr><td><code>entityClass</code></td><td>Die Kotlin-Klassenreferenz für den Rechnungsentitätstyp (<code>RechnungDO::class</code> oder <code>EingangsrechnungDO::class</code>) — wird für JDBC-Abfragen und Logging verwendet</td></tr>
+<tr><td><code>rechnungJdbcService</code></td><td>JDBC-Dienst für effizientes Massenladen von Rechnungsinformationen aus der Datenbank (umgeht Hibernate aus Performancegründen)</td></tr>
+</table>
+
+<h2>Interner Zustand</h2>
+<table>
+<tr><th>Feld</th><th>Typ</th><th>Beschreibung</th></tr>
+<tr><td><code>invoiceInfoMap</code></td><td><code>ConcurrentHashMap&lt;Long, RechnungInfo&gt;</code></td><td>Primärer Cache: Rechnungs-ID → aggregierte Rechnungsberechnungen</td></tr>
+<tr><td><code>invoicePosInfoMap</code></td><td><code>ConcurrentHashMap&lt;Long, RechnungPosInfo&gt;</code></td><td>Sekundärer Cache: Positions-ID → positionsbezogene Berechnungen</td></tr>
+</table>
+
+<p>Beide Maps verwenden <code>ConcurrentHashMap</code> (keine synchronisierten Blöcke) — diese Änderung wurde im Commit <code>85d8930b3</code> vorgenommen, um einen Deadlock zu beheben, der auftrat, wenn Cache-Operationen unter Synchronisation miteinander interagierten.</p>
+
+<h2>Öffentliche API</h2>
+
+<h3><code>update(invoice: AbstractRechnungDO)</code></h3>
+<p>Erzwingt die Neuberechnung einer einzelnen Rechnung und speichert das Ergebnis im Cache. Wird aufgerufen, wenn eine Rechnung geändert wird (eingefügt, aktualisiert oder gelöscht über die DAO-Schicht). Verwendet <code>RechnungCalculator.calculate(invoice)</code>, um aktuelle Werte zu berechnen.</p>
+
+<h3><code>ensureRechnungInfo(rechnung: AbstractRechnungDO): RechnungInfo</code></h3>
+<p>Garantiert, dass eine <code>RechnungInfo</code> für die angegebene Rechnung existiert. Wenn bereits zwischengespeichert, wird die gecachte Version zurückgegeben (und setzt <code>rechnung.info</code>). Andernfalls wird sie über <code>RechnungCalculator</code> berechnet, im Cache gespeichert und zurückgegeben. Dies ist der bevorzugte Zugriff — er funktioniert auch, wenn der Positionsbaum noch nicht nachgeladen wurde.</p>
+
+<h3><code>getRechnungInfo(rechnungId: Long?): RechnungInfo?</code></h3>
+<p>Gibt zwischengespeicherte Rechnungsinformationen nach ID zurück (null-sicher für den ID-Parameter). Ruft <code>checkRefresh()</code> auf, das sicherstellt, dass der Cache nicht veraltet ist.</p>
+
+<h3><code>getRechnungInfo(rechnung: AbstractRechnungDO?): RechnungInfo?</code></h3>
+<p>Überladung, die die ID aus der Entität extrahiert. Null-sicher.</p>
+
+<h3><code>ensureRechnungPosInfo(pos: AbstractRechnungsPositionDO): RechnungPosInfo</code></h3>
+<p>Analog zu <code>ensureRechnungInfo</code>, aber für einzelne Positionen. Stellt sicher, dass die <code>RechnungInfo</code> der übergeordneten Rechnung zuerst existiert (wird als Kontext benötigt), und berechnet dann positionsspezifische Informationen über <code>RechnungCalculator.calculate(posInfo, pos)</code>.</p>
+
+<h3><code>getRechnungPosInfo(rechnungPosId: Long?): RechnungPosInfo?</code></h3>
+<p>Gibt zwischengespeicherte Positionsinformationen nach ID zurück. Null-sicher.</p>
+
+<h2>Cache-Aktualisierung (<code>override fun refresh()</code>)</h2>
+<p>Wird automatisch vom <code>CacheHelper</code>-Framework zeitgesteuert und während der <code>checkRefresh()</code>-Absicherung aufgerufen. Die Aktualisierungsstrategie verwendet <strong>Copy-and-Swap</strong> für die Thread-Sicherheit:</p>
+<ol>
+<li>Erstellt neue <code>ConcurrentHashMap</code>-Instanzen (<code>nInvoiceInfoMap</code>, <code>nInvoicePosInfoMap</code>)</li>
+<li>Lädt alle Rechnungsinformationen massenweise über <code>rechnungJdbcService.selectRechnungInfos(entityClass)</code> — dies verwendet JDBC direkt für die Leistung und umgeht Hibernate</li>
+<li>Befüllt beide Maps aus dem JDBC-Ergebnissatz</li>
+<li>Tauscht atomar die neuen Maps anstelle der alten aus</li>
+</ol>
+<p>Dieser Ansatz bedeutet, dass der Cache <strong>nie länger als einen Aktualisierungszyklus veraltet ist</strong> und Lesevorgänge nie durch den Aktualisierungsvorgang blockiert werden.</p>
+
+<h2>Architekturanmerkungen</h2>
+<ul>
+<li>Konkrete Unterklassen: <code>RechnungCache</code> (für <code>RechnungDO</code>) und <code>EingangsrechnungCache</code> (für <code>EingangsrechnungDO</code>), die jeweils nur den <code>entityClass</code>-Parameter bereitstellen</li>
+<li>Verwendet Kotlins <code>kotlin.reflect.KClass</code> anstelle von Javas <code>Class</code> für Typsicherheit</li>
+<li>Das <code>@Transient lateinit var info</code> auf <code>AbstractRechnungDO</code> ist das Begleitfeld, das dieser Cache befüllt</li>
+<li>Während der Aktualisierung werden Positionen ohne IDs als Fehler protokolliert — dies kann bei geklonten Rechnungen passieren, bei denen Positions-IDs noch nicht zugewiesen wurden</li>
+<li>Das <code>LogDuration</code>-Dienstprogramm verfolgt die Aktualisierungsleistung in den Protokollen</li>
+</ul>
+
+<h2>Git-Verlauf</h2>
+<div class="hist"><pre>868d6abb7 2025 -> 2026
+85d8930b3 AbstractRechnungCache: Deadlock entfernt durch Ersetzen von Sync-Blöcken durch ConcurrentHashMaps
+63081666f Quelltextdatei-Header: 2024 -> 2025.
+2d324f2bb Finanzen: Eingehende Rechnungen korrigiert.
+12610fee2 Migration in Arbeit... (alle Tests aller Pakete: OK).
+ff2cc4cfa Migration in Arbeit... (alle Tests aller Pakete: OK).
+190c0aea1 Migration in Arbeit... (alle Tests aller Pakete: OK).
+2e9839891 Migration in Arbeit...
+ba2479571 Migration in Arbeit...
+b3293f0cc PersistenceService/Context: Statistik-Handling verbessert.
+b47c21af6 Caching und Berechnungen mit Rechnungen umgestaltet (noch nicht abgeschlossen)
+ccb7ca64d Migration in Arbeit...
+41b5c2645 Migration in Arbeit...
+87dd5b87c AuftragsCache umgestaltet, Migration... (alle Tests OK)
+9408b59d7 Migration in Arbeit...
+85b4e1175 PfPersistenceService und PfPersistenceContext: query in executeQuery umbenannt.
+4c04cfd65 GROSSE-ÄNDERUNG! Migration von Integer-IDs zu Long-IDs (einschließlich Fremdschlüsseln usw.)
+2863b30b9 Migration in Arbeit...
+067a4cbb1 Migration in Arbeit...
+9d8b94352 Migration in Arbeit...
+67ce75fe9 Migration in Arbeit...
+e33c8b9c2 Migration in Arbeit...
+</pre></div>
+</body>
+</html>

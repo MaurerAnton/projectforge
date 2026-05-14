@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>#657: AccessException.java [RU]</title>
+<style>
+body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}
+h1{border-bottom:2px solid #333;padding-bottom:.3em}
+h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}
+h3{margin-top:2em;color:#444}
+a{color:#0366d6}
+.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}
+.nav{font-size:.9em;color:#888;margin-bottom:1em}
+.lang{font-size:.85em;color:#888;float:right}
+.lang a{color:#888;text-decoration:none;padding:0 .3em}
+.lang a.active{color:#0366d6;font-weight:600;text-decoration:underline}
+.meta{font-size:.9em;margin:1em 0;color:#555}
+code{background:#f0f0f0;padding:0 .2em;font-size:.93em}
+pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}
+table{border-collapse:collapse;width:100%;margin:1em 0}
+th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}
+th{background:#f5f5f5;font-weight:600}
+.hist{font-size:.85em;color:#555}
+</style>
+</head>
+<body>
+<div class="lang"><a href="657.html">EN</a> · <a href="657_de.html">DE</a> · <a href="657_ru.html" class="active">RU</a> · <a href="657_fr.html">FR</a> · <a href="657_es.html">ES</a></div>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Индекс</a> · <a href="file-index.html">← Индекс файлов</a> · <a href="200.html">← Предыдущий</a> · <a href="331.html">Следующий →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/java/org/projectforge/framework/access/AccessException.java" target="_blank" title="Просмотреть исходный код на GitHub">📄 исходник</a></div>
+<h1>#657: <code>AccessException.java</code></h1>
+<div class="meta"><code>projectforge-business/src/main/java/org/projectforge/framework/access/AccessException.java</code> Тип: Java · Роль: Компонент · Исходник: projectforge-business/src/main/java/org/projectforge/framework/access/AccessException.java <span style="color:#888">246 строк · 160 кода · 52 комментария · 34 пустых</span></div>
+<div class="c">Файл исходного кода <code>projectforge-business/src/main/java/org/projectforge/framework/access/AccessException.java</code>, содержащий Java-код для слоя компонентов.</div>
+<h2>Структура кода</h2>
+<p>Пакет: <code>org.projectforge.framework.access</code></p>
+<p>Классы: <code>AccessException</code></p>
+<p>Расширяет: <code>UserException</code></p>
+<p>Методы (11): <code>getUser</code>, <code>getTaskId</code>, <code>getAccessType</code>, <code>setAccessType</code>, <code>getTaskNode</code>, <code>setClazz</code>, <code>getOperationType</code>, <code>setOperationType</code>, <code>setMessage</code>, <code>setUser</code>, <code>toString</code></p>
+<p>Поля (7): <code>serialVersionUID</code>, <code>taskTree</code>, <code>user</code>, <code>taskId</code>, <code>accessType</code>, <code>message</code>, <code>operationType</code></p>
+<p>Импорты: 10 пакетов</p>
+<h2>Исходный код (сокращённый)</h2>
+<pre>
+package org.projectforge.framework.access;
+
+import org.apache.commons.lang3.builder.ToStringBuilder;
+import org.projectforge.business.task.TaskDO;
+import org.projectforge.business.task.TaskNode;
+import org.projectforge.business.task.TaskTree;
+import org.projectforge.common.i18n.MessageParam;
+import org.projectforge.common.i18n.MessageParamType;
+import org.projectforge.common.i18n.UserException;
+import org.projectforge.framework.persistence.user.api.ThreadLocalUserContext;
+import org.projectforge.framework.persistence.user.entities.PFUserDO;
+
+import java.util.ResourceBundle;
+
+/**
+ * Этот класс будет выброшен AccessChecker, если у пользователя нет доступа к запрашиваемому действию.
+ *
+ * @author Kai Reinhard (k.reinhard@micromata.de)
+ */
+public class AccessException extends UserException {
+  private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(AccessException.class);
+
+  private static final long serialVersionUID = 147795804616526958L;
+
+  public final static String I18N_KEY_STANDARD = &quot;access.exception.standard&quot;;
+
+  public final static String I18N_KEY_STANDARD_WITH_TASK = &quot;access.exception.standardWithTask&quot;;
+
+  private TaskTree taskTree;
+
+  protected PFUserDO user = null;
+
+  protected Long taskId = null;
+
+  protected AccessType accessType = null;
+
+  protected String message = null;
+
+  protected OperationType operationType = null;
+
+  protected Class&lt;?&gt; clazz = null;
+
+  public AccessException(final String i18nKey, final Object... params) {
+    this(ThreadLocalUserContext.getLoggedInUser(), i18nKey, params);
+  }
+
+  public AccessException(final PFUserDO user, final String i18nKey, final Object... params) {
+    super(i18nKey, params);
+    this.user = user;
+    log.info(&quot;AccessException: &quot; + this);
+  }
+
+  public AccessException(final AccessType accessType, final OperationType operationType) {
+    this(ThreadLocalUserContext.getLoggedInUser(), accessType, operationType);
+  }
+
+  public AccessException(final PFUserDO user, final AccessType accessType,
+                         final OperationType operationType) {
+    super(I18N_KEY_STANDARD, new MessageParam[]{new MessageParam(accessType), new MessageParam(operationType)});
+    this.user = user;
+    this.accessType = accessType;
+    this.operationType = operationType;
+    log.info(&quot;AccessException: &quot; + this);
+  }
+
+  public AccessException(final Long taskId, final AccessType accessType,
+                         final OperationType operationType) {
+    this(ThreadLocalUserContext.getLoggedInUser(), taskId, accessType, operationType);
+  }
+
+  public AccessException(final PFUserDO user, final Long taskId, final AccessType accessType,
+                         final OperationType operationType) {
+    super(I18N_KEY_STANDARD_WITH_TASK,
+        new MessageParam[]{new MessageParam(taskId), new MessageParam(accessType),
+            new MessageParam(operationType)});
+    this.user = user;
+    this.taskId = taskId;
+    this.accessType = accessType;
+    this.operationType = operationType;
+    log.info(&quot;AccessException: &quot; + this);
+  }
+
+  /**
+   * Порядок аргументов: идентификатор задачи, accessType и operationType.
+   *
+   * @return аргументы для форматирования сообщения типа Object[3].
+   */
+  public Object[] getMessageArgs(final ResourceBundle bundle) {
+    final Object[] result = new Object[3];
+    if (taskTree != null &amp;&amp; this.taskId != null) {
+      final TaskDO task = TaskTree.getInstance().getTaskById(taskId);
+      if (task != null) {
+        result[0] = task.getTitle();
+      } else {
+        result[0] = taskId;
+      }
+    } else {
+      result[0] = taskId;
+    }
+    if (accessType != null) {
+      result[1] = bundle.getString(accessType.getI18nKey());
+    }
+    if (operationType != null) {
+      result[2] = bundle.getString(operationType.getI18nKey());
+    }
+    return result;
+  }
+
+  public MessageParam[] getMessageArgs() {
+    final MessageParam[] result = new MessageParam[3];
+    if (taskTree != null &amp;&amp; this.taskId != null) {
+      final TaskDO task = TaskTree.getInstance().getTaskById(taskId);
+      if (task != null) {
+        result[0] = new MessageParam(task.getTitle());
+      } else {
+        result[0] = new MessageParam(taskId);
+      }
+    } else {
+      result[0] = new MessageParam(taskId);
+// ... (сокращено, всего 224 строки)</pre>
+
+<h2>История Git</h2><div class="hist"><pre>868d6abb7 2025 -> 2026
+63081666f Заголовки файлов исходного кода: 2024 -> 2025.
+67805f2fc ThreadLocalUserContext.user -> ThreadLocalUserContext.loggedInUser (переименовано для избежания недопонимания в коде).
+4c04cfd65 КРУПНОЕ ИЗМЕНЕНИЕ! Миграция целочисленных id на Long id (включая внешние ключи и т.д.)
+b6092df09 Авторские права 2023 -> 2024</pre></div>
+</body>
+</html>

@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>#918: EingangsrechnungsPositionDO.kt [RU]</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:2em;color:#444}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}</style>
+</head>
+<body>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Индекс</a> · <a href="file-index.html">← Индекс файлов</a> · <a href="917.html">← Предыдущий</a> · <a href="919.html">Следующий →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/kotlin/org/projectforge/business/fibu/EingangsrechnungsPositionDO.kt" target="_blank" title="Просмотреть исходный код на GitHub">📄 исходный код</a></div>
+<h1>#918: <code>EingangsrechnungsPositionDO.kt</code></h1>
+<div class="meta"><code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/EingangsrechnungsPositionDO.kt</code> Тип: JPA-сущность (объект данных) · Назначение: представляет позицию строки во входящем счёте (Eingangsrechnung) · Путь: <code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/EingangsrechnungsPositionDO.kt</code> <span style="color:#888">96 строк · 56 кода · 31 комментарий · 9 пустых</span></div>
+<div class="c">Основная доменная сущность, представляющая отдельную позицию/строку во входящем счёте. Расширяет <code>AbstractRechnungsPositionDO</code> и устанавливает связь с родительским <code>EingangsrechnungDO</code>, а также с назначениями затрат (<code>KostZuweisungDO</code>). Индексировано Hibernate-search для полнотекстового поиска.</div>
+
+<h2>Архитектура / Дизайн</h2>
+<h3>Наследование и JPA-маппинг</h3>
+<p>Расширяет <code>AbstractRechnungsPositionDO</code> (общий базовый класс для позиций как входящих, так и исходящих счетов). Объявлен как <code>open</code> (требуется Kotlin + Hibernate для прокси-объектов с ленивой загрузкой). Аннотация <code>@Table</code> маппится на <code>t_fibu_eingangsrechnung_position</code> с <strong>составным уникальным ограничением</strong> на <code>(eingangsrechnung_fk, number)</code> — гарантирует уникальность номеров позиций в пределах одного счёта.</p>
+
+<table>
+<tr><th>Поле</th><th>Тип</th><th>JPA / Примечания</th></tr>
+<tr><td><code>eingangsrechnung</code></td><td><code>EingangsrechnungDO?</code></td><td><code>@ManyToOne(LAZY)</code> — ссылка на родительский счёт. Использует <code>@JsonBackReference</code> для разрыва цикла сериализации. Сериализуется только как ID через <code>@JsonSerialize(IdOnlySerializer)</code>.</td></tr>
+<tr><td><code>rechnungId</code></td><td><code>Long?</code></td><td><code>@Transient</code> — удобный геттер, делегирующий вызов к <code>eingangsrechnung?.id</code>. Переопределяет абстрактное свойство из <code>AbstractRechnungsPositionDO</code>.</td></tr>
+<tr><td><code>kostZuweisungen</code></td><td><code>MutableList&lt;KostZuweisungDO&gt;?</code></td><td><code>@OneToMany(mappedBy="eingangsrechnungsPosition")</code> с <code>@OrderColumn(name="index")</code>. <code>@JsonManagedReference</code> («владеющая» сторона JSON-пары). Аннотировано <code>@PersistenceBehavior(autoUpdateCollectionEntries=true)</code>.</td></tr>
+</table>
+
+<h3>Ключевые методы</h3>
+<ul>
+<li><strong><code>checkKostZuweisungId()</code></strong> — Проверяет, что назначение затрат принадлежит этой позиции, сравнивая FK-ссылку позиции.</li>
+<li><strong><code>newClone()</code></strong> — Создаёт глубокую копию (без ID), включая все назначения затрат. Использует <code>copyValuesFrom()</code> с исключением <code>"id"</code> и <code>"kostZuweisungen"</code>, затем клонирует каждый <code>KostZuweisungDO</code> индивидуально.</li>
+<li><strong><code>newInstance()</code></strong> — Фабричный метод, возвращающий новый пустой <code>EingangsrechnungsPositionDO</code>.</li>
+</ul>
+
+<h3>Стратегия JSON-сериализации</h3>
+<p>Использует <code>@JsonBackReference</code> на <code>eingangsrechnung</code> и <code>@JsonManagedReference</code> на <code>kostZuweisungen</code> для обработки двунаправленных связей без бесконечной рекурсии. Родительский счёт сериализуется только как ID, что делает JSON-ответы компактными.</p>
+
+<h2>История Git</h2>
+<div class="hist"><pre>868d6abb7 2025 -> 2026
+aa20b7708 NewGroupSelectPanel исправлен (используется в мастере). (Eingangs)RechnungsPositionDO: @get:JoinColumn -> mappedBy.
+63081666f Заголовки исходных файлов: 2024 -> 2025.
+0237d5eba Рефакторинг JSON-сериализации: введены IdOnlySerializer и IdsOnlySerializer.
+db2599ab8 История в книге заказов, входящих/исходящих счетах и проектах.
+4bc37b3a1 Миграция в процессе...
+fa194d7f8 Миграция в процессе...
+4c04cfd65 MAJOR-CHANGE! Миграция целочисленных id на Long id (включая внешние ключи и т.д.)
+c04fb0d51 Миграция в процессе...
+06828f490 Миграция в процессе...
+b6092df09 Авторские права 2023 -> 2024
+ab45d51fa Авторские права 2001-2022 -> 2001-2023.
+f984352a0 (Eingangs)Rechnung(sposition): @JsonBackReference/@JsonManagedReference: KostZuweisungDO
+a9cf30719 (Eingangs)Rechnung(sposition): @JsonBackReference/@JsonManagedReference.
+5f7ef41b8 Авторские права 2021 -> 2022
+c0f2b9de0 Функционал арендаторов удалён везде (не тестировалось).
+ceb63e8a1 Заголовок исходного кода: (C) 2001-2021.
+b79632fa2 Добавлена аннотация к EingangsrechnungsPositionDO
+7c79f1922 Авторские права в заголовке исходного кода -> 2020.
+1cf12f943 Rechnungsposition->Kostzuweisung: Исправлена бесконечная петля в JSON-сериализации.
+55d9ef9ce Ничего, форматирование кода
+e3a1188d6 EingangsrechnungPositionDO: проблема производительности: ленивая загрузка родительского Eingangsrechnung.
+bc7b1761c Eingangsrechnungen: Kostzuweisungen исправлены.
+e92b3afd0 Jackson: JsonBackReference/JsonManagedReference -> JsonIdentityInfo
+8675a1dbe Обнаружена серьёзная проблема производительности: все Kotlin JPA-сущности и их свойства объявлены как open. Ленивая загрузка не поддерживалась Hibernate, что приводило к тысячам JPA-запросов...
+a55ef0c14 Большая работа в процессе: рефакторинг (Eingangs)Rechnung*. Обнаружен серьёзный убийца производительности!!!!!
+812b5b751 Большая работа в процессе: рефакторинг (Eingangs)Rechnung*. Обнаружен серьёзный убийца производительности!!!!!
+2c92507bc {Eingangs}RechnungsPositionDO.rechnungId теперь val (не требуется var) и должен быть JPA-транзиентным.
+f2b55f6aa RechnungsPositionDO.java - RechnungsPositionDO.kt EingangsrechnungsPositionDO.java -> EingangsrechnungsPositionDO.kt AbstractRechnungsPositionDO.java -> AbstractRechnungsPositionDO.kt</pre></div>
+</body>
+</html>

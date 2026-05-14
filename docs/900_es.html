@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>#900: AuftragsPositionDO.kt [ES]</title>
+<style>
+body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}
+h1{border-bottom:2px solid #333;padding-bottom:.3em}
+h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}
+h3{margin-top:2em;color:#444}
+a{color:#0366d6}
+.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}
+.nav{font-size:.9em;color:#888;margin-bottom:1em}
+.meta{font-size:.9em;margin:1em 0;color:#555}
+code{background:#f0f0f0;padding:0 .2em;font-size:.93em}
+pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}
+table{border-collapse:collapse;width:100%;margin:1em 0}
+th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}
+th{background:#f5f5f5;font-weight:600}
+.hist{font-size:.85em;color:#555}
+</style>
+</head>
+<body>
+
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Índice</a> · <a href="file-index.html">← Índice de archivos</a> · <a href="899.html">← Anterior</a> · <a href="901.html">Siguiente →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/kotlin/org/projectforge/business/fibu/AuftragsPositionDO.kt" target="_blank" title="Ver fuente en GitHub">📄 fuente</a></div>
+
+<h1>#900: <code>AuftragsPositionDO.kt</code></h1>
+
+<div class="meta"><code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/AuftragsPositionDO.kt</code> 
+  <strong>Tipo:</strong> Entidad JPA (indexada por Hibernate Search) &middot;
+  <strong>Propósito:</strong> Representa una posición (línea de detalle) dentro de un pedido o propuesta &middot;
+  <strong>Paquete:</strong> <code>org.projectforge.business.fibu</code><br>
+  <strong>Ruta de origen:</strong> <code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/AuftragsPositionDO.kt</code>
+ <span style="color:#888">216 líneas · 139 código · 50 comentarios · 27 en blanco</span></div>
+
+<div class="c">
+  Entidad de dominio central que representa una línea de detalle dentro de un <code>AuftragDO</code> (pedido/propuesta). Cada pedido puede tener múltiples posiciones, identificadas de forma única por <code>(auftrag_fk, number)</code>. Realiza seguimiento de datos financieros (suma neta, días-persona), estado, tipo de pago, clasificación (<code>art</code>) e indicadores de facturación. Implementa <code>DisplayNameCapable</code> y está completamente indexada por Hibernate Search para capacidades de búsqueda de texto completo.
+</div>
+
+<h2>Arquitectura y Diseño</h2>
+
+<h3>Metadatos de la Entidad</h3>
+<table>
+  <tr><th>Anotación</th><th>Valor/Detalles</th></tr>
+  <tr><td><code>@Entity</code></td><td>Entidad JPA</td></tr>
+  <tr><td><code>@Indexed</code></td><td>Índice de texto completo de Hibernate Search</td></tr>
+  <tr><td><code>@TypeBinding</code></td><td><code>HibernateSearchAuftragsPositionTypeBinder</code> — enlazador personalizado para búsqueda específica de posición</td></tr>
+  <tr><td><code>@ClassBridge(name = "position")</code></td><td>Puente de clase personalizado utilizado para campo de búsqueda compuesto</td></tr>
+  <tr><td><code>@Table</code></td><td><code>t_fibu_auftrag_position</code> con restricción única <code>(auftrag_fk, number)</code></td></tr>
+</table>
+
+<h3>Índices de Base de Datos</h3>
+<table>
+  <tr><th>Nombre del Índice</th><th>Columna</th></tr>
+  <tr><td><code>idx_fk_t_fibu_auftrag_position_auftrag_fk</code></td><td><code>auftrag_fk</code></td></tr>
+  <tr><td><code>idx_fk_t_fibu_auftrag_position_task_fk</code></td><td><code>task_fk</code></td></tr>
+</table>
+
+<h3>Consultas Nombradas</h3>
+<p><code>FIND_BY_ID = "AuftragPositionDO_FindById"</code> — búsqueda simple por clave primaria.</p>
+
+<h3>Campos</h3>
+
+<table>
+  <tr><th>Campo</th><th>Columna BD</th><th>Tipo</th><th>Descripción</th></tr>
+  <tr><td><code>number</code></td><td><code>number</code> (no nulo)</td><td><code>Short</code></td><td>Número de posición dentro del pedido (ej. 1, 2, 3…)</td></tr>
+  <tr><td><code>auftrag</code></td><td><code>auftrag_fk</code> (FK, no nulo)</td><td><code>AuftragDO</code></td><td>Pedido padre — <code>@JsonIgnore</code> para evitar serialización circular; <code>@JsonSerialize(IdOnlySerializer)</code> en la capa web</td></tr>
+  <tr><td><code>task</code></td><td><code>task_fk</code> (FK, nullable)</td><td><code>TaskDO</code></td><td>Tarea de proyecto asociada, serializada solo como ID</td></tr>
+  <tr><td><code>art</code></td><td><code>art</code> (VARCHAR 30)</td><td>enum <code>AuftragsPositionsArt</code></td><td>Clasificación: <code>CHANGE_REQUEST</code>, <code>DAUERNDE_LEISTUNG</code>, <code>WARTUNG</code>, <code>NEUENTWICKLUNG</code></td></tr>
+  <tr><td><code>paymentType</code></td><td><code>paymentType</code> (VARCHAR 30)</td><td>enum <code>AuftragsPositionsPaymentType</code></td><td>Modelo de pago: <code>FESTPREISPAKET</code>, <code>TIME_AND_MATERIALS</code>, <code>PAUSCHALE</code></td></tr>
+  <tr><td><code>forecastType</code></td><td><code>forecast_type</code> (VARCHAR 20)</td><td>enum <code>AuftragForecastType</code></td><td>Anulación del tipo de previsión del pedido padre (mes actual/siguiente)</td></tr>
+  <tr><td><code>status</code></td><td><code>status</code> (VARCHAR 30)</td><td>enum <code>AuftragsStatus</code></td><td>Estado actual (ej. <code>ABGESCHLOSSEN</code>, <code>IN_ERSTELLUNG</code>)</td></tr>
+  <tr><td><code>titel</code></td><td><code>titel</code> (VARCHAR 255)</td><td><code>String</code></td><td>Título de la posición — <code>@FullTextField</code> para Hibernate Search</td></tr>
+  <tr><td><code>bemerkung</code></td><td><code>bemerkung</code> (4000)</td><td><code>String</code></td><td>Comentario de texto libre — <code>@FullTextField</code></td></tr>
+  <tr><td><code>nettoSumme</code></td><td><code>netto_summe</code> (12,2)</td><td><code>BigDecimal</code></td><td>Importe neto de esta posición — <code>@GenericField</code></td></tr>
+  <tr><td><code>personDays</code></td><td><code>person_days</code> (12,2)</td><td><code>BigDecimal</code></td><td>Días-persona asignados; puede diferir de la suma neta calculada</td></tr>
+  <tr><td><code>vollstaendigFakturiert</code></td><td><code>vollstaendig_fakturiert</code> (no nulo)</td><td><code>Boolean</code></td><td>Establecido manualmente por el departamento financiero — solo para posiciones completadas</td></tr>
+  <tr><td><code>periodOfPerformanceType</code></td><td><code>period_of_performance_type</code> (VARCHAR 10)</td><td>enum <code>PeriodOfPerformanceType</code></td><td>Por defecto <code>SEEABOVE</code>; <code>OWN</code> si la posición tiene su propio PoP</td></tr>
+  <tr><td><code>periodOfPerformanceBegin</code></td><td><code>period_of_performance_begin</code></td><td><code>LocalDate</code></td><td>Inicio del período de ejecución</td></tr>
+  <tr><td><code>periodOfPerformanceEnd</code></td><td><code>period_of_performance_end</code></td><td><code>LocalDate</code></td><td>Fin del período de ejecución</td></tr>
+  <tr><td><code>modeOfPaymentType</code></td><td><code>mode_of_payment_type</code> (VARCHAR 13)</td><td>enum <code>ModeOfPaymentType</code></td><td>Modalidad de pago</td></tr>
+</table>
+
+<h3>Propiedades Calculadas</h3>
+<ul>
+  <li><code>displayName</code> — formato <code>"{order.nummer}.{number}"</code>, ej. "12345.2"</li>
+  <li><code>formattedNumber</code> — igual que <code>displayName</code>: <code>"{auftrag?.nummer}.{number}"</code></li>
+  <li><code>isEmpty</code> — devuelve <code>true</code> si el título está en blanco Y la suma neta es cero/nula Y el comentario está en blanco</li>
+  <li><code>hasOwnPeriodOfPerformance()</code> — devuelve <code>true</code> si <code>periodOfPerformanceType == PeriodOfPerformanceType.OWN</code></li>
+</ul>
+
+<h3>Validación</h3>
+<p><code>checkVollstaendigFakturiert()</code> — lanza <code>UserException</code> si <code>vollstaendigFakturiert</code> está establecido en <code>true</code> pero el estado no es <code>ABGESCHLOSSEN</code> (solo las posiciones completadas pueden marcarse como totalmente facturadas).</p>
+
+<h3>Igualdad y Hashing</h3>
+<p>La igualdad (y el hash) se basa en <code>number</code> y <code>auftrag.id</code> — dos posiciones se consideran iguales si comparten el mismo número de posición dentro del mismo pedido padre.</p>
+
+<h3>Configuración de Hibernate Search</h3>
+<p>La entidad utiliza <code>@TypeBinding</code> con <code>HibernateSearchAuftragsPositionTypeBinder</code> y un <code>@ClassBridge(name = "position")</code> personalizado. Varios campos llevan <code>@FullTextField</code> (<code>art</code>, <code>forecastType</code>, <code>status</code>, <code>titel</code>, <code>bemerkung</code>) y <code>@GenericField</code> (<code>nettoSumme</code>) para la indexación de Hibernate Search. El puente de clase permite la búsqueda compuesta en campos relacionados con la posición.</p>
+
+<h2>Clases Relacionadas</h2>
+<ul>
+  <li><strong>Padre:</strong> <code>AuftragDO</code> — el pedido que contiene esta posición</li>
+  <li><strong>Enums:</strong> <code>AuftragsPositionsArt</code>, <code>AuftragsPositionsPaymentType</code>, <code>AuftragsStatus</code>, <code>AuftragForecastType</code>, <code>PeriodOfPerformanceType</code>, <code>ModeOfPaymentType</code></li>
+  <li><strong>Caché:</strong> <code>AuftragsCacheService</code> — carga posiciones mediante consultas de tuplas para rendimiento</li>
+  <li><strong>Búsqueda:</strong> <code>HibernateSearchAuftragsPositionTypeBinder</code> — enlace de búsqueda personalizado</li>
+  <li><strong>JSON:</strong> <code>IdOnlySerializer</code> — serializa referencias FK solo como IDs</li>
+</ul>
+
+<h2>Historial Git</h2>
+<div class="hist"><pre>
+868d6abb7 2025 -> 2026
+49b1d6b8d Previsión y libro de pedidos: tipo de previsión para pedidos/posiciones añadido (mes actual o siguiente)
+63081666f Encabezados de archivos fuente: 2024 -> 2025.
+0237d5eba Serialización JSON refactorizada: se introdujeron IdOnlySerializer e IdsOnlySerializer.
+a35971f85 Problemas de la última solicitud de extracción resueltos. Muchas gracias a luzpaz.
+56e9a4c44 WIP: almacenamiento del libro de pedidos.
+c193e8288 Ical4j: cosas de migración... (todas las pruebas OK)
+ae2c04ee0 Cosas de migración en curso... (todas las pruebas de todos los paquetes: OK).
+3f25c773a Cosas de migración en curso...
+184f154a5 Cosas de migración en curso...
+f31e8064e Cosas de migración en curso...
+87dd5b87c AuftragsCache refactorizado, cosas de migración... (todas las pruebas OK)
+6f7e0fbc7 Cosas de migración en curso...
+4c04cfd65 CAMBIO IMPORTANTE: Migración de IDs enteros a IDs Long (incluyendo FK, etc.)
+c4950ae12 Cosas de migración en curso...
+f5c09f87f Cosas de migración en curso...
+c04fb0d51 Cosas de migración en curso...
+06828f490 Cosas de migración en curso...
+b6092df09 Copyright 2023 -> 2024
+ab45d51fa Copyright 2001-2022 -> 2001-2023.
+9a65e1bc0 AuftragDO: estadísticas refactorizadas (aún no facturado, por facturar, facturado, etc.)
+ed17a2353 ForecastExport muestra ahora más facturas (también facturas sin pedidos)
+5f7ef41b8 Copyright 2021 -> 2022
+c0f2b9de0 Funcionalidad de inquilinos eliminada en todas partes (sin probar).
+db3b02da7 UserException movido del paquete business al common (AccesssException afectado). UserException ahora se devolverá como Toast para clientes Rest por defecto. FileSizeChecker WIP.
+ceb63e8a1 Encabezado de código fuente: (C) 2001-2021.
+d89920003 Filtro de libro de pedidos "por facturar" añadido.
+ca0d5470e Eliminar DateBridges de los DO.
+a6a7aece4 Optimizar importaciones
+78b436d9e Reemplazar instancias de java.util.date y java.sql.Date con java.time.LocalDate
+b78b870bd ShortDisplayNameCapable -> DisplayNameCapable.
+7c79f1922 Copyright del encabezado fuente -> 2020.
+2fa37a281 AuftragsPositionDO.formattedNumber simplificado.
+8241700f0 ShortDisplayNameCapable convertido a Kotlin. Clases DO que implementan ShortDisplayNameCapable refactorizadas.
+e7e42d821 AuftragsPositionDO.titel como índice de búsqueda de Hibernate.
+ff4c3dcf3 corregir diseño de posición de pedido
+19b97fcc3 DateBridge: codificación = EncodingType.STRING para todos los DateBridges en todos los DO.
+8675a1dbe Encontrado gran problema de rendimiento: se declararon todas las entidades JPA de Kotlin y sus propiedades como abiertas. La carga diferida no era compatible con Hibernate y resultaba en miles de consultas JPA...
+d36fe6ad9 Heavy WIP: refactorización
+39cdd224c Búsqueda de Hibernate: DateBridge...
+985286296 hibernate 5.4.3 -> 5.4.4, ehcache introducido (de nuevo).
+12c7143a5 AuftragRest: Añadidos elementos de EditPage
+97d00031d Auftrag*DO, AddressDO, *Rechnung*DO: rendimiento mejorado (usando ahora carga LAZY en lugar de EAGER).
+2ed09316e AuftragsPositionDO.kt: Resolver advertencias
+ca013f56b AuftragsPositionDO.kt: todos los campos deben ser anulables (para fines de deserialización): vollstaendigFakturiert y periodOfPerformanceType.
+05244ff19 Copyright de todos los encabezados de archivos Kotlin actualizado o creado.
+6dc8997a3 AuftragsPositionDO.java -> AuftragsPositionDO.kt
+</pre></div>
+
+</body>
+</html>

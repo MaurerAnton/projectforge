@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>#4321: XStreamTest.java [FR]</title>
+<style>
+  body { font-family: system-ui, sans-serif; max-width: 960px; margin: 2em auto; padding: 0 1em; background: #fafafa; color: #222; line-height: 1.6; }
+  h1 { border-bottom: 2px solid #333; padding-bottom: 0.3em; }
+  h2 { margin-top: 2em; border-bottom: 1px solid #ddd; padding-bottom: 0.2em; }
+  h3 { margin-top: 1.5em; color: #333; }
+  a { color: #0366d6; text-decoration: none; } a:hover { text-decoration: underline; }
+  .meta { background: #f0f0f0; border-radius: 6px; padding: 1em; margin: 1em 0; font-size: 0.9em; }
+  .code-block { background: #1e1e1e; color: #d4d4d4; border-radius: 4px; padding: 0.8em 1em; margin: 0.5em 0; overflow-x: auto; font-family: 'Consolas', monospace; font-size: 0.82em; line-height: 1.5; }
+  .commentary { margin: 0.8em 0; line-height: 1.7; background: #fff; padding: 0.5em 1em; border-radius: 6px; border-left: 4px solid #ddd; }
+  table { border-collapse: collapse; width: 100%; margin: 0.8em 0; font-size: 0.9em; } th, td { border: 1px solid #ddd; padding: 0.4em 0.6em; text-align: left; } th { background: #f0f0f0; }
+  code { background: #e8e8e8; border-radius: 3px; padding: 0.1em 0.3em; font-size: 0.9em; }
+  .nav { font-size: 0.9em; color: #888; margin-bottom: 1em; }
+  .history { background: #fffbe6; border-radius: 6px; padding: 1em; margin: 1em 0; font-size: 0.9em; border-left: 4px solid #ffc107; }
+  .arch { background: #e8f4fd; border-radius: 6px; padding: 1em; margin: 1em 0; font-size: 0.9em; border-left: 4px solid #2196f3; }
+</style>
+</head>
+<body>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← Index des fichiers</a> · <a href="4320.html">← Précédent</a> · Suivant → · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/tools/org.projectforge.tools.schemaexp/src/test/java/org/projectforge/tools/schemaexp/XStreamTest.java" target="_blank" title="Voir la source sur GitHub">📄 source</a></div>
+
+<h1>#4321: <code>XStreamTest.java</code></h1>
+
+<div class="meta"><code>tools/org.projectforge.tools.schemaexp/src/test/java/org/projectforge/tools/schemaexp/XStreamTest.java</code> 
+  <p><strong>Chemin :</strong> <code>tools/org.projectforge.tools.schemaexp/src/test/java/org/projectforge/tools/schemaexp/XStreamTest.java</code></p>
+  <p><strong>Type :</strong> Classe de test JUnit 5 · <strong>Lignes :</strong> 40 · <strong>Paquetage :</strong> <code>org.projectforge.tools.schemaexp</code></p>
+  <p><strong>Objectif :</strong> Valide que XStream avec <code>ReferenceByIdMarshallingStrategy</code> gère correctement les graphes d'objets cycliques lors de la sérialisation XML — une condition préalable pour l'outil d'export/import de base de données SchemaExp.</p>
+  <p><strong>Source :</strong> <a href="https://github.com/micromata/projectforge/blob/develop/tools/org.projectforge.tools.schemaexp/src/test/java/org/projectforge/tools/schemaexp/XStreamTest.java">GitHub</a></p>
+ <span style="color:#888">40 lignes · 34 lignes de code · 0 commentaires · 6 lignes vides</span></div>
+
+<div class="history">
+<table><tr><th>Commit</th><th>Date</th><th>Message</th></tr>
+<tr><td><code>f46333761</code></td><td>2019-04-12</td><td>TestNG et JUnit4 remplacés par JUnit5. Certains tests (avec powermock) sont encore en JUnit4. Il n'existe plus de tests TestNG.</td></tr>
+<tr><td><code>9ebb88522</code></td><td>2016-07-18</td><td>Commit initial</td></tr></table>
+<p>Créé à l'origine en 2016 dans le cadre de l'outil SchemaExp. Migré de JUnit4 vers JUnit5 en avril 2019. La logique de test principale est restée inchangée depuis 10 ans.</p>
+</div>
+
+<h2>Ce qu'il fait</h2>
+<div class="commentary">
+<p>Ce test valide une <strong>préoccupation critique de sérialisation</strong> pour l'outil SchemaExp : XStream peut-il correctement sérialiser et désérialiser des objets Java contenant des <strong>références circulaires</strong> ? Le modèle de domaine de ProjectForge est rempli de relations bidirectionnelles : <code>UserDO ↔ GroupDO</code>, <code>TaskDO ↔ TaskDO</code> (parent/enfant), <code>RechnungDO ↔ RechnungsPositionDO</code> (facture ↔ lignes d'écriture). Sans une gestion appropriée des cycles, la <code>TreeMarshallingStrategy</code> par défaut de XStream entrerait dans une récursion infinie sur ces objets et lèverait une <code>StackOverflowError</code>.</p>
+<p>Le test construit un cycle parent-enfant minimal (Parent a Map&lt;String, Child&gt;, chaque Child a une référence arrière vers Parent), configure XStream avec <code>ReferenceByIdMarshallingStrategy</code>, et vérifie que le marshalling → unmarshalling se termine sans erreur. La stratégie remplace les références d'objets répétées par des identifiants internes dans la sortie XML et reconstruit le graphe d'objets complet lors de la désérialisation.</p>
+</div>
+
+<h2>Ligne par ligne</h2>
+
+<h3>Lignes 1–13 : Paquetage, imports, déclaration de classe</h3>
+<div class="code-block"><pre>package org.projectforge.tools.schemaexp;
+
+import java.io.Serializable;
+import java.util.HashMap;
+import java.util.Map;
+import org.junit.jupiter.api.Test;
+import com.thoughtworks.xstream.XStream;
+import com.thoughtworks.xstream.core.ReferenceByIdMarshallingStrategy;
+
+public class XStreamTest {</pre></div>
+<div class="commentary">
+<p><strong>Lignes 1–5 :</strong> Imports standards. <code>Serializable</code> est requis car certains modes de sérialisation XStream l'exigent. <code>HashMap</code> stocke le mappage parent→enfant.</p>
+<p><strong>Ligne 7 :</strong> <code>org.junit.jupiter.api.Test</code> — confirme qu'il s'agit de JUnit 5 (Jupiter), pas de JUnit 4. Le commit de migration (<code>f46333761</code>) mentionne explicitement ce changement.</p>
+<p><strong>Lignes 9–10 :</strong> Les deux imports XStream :
+<ul><li><code>XStream</code> — la bibliothèque de sérialisation XML de ThoughtWorks, utilisée par ProjectForge pour les vidages XML de base de données</li>
+<li><code>ReferenceByIdMarshallingStrategy</code> — la stratégie qui permet la gestion des références cycliques en attribuant des identifiants internes aux objets et en les référençant au lieu de les imbriquer en ligne. C'est la ligne la plus importante du test.</li></ul></p>
+</div>
+
+<h3>Lignes 14–22 : Classes internes — le modèle de graphe cyclique</h3>
+<div class="code-block"><pre>  public static class Parent implements Serializable {
+    Map&lt;String, Child&gt; childres = new HashMap&lt;&gt;();
+  }
+
+  public static class Child implements Serializable {
+    Parent parentRef;
+  }</pre></div>
+<div class="commentary">
+<p><strong><code>Parent</code></strong> (ligne 14) : Contient une <code>Map&lt;String, Child&gt;</code> — un parent peut référencer plusieurs enfants. Le nom du champ <code>childres</code> a une faute de frappe (il manque le 'n' à "children") — un problème mineur de code connu qui n'affecte pas la fonctionnalité.</p>
+<p><strong><code>Child</code></strong> (ligne 19) : Contient une seule <code>Parent parentRef</code> — la référence arrière qui crée le cycle. Sans ce champ, il n'y aurait pas de cycle à tester.</p>
+<p><strong>Modificateur <code>static</code> :</strong> Les deux classes sont des classes internes <code>static</code> — elles ne capturent pas de référence à l'instance externe de <code>XStreamTest</code>. Cela empêche la classe de test elle-même d'être sérialisée.</p>
+</div>
+
+<h3>Lignes 24–39 : La méthode de test — aller-retour marshal → unmarshal</h3>
+<div class="code-block"><pre>  @Test
+  public void testXStream() {
+    Parent parent = new Parent();
+    Child child = new Child();
+    child.parentRef = parent;              // enfant → parent (référence arrière)
+    parent.childres.put("asdf", child);    // parent → enfant (référence avant)
+    // Maintenant les deux directions existent — un vrai cycle
+    
+    XStream xstream = new XStream();
+    xstream.setMarshallingStrategy(new ReferenceByIdMarshallingStrategy());
+    String res = xstream.toXML(parent);    // Marshal vers XML
+    System.out.println("marshalisé : " + res);
+    
+    xstream = new XStream();               // Nouvelle instance (pas d'état obsolète)
+    xstream.setMarshallingStrategy(new ReferenceByIdMarshallingStrategy());
+    Object object = xstream.fromXML(res);  // Unmarshal depuis XML
+    Parent rparent = (Parent) object;      // Le cast réussit = le test passe
+  }
+}</pre></div>
+<div class="commentary">
+<p><strong>Lignes 27–30 : Construction du cycle.</strong> Un <code>Parent</code> et un <code>Child</code> sont créés. La ligne 29 définit <code>child.parentRef = parent</code> (enfant → parent). La ligne 30 place l'enfant dans la map du parent avec la clé <code>"asdf"</code> (parent → enfant). Les deux directions existent maintenant.</p>
+<p><strong>Lignes 32–34 : Marshalling.</strong> Une nouvelle instance XStream est configurée avec <code>ReferenceByIdMarshallingStrategy</code>. Sans la ligne 32, XStream utiliserait <code>TreeMarshallingStrategy</code> qui sérialise récursivement le graphe entier — rencontrant le cycle et levant une <code>StackOverflowError</code>. La sortie XML contiendra <code>&lt;parentRef reference="1"/&gt;</code> au lieu d'imbriquer à nouveau l'objet Parent en ligne.</p>
+<p><strong>Lignes 36–38 : Unmarshalling.</strong> Une <strong>nouvelle instance XStream</strong> est créée (ligne 36) pour garantir qu'aucun état ne fuit de l'étape de marshalling. La même stratégie est appliquée, puis la chaîne XML est désérialisée. Le cast <code>(Parent) object</code> de la ligne 38 est l'assertion implicite — si la désérialisation échoue ou si les types ne correspondent pas, une <code>ClassCastException</code> est levée et le test échoue.</p>
+<p><strong>Aucune assertion explicite :</strong> Le test n'a pas d'appels <code>assert*</code>. Il repose sur l'échec basé sur les exceptions : toute <code>StackOverflowError</code>, <code>ClassCastException</code> ou erreur d'analyse XStream fera échouer le test. C'est un modèle de "test de fumée" — vérifier que l'opération ne plante pas.</p>
+</div>
+
+<h2>Comment ce fichier se connecte au projet</h2>
+<div class="commentary">
+<p>Ce test est la <strong>validation fondamentale</strong> pour toute la chaîne d'outils SchemaExp. Il prouve que XStream peut gérer en toute sécurité le graphe d'entités de ProjectForge avant que des données de production ne soient touchées. Le flux de la suite de tests :</p>
+<table><tr><th>Fichier</th><th>Rôle</th></tr>
+<tr><td><strong>#4108 XStreamTest</strong></td><td>Valide la gestion des cycles au niveau de la bibliothèque de sérialisation</td></tr>
+<tr><td>#4107 ToXmlTest</td><td>Export de bout en bout de la base de données réelle vers XML</td></tr>
+<tr><td>#4106 FromXmlTest</td><td>Import de bout en bout du XML dans une base de données propre</td></tr>
+<tr><td>#4105 ClearDbTest</td><td>Valide le nettoyage de la base de données de manière isolée</td></tr>
+<tr><td>#4104 SchemaExpService</td><td>Service de production utilisant la configuration XStream validée</td></tr></table>
+<p><strong>En production :</strong> La fonctionnalité "Sauvegarde/Restauration XML" de l'interface d'administration et l'initialisation "Système de test" de l'assistant d'installation dépendent toutes deux du bon fonctionnement de cette sérialisation. Un échec ici signifie pas de sauvegardes XML, pas d'import de données de test et pas de migration de base de données entre fournisseurs (HSQLDB → PostgreSQL).</p>
+</div>
+
+<h2>Points clés à retenir</h2>
+<div class="commentary">
+<ul>
+<li><strong>ReferenceById est obligatoire :</strong> N'utilisez jamais XStream sans cette stratégie lorsque vous travaillez avec des entités ProjectForge. Le modèle de domaine est intrinsèquement cyclique.</li>
+<li><strong>Migration JUnit 5 :</strong> Le <code>@Test</code> de <code>org.junit.jupiter.api</code> confirme JUnit 5. Tous les nouveaux tests doivent suivre ce modèle.</li>
+<li><strong>Aucune assertion = choix de conception :</strong> Les tests basés sur les exceptions sont valables pour les tests de fumée mais fragiles pour la régression. Une amélioration future ajouterait des assertions explicites (par exemple, vérifier <code>rparent.childres.get("asdf").parentRef == rparent</code>).</li>
+<li><strong>Modèle de nouvelle instance :</strong> La ligne 36 crée un nouveau XStream pour l'unmarshalling — empêche les fuites d'état entre les opérations de marshal et d'unmarshal. Bonne pratique pour les tests de sérialisation.</li>
+<li><strong>Faute de frappe dans le nom du champ :</strong> <code>childres</code> à la ligne 16 devrait être <code>children</code>. Inoffensif mais mérite d'être corrigé pour la lisibilité.</li>
+</ul>
+</div>
+
+<div class="nav" style="margin-top:2em; padding-top:1em; border-top:1px solid #ddd">
+  <a href="4107.html">← #4107 : ToXmlTest.java</a> ·
+  <a href="file-index.html">Index des fichiers</a>
+</div>
+</body>
+</html>

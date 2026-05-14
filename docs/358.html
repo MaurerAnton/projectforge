@@ -1,5 +1,111 @@
-<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>#358</title><style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333}a{color:#0366d6}.meta{font-size:.9em;margin:1em 0}.nav{font-size:.9em;color:#888;margin-bottom:1em}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}code{background:#f0f0f0;padding:0 .2em}</style></head>
-<body><div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="357.html">← Prev</a> · <a href="359.html">Next →</a></div>
-<h1>#358: <code>DeltaSetCalculator.java</code></h1>
-<div class="meta"><strong>Hibernate history engine</strong> — computes the delta between the old entity state (before save) and new entity state (after save). Iterates all properties of the entity, comparing old vs. new values. For simple types → creates <code>PropertyDelta</code>, for associations → creates <code>AssociationPropertyDelta</code>, for collections → creates <code>CollectionPropertyDelta</code>. Fields annotated <code>@NoHistory</code> are skipped. This is the core algorithm of ProjectForge's custom Hibernate change tracking — a lightweight alternative to <a href="https://hibernate.org/orm/envers/">Hibernate Envers</a>.</div>
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>#358: CollectionPropertyDelta.java</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:2em;color:#444}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.lang{font-size:.85em;color:#888;float:right}.lang a{color:#888;text-decoration:none;padding:0 .3em}.lang a.active{color:#0366d6;font-weight:600;text-decoration:underline}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}</style></head>
+<body><div class="lang"><a href="358.html" class="active">EN</a> · <a href="358_de.html">DE</a> · <a href="358_ru.html">RU</a> · <a href="358_fr.html">FR</a> · <a href="358_es.html">ES</a></div>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="1496.html">← Prev</a> · <a href="2757.html">Next →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/java/de/micromata/hibernate/history/delta/CollectionPropertyDelta.java" target="_blank" title="View source on GitHub">📄 source</a></div>
+<h1>#358: <code>CollectionPropertyDelta.java</code></h1>
+<div class="meta"><code>projectforge-business/src/main/java/de/micromata/hibernate/history/delta/CollectionPropertyDelta.java</code> Type: Java · Role: Component · Source: projectforge-business/src/main/java/de/micromata/hibernate/history/delta/CollectionPropertyDelta.java <span style="color:#888">112 lines · 65 code · 33 comments · 14 blank</span></div>
+<div class="c">Source code file at <code>projectforge-business/src/main/java/de/micromata/hibernate/history/delta/CollectionPropertyDelta.java</code> containing Java code for the Component layer.</div>
+<h2>Code Structure</h2>
+<p>Package: <code>de.micromata.hibernate.history.delta</code></p>
+<p>Classes: <code>CollectionPropertyDelta</code></p>
+<p>Extends: <code>PropertyDelta</code></p>
+<p>Methods (5): <code>calculateAdditionsAndRemovals</code>, <code>toString</code>, <code>getNewObjectValue</code>, <code>splitElements</code>, <code>getOldObjectValue</code></p>
+<p>Imports: 4 packages</p>
+<h2>Source Code (abridged)</h2>
+<pre>
+package de.micromata.hibernate.history.delta;
+
+import org.apache.commons.lang3.ClassUtils;
+import org.apache.commons.lang3.StringUtils;
+import org.hibernate.Session;
+
+import java.util.*;
+
+/**
+ * Legacy used for XML persistence of DB.
+ * 
+ * @author Wolfgang Jung (w.jung@micromata.de)
+ * 
+ */
+public class CollectionPropertyDelta extends PropertyDelta
+{
+
+  private transient Set&lt;Object&gt; additions = new HashSet&lt;&gt;();
+
+  private transient Set&lt;Object&gt; removals = new HashSet&lt;&gt;();
+
+  protected CollectionPropertyDelta()
+  {
+    // do nothing
+  }
+
+  public CollectionPropertyDelta(String propertyName, Class&lt;?&gt; propertyType, Collection&lt;Object&gt; oldValue,
+      Collection&lt;Object&gt; newValue)
+  {
+    this.propertyName = propertyName;
+    this.propertyType = ClassUtils.getShortClassName(propertyType);
+    calculateAdditionsAndRemovals(oldValue, newValue);
+    this.oldValue = StringUtils.join(removals.iterator(), &quot;,&quot;);
+    this.newValue = StringUtils.join(additions.iterator(), &quot;,&quot;);
+  }
+
+  private void calculateAdditionsAndRemovals(Collection&lt;Object&gt; oldValue, Collection&lt;Object&gt; newValue)
+  {
+    // //////////////////////////////////////////////////////////////////////
+    // First, determine additions
+    if (newValue != null) {
+      additions.addAll(newValue);
+    }
+    if (oldValue != null) {
+      additions.removeAll(oldValue);
+    }
+
+    // //////////////////////////////////////////////////////////////////////
+    // Then, determine removals
+    if (oldValue != null) {
+      removals.addAll(oldValue);
+    }
+    if (newValue != null) {
+      removals.removeAll(newValue);
+    }
+  }
+
+  @Override
+  public String toString()
+  {
+    return &quot;changes of &quot; + propertyName + &quot; new=&quot; + newValue + &quot; old=&quot; + oldValue;
+  }
+
+  @Override
+  public Object getNewObjectValue(final Session session)
+  {
+    return splitElements(getNewValue(), session);
+  }
+
+  private List&lt;Object&gt; splitElements(final String keyList, final Session session)
+  {
+    List&lt;Object&gt; entityList = new ArrayList&lt;&gt;();
+    if (!StringUtils.isEmpty(keyList)) {
+      for (String key : keyList.split(&quot;,&quot;)) {
+        if (StringUtils.isEmpty(key)) {
+          continue;
+        }
+        entityList.add(loadItem(propertyType, key, session));
+      }
+    }
+    return entityList;
+  }
+
+  @Override
+  public Object getOldObjectValue(final Session session)
+  {
+    return splitElements(getOldValue(), session);
+  }
+}</pre>
+
+<h2>Git History</h2><div class="hist"><pre>868d6abb7 2025 -&gt; 2026
+63081666f Source file headers: 2024-&gt; 2025.
+b6092df09 Copyright 2023 -&gt; 2024
+ab45d51fa Copyright 2001-2022 -&gt; 2001-2023.
+5f7ef41b8 Copyright 2021 -&gt; 2022</pre></div>
 </body></html>

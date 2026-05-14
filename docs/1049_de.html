@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>#1049 [DE]</title>
+<style>
+body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}
+h1{border-bottom:2px solid #333;padding-bottom:.3em}
+h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}
+h3{margin-top:2em;color:#444}
+a{color:#0366d6}
+.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}
+.nav{font-size:.9em;color:#888;margin-bottom:1em}
+.meta{font-size:.9em;margin:1em 0;color:#555}
+code{background:#f0f0f0;padding:0 .2em;font-size:.93em}
+pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}
+table{border-collapse:collapse;width:100%;margin:1em 0}
+th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}
+th{background:#f5f5f5;font-weight:600}
+.hist{font-size:.85em;color:#555}
+</style>
+</head>
+<body>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← Datei-Index</a> · <a href="1048.html">← Vorherige</a> · <a href="1050.html">Nächste →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/kotlin/org/projectforge/business/scripting/KotlinScriptExecutor.kt" target="_blank" title="Quelle auf GitHub ansehen">📄 Quelle</a></div>
+<h1>#1049: <code>KotlinScriptExecutor.kt</code></h1>
+<div class="meta"><code>projectforge-business/src/main/kotlin/org/projectforge/business/scripting/KotlinScriptExecutor.kt</code> Kotlin-Skript-Ausführer, projectforge-business/src/main/kotlin/org/projectforge/business/scripting/KotlinScriptExecutor.kt <span style="color:#888">139 Zeilen · 106 Code · 25 Kommentare · 8 leer</span></div>
+<div class="c">Konkreter <code>ScriptExecutor</code> für Kotlin-Skripte. Kompiliert und evaluiert Kotlin-Quellcode mithilfe der <code>kotlin.script.experimental</code>-API. Behandelt die Klassenpfadauflösung für Fat-JARs über <code>JarExtractor</code>, die Variablenbindung über <code>KotlinScriptContext</code> und die Skriptausführung mit einem 300-Sekunden-Timeout sowie ordnungsgemäßen Fehlerdiagnosen.</div>
+
+<h2>Architektur</h2>
+<h3>Kompilierungskonfiguration</h3>
+<p>Konfiguriert Kotlin-Scripting mit:
+<ul>
+<li><strong>Klassenpfad:</strong> Bei Ausführung in einer Fat-JAR wird <code>URLClassLoader</code> mit <code>JarExtractor.classpathUrls</code> und <code>updateClasspath(JarExtractor.classpathFiles)</code> verwendet. Andernfalls wird <code>dependenciesFromCurrentContext(wholeClasspath=true)</code> genutzt.</li>
+<li><strong>Bereitgestellte Eigenschaften:</strong> Registriert <code>"context"</code> als Typ <code>KotlinScriptContext</code>, wodurch <code>context.getProperty("name")</code> in Skripten ermöglicht wird.</li>
+<li><strong>Compiler-Optionen:</strong> <code>-nowarn</code> zur Unterdrückung von Rauschen.</li>
+</ul>
+
+<h3>Ausführung mit Zeitüberschreitung</h3>
+<p>Verwendet <code>Executors.newSingleThreadExecutor()</code> mit einem 300-Sekunden-Timeout über <code>Future.get(300, SECONDS)</code>. Bei Zeitüberschreitung wird der Future abgebrochen, der Fehler protokolliert und <code>scriptExecutionResult.exception</code> gesetzt. Der Executor wird stets im <code>finally</code>-Block heruntergefahren.</p>
+
+<h3>Variablenbindung</h3>
+<p>Befüllt einen <code>KotlinScriptContext</code> mit allen Variablen und Parametern, woraufhin <code>KotlinScriptUtils.appendBlockAfterImports</code> die entsprechenden Kotlin-Eigenschaftsdeklarationen generiert.</p>
+
+<h3>Standardimporte</h3>
+<p>Fügt über die Basis-<code>STANDARD_IMPORTS</code> hinaus Kotlin-spezifische Importe hinzu: Lokalisierungsfunktionen (<code>translate</code>, <code>translateMsg</code>), Zahlenformatierungserweiterungen (<code>format</code>, <code>formatCurrency</code>, <code>formatBytes</code>) und <code>PfCaches.initialize</code>.</p>
+
+<h2>Git-Verlauf</h2><div class="hist"><pre>
+868d6abb7 2025 -> 2026
+801bf7c63 Scripting: ScriptLogger wird zu ThreadLocal hinzugefügt.
+63081666f Quelltext-Header: 2024 -> 2025.
+aeff942b5 Skriptausführung verbessert (Protokollierung für Endbenutzer).
+22ccc4877 WIP: Scripting
+36c9acc50 Es war harte, harte Arbeit, aber Kotlin-Skripte laufen, ja!
+921638f43 WIP
+de4d8d2af Kampf mit KotlinExecutor in SpringBoots Fat-Jar.
+302470ef9 Kampf mit KotlinExecutor in SpringBoots Fat-Jar.
+7617cf5da Kampf mit KotlinExecutor in SpringBoots Fat-Jar.
+31545575d Kampf mit KotlinExecutor in SpringBoots Fat-Jar.
+4c8365b88 Kotlin-Scripting umstrukturiert (Alle Tests OK)
+b6092df09 Copyright 2023 -> 2024
+ab45d51fa Copyright 2001-2022 -> 2001-2023.
+47aec0fc2 WIP: Sudo-Scripting
+a10660bc8 WIP: Scripting.
+52ef31ca5 WIP: Scripting
+69121a1f8 WIP: Scripting
+7059cacd4 WIP: Scripting: Unterstützung von Parameternamen mit Leerzeichen.
+de0d98425 WIP: Scripting: Fehlerbehebung für null-Skriptwerte.
+d37760c3e Scripting umstrukturiert.
+0bd431bd9 WIP Scripting...
+97e4bd526 Scripting: Pantha rein. ACE-Editor hinzugefügt.
+5f7ef41b8 Copyright 2021 -> 2022
+ceb63e8a1 Quelltext-Header: (C) 2001-2021.
+d60de80b6 MyKotlinScriptEngineFactory funktioniert jetzt mit Fat Spring Boot JAR.
+6fd010dd6 Kotlin-Scripting funktioniert jetzt mit hässlichem Workaround für Spring Boot Fat JAR.
+52d9c1d88 WIP: Kotlin-Skripte...
+c5aa8210b WIP: Unterstützung für Kotlin-Skripte zusätzlich zu Groovy hinzugefügt...
+</pre></div>
+</body>
+</html>

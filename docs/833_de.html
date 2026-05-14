@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>#833: AddressbookDao.kt [DE]</title>
+<style>
+body { font-family: system-ui, sans-serif; max-width: 960px; margin: 2em auto; padding: 0 1em; background: #fafafa; color: #222; line-height: 1.6; }
+h1 { border-bottom: 2px solid #333; padding-bottom: 0.3em; }
+h2 { margin-top: 2.5em; border-bottom: 1px solid #ddd; padding-bottom: 0.2em; color: #333; }
+h3 { margin-top: 2em; color: #444; }
+a { color: #0366d6; }
+.c { border-left: 3px solid #ddd; padding: .5em 1em; margin: 1em 0; background: #fff; }
+.nav { font-size: .9em; color: #888; margin-bottom: 1em; }
+.meta { font-size: .9em; margin: 1em 0; color: #555; }
+code { background: #f0f0f0; padding: 0 .2em; font-size: .93em; }
+pre { background: #f5f5f5; padding: .8em 1em; border: 1px solid #ddd; border-radius: 4px; overflow-x: auto; font-size: .88em; line-height: 1.4; }
+table { border-collapse: collapse; width: 100%; margin: 1em 0; }
+th, td { border: 1px solid #ddd; padding: .5em .8em; text-align: left; font-size: .9em; }
+th { background: #f5f5f5; font-weight: 600; }
+.hist { font-size: .85em; color: #555; }
+</style>
+</head>
+<body>
+
+<div class="nav">
+  <a href="https://maureranton.github.io/projectforge/">← Index</a> ·
+  <a href="file-index.html">← Dateiindex</a> ·
+  <a href="832.html">← Vorherige</a> ·
+  <a href="834.html">Nächste →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/kotlin/org/projectforge/business/address/AddressbookDao.kt" target="_blank" title="Quellcode auf GitHub ansehen">📄 Quelle</a></div>
+
+<h1>#833: <code>AddressbookDao.kt</code></h1>
+
+<div class="meta"><code>projectforge-business/src/main/kotlin/org/projectforge/business/address/AddressbookDao.kt</code> 
+  <strong>Typ:</strong> Datenzugriffsobjekt (DAO) — Spring-verwalteter Dienst<br>
+  <strong>Zweck:</strong> Persistenz- und Zugriffskontrollschicht für Adressbuch-Entitäten<br>
+  <strong>Speicherort:</strong> <code>projectforge-business/src/main/kotlin/org/projectforge/business/address/AddressbookDao.kt</code>
+ <span style="color:#888">174 Zeilen · 120 Code · 38 Kommentare · 16 Leerzeichen</span></div>
+
+<div class="c">
+  <strong>Zusammenfassung:</strong> <code>AddressbookDao</code> ist das primäre Datenzugriffsobjekt für <code>AddressbookDO</code>-Entitäten. Es erweitert <code>BaseDao</code>, um standardmäßige CRUD-Operationen (speichern, aktualisieren, löschen, finden, Liste abrufen, als gelöscht markieren, wiederherstellen) zu erben und überschreibt <code>select()</code>, um eine benutzerspezifische Zugriffskontrollfilterung über <code>AddressbookRight</code> zu erzwingen. Es ist als Spring <code>@Service</code>-Singleton annotiert und gehört zu den ältesten Dateien im Codebestand, die seit dem ersten Commit vorhanden ist.
+</div>
+
+<h2>Architektur &amp; Position im System</h2>
+
+<h3>Klassenhierarchie</h3>
+<p><code>AddressbookDao</code> erweitert <code>BaseDao&lt;AddressbookDO&gt;</code>, welches selbst ein generisches Hibernate-DAO ist und Folgendes bereitstellt:</p>
+<ul>
+  <li><code>save(obj)</code> / <code>update(obj)</code> — eine Entität persistieren oder zusammenführen</li>
+  <li><code>delete(obj)</code> / <code>markAsDeleted(obj)</code> — hartes oder weiches Löschen</li>
+  <li><code>select(filter)</code> — gefilterte Listenabfragen (hier überschrieben)</li>
+  <li><code>find(id)</code> / <code>getList(filter)</code> — Einzelabruf und paginierte Listen</li>
+  <li><code>undelete(obj)</code> — eine weich gelöschte Entität wiederherstellen</li>
+</ul>
+
+<h3>Zugriffskontrollintegration</h3>
+<p>Das DAO ist auf zwei Arten in das Rechteverwaltungssystem von ProjectForge eingebunden:</p>
+<table>
+  <tr><th>Mechanismus</th><th>Beschreibung</th></tr>
+  <tr>
+    <td><code>UserRightId.MISC_ADDRESSBOOK</code></td>
+    <td>Wird im <code>init</code>-Block gesetzt. Dieses Recht wird von <code>BaseDao</code> vor jeder ändernden Operation (speichern, aktualisieren, löschen usw.) überprüft, um sicherzustellen, dass der Aufrufer die Berechtigung <em>MISC_ADDRESSBOOK</em> besitzt.</td>
+  </tr>
+  <tr>
+    <td><code>AddressbookRight</code></td>
+    <td>Wird innerhalb der überschriebenen <code>select()</code>-Methode verwendet. Erstellt eine HQL-Abfrage, die eine Verknüpfung mit den Benutzer-/Gruppenrechtetabellen herstellt und die Ergebnisse auf Adressbücher beschränkt, die der aktuelle Benutzer lesen kann, basierend auf den von <code>BaseUserGroupRightsDO</code> geerbten Besitz- und Gruppenregeln.</td>
+  </tr>
+</table>
+
+<h3>Abhängigkeiten</h3>
+<table>
+  <tr><th>Abhängigkeit</th><th>Rolle</th></tr>
+  <tr><td><code>UserDao</code></td><td>Autowired; wird von <code>setOwner()</code> verwendet, um ein <code>PFUserDO</code> anhand seiner numerischen ID aufzulösen, bevor es als Besitzer eines Adressbuchs zugewiesen wird.</td></tr>
+  <tr><td><code>HistoryFormatUtils</code></td><td>Autowired; bietet Formatierungshilfen für Audit-Log-Einträge (Historie), die wahrscheinlich über <code>BaseDao</code> bei der Aufzeichnung von Änderungen verwendet werden.</td></tr>
+</table>
+
+<h3>Wichtige Methoden</h3>
+
+<h4><code>setOwner(ab: AddressbookDO, userId: Long)</code></h4>
+<p>Löst ein <code>PFUserDO</code> über <code>UserDao</code> auf und weist es dem <code>owner</code>-Feld des Adressbuchs zu. Dies ist eine praktische Methode, die das von UI-Controllern verwendete Muster der Besitzersuche zentralisiert.</p>
+
+<h4><code>override fun select(filter: BaseSearchFilter): List&lt;AddressbookDO&gt;</code></h4>
+<p>Überschreibt die Basisimplementierung, um den generischen Filter in einen <code>AddressbookFilter</code> umzuwandeln und die Filterung basierend auf <code>AddressbookRight</code> zu integrieren. Das generierte HQL fügt JOIN-Klauseln zu den Rechttabellen hinzu, sodass nur Adressbücher zurückgegeben werden, die für den aktuellen Benutzer sichtbar sind (durch Besitz, Gruppenmitgliedschaft oder explizite Zugriffsgewährung). Benutzer ohne <code>MISC_ADDRESSBOOK</code> sehen möglicherweise eine leere Liste.</p>
+
+<h4><code>override fun newInstance(): AddressbookDO</code></h4>
+<p>Factory-Methode, die von der generischen DAO-Infrastruktur benötigt wird; gibt ein einfaches neues <code>AddressbookDO()</code> zurück.</p>
+
+<h4><code>override val additionalSearchFields: Array&lt;String&gt;</code></h4>
+<p>Gibt <code>ADDITIONAL_SEARCH_FIELDS</code> zurück, ein konstantes Array, das die Entitätseigenschaften auflistet, die in Volltext-/Hibernate-Search-Abfragen über die von <code>BaseDO</code> geerbten Standardfelder hinaus einbezogen werden sollen.</p>
+
+<h2>Git-Verlauf</h2>
+<div class="hist">
+  <table>
+    <tr><th>Commit</th><th>Beschreibung</th></tr>
+    <tr><td><code>868d6abb7</code></td><td>Copyright-Jahr erhöht: 2025 → 2026</td></tr>
+    <tr><td><code>63081666f</code></td><td>Quelldatei-Header: 2024 → 2025</td></tr>
+    <tr><td><code>4c04cfd65</code></td><td>MAJOR: Migration von Integer-IDs zu Long-IDs (alle <code>Integer</code>-basierten Schlüssel in <code>Long</code> geändert)</td></tr>
+    <tr><td><code>b6092df09</code></td><td>Copyright 2023 → 2024</td></tr>
+    <tr><td><code>ab45d51fa</code></td><td>Copyright 2001-2022 → 2001-2023</td></tr>
+    <tr><td><code>5f7ef41b8</code></td><td>Copyright 2021 → 2022</td></tr>
+    <tr><td><code>ceb63e8a1</code></td><td>Quellcode-Header: (C) 2001-2021</td></tr>
+    <tr><td><code>7c79f1922</code></td><td>Copyright des Quell-Headers → 2020</td></tr>
+    <tr><td><code>dd5ca38ac</code></td><td>Copyright aller Java-Dateiköpfe aktualisiert oder erstellt</td></tr>
+    <tr><td><code>2d86a8cd6</code></td><td>PROJECTFORGE-2306: Refaktorisierungen zur Aufrechterhaltung der Zugriffsprüfung bei Aktualisierungen (sichergestellt, dass <code>UserRightId</code>-Prüfungen bei jedem Schreibpfad eingehalten werden)</td></tr>
+    <tr><td><code>9ebb88522</code></td><td>Erster Commit — eine der ursprünglichen Dateien aus dem Gründungsimport des Projekts</td></tr>
+  </table>
+</div>
+
+<h2>Design-Grundlagen</h2>
+
+<h3>Warum eine separate DAO-Klasse?</h3>
+<p>ProjectForge folgt dem Standardmuster "DAO pro Entität". Jede Geschäftsentität erhält ihr eigenes DAO, damit querschnittliche Belange (Zugriffskontrolle, Auditierung, Volltextindizierung) pro Entität angepasst werden können. Das generische <code>BaseDao</code> behandelt die Standard-CRUD-Operationen, und die untergeordnete Klasse pro Entität fügt entitätsspezifische Regeln ein – hier die Logik für den Adressbuchzugriff.</p>
+
+<h3>Warum <code>select()</code> überschreiben anstatt Spring Security-Annotationen zu verwenden?</h3>
+<p>ProjectForge existiert bereits vor der weit verbreiteten Einführung von Spring Security und verwendet eine eigene, auf HQL-JOINs basierende Rechteverwaltungsschicht. Das Überschreiben von <code>select()</code> ermöglicht es, die Zugriffsprüfungen direkt in die Datenbankabfrage zu integrieren, wodurch das N+1-Problem vermieden wird, das beim Laden aller Zeilen und anschließenden Filtern im Anwendungscode auftreten würde. Dieser Ansatz ermöglicht es dem Filter auch, Zugriffskontrollprädikate mit benutzerdefinierten Suchkriterien in einer einzigen HQL-Anweisung zu kombinieren.</p>
+
+<h3>Warum wird eine <code>AddressbookRight</code>-Klasse anstelle von inline-HQL verwendet?</h3>
+<p>Die Klasse <code>AddressbookRight</code> kapselt das von <code>BaseUserGroupRightsDO</code> definierte Benutzer-/Gruppenberechtigungsmodell. Durch die Delegierung an eine separate Klasse kann dieselbe Zugriffslogik in Berichten, Exporten und REST-Endpunkten wiederverwendet werden, ohne das Multi-JOIN-Muster zu duplizieren. Außerdem wird das Zugriffsmodell so leichter isoliert testbar.</p>
+
+<h3>Warum <code>@Service</code> anstelle von <code>@Repository</code>?</h3>
+<p>Obwohl das Spring-<code>@Repository</code>-Stereotyp für DAOs typisch ist, verwendet ProjectForge durchgängig <code>@Service</code> in seiner DAO-Schicht. Dies spiegelt wahrscheinlich eine Konvention wider, die vor der breiten Einführung der Ausnahmeübersetzungsfunktion von <code>@Repository</code> etabliert wurde, oder eine bewusste Entscheidung, DAOs als transaktionale Dienstkomponenten zu behandeln. Der funktionale Unterschied ist vernachlässigbar, da beide Spring-verwaltete Singletons sind.</p>
+
+<h3>Langlebigkeit</h3>
+<p>Diese Datei ist seit dem ersten Commit (<code>9ebb88522</code>) im Codebestand und hat jede größere Refaktorisierung überstanden – die Integer-zu-Long-Migration, mehrere Copyright-Aktualisierungen und die Zugriffsprüfungs-Refaktorisierung von PROJECTFORGE-2306 – was die Stabilität der DAO-Abstraktion belegt.</p>
+
+</body>
+</html>

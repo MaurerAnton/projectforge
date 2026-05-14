@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>#276: ToDoEditForm.java [DE]</title>
+<style>
+body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}
+h1{border-bottom:2px solid #333;padding-bottom:.3em}
+h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}
+h3{margin-top:2em;color:#444}
+a{color:#0366d6}
+.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}
+.nav{font-size:.9em;color:#888;margin-bottom:1em}
+.lang{font-size:.85em;color:#888;float:right}
+.lang a{color:#888;text-decoration:none;padding:0 .3em}
+.lang a.active{color:#0366d6;font-weight:600;text-decoration:underline}
+.meta{font-size:.9em;margin:1em 0;color:#555}
+code{background:#f0f0f0;padding:0 .2em;font-size:.93em}
+pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}
+table{border-collapse:collapse;width:100%;margin:1em 0}
+th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}
+th{background:#f5f5f5;font-weight:600}
+.hist{font-size:.85em;color:#555}
+</style>
+</head>
+<body>
+<div class="lang"><a href="276.html">EN</a> · <a href="276_de.html" class="active">DE</a> · <a href="276_ru.html">RU</a> · <a href="276_fr.html">FR</a> · <a href="276_es.html">ES</a></div>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← Datei-Index</a> · <a href="284.html">← Vorherige</a> · <a href="617.html">Nächste →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/plugins/org.projectforge.plugins.todo/src/main/java/org/projectforge/plugins/todo/ToDoEditForm.java" target="_blank" title="Quellcode auf GitHub anzeigen">📄 Quelle</a></div>
+<h1>#276: <code>ToDoEditForm.java</code></h1>
+<div class="meta"><code>plugins/org.projectforge.plugins.todo/src/main/java/org/projectforge/plugins/todo/ToDoEditForm.java</code> Typ: Java · Rolle: Formular · Quelle: plugins/org.projectforge.plugins.todo/src/main/java/org/projectforge/plugins/todo/ToDoEditForm.java <span style="color:#888">372 Zeilen · 289 Code · 49 Kommentare · 34 Leerzeichen</span></div>
+<div class="c">Wicket-Formular-Implementierung für die ToDo-Bearbeitung. Behandelt Formularvalidierung, Absende-Logik und Feld-zu-Entitäts-Bindung.</div>
+<h2>Codestruktur</h2>
+<p>Paket: <code>org.projectforge.plugins.todo</code></p>
+<p>Klassen: <code>ToDoEditForm</code></p>
+<p>Erweitert: <code>AbstractEditForm</code></p>
+<p>Methoden (11): <code>init</code>, <code>getDefaultChoice</code>, <code>onUpdate</code>, <code>component</code>, <code>onSubmit</code>, <code>onError</code>, <code>getDueDateProperties</code>, <code>addCloseToDoDialog</code>, <code>init</code>, <code>onCloseButtonSubmit</code>, <code>getLogger</code></p>
+<p>Felder (4): <code>serialVersionUID</code>, <code>templateName</code>, <code>closeToDoDialog</code>, <code>groupSelectPanel</code></p>
+<p>Importe: 32 Pakete</p>
+<h2>Quellcode (gekürzt)</h2>
+<pre>
+package org.projectforge.plugins.todo;
+
+import org.apache.commons.lang3.StringUtils;
+import org.apache.wicket.AttributeModifier;
+import org.apache.wicket.ajax.AjaxRequestTarget;
+import org.apache.wicket.ajax.markup.html.form.AjaxButton;
+import org.apache.wicket.markup.html.form.DropDownChoice;
+import org.apache.wicket.markup.html.form.Form;
+import org.apache.wicket.markup.html.form.FormComponent;
+import org.apache.wicket.markup.html.form.FormComponentUpdatingBehavior;
+import org.apache.wicket.model.PropertyModel;
+import org.apache.wicket.model.ResourceModel;
+import org.apache.wicket.spring.injection.annot.SpringBean;
+import org.apache.wicket.util.visit.IVisit;
+import org.apache.wicket.util.visit.IVisitor;
+import org.hibernate.Hibernate;
+import org.projectforge.business.configuration.ConfigurationService;
+import org.projectforge.business.user.UserGroupCache;
+import org.projectforge.business.user.UserPrefDao;
+import org.projectforge.common.i18n.Priority;
+import org.projectforge.framework.persistence.user.entities.PFUserDO;
+import org.projectforge.framework.persistence.user.entities.UserPrefDO;
+import org.projectforge.web.WicketSupport;
+import org.projectforge.web.dialog.ModalDialog;
+import org.projectforge.web.task.TaskSelectPanel;
+import org.projectforge.web.user.NewGroupSelectPanel;
+import org.projectforge.web.user.UserSelectPanel;
+import org.projectforge.web.wicket.AbstractEditForm;
+import org.projectforge.web.wicket.WicketUtils;
+import org.projectforge.web.wicket.bootstrap.GridSize;
+import org.projectforge.web.wicket.components.*;
+import org.projectforge.web.wicket.flowlayout.*;
+import org.slf4j.Logger;
+
+import java.time.LocalDate;
+
+public class ToDoEditForm extends AbstractEditForm&lt;ToDoDO, ToDoEditPage&gt;
+{
+  private static final long serialVersionUID = -6208809585214296635L;
+
+  private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(ToDoEditForm.class);
+
+  protected boolean saveAsTemplate, sendNotification = true, sendShortMessage;
+
+  @SuppressWarnings(&quot;unused&quot;)
+  private String templateName; // Von Wicket verwendet
+
+  private ModalDialog closeToDoDialog;
+
+  private MaxLengthTextArea commentTextArea, closeToDoDialogCommentTextArea;
+
+  protected NewGroupSelectPanel groupSelectPanel;
+
+  public ToDoEditForm(final ToDoEditPage parentPage, final ToDoDO data)
+  {
+    super(parentPage, data);
+  }
+
+  @SuppressWarnings(&quot;serial&quot;)
+  @Override
+  protected void init()
+  {
+    super.init();
+    gridBuilder.newGridPanel();
+    UserPrefDao userPrefDao = WicketSupport.get(UserPrefDao.class);
+    if (isNew()) {
+      // Favoriten
+      final String[] templateNames = userPrefDao.getPrefNames(ToDoPlugin.USER_PREF_AREA);
+      if (templateNames != null &amp;&amp; templateNames.length &gt; 0) {
+        // DropDownChoice Vorlagen
+        final FieldsetPanel fs = gridBuilder.newFieldset(getString(&quot;templates&quot;));
+        final LabelValueChoiceRenderer&lt;String&gt; templateNamesChoiceRenderer = new LabelValueChoiceRenderer&lt;&gt;();
+        templateNamesChoiceRenderer.addValue(&quot;&quot;, getString(&quot;userPref.template.select&quot;));
+        for (final String name : templateNames) {
+          templateNamesChoiceRenderer.addValue(name, name);
+        }
+        final DropDownChoice&lt;String&gt; templateNamesChoice = new DropDownChoice&lt;String&gt;(fs.getDropDownChoiceId(),
+            new PropertyModel&lt;&gt;(
+                this, &quot;templateName&quot;),
+            templateNamesChoiceRenderer.getValues(), templateNamesChoiceRenderer)
+        {
+          @Override
+          protected CharSequence getDefaultChoice(final String selected)
+          {
+            return &quot;&quot;;
+          }
+        };
+
+        templateNamesChoice.add(new FormComponentUpdatingBehavior()
+        {
+          @SuppressWarnings({ &quot;unchecked&quot;, &quot;rawtypes&quot; })
+          @Override
+          public void onUpdate()
+          {
+            final String newSelection = (String) this.getFormComponent().getModelObject();
+            if (StringUtils.isNotEmpty(newSelection)) {
+              // Felder mit ausgewählten Vorlagenwerten füllen:
+              final UserPrefDO userPref = userPrefDao.selectUserPref(ToDoPlugin.USER_PREF_AREA, newSelection);
+              if (userPref != null) {
+                userPrefDao.fillFromUserPrefParameters(userPref, data);
+              }
+              templateName = &quot;&quot;;
+              // Alle Formularkomponenten als modellgeändert markieren.
+              visitFormComponents(new IVisitor()
+              {
+                @Override
+                public void component(final Object object, final IVisit visit)
+                {
+                  final FormComponent&lt;?&gt; fc = (FormComponent&lt;?&gt;) object;
+                  fc.modelChanged();
+                  visit.dontGoDeeper();
+                }
+              });
+            }
+          }
+        });
+        templateNamesChoice.setNullValid(true);
+        fs.add(templateNamesChoice);
+      }
+// ... (gekürzt, insgesamt 350 Zeilen)</pre>
+
+<h2>Git-Verlauf</h2>
+<div class="hist"><pre>868d6abb7 2025 -> 2026
+63081666f Quellcode-Dateiköpfe: 2024 -> 2025.
+3785f8347 Migration in Arbeit...
+011000f03 Migration in Arbeit... (alle Tests aller Pakete: OK).
+06828f490 Migration in Arbeit...</pre></div>
+</body>
+</html>

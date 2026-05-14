@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head><meta charset="utf-8"><title>#2846: AccessListPage.java [RU]</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333}h2{margin-top:2em;border-bottom:1px solid #ddd}h3{margin-top:1.5em;color:#333}a{color:#0366d6}.meta{background:#f0f0f0;border-radius:6px;padding:1em;margin:1em 0;font-size:.9em}.code-block{background:#1e1e1e;color:#d4d4d4;border-radius:4px;padding:.8em 1em;margin:.5em 0;overflow-x:auto;font-family:Consolas,monospace;font-size:.82em;line-height:1.5;white-space:pre-wrap}.commentary{margin:.8em 0;background:#fff;padding:.5em 1em;border-radius:6px;border-left:4px solid #ddd;line-height:1.7}table{border-collapse:collapse;width:100%;margin:.8em 0;font-size:.9em}th,td{border:1px solid #ddd;padding:.4em .6em}th{background:#f0f0f0}code{background:#e8e8e8;border-radius:3px;padding:.1em .3em;font-size:.9em}.nav{font-size:.9em;color:#888;margin-bottom:1em}.history{background:#fffbe6;border-radius:6px;padding:1em;margin:1em 0;font-size:.9em;border-left:4px solid #ffc107}.arch{background:#e8f4fd;border-radius:6px;padding:1em;margin:1em 0;font-size:.9em;border-left:4px solid #2196f3}</style></head>
+<body><div class="nav"><a href="https://maureranton.github.io/projectforge/">← Индекс</a> · <a href="file-index.html">← Индекс файлов</a> · <a href="2845.html">← Предыдущая</a> · <a href="2847.html">Следующая →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-wicket/src/main/java/org/projectforge/web/access/AccessListPage.java" target="_blank" title="Просмотреть исходник на GitHub">📄 исходник</a></div>
+<h1>#2846: <code>AccessListPage.java</code></h1>
+<div class="meta"><code>projectforge-wicket/src/main/java/org/projectforge/web/access/AccessListPage.java</code> <p><strong>Путь:</strong> <code>projectforge-wicket/src/main/java/org/projectforge/web/access/AccessListPage.java</code> · <strong>Строк:</strong> 228 · <strong>Расширяет:</strong> <code>AbstractListPage&lt;AccessListForm, AccessDao, GroupTaskAccessDO&gt;</code></p><p><strong>Назначение:</strong> Главная страница управления правами доступа — центральный интерфейс для настройки того, кто (группа) может что делать (тип доступа) над какой задачей (структурный элемент). Отображает записи GroupTaskAccess в Wicket DataTable с 4 пользовательскими колонками: иерархическое дерево задач, имя группы, типы доступа (подтаблица) и рекурсивный флаг (галочка). Кнопка мастера только для администраторов для массовой настройки доступа.</p><p><strong>Исходник:</strong> <a href="https://github.com/micromata/projectforge/blob/develop/projectforge-wicket/src/main/java/org/projectforge/web/access/AccessListPage.java">GitHub</a></p> <span style="color:#888">228 строк · 180 кода · 35 комментариев · 13 пустых</span></div>
+<div class="history"><table><tr><th>Коммит</th><th>Сообщение</th></tr><tr><td><code>9ebb88522</code></td><td>2016-07-18 Первоначальный коммит</td></tr></table></div>
+
+<h2>Архитектура обобщённых типов — контракт из 3 типов</h2>
+<div class="code-block"><pre>public class AccessListPage extends AbstractListPage&lt;
+    AccessListForm,          // F — форма Wicket с полями фильтра/поиска
+    AccessDao,               // D — объект доступа к данным для CRUD
+    GroupTaskAccessDO        // E — сущность/доменный объект, который отображается
+&gt; implements IListPageColumnsCreator&lt;GroupTaskAccessDO&gt;</pre></div>
+<div class="commentary"><p>Архитектура Wicket в ProjectForge использует <strong>шаблон с 3 обобщёнными типами</strong> для каждой страницы списка. Это подход быстрой разработки (RAD) из руководства разработчика (#site/_docs/development.adoc): "Создавайте классы UI на основе базовых классов." Расширяя <code>AbstractListPage</code> этими тремя типами, страница наследует:</p><ul><li><strong>Интерфейс фильтра/поиска</strong> — от <code>AccessListForm</code> (тип F). Форма предоставляет поля фильтра (выбор задачи, выбор группы, выбор пользователя, текст поиска).</li><li><strong>CRUD-операции</strong> — от <code>AccessDao</code> (тип D). DAO обрабатывает запросы к базе данных с автоматической фильтрацией прав доступа — пользователи видят только те записи, которые им разрешено просматривать.</li><li><strong>Привязка данных</strong> — от <code>GroupTaskAccessDO</code> (тип E). Сущность предоставляет данные колонок, сортировку и идентификацию строк.</li></ul><p>Аннотация <code>@ListPage(editPage = AccessEditPage.class)</code> в строке 53 связывает эту страницу списка с её редактором. Когда пользователь кликает по строке, Wicket переходит на <code>AccessEditPage</code> с идентификатором сущности. Это собственная аннотация ProjectForge — не стандартная аннотация Wicket.</p></div>
+
+<h2>DataTable из 4 колонок — каждая колонка как мини-рендерер</h2>
+<div class="code-block"><pre>// КОЛОНКА 1: Задача — иерархический путь дерева
+new PropertyColumn("task.title") {
+  @Override public void populateItem(...) {
+    TaskDO task = access.getTask();
+    WicketTaskFormatter.appendFormattedTask(cycle, buf, task, true, false);
+    item.add(new ListSelectActionPanel(..., AccessEditPage.class, access.getId(), ...));
+    addRowClick(item);  // Вся строка кликабельна для перехода к редактированию
+  }
+}
+
+// КОЛОНКА 2: Группа — простой текст
+new PropertyColumn("group.name")
+
+// КОЛОНКА 3: Рекурсивность — иконка галочки или пусто
+new PropertyColumn("recursive") {
+  @Override public void populateItem(...) {
+    if (access.getRecursive()) item.add(new IconPanel(..., IconType.ACCEPT));
+    else item.add(createInvisibleDummyComponent(...));  // Сохраняем структуру DOM
+  }
+}
+
+// КОЛОНКА 4: Записи доступа — ВСТРОЕННАЯ ПОДТАБЛИЦА
+new PropertyColumn("accessEntries") {
+  @Override public void populateItem(...) {
+    AccessTablePanel accessTablePanel = new AccessTablePanel(..., accessEntries);
+    if (rowIndex == 0) accessTablePanel.setDrawHeader(true);  // Заголовок только в первой строке
+    item.add(accessTablePanel);
+  }
+}</pre></div>
+<div class="commentary"><p><strong>Колонка 1 — Дерево задач (строки 83-105):</strong> Самая сложная колонка. <code>WicketTaskFormatter.appendFormattedTask()</code> отображает полный иерархический путь задачи (например, "ООО "Ромашка" → Веб-портал → Спринт 3") в виде одной форматированной строки. <code>ListSelectActionPanel</code> оборачивает это в кликабельную ссылку на <code>AccessEditPage</code>. <code>addRowClick(item)</code> делает кликабельной ВСЮ строку, а не только имя задачи.</p><p><strong>Колонка 3 — Рекурсивный флаг (строки 110-125):</strong> Показывает зелёную галочку (<code>IconType.ACCEPT</code>), если доступ рекурсивный (применяется ко всем дочерним задачам). В противном случае показывает <strong>невидимый фиктивный компонент</strong> — не просто пустоту. Это паттерн Wicket: удаление компонента из иерархии нарушает индексное отображение повторителя. Фиктивный компонент сохраняет структуру дерева компонентов, не отображая ничего видимого.</p><p><strong>Колонка 4 — Встроенный AccessTablePanel (строки 126-143):</strong> Каждая строка содержит ВЛОЖЕННУЮ подтаблицу, показывающую отдельные записи доступа (чтение, запись, удаление и т.д.) для данной комбинации группы/задачи. Заголовок отображается только в ПЕРВОЙ строке (<code>rowIndex == 0</code>), чтобы избежать повторения заголовков колонок в каждой строке. Это паттерн "список-в-списке" — внешний список показывает пары группа/задача, каждая из которых содержит внутренний список типов доступа.</p></div>
+
+<h2>Мастер для администратора — массовая настройка доступа (строки 160-174)</h2>
+<div class="code-block"><pre>@Override protected void init() {
+  if (getAccessChecker().isLoggedInUserMemberOfAdminGroup()) {
+    ContentMenuEntryPanel menuEntry = new ContentMenuEntryPanel(..., new Link() {
+      public void onClick() {
+        TaskWizardPage wizardPage = new TaskWizardPage(params);
+        wizardPage.setReturnToPage(AccessListPage.this);
+        setResponsePage(wizardPage);
+      }
+    }, getString("wizard"));
+    addContentMenuEntry(menuEntry);
+  }
+}</pre></div>
+<div class="commentary"><p>Кнопка мастера появляется в контекстном меню страницы ТОЛЬКО для пользователей-администраторов. Она ведёт на <code>TaskWizardPage</code> — многошаговый мастер, который массово создаёт записи доступа для иерархии задач. Это функция "Быстрый старт", описанная в руководстве пользователя: вместо ручного создания десятков записей доступа для каждой задачи, мастер генерирует их автоматически с помощью шаблонов (например, шаблон "сотрудник" даёт доступ на чтение ко всем дочерним задачам). <code>setReturnToPage(AccessListPage.this)</code> гарантирует, что мастер вернётся на эту страницу после завершения.</p></div>
+
+<h2>Выбор/отмена выбора — фильтрация по задаче, группе или пользователю (строки 179-217)</h2>
+<div class="code-block"><pre>public void select(String property, Object selectedValue) {
+  if ("taskId".equals(property)) {
+    form.getSearchFilter().setTaskId((Long) selectedValue); refresh();
+  } else if ("groupId".equals(property)) {
+    form.getSearchFilter().setGroupId((Long) selectedValue); refresh();
+  } else if ("userId".equals(property)) {
+    form.getSearchFilter().setUserId((Long) selectedValue); refresh();
+  } else {
+    super.select(property, selectedValue);
+  }
+}</pre></div>
+<div class="commentary"><p>Методы <code>select/unselect</code> реализуют <strong>паттерн обратного вызова</strong> для всплывающих окон выбора в ProjectForge. Когда пользователь нажимает "Выбрать задачу" в панели фильтра, открывается окно выбора. Когда пользователь выбирает задачу, всплывающее окно вызывает <code>select("taskId", taskId)</code> на этой странице. Метод устанавливает фильтр и вызывает <code>refresh()</code> для перезагрузки таблицы. <code>unselect</code> очищает фильтр. Ветка <code>groupId</code> содержит <code>form.groupSelectPanel.getTextField().modelChanged()</code> — уведомляет Wicket о том, что модель текстового поля была изменена извне, что вызывает перерисовку.</p></div>
+
+<h2>Ключевые выводы</h2><div class="commentary"><ul><li><strong>3 обобщённых типа:</strong> Каждая страница списка следует шаблону <code>&lt;F, D, E&gt;</code>. Понимание этого открывает всю архитектуру Wicket UI.</li><li><strong>Фиктивные компоненты:</strong> <code>createInvisibleDummyComponent</code> в строке 121 — критически важный паттерн Wicket: никогда не возвращайте null и не пропускайте компоненты в повторителе.</li><li><strong>Встроенные подтаблицы:</strong> Колонка 4 отображает целый <code>AccessTablePanel</code> внутри ячейки таблицы. Это мощный, но дорогой паттерн — каждая строка создаёт новое дерево компонентов Wicket.</li><li><strong>Возврат из мастера:</strong> <code>setReturnToPage(this)</code> создаёт навигационную "хлебную крошку" обратно на страницу списка.</li><li><strong>Функции только для администраторов:</strong> Кнопка мастера защищена проверкой <code>isLoggedInUserMemberOfAdminGroup()</code>. Пользователи, не являющиеся администраторами, никогда её не видят — безопасность обеспечивается на уровне UI (в дополнение к проверкам доступа на стороне сервера в DAO).</li></ul></div>
+<div class="nav" style="margin-top:2em"><a href="2799.html">← #2799</a> · <a href="2801.html">#2801 →</a></div>
+</body></html>

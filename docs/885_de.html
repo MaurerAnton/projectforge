@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>#885: TradingPartner.kt [DE]</title>
+<style>
+body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}
+h1{border-bottom:2px solid #333;padding-bottom:.3em}
+h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}
+h3{margin-top:2em;color:#444}
+a{color:#0366d6}
+.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}
+.nav{font-size:.9em;color:#888;margin-bottom:1em}
+.meta{font-size:.9em;margin:1em 0;color:#555}
+code{background:#f0f0f0;padding:0 .2em;font-size:.93em}
+pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}
+table{border-collapse:collapse;width:100%;margin:1em 0}
+th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}
+th{background:#f5f5f5;font-weight:600}
+.hist{font-size:.85em;color:#555}
+</style>
+</head>
+<body>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← Dateiindex</a> · <a href="884.html">← Vorherige</a> · <a href="886.html">Nächste →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/kotlin/org/projectforge/business/dvelop/TradingPartner.kt" target="_blank" title="Quellcode auf GitHub ansehen">📄 Quelle</a></div>
+
+<h1>#885: <code>TradingPartner.kt</code></h1>
+
+<div class="meta"><code>projectforge-business/src/main/kotlin/org/projectforge/business/dvelop/TradingPartner.kt</code> 
+<p><strong>Typ:</strong> Kotlin-Klasse — D-velop-Domänenmodell</p>
+<p><strong>Zweck:</strong> Stellt einen Geschäftspartner (Lieferant, Kunde oder beides) in der D-velop-Plattform dar. Dies ist die primäre Entität, die während der Synchronisation zwischen ProjectForge und D-velop übertragen wird.</p>
+<p><strong>Quellpfad:</strong> <code>projectforge-business/src/main/kotlin/org/projectforge/business/dvelop/TradingPartner.kt</code></p>
+ <span style="color:#888">201 Zeilen · 103 Code · 72 Kommentare · 26 leer</span></div>
+
+<div class="c">
+<p>Das <strong>zentrale Domänenmodell</strong> für die D-velop-Integration. Ein Geschäftspartner repräsentiert eine Geschäftseinheit (Unternehmen oder Person), mit der ProjectForge Rechnungen austauscht – Lieferanten (Vendoren), Kunden oder Entitäten, die beides sind. Diese Klasse bildet direkt die JSON-Struktur der D-velop-REST-API für Geschäftspartner ab und enthält alle Felder, die für die Adressverwaltung (Rechnungs-, Liefer- und physische Adressen), Kontaktdaten, organisatorische Zuordnung und einen benutzerdefinierten Feldmechanismus benötigt werden, der die DATEV-Kontonummer von ProjectForge mit der benutzerdefinierten Feld-API von D-velop verbindet.</p>
+</div>
+
+<h2>Enum-Wert-Wrapper</h2>
+<p>D-velop verwendet enum-ähnliche Wertobjekte anstelle von einfachen Zeichenketten. ProjectForge kapselt diese als innere Klassen:</p>
+
+<table>
+<tr><th>Innere Klasse</th><th>Enum-Werte</th><th>JSON-Struktur</th></tr>
+<tr><td><code>Type</code></td><td><code>VENDOR</code>, <code>CUSTOMER</code>, <code>PARTNER</code></td><td><code>{ "value": "VENDOR" }</code></td></tr>
+<tr><td><code>ContactType</code></td><td><code>COMPANY</code>, <code>PRIVATE</code></td><td><code>{ "value": "COMPANY" }</code></td></tr>
+<tr><td><code>Active</code></td><td><code>TRUE</code>, <code>FALSE</code></td><td><code>{ "value": "TRUE" }</code></td></tr>
+<tr><td><code>Organization</code></td><td><code>id</code>, <code>number?</code>, <code>name?</code></td><td><code>{ "id": "...", "number": null, "name": null }</code></td></tr>
+</table>
+
+<p><code>Organization</code> implementiert <code>equals()</code> und <code>hashCode()</code> ausschließlich basierend auf <code>id</code> für die mengenbasierte Deduplizierung.</p>
+
+<h2>Begleitobjekt</h2>
+<pre>companion object {
+    var datevKontoFieldId: String? = null
+}</pre>
+<p>Die <code>datevKontoFieldId</code> ist eine global gecachte ID der benutzerdefinierten Felddefinition von D-velop für "datevKonto". Sie wird einmal während des D-velop-Bootstrappings gesetzt (durch Ermitteln der benutzerdefinierten Felddefinitionen) und dann von der Eigenschaft <code>customFields</code> verwendet, um die DATEV-Kontonummer über den benutzerdefinierten Feldmechanismus von D-velop zu serialisieren/deserialisieren.</p>
+
+<h2>Kerneigenschaften</h2>
+<table>
+<tr><th>Eigenschaft</th><th>Typ</th><th>Erforderlich?</th><th>Beschreibung</th></tr>
+<tr><td><code>id</code></td><td><code>String?</code></td><td>—</td><td>Eindeutige Kennung, die von D-velop nach der Erstellung vergeben wird</td></tr>
+<tr><td><code>number</code></td><td><code>String?</code></td><td>Erforderlich</td><td>Geschäftspartnernummer (externe Kennung)</td></tr>
+<tr><td><code>name</code></td><td><code>String?</code></td><td>Schreibgeschützt</td><td>Wird von D-velop aus Firma oder Vorname+Nachname berechnet</td></tr>
+<tr><td><code>shortName</code></td><td><code>String?</code></td><td>—</td><td>Kurzkennung für Listendarstellungen</td></tr>
+<tr><td><code>contactType</code></td><td><code>ContactType?</code></td><td>Erforderlich</td><td>COMPANY oder PRIVATE</td></tr>
+<tr><td><code>firstName</code></td><td><code>String?</code></td><td>—</td><td>Vorname (für PRIVATE-Kontakte)</td></tr>
+<tr><td><code>lastName</code></td><td><code>String?</code></td><td>Wenn PRIVATE</td><td>Nachname (erforderlich, wenn contactType=PRIVATE)</td></tr>
+<tr><td><code>company</code></td><td><code>String?</code></td><td>Wenn COMPANY</td><td>Firmenname (erforderlich, wenn contactType=COMPANY)</td></tr>
+<tr><td><code>type</code></td><td><code>Type?</code></td><td>Erforderlich</td><td>VENDOR, CUSTOMER oder PARTNER</td></tr>
+<tr><td><code>active</code></td><td><code>Active?</code></td><td>Erforderlich</td><td>Gibt an, ob der Partner aktiv ist</td></tr>
+<tr><td><code>organization</code></td><td><code>Organization?</code></td><td>Erforderlich</td><td>Die D-velop-Organisation, zu der dieser Partner gehört</td></tr>
+</table>
+
+<h2>Adresseigenschaften (Physische Adresse)</h2>
+<table>
+<tr><th>Eigenschaft</th><th>Typ</th></tr>
+<tr><td><code>street</code></td><td><code>String?</code></td></tr>
+<tr><td><code>zip</code></td><td><code>String?</code></td></tr>
+<tr><td><code>city</code></td><td><code>String?</code></td></tr>
+<tr><td><code>region</code></td><td><code>String?</code></td></tr>
+<tr><td><code>country</code></td><td><code>String?</code></td></tr>
+<tr><td><code>postBoxZip</code></td><td><code>String?</code></td></tr>
+<tr><td><code>postBox</code></td><td><code>String?</code></td></tr>
+<tr><td><code>addressAdditional</code></td><td><code>String?</code></td></tr>
+</table>
+
+<h2>Rechnungsadresseigenschaften (<code>billTo*</code>)</h2>
+<table>
+<tr><th>Eigenschaft</th><th>Typ</th><th>Beschreibung</th></tr>
+<tr><td><code>billToStreet</code></td><td><code>String?</code></td><td>Rechnungsstraße</td></tr>
+<tr><td><code>billToZip</code></td><td><code>String?</code></td><td>Rechnungs-PLZ</td></tr>
+<tr><td><code>billToCity</code></td><td><code>String?</code></td><td>Rechnungsort</td></tr>
+<tr><td><code>billToRegion</code></td><td><code>String?</code></td><td>Rechnungsregion/-bundesland</td></tr>
+<tr><td><code>billToCountry</code></td><td><code>String?</code></td><td>Rechnungsland</td></tr>
+<tr><td><code>billToAddressAdditional</code></td><td><code>String?</code></td><td>Zusätzliche Rechnungsadresszeilen</td></tr>
+<tr><td><code>isBillToAddressEmpty</code></td><td><code>Boolean</code> (berechnet)</td><td>True, wenn alle billTo-Felder leer sind</td></tr>
+</table>
+
+<h2>Lieferadresseigenschaften (<code>shipTo*</code>)</h2>
+<table>
+<tr><th>Eigenschaft</th><th>Typ</th></tr>
+<tr><td><code>shipToStreet</code></td><td><code>String?</code></td></tr>
+<tr><td><code>shipToZip</code></td><td><code>String?</code></td></tr>
+<tr><td><code>shipToCity</code></td><td><code>String?</code></td></tr>
+<tr><td><code>shipToRegion</code></td><td><code>String?</code></td></tr>
+<tr><td><code>shipToCountry</code></td><td><code>String?</code></td></tr>
+<tr><td><code>shipToAddressAdditional</code></td><td><code>String?</code></td></tr>
+</table>
+
+<h2>Kontakt &amp; Metadaten</h2>
+<table>
+<tr><th>Eigenschaft</th><th>Typ</th><th>Beschreibung</th></tr>
+<tr><td><code>phoneNumber</code></td><td><code>String?</code></td><td>Telefonnummer</td></tr>
+<tr><td><code>faxNumber</code></td><td><code>String?</code></td><td>Faxnummer</td></tr>
+<tr><td><code>eMail</code></td><td><code>String?</code></td><td>E-Mail-Adresse</td></tr>
+<tr><td><code>website</code></td><td><code>String?</code></td><td>Website-URL</td></tr>
+<tr><td><code>remarks</code></td><td><code>String?</code></td><td>Freitext-Notizen</td></tr>
+<tr><td><code>responsible</code></td><td><code>String?</code></td><td>Benutzer-ID der verantwortlichen Person</td></tr>
+<tr><td><code>relationSince</code></td><td><code>String?</code></td><td>Startdatum der Geschäftsbeziehung (Format: "2022-05-11 00:00:00")</td></tr>
+<tr><td><code>relationUntil</code></td><td><code>String?</code></td><td>Enddatum der Geschäftsbeziehung</td></tr>
+<tr><td><code>importCode</code></td><td><code>String?</code></td><td>Führende ID im externen System (wird während der Migration verwendet)</td></tr>
+</table>
+
+<h2>Mechanismus für benutzerdefinierte Felder</h2>
+<p>Die Eigenschaft <code>customFields</code> mit benutzerdefiniertem Getter/Setter ist die Brücke zwischen dem <code>datevKonto</code>-Feld von ProjectForge und der generischen API für benutzerdefinierte Felder von D-velop:</p>
+
+<h3>Getter</h3>
+<pre>get() {
+    if (datevKonto == null || datevKontoFieldId == null) return null
+    return mapOf(datevKontoFieldId!! to CustomField(
+        configID = datevKontoFieldId!!,
+        name = "datevKonto",
+        value = datevKonto
+    ))
+}</pre>
+<p>Wenn eine DATEV-Kontonummer gesetzt ist und die <code>datevKontoFieldId</code> bekannt ist, wird eine Map mit einem einzelnen Eintrag erstellt, der den Wrapper für das benutzerdefinierte Feld enthält.</p>
+
+<h3>Setter</h3>
+<pre>set(value) {
+    value?.values?.find { it.name == "datevKonto" }?.value?.let {
+        datevKonto = it as Int?
+    }
+    if (value == null) { datevKonto = null }
+}</pre>
+<p>Beim Deserialisieren von D-velop-JSON-Antworten wird das benutzerdefinierte Feld "datevKonto" gefunden und sein ganzzahliger Wert extrahiert.</p>
+
+<h2>Architekturnotizen</h2>
+<ul>
+<li><code>@JsonIgnore</code> auf <code>datevKonto</code> verhindert die direkte Serialisierung – es muss über den <code>customFields</code>-Mechanismus erfolgen</li>
+<li>Alle Enum-Werte sind in Containerobjekte (<code>Type(value)</code>) eingekapselt, um der JSON-Struktur von D-velop <code>{"value": "..."}</code> zu entsprechen</li>
+<li><code>isBillToAddressEmpty</code> ist mit <code>@JsonIgnore</code> annotiert, um die Serialisierung zu verhindern</li>
+<li>Die Klasse verwendet reguläre <code>var</code>-Eigenschaften (keine Datenklasse), da sie benutzerdefinierte Getter/Setter und eine Begleitobjektlogik hat</li>
+<li>Die Adresse ist auf drei separate Gruppen aufgeteilt: physisch (<code>street/zip/city</code>), Rechnung (<code>billTo*</code>) und Lieferung (<code>shipTo*</code>)</li>
+</ul>
+
+<h2>Git-Verlauf</h2>
+<div class="hist"><pre>868d6abb7 2025 -> 2026
+63081666f Quellcodedatei-Header: 2024 -> 2025.
+b6092df09 Copyright 2023 -> 2024
+510974f0f D-velop: Test korrigiert.
+adc61b60b Nichts Wesentliches
+bf2e51373 WIP D.velop
+be750e77e WIP D.velop
+9ebb99c88 WIP D.velop
+cb2915283 WIP D.velop
+aec5b4be0 Nichts Wesentliches.
+cb6d633f9 WIP D-velop
+6a4ee1932 WIP D-velop
+50926baa8 WIP D-velop
+912400e42 WIP D-velop
+c2418da24 dvelop-Paket von projectforge-business nach projectforge-rest verschoben.
+f993107db Erste Revision. Spring Boot 2.7.6->2.7.7
+</pre></div>
+</body>
+</html>

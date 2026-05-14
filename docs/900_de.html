@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<title>#900: AuftragsPositionDO.kt [DE]</title>
+<style>
+body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}
+h1{border-bottom:2px solid #333;padding-bottom:.3em}
+h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}
+h3{margin-top:2em;color:#444}
+a{color:#0366d6}
+.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}
+.nav{font-size:.9em;color:#888;margin-bottom:1em}
+.meta{font-size:.9em;margin:1em 0;color:#555}
+code{background:#f0f0f0;padding:0 .2em;font-size:.93em}
+pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}
+table{border-collapse:collapse;width:100%;margin:1em 0}
+th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}
+th{background:#f5f5f5;font-weight:600}
+.hist{font-size:.85em;color:#555}
+</style>
+</head>
+<body>
+
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← Dateiindex</a> · <a href="899.html">← Vorherige</a> · <a href="901.html">Nächste →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/kotlin/org/projectforge/business/fibu/AuftragsPositionDO.kt" target="_blank" title="Quelltext auf GitHub anzeigen">📄 Quelle</a></div>
+
+<h1>#900: <code>AuftragsPositionDO.kt</code></h1>
+
+<div class="meta"><code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/AuftragsPositionDO.kt</code> 
+  <strong>Typ:</strong> JPA-Entität (Hibernate Search indiziert) &middot;
+  <strong>Zweck:</strong> Repräsentiert eine einzelne Position (Position) innerhalb eines Auftrags oder Angebots &middot;
+  <strong>Paket:</strong> <code>org.projectforge.business.fibu</code><br>
+  <strong>Quellpfad:</strong> <code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/AuftragsPositionDO.kt</code>
+ <span style="color:#888">216 Zeilen · 139 Code · 50 Kommentare · 27 leer</span></div>
+
+<div class="c">
+  Zentrale Domänenentität, die eine Position innerhalb eines <code>AuftragDO</code> (Auftrag/Angebot) repräsentiert. Jeder Auftrag kann mehrere Positionen haben, die eindeutig durch <code>(auftrag_fk, number)</code> identifiziert werden. Erfasst Finanzdaten (Nettosumme, Personentage), Status, Zahlungsart, Klassifizierung (<code>art</code>) und Fakturierungskennzeichen. Implementiert <code>DisplayNameCapable</code> und ist vollständig von Hibernate Search für die Volltextsuche indiziert.
+</div>
+
+<h2>Architektur &amp; Design</h2>
+
+<h3>Entitätsmetadaten</h3>
+<table>
+  <tr><th>Annotation</th><th>Wert/Details</th></tr>
+  <tr><td><code>@Entity</code></td><td>JPA-Entität</td></tr>
+  <tr><td><code>@Indexed</code></td><td>Hibernate Search Volltextindex</td></tr>
+  <tr><td><code>@TypeBinding</code></td><td><code>HibernateSearchAuftragsPositionTypeBinder</code> — benutzerdefinierter Binder für positionsspezifische Suche</td></tr>
+  <tr><td><code>@ClassBridge(name = "position")</code></td><td>Benutzerdefinierte Class Bridge für zusammengesetztes Suchfeld</td></tr>
+  <tr><td><code>@Table</code></td><td><code>t_fibu_auftrag_position</code> mit eindeutiger Einschränkung <code>(auftrag_fk, number)</code></td></tr>
+</table>
+
+<h3>Datenbankindizes</h3>
+<table>
+  <tr><th>Indexname</th><th>Spalte</th></tr>
+  <tr><td><code>idx_fk_t_fibu_auftrag_position_auftrag_fk</code></td><td><code>auftrag_fk</code></td></tr>
+  <tr><td><code>idx_fk_t_fibu_auftrag_position_task_fk</code></td><td><code>task_fk</code></td></tr>
+</table>
+
+<h3>Benannte Abfragen</h3>
+<p><code>FIND_BY_ID = "AuftragPositionDO_FindById"</code> — einfache Suche nach Primärschlüssel.</p>
+
+<h3>Felder</h3>
+
+<table>
+  <tr><th>Feld</th><th>DB-Spalte</th><th>Typ</th><th>Beschreibung</th></tr>
+  <tr><td><code>number</code></td><td><code>number</code> (nicht null)</td><td><code>Short</code></td><td>Positionsnummer innerhalb des Auftrags (z. B. 1, 2, 3…)</td></tr>
+  <tr><td><code>auftrag</code></td><td><code>auftrag_fk</code> (FK, nicht null)</td><td><code>AuftragDO</code></td><td>Übergeordneter Auftrag — <code>@JsonIgnore</code> zur Vermeidung zirkulärer Serialisierung; <code>@JsonSerialize(IdOnlySerializer)</code> auf der Web-Ebene</td></tr>
+  <tr><td><code>task</code></td><td><code>task_fk</code> (FK, nullable)</td><td><code>TaskDO</code></td><td>Zugehörige Projektaufgabe, nur als ID serialisiert</td></tr>
+  <tr><td><code>art</code></td><td><code>art</code> (VARCHAR 30)</td><td><code>AuftragsPositionsArt</code> Enum</td><td>Klassifizierung: <code>CHANGE_REQUEST</code>, <code>DAUERNDE_LEISTUNG</code>, <code>WARTUNG</code>, <code>NEUENTWICKLUNG</code></td></tr>
+  <tr><td><code>paymentType</code></td><td><code>paymentType</code> (VARCHAR 30)</td><td><code>AuftragsPositionsPaymentType</code> Enum</td><td>Zahlungsmodell: <code>FESTPREISPAKET</code>, <code>TIME_AND_MATERIALS</code>, <code>PAUSCHALE</code></td></tr>
+  <tr><td><code>forecastType</code></td><td><code>forecast_type</code> (VARCHAR 20)</td><td><code>AuftragForecastType</code> Enum</td><td>Überschreibung des Forecast-Typs des übergeordneten Auftrags (aktueller/folgender Monat)</td></tr>
+  <tr><td><code>status</code></td><td><code>status</code> (VARCHAR 30)</td><td><code>AuftragsStatus</code> Enum</td><td>Aktueller Status (z. B. <code>ABGESCHLOSSEN</code>, <code>IN_ERSTELLUNG</code>)</td></tr>
+  <tr><td><code>titel</code></td><td><code>titel</code> (VARCHAR 255)</td><td><code>String</code></td><td>Positionstitel — <code>@FullTextField</code> für Hibernate Search</td></tr>
+  <tr><td><code>bemerkung</code></td><td><code>bemerkung</code> (4000)</td><td><code>String</code></td><td>Freitextkommentar — <code>@FullTextField</code></td></tr>
+  <tr><td><code>nettoSumme</code></td><td><code>netto_summe</code> (12,2)</td><td><code>BigDecimal</code></td><td>Nettobetrag für diese Position — <code>@GenericField</code></td></tr>
+  <tr><td><code>personDays</code></td><td><code>person_days</code> (12,2)</td><td><code>BigDecimal</code></td><td>Zugewiesene Personentage; kann von der berechneten Nettosumme abweichen</td></tr>
+  <tr><td><code>vollstaendigFakturiert</code></td><td><code>vollstaendig_fakturiert</code> (nicht null)</td><td><code>Boolean</code></td><td>Manuell von der Finanzabteilung gesetzt — nur für abgeschlossene Positionen</td></tr>
+  <tr><td><code>periodOfPerformanceType</code></td><td><code>period_of_performance_type</code> (VARCHAR 10)</td><td><code>PeriodOfPerformanceType</code> Enum</td><td>Standardmäßig <code>SEEABOVE</code>; <code>OWN</code>, wenn die Position einen eigenen Leistungszeitraum hat</td></tr>
+  <tr><td><code>periodOfPerformanceBegin</code></td><td><code>period_of_performance_begin</code></td><td><code>LocalDate</code></td><td>Beginn des Leistungszeitraums</td></tr>
+  <tr><td><code>periodOfPerformanceEnd</code></td><td><code>period_of_performance_end</code></td><td><code>LocalDate</code></td><td>Ende des Leistungszeitraums</td></tr>
+  <tr><td><code>modeOfPaymentType</code></td><td><code>mode_of_payment_type</code> (VARCHAR 13)</td><td><code>ModeOfPaymentType</code> Enum</td><td>Zahlungsart</td></tr>
+</table>
+
+<h3>Berechnete Eigenschaften</h3>
+<ul>
+  <li><code>displayName</code> — Format <code>"{order.nummer}.{number}"</code>, z. B. "12345.2"</li>
+  <li><code>formattedNumber</code> — identisch zu <code>displayName</code>: <code>"{auftrag?.nummer}.{number}"</code></li>
+  <li><code>isEmpty</code> — gibt <code>true</code> zurück, wenn der Titel leer ist UND die Nettosumme null/Null ist UND der Kommentar leer ist</li>
+  <li><code>hasOwnPeriodOfPerformance()</code> — gibt <code>true</code> zurück, wenn <code>periodOfPerformanceType == PeriodOfPerformanceType.OWN</code></li>
+</ul>
+
+<h3>Validierung</h3>
+<p><code>checkVollstaendigFakturiert()</code> — wirft <code>UserException</code>, wenn <code>vollstaendigFakturiert</code> auf <code>true</code> gesetzt ist, der Status aber nicht <code>ABGESCHLOSSEN</code> ist (nur abgeschlossene Positionen dürfen als vollständig fakturiert markiert werden).</p>
+
+<h3>Gleichheit &amp; Hashing</h3>
+<p>Gleichheit (und Hash) basiert auf <code>number</code> und <code>auftrag.id</code> — zwei Positionen gelten als gleich, wenn sie dieselbe Positionsnummer innerhalb desselben übergeordneten Auftrags haben.</p>
+
+<h3>Hibernate Search Konfiguration</h3>
+<p>Die Entität verwendet <code>@TypeBinding</code> mit <code>HibernateSearchAuftragsPositionTypeBinder</code> und einer benutzerdefinierten <code>@ClassBridge(name = "position")</code>. Mehrere Felder tragen <code>@FullTextField</code> (<code>art</code>, <code>forecastType</code>, <code>status</code>, <code>titel</code>, <code>bemerkung</code>) und <code>@GenericField</code> (<code>nettoSumme</code>) für die Hibernate Search Indizierung. Die Class Bridge ermöglicht die zusammengesetzte Suche über positionsbezogene Felder.</p>
+
+<h2>Verwandte Klassen</h2>
+<ul>
+  <li><strong>Übergeordnet:</strong> <code>AuftragDO</code> — der Auftrag, der diese Position enthält</li>
+  <li><strong>Enums:</strong> <code>AuftragsPositionsArt</code>, <code>AuftragsPositionsPaymentType</code>, <code>AuftragsStatus</code>, <code>AuftragForecastType</code>, <code>PeriodOfPerformanceType</code>, <code>ModeOfPaymentType</code></li>
+  <li><strong>Cache:</strong> <code>AuftragsCacheService</code> — lädt Positionen über Tupelabfragen für die Leistung</li>
+  <li><strong>Suche:</strong> <code>HibernateSearchAuftragsPositionTypeBinder</code> — benutzerdefinierte Suchbindung</li>
+  <li><strong>JSON:</strong> <code>IdOnlySerializer</code> — serialisiert FK-Referenzen nur als IDs</li>
+</ul>
+
+<h2>Git-Verlauf</h2>
+<div class="hist"><pre>
+868d6abb7 2025 -> 2026
+49b1d6b8d Forecast und Orderbook: forecast-Type für Aufträge/Positionen hinzugefügt (aktueller Monat oder Folgemonat)
+63081666f Quelltext-Dateiköpfe: 2024 -> 2025.
+0237d5eba JSON-Serialisierung umgestaltet: IdOnlySerializer und IdsOnlySerializer eingeführt.
+a35971f85 Probleme aus dem letzten Pull-Request behoben. Großen Dank an luzpaz.
+56e9a4c44 WIP: Orderbook-Speicherung.
+c193e8288 Ical4j: Migrationskram... (alle Tests OK)
+ae2c04ee0 Migration läuft... (alle Tests aller Pakete: OK).
+3f25c773a Migration läuft...
+184f154a5 Migration läuft...
+f31e8064e Migration läuft...
+87dd5b87c AuftragsCache umgestaltet, Migration läuft... (alle Tests OK)
+6f7e0fbc7 Migration läuft...
+4c04cfd65 GROSSE-ÄNDERUNG! Migration von Integer-IDs zu Long-IDs (inkl. FKs usw.)
+c4950ae12 Migration läuft...
+f5c09f87f Migration läuft...
+c04fb0d51 Migration läuft...
+06828f490 Migration läuft...
+b6092df09 Copyright 2023 -> 2024
+ab45d51fa Copyright 2001-2022 -> 2001-2023.
+9a65e1bc0 AuftragDO: Statistik umgestaltet (noch nicht fakturiert, zu fakturieren, fakturiert usw.)
+ed17a2353 ForecastExport zeigt jetzt mehr Rechnungen (auch Rechnungen ohne Aufträge)
+5f7ef41b8 Copyright 2021 -> 2022
+c0f2b9de0 Mandantenfunktionalität überall entfernt (ungtestet).
+db3b02da7 UserException vom Geschäftspaket in das gemeinsame Paket verschoben (AccesssException betroffen). UserException wird jetzt standardmäßig als Toast für REST-Clients zurückgegeben. FileSizeChecker WIP.
+ceb63e8a1 Quelltextkopf: (C) 2001-2021.
+d89920003 Orderbook-Filter "zu fakturieren" hinzugefügt.
+ca0d5470e Entferne DateBridges aus DOs.
+a6a7aece4 Optimiere Imports
+78b436d9e Ersetze Instanzen von java.util.date und java.sql.Date durch java.time.LocalDate
+b78b870bd ShortDisplayNameCapable -> DisplayNameCapable.
+7c79f1922 Copyright des Quelltextkopfs -> 2020.
+2fa37a281 AuftragsPositionDO.formattedNumber vereinfacht.
+8241700f0 ShortDisplayNameCapable nach Kotlin konvertiert. DO-Klassen, die ShortDisplayNameCapable implementieren, umgestaltet.
+e7e42d821 AuftragsPositionDO.titel als Hibernate Search Index.
+ff4c3dcf3 Korrigiere Auftragspositionslayout
+19b97fcc3 DateBridge: encoding = EncodingType.STRING für alle DateBridges in allen DOs.
+8675a1dbe Großes Performance-Problem gefunden: Alle Kotlin JPA-Entitäten und ihre Eigenschaften als offen deklariert. Lazy Loading wurde von Hibernate nicht unterstützt und führte zu Tausenden von JPA-Abfragen...
+d36fe6ad9 Schweres WIP: Umgestaltung
+39cdd224c Hibernate Search: DateBridge...
+985286296 Hibernate 5.4.3 -> 5.4.4, Ehcache wieder eingeführt.
+12c7143a5 AuftragRest: EditPage-Elemente hinzugefügt
+97d00031d Auftrag*DO, AddressDO, *Rechnung*DO: Leistung verbessert (jetzt LAZY statt EAGER Loading).
+2ed09316e AuftragsPositionDO.kt: Warnungen auflösen
+ca013f56b AuftragsPositionDO.kt: Alle Felder müssen nullable sein (für Deserialisierungszwecke): vollstaendigFakturiert und periodOfPerformanceType.
+05244ff19 Copyright aller Kotlin-Dateiköpfe aktualisiert oder erstellt.
+6dc8997a3 AuftragsPositionDO.java -> AuftragsPositionDO.kt
+</pre></div>
+
+</body>
+</html>

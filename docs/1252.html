@@ -1,10 +1,72 @@
-<!DOCTYPE html>
-<html lang="en"><head><meta charset="utf-8"><title>File #1252: HistoryUserRight.kt</title>
-<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333}a{color:#0366d6}.meta{background:#f0f0f0;border-radius:6px;padding:1em;margin:1em 0;font-size:.9em}.commentary{margin:.8em 0;background:#fff;padding:.5em 1em;border-radius:6px;border-left:4px solid #ddd;line-height:1.7}table{border-collapse:collapse;width:100%;margin:.8em 0;font-size:.9em}th,td{border:1px solid #ddd;padding:.4em .6em}th{background:#f0f0f0}code{background:#e8e8e8;border-radius:3px;padding:.1em .3em;font-size:.9em}.nav{font-size:.9em;color:#888;margin-bottom:1em}.history{background:#fffbe6;border-radius:6px;padding:1em;margin:1em 0;font-size:.9em;border-left:4px solid #ffc107}</style></head>
-<body><div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="1251.html">← Prev</a> · <a href="1253.html">Next →</a></div>
-<h1>File #1252: <code>HistoryUserRight.kt</code></h1>
-<div class="meta"><p><strong>Path:</strong> <code>N/A</code> · <strong>Type:</strong> Other file</p><p><strong>Source:</strong> <a href="https://github.com/micromata/projectforge/blob/develop/N/A">GitHub</a></p></div>
-<div class="history"><table><tr><th>Commit</th><th>Message</th></tr><tr><td><code>9ebb88522</code></td><td>2016-07-18 Initial commit</td></tr></table></div>
-<div class="commentary"><p>Part of the ProjectForge Wicket web application. Located at <code>N/A</code>. Project resource file.</p></div>
-<div class="nav" style="margin-top:2em"><a href="1251.html">← #1251</a> · <a href="1253.html">#1253 →</a></div>
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>#1252</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:2em;color:#444}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}</style></head>
+<body><div class="nav"><a href="https://maureranton.github.io/projectforge/">&#8592; Index</a> &#183; <a href="file-index.html">&#8592; File index</a> &#183; <a href="1231.html">&#8592; Prev</a> &#183; <a href="1233.html">Next &#8594;</a></div>
+<h1>#1252: <code>DBQueryBuilderByCriteria.kt</code></h1>
+<div class="meta"><code>projectforge-business/src/main/kotlin/org/projectforge/framework/persistence/api/impl/DBQueryBuilderByCriteria.kt</code> Query Engine (Criteria), projectforge-business/src/main/kotlin/org/projectforge/framework/persistence/api/impl/DBQueryBuilderByCriteria.kt <span style="color:#888">87 lines · 54 code · 25 comments · 8 blank</span></div>
+<div class="c">Internal JPA Criteria API query builder used by <code>QueryFilter</code> for structured database queries. Translates <code>DBPredicate</code> objects into JPA <code>Predicate</code> instances via <code>CriteriaBuilder</code>, manages joins, and creates a <code>DBCriteriaResultIterator</code> for result iteration with in-memory filtering.</div>
+
+<h2>Architecture</h2>
+<h3>Constructor Dependencies</h3>
+<ul>
+  <li><strong>baseDao</strong> <code>BaseDao&lt;O&gt;</code> — provides entity class for root query</li>
+  <li><strong>entityManager</strong> — JPA EntityManager for CriteriaBuilder/CriteriaQuery</li>
+  <li><strong>queryFilter</strong> — the <code>QueryFilter</code> providing join definitions and predicates</li>
+</ul>
+
+<h3>Lazy Initialization</h3>
+<pre>private val ctx: DBCriteriaContext&lt;O&gt; by lazy {
+    val cb = entityManager.criteriaBuilder
+    val cr = cb.createQuery(baseDao.doClass)
+    DBCriteriaContext(cb, cr, cr.from(baseDao.doClass), baseDao.doClass).also {
+        queryFilter.joinList.forEach { join -> it.addJoin(join) }
+    }
+}</pre>
+<p>The <code>DBCriteriaContext</code> is lazily constructed to defer JPA root.from() until needed.</p>
+
+<h3>Core Methods</h3>
+<table>
+  <tr><th>Method</th><th>Description</th></tr>
+  <tr><td><code>add(matcher: DBPredicate)</code></td><td>Converts DBPredicate to JPA Predicate via <code>matcher.asPredicate(ctx)</code></td></tr>
+  <tr><td><code>addOrder(sortProperty)</code></td><td>Adds ASC/DESC ordering using <code>ctx.cb.asc()</code> or <code>ctx.cb.desc()</code></td></tr>
+  <tr><td><code>createResultIterator(predicates, queryFilter)</code></td><td>Builds the final CriteriaQuery with where/orderBy clauses, wraps in <code>DBCriteriaResultIterator</code></td></tr>
+</table>
+
+<h3>Error Handling</h3>
+<ul>
+  <li><code>addOrder</code> catches exceptions and logs error for unknown property names instead of failing silently</li>
+</ul>
+
+<h2>Git History</h2><div class="hist"><pre>
+868d6abb7 2025 -> 2026
+b131193e7 Member variables refactored by using by lazy {}.
+63081666f Source file headers: 2024-> 2025.
+b71b5073d Migration stuff in progress... (all tests OK).
+3264694a8 Migration stuff in progress... (all tests OK).
+4c04cfd65 MAJOR-CHANGE! Migration of integer id's to Long id's.
+06828f490 Migration stuff in progress...
+b6092df09 Copyright 2023 -> 2024
+ab45d51fa Copyright 2001-2022 -> 2001-2023.
+5f7ef41b8 Copyright 2021 -> 2022
+ceb63e8a1 Source code header: (C) 2001-2021.
+7c79f1922 Copyright of source header -> 2020.
+012e046df DBQueryBuilderByCriteria: exception of unknown properties for order by caught.
+2609f511f Heavy WIP: session -> em
+ee355d979 WIP: Session -> EntityManager...
+9896ea5c5 WIP: Session -> EntityManager...
+bf3d20864 DB.SortProperty fixed.
+14af0e09e DBAlias -> DBJoin.
+66d9e3a30 WiP: DBQuery* and QueryFilter: aliases....
+efb8e0b16 WiP: DBQuery* and QueryFilter: aliases....
+88bf1de7c WiP: DBQuery* and QueryFilter...
+39cdd224c Hibernate search: DateBridge...
+7998890ea WiP: DBQuery* and QueryFilter...
+a59e59eb1 WiP: DBQuery* and QueryFilter...
+5e65f6b22 WiP: DBQuery*
+a48f5a193 WIP: JPA...
+7e54bd634 MagicFilter: Unrecommended full text search combined with Hibernate query removed.
+257c6cb6f WIP: MagicFilter... (sort order)
+cb2ea2e24 WIP: MagicFilter... (sort order)
+6c179b06f WIP: MagicFilter...
+d32dbc8b4 WIP: MagicFilter...
+</pre></div>
 </body></html>

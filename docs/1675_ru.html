@@ -1,0 +1,144 @@
+<!DOCTYPE html><html lang="ru"><head><meta charset="utf-8"><title>#1675: AuftragsCacheTest.kt [RU]</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:2em;color:#444}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.lang{font-size:.85em;color:#888;float:right}.lang a{color:#888;text-decoration:none;padding:0 .3em}.lang a.active{color:#0366d6;font-weight:600;text-decoration:underline}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}</style></head>
+<body><div class="lang"><a href="1675.html">EN</a> · <a href="1675_de.html">DE</a> · <a href="1675_ru.html" class="active">RU</a> · <a href="1675_fr.html">FR</a> · <a href="1675_es.html">ES</a></div>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Индекс</a> · <a href="file-index.html">← Индекс файлов</a> · <a href="1067.html">← Пред.</a> · <a href="3019.html">След. →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/test/kotlin/org/projectforge/business/fibu/AuftragsCacheTest.kt" target="_blank" title="Просмотреть исходник на GitHub">📄 Исходник</a></div>
+<h1>#1675: <code>AuftragsCacheTest.kt</code></h1>
+<div class="meta"><code>projectforge-business/src/test/kotlin/org/projectforge/business/fibu/AuftragsCacheTest.kt</code> Тип: Kotlin · Роль: Тест · Исходник: projectforge-business/src/test/kotlin/org/projectforge/business/fibu/AuftragsCacheTest.kt <span style="color:#888">179 строк · 145 кода · 26 комментариев · 8 пустых</span></div>
+<div class="c">Модульный/интеграционный тест для AuftragsCache. Проверяет корректность поведения соответствующего производственного класса.</div>
+<h2>Структура кода</h2>
+<p>Аннотации: <code>Test</code>, <code>Autowired</code></p>
+<p>Классы: <code>AuftragsCacheTest</code></p>
+<p>Супертип(ы): <code>AbstractTestBase</code></p>
+<p>Функции (1): <code>assertValues</code></p>
+<p>Свойства (6): <code>auftragDao</code>, <code>auftragsCache</code>, <code>rechnungDao</code>, <code>order</code>, <code>order</code>, <code>invoice</code></p>
+<p>Импорты: 6 пакетов</p>
+<p>Пакет: <code>org.projectforge.business.fibu</code></p>
+<h2>Исходный код (сокращён)</h2>
+<pre>
+package org.projectforge.business.fibu
+
+import org.junit.jupiter.api.Assertions
+import org.junit.jupiter.api.Test
+import org.projectforge.commons.test.TestUtils.Companion.assertSame
+import org.projectforge.business.test.AbstractTestBase
+import org.springframework.beans.factory.annotation.Autowired
+import java.time.LocalDate
+
+class AuftragsCacheTest : AbstractTestBase() {
+    @Autowired
+    private lateinit var auftragDao: AuftragDao
+
+    @Autowired
+    private lateinit var auftragsCache: AuftragsCache
+
+    @Autowired
+    private lateinit var rechnungDao: RechnungDao
+
+    @Test
+    fun `тест workflow заказа со счетами`() {
+        val order = AuftragDO().also {
+            it.addPosition(AuftragsPositionDO().also { pos -&gt;
+                pos.titel = &quot;Поз 1&quot;
+                pos.nettoSumme = 100.toBigDecimal()
+                pos.status = AuftragsStatus.GELEGT
+            })
+            it.addPosition(AuftragsPositionDO().also { pos -&gt;
+                pos.titel = &quot;Поз 2&quot;
+                pos.nettoSumme = 200.toBigDecimal()
+                pos.status = AuftragsStatus.GELEGT
+            })
+            it.addPosition(AuftragsPositionDO().also { pos -&gt;
+                pos.titel = &quot;Поз 3&quot;
+                pos.nettoSumme = 400.toBigDecimal()
+                pos.status = AuftragsStatus.GELEGT
+            })
+            it.status = AuftragsStatus.GELEGT
+            it.nummer = auftragDao.nextNumber
+        }
+        auftragDao.insert(order, checkAccess = false)
+        auftragsCache.getOrderInfo(order.id).also { orderInfo -&gt;
+            assertValues(orderInfo, akquiseSum = 700, netSum = 700)
+        }
+        order.status = AuftragsStatus.BEAUFTRAGT
+        order.positionen!!.find { it.titel == &quot;Поз 1&quot; }!!.status = AuftragsStatus.BEAUFTRAGT
+        order.positionen!!.find { it.titel == &quot;Поз 2&quot; }!!.status = AuftragsStatus.ABGELEHNT
+        order.positionen!!.find { it.titel == &quot;Поз 3&quot; }!!.status = AuftragsStatus.OPTIONAL
+        auftragDao.update(order, checkAccess = false)
+        auftragsCache.getOrderInfo(order.id).let { orderInfo -&gt;
+            assertValues(orderInfo, akquiseSum = 400, netSum = 500, orderedNetSum = 100, notYetInvoicedSum = 100)
+        }
+        order.positionen!!.find { it.titel == &quot;Поз 1&quot; }!!.status = AuftragsStatus.ABGESCHLOSSEN
+        auftragDao.update(order, checkAccess = false)
+        auftragsCache.getOrderInfo(order.id).also { orderInfo -&gt;
+            assertValues(
+                orderInfo, akquiseSum = 400, netSum = 500, orderedNetSum = 100,
+                toBeInvoicedSum = 100, notYetInvoicedSum = 100, toBeInvoiced = true
+            )
+        }
+        order.addPaymentSchedule(PaymentScheduleDO().also { schedule -&gt;
+            schedule.amount = 50.toBigDecimal()
+            schedule.reached = true
+        })
+        auftragDao.update(order, checkAccess = false)
+        auftragsCache.getOrderInfo(order.id).also { orderInfo -&gt;
+            // 100 за позицию к выставлению счёта и 50 за достигнутый график платежей, не привязанный к позиции.
+            assertValues(
+                orderInfo, akquiseSum = 400, netSum = 500, orderedNetSum = 100,
+                toBeInvoicedSum = 150, notYetInvoicedSum = 100, toBeInvoiced = true
+            )
+        }
+        order.addPaymentSchedule(PaymentScheduleDO().also { schedule -&gt;
+            schedule.amount = 25.toBigDecimal()
+            schedule.reached = true
+            schedule.vollstaendigFakturiert = true
+        })
+        order.addPaymentSchedule(PaymentScheduleDO().also { schedule -&gt;
+            schedule.amount = 80.toBigDecimal()
+            schedule.reached = true
+            schedule.positionNumber = order.positionen!!.find { it.titel == &quot;Поз 1&quot; }!!.number
+        })
+        auftragDao.update(order, checkAccess = false)
+        auftragsCache.getOrderInfo(order.id).also { orderInfo -&gt;
+            // (25) игнорируется (уже полностью выставлен счёт).
+            // 80 за позицию к выставлению счёта &quot;перезаписывается&quot; 80 из графика платежей.
+            // 50 за достигнутый график платежей, не привязанный к позиции.
+            assertValues(
+                orderInfo, akquiseSum = 400, netSum = 500, orderedNetSum = 100,
+                toBeInvoicedSum = 130, notYetInvoicedSum = 100, toBeInvoiced = true
+            )
+        }
+    }
+
+        @Test
+    fun `тест заказа в стадии привлечения со счетами`() {
+        val order = AuftragDO().also {
+            it.addPosition(AuftragsPositionDO().also { pos -&gt;
+                pos.titel = &quot;Поз 1&quot;
+                pos.nettoSumme = 100.toBigDecimal()
+                pos.status = AuftragsStatus.GELEGT
+            })
+            it.addPosition(AuftragsPositionDO().also { pos -&gt;
+                pos.titel = &quot;Поз 2&quot;
+                pos.nettoSumme = 200.toBigDecimal()
+                pos.status = AuftragsStatus.GELEGT
+            })
+            it.status = AuftragsStatus.GELEGT
+            it.nummer = auftragDao.nextNumber
+        }
+        auftragDao.insert(order, checkAccess = false)
+        auftragsCache.getOrderInfo(order.id).let { orderInfo -&gt;
+            assertValues(orderInfo, akquiseSum = 300, netSum = 300)
+        }
+        val invoice = RechnungDO().also {
+            it.addPosition(RechnungsPositionDO().also { pos -&gt; // 50 из 100
+                pos.auftragsPosition = order.positionen!!.get(0)
+                pos.menge = 5.toBigDecimal()
+                pos.einzelNetto = 10.toBigDecimal()
+// ... (сокращено, всего 157 строк)</pre>
+
+<h2>История Git</h2><div class="hist"><pre>868d6abb7 2025 -&gt; 2026
+63081666f Заголовки исходных файлов: 2024-&gt; 2025.
+42dc9fa16 Заказы: ordered -&gt; commisioned.
+176cb32d7 WIP: Gradle
+ae2c04ee0 Миграция в процессе... (все тесты всех пакетов: OK).</pre></div>
+</body></html>

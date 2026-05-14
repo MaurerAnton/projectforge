@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>#711: ProxyIdRefMarshallingStrategy.java [DE]</title>
+<style>
+  body { font-family: system-ui, sans-serif; max-width: 960px; margin: 2em auto; padding: 0 1em; background: #fafafa; color: #222; line-height: 1.6; }
+  h1 { border-bottom: 2px solid #333; padding-bottom: 0.3em; }
+  h2 { margin-top: 2.5em; border-bottom: 1px solid #ddd; padding-bottom: 0.2em; color: #333; }
+  h3 { margin-top: 2em; color: #444; }
+  a { color: #0366d6; }
+  .c { border-left: 3px solid #ddd; padding: .5em 1em; margin: 1em 0; background: #fff; }
+  .nav { font-size: .9em; color: #888; margin-bottom: 1em; }
+  .meta { font-size: .9em; margin: 1em 0; color: #555; }
+  code { background: #f0f0f0; padding: 0 .2em; font-size: .93em; }
+  pre { background: #f5f5f5; padding: .8em 1em; border: 1px solid #ddd; border-radius: 4px; overflow-x: auto; font-size: .88em; line-height: 1.4; }
+  table { border-collapse: collapse; width: 100%; margin: 1em 0; }
+  th, td { border: 1px solid #ddd; padding: .5em .8em; text-align: left; font-size: .9em; }
+  th { background: #f5f5f5; font-weight: 600; }
+  .hist { font-size: .85em; color: #555; }
+  .warn { background: #fff3cd; border-left: 3px solid #ffc107; padding: .5em 1em; margin: 1em 0; }
+  .tip { background: #d4edda; border-left: 3px solid #28a745; padding: .5em 1em; margin: 1em 0; }
+</style>
+</head>
+<body>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← Dateiindex</a> · <a href="710.html">← Zurück</a> · <a href="712.html">Weiter →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/java/org/projectforge/framework/persistence/xstream/ProxyIdRefMarshallingStrategy.java" target="_blank" title="Quelltext auf GitHub ansehen">📄 Quelle</a></div>
+
+<h1>#711: <code>ProxyIdRefMarshallingStrategy.java</code></h1>
+<div class="meta"><code>projectforge-business/src/main/java/org/projectforge/framework/persistence/xstream/ProxyIdRefMarshallingStrategy.java</code> <strong>XStream-Marshalling-Strategie</strong> — zusammengesetzte Strategie, die für die Serialisierung (Marshal) an <a href="708.html">ProxyIdRefMarshaller</a> und für die Deserialisierung (Unmarshal) an den standardmäßigen <code>ReferenceByIdUnmarshaller</code> delegiert. Quelle: <code>projectforge-business/src/main/java/org/projectforge/framework/persistence/xstream/ProxyIdRefMarshallingStrategy.java</code> <span style="color:#888">54 Zeilen · 26 Code · 22 Kommentare · 6 leer</span></div>
+
+<div class="c">
+<strong>Zweck:</strong> Beim Serialisieren von JPA-Entitäten in XML (für Datenbankverlaufsspeicherung, XML-Backup/Wiederherstellung und Plugin-Datenaustausch) erstellt Hibernate <em>Proxy-Objekte</em> (cglib-erweiterte Unterklassen) für lazy-geladene Assoziationen. Das standardmäßige XStream-Marshalling würde diese Proxys mit ihren cglib-Wrapper-Klassennamen und internen Feldern serialisieren, was zu unlesbarem, nicht deserialisierbarem XML führt. Diese Strategie greift in den Marshalling-Prozess ein, um Proxys zu entpacken und nur echte Entitätsdaten mit Referenzverfolgung (ID-basierte Deduplizierung) zu serialisieren.
+</div>
+
+<h2>Architektur</h2>
+
+<h3>Strategiemuster — Zusammengesetzte Delegation</h3>
+<div class="c">
+Die Klasse erweitert <strong><code>ReferenceByIdMarshallingStrategy</code></strong> (von XStream) und überschreibt nur zwei Methoden:<br><br>
+<strong><code>marshal()</code></strong> → Erstellt einen neuen <code>ProxyIdRefMarshaller</code> (NICHT den standardmäßigen <code>ReferenceByIdMarshaller</code>). Der ProxyIdRefMarshaller entpackt Hibernate-Proxys mittels <code>HibernateProxyHelper.get()</code>, entfernt cglib-Erweiterungen mittels <code>Enhancer.isEnhanced()</code> und behandelt die Referenzverfolgung mit einem internen <code>ObjectIdDictionary</code>.<br><br>
+<strong><code>unmarshal()</code></strong> → Verwendet den <em>standardmäßigen</em> <code>ReferenceByIdUnmarshaller</code> von XStream. Die Deserialisierung erhält bereits sauberes XML (Proxys wurden während des Marshalls entfernt), daher ist auf der Leseseite keine spezielle Behandlung erforderlich.<br><br>
+Dieses asymmetrische Design spiegelt die Realität wider, dass Proxy-Probleme nur zum Zeitpunkt der Serialisierung auftreten – die XML-Ausgabe ist immer «sauber».
+</div>
+
+<h3>Vererbungshierarchie</h3>
+<pre>
+ReferenceByIdMarshallingStrategy          (XStream-Basis)
+  └── ProxyIdRefMarshallingStrategy       (#709 — diese Datei)
+        ├── marshal()  → ProxyIdRefMarshaller  (#708)
+        └── unmarshal() → ReferenceByIdUnmarshaller  (XStream-Standard)
+</pre>
+
+<h2>Das Hibernate-Proxy-Problem</h2>
+
+<div class="c">
+<strong>Was ohne diese Strategie passiert:</strong><br><br>
+1. JPA-Entität <code>AddressDO</code> hat ein <code>@ManyToOne(fetch = LAZY)</code> zu <code>AddressbookDO</code><br>
+2. Hibernate erstellt einen cglib-Proxy: <code>AddressbookDO$$EnhancerByCGLIB$$a1b2c3d4@123</code><br>
+3. Standard-XStream serialisiert dies als: <code>&lt;addressbook class="AddressbookDO$$EnhancerByCGLIB$$a1b2c3d4"&gt;...Hibernate-Interna...&lt;/addressbook&gt;</code><br>
+4. Ergebnis: unlesbares XML, unterbricht Deserialisierung, gibt Hibernate-Interna preis<br><br>
+<strong>Mit ProxyIdRefMarshallingStrategy:</strong><br><br>
+1. <code>Enhancer.isEnhanced(targetClass)</code> → erkennt cglib-Proxy, geht zur Superklasse hoch<br>
+2. <code>HibernateProxyHelper.get(item)</code> → extrahiert die echte Entität hinter dem Proxy<br>
+3. <code>references.lookupId(realItem)</code> → falls bereits gesehen, wird <code>reference="ID"</code>-Attribut ausgegeben (keine Datenverdopplung)<br>
+4. Andernfalls wird <code>id="ID"</code> ausgegeben und die echten Entitätsdaten serialisiert<br><br>
+Ergebnis: sauberes XML mit echten Klassennamen, keine Hibernate-Interna und referenzbasierte Deduplizierung.
+</div>
+
+<h2>Referenzverfolgung — Vermeidung zirkulärer Referenzen</h2>
+
+<div class="c">
+Der <code>ProxyIdRefMarshaller</code> verwaltet ein <code>ObjectIdDictionary</code> (Identitäts-Hash-Map). Für jedes nicht-unveränderliche Objekt, auf das er stößt:<br><br>
+• <strong>Erstes Auftreten:</strong> Weist eine ID über <code>SequenceGenerator</code> zu, speichert sie im Wörterbuch, serialisiert das vollständige Objekt<br>
+• <strong>Spätere Auftreten:</strong> Gibt nur das <code>reference="ID"</code>-Attribut aus und überspringt den Objektkörper<br><br>
+Dies ist entscheidend, da JPA-Entitätsgraphen oft Zyklen enthalten: <code>AddressDO → AddressbookDO → owner → addresses → AddressDO</code>. Ohne Referenzverfolgung würde XStream in eine Endlosrekursion geraten. Damit werden zyklische Referenzen zu kompakten <code>&lt;addressbook reference="42"/&gt;</code>-Tags.<br><br>
+<strong>Unveränderliche Objekte sind von der Referenzverfolgung ausgeschlossen</strong> (<code>classMapper.isImmutableValueType()</code>): Strings, Integers, Dates usw. werden immer inline serialisiert. Dies vermeidet, dass die Referenztabelle mit Tausenden von Werttypen gefüllt wird.
+</div>
+
+<h2>Git-Verlauf</h2>
+<div class="hist">
+<pre>868d6abb7 2025 → 2026 (Aktualisierung des Copyright-Jahres)
+63081666f Quelldatei-Header: 2024→2025
+b6092df09 Copyright 2023 → 2024
+ab45d51fa Copyright 2001-2022 → 2001-2023
+5f7ef41b8 Copyright 2021 → 2022
+ceb63e8a1 Quellcode-Header: (C) 2001-2021
+7c79f1922 Copyright des Quell-Headers → 2020
+dd5ca38ac CopyRight aller Java-Datei-Header aktualisiert oder erstellt
+9ebb88522 Erster Commit (Projekterstellung)
+</pre>
+Die Datei existiert seit dem allerersten Commit des Projekts. Sie ist Teil der grundlegenden XStream-Integration – eine der frühesten Designentscheidungen in der Architektur von ProjectForge.
+</div>
+
+<h2>Wichtige Commits</h2>
+<div class="c">
+<strong><code>9ebb88522</code> (erster Commit):</strong> Die ProxyIdRefMarshallingStrategy wurde zusammen mit der gesamten XStream-Persistenzschicht eingeführt. Zu dieser Zeit verwendete ProjectForge XStream für:<br>
+• <strong>Datenbankverlauf:</strong> Serialisierung von Entitäts-Snapshots vor/nach Änderungen in eine Verlaufstabellenspalte<br>
+• <strong>XML-Import/Export:</strong> Plugin-Datenaustausch und Migrationsskripte<br>
+• <strong>Benutzereinstellungen:</strong> Serialisierung von Benutzereinstellungen als XML-Blobs<br><br>
+Die Strategie war eine <em>Voraussetzung</em> für diese Funktionen – ohne Proxy-sicheres Marshalling wären Verlaufs-Snapshots von Entitäten mit lazy-geladenen Beziehungen beschädigt.<br><br>
+<strong>Keine Logikänderungen seit dem ersten Commit:</strong> Die Datei hat nur Aktualisierungen des Copyright-Jahres erhalten. Der Algorithmus (cglib-Erkennung → Proxy-Entpacken → Referenzverfolgung) hat sich über 5+ Jahre Hibernate- und XStream-Versionsupgrades als stabil erwiesen.
+</div>
+
+<h2>Designentscheidungen</h2>
+
+<table>
+<tr><th>Entscheidung</th><th>Warum</th><th>Kompromiss</th></tr>
+<tr>
+  <td>Erweiterung von <code>ReferenceByIdMarshallingStrategy</code> anstatt Neuimplementierung</td>
+  <td>Wiederverwendung des XStream-Referenz-by-ID-Drahtformats (<code>id</code>/<code>reference</code>-Attribute), das gut dokumentiert und verstanden ist</td>
+  <td>Enge Kopplung an XStreams interne Klassenhierarchie – könnte bei größeren XStream-Upgrades brechen</td>
+</tr>
+<tr>
+  <td>Asymmetrisches Marshal/Unmarshal (nur beim Schreiben benutzerdefiniert)</td>
+  <td>Proxy-Probleme treten nur zum Zeitpunkt der Serialisierung auf; deserialisierte Objekte sind niemals Proxys</td>
+  <td>Falls die Deserialisierung beginnt, Proxy-haltiges XML zu empfangen (z.B. von externen Quellen), könnten Probleme auftreten</td>
+</tr>
+<tr>
+  <td>Direkte Verwendung von <code>Enhancer.isEnhanced()</code> (cglib)</td>
+  <td>XStream 1.4.x hatte keine eingebaute Hibernate-Proxy-Erkennung; dies war der einzig zuverlässige Weg</td>
+  <td>Direkte cglib-Abhängigkeit – müsste aktualisiert werden, falls Hibernate 6+ von cglib zu ByteBuddy-Proxys wechselt</td>
+</tr>
+<tr>
+  <td>Separate <code>ProxyIdRefMarshaller</code>-Klasse (nicht inline)</td>
+  <td>Marshaller ist die «schwere» Klasse mit ~70 Zeilen Proxy-Logik; Strategie ist eine dünne 25-zeilige Delegationsklasse</td>
+  <td>Fügt eine zusätzliche Datei zum Namensraum hinzu, folgt aber dem Single-Responsibility-Prinzip</td>
+</tr>
+</table>
+
+<div class="warn"><strong>Achtung — Hibernate 6+ ByteBuddy-Proxys:</strong> ProjectForge 8.x verwendet Hibernate 5.x mit cglib. Bei einem Upgrade auf Hibernate 6.x wird <code>Enhancer.isEnhanced()</code> ByteBuddy-Proxys nicht erkennen (Hibernate 6 hat cglib durch ByteBuddy ersetzt). Die Proxy-Erkennungslogik müsste aktualisiert werden, um beide zu unterstützen: cglib <code>Enhancer.isEnhanced()</code> und ByteBuddys Proxy-Erkennung (<code>Hibernate.isInitialized()</code> + <code>Hibernate.unproxy()</code>). Dies ist ein bekanntes Migrationsrisiko für zukünftige Hibernate-Upgrades.</div>
+
+<div class="tip"><strong>Wo es verwendet wird:</strong> Registriert als standardmäßige XStream-Marshalling-Strategie in <code>XmlRegistry</code>. Jede XStream-Operation in ProjectForge – Verlaufs-Snapshots, XML-Backup/Wiederherstellung, Serialisierung von Benutzereinstellungen – durchläuft diese Strategie. Die Komponenten <code>XmlObjectWriter</code> und <code>XmlObjectReader</code> (das xmlstream-Framework) verwenden XStream unter der Haube, daher ist diese Strategie effektiv das «Gateway» für die gesamte XML-E/A in der Anwendung.</div>
+
+</body>
+</html>

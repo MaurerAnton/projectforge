@@ -1,187 +1,25 @@
-<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>#2288</title>
-<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}.hist{font-size:.85em;color:#555}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}</style></head>
-<body><div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="2287.html">← Prev</a> · <a href="2289.html">Next →</a></div>
-<h1>#2288: <code>ScriptExecutePageRest.kt</code></h1>
-<div class="meta">REST Controller, <code>projectforge-rest/src/main/kotlin/org/projectforge/rest/scripting/ScriptExecutePageRest.kt</code> (170 lines)</div>
-<div class="c">Source file: ScriptExecutePageRest.kt - rest controller in ProjectForge REST module.</div>
-<h2>Source Code</h2><pre>/////////////////////////////////////////////////////////////////////////////
-//
-// Project ProjectForge Community Edition
-//         www.projectforge.org
-//
-// Copyright (C) 2001-2026 Micromata GmbH, Germany (www.micromata.com)
-//
-// ProjectForge is dual-licensed.
-//
-// This community edition is free software; you can redistribute it and/or
-// modify it under the terms of the GNU General Public License as published
-// by the Free Software Foundation; version 3 of the License.
-//
-// This community edition is distributed in the hope that it will be useful,
-// but WITHOUT ANY WARRANTY; without even the implied warranty of
-// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General
-// Public License for more details.
-//
-// You should have received a copy of the GNU General Public License along
-// with this program; if not, see http://www.gnu.org/licenses/.
-//
-/////////////////////////////////////////////////////////////////////////////
-
-package org.projectforge.rest.scripting
-
-import mu.KotlinLogging
-import org.projectforge.business.group.service.GroupService
-import org.projectforge.business.scripting.ScriptDO
-import org.projectforge.business.scripting.ScriptDao
-import org.projectforge.business.user.UserGroupCache
-import org.projectforge.common.logging.LogEventLoggerNameMatcher
-import org.projectforge.common.logging.LogSubscription
-import org.projectforge.framework.persistence.user.api.ThreadLocalUserContext
-import org.projectforge.framework.utils.NumberHelper
-import org.projectforge.menu.MenuItem
-import org.projectforge.menu.MenuItemTargetType
-import org.projectforge.rest.admin.LogViewerPageRest
-import org.projectforge.rest.config.Rest
-import org.projectforge.rest.core.PagesResolver
-import org.projectforge.rest.dto.FormLayoutData
-import org.projectforge.rest.dto.Script
-import org.projectforge.ui.UILayout
-import org.projectforge.ui.UIReadOnlyField
-import org.springframework.beans.factory.annotation.Autowired
-import org.springframework.web.bind.annotation.GetMapping
-import org.springframework.web.bind.annotation.RequestMapping
-import org.springframework.web.bind.annotation.RequestParam
-import org.springframework.web.bind.annotation.RestController
-import jakarta.annotation.PostConstruct
-import jakarta.servlet.http.HttpServletRequest
-
-private val log = KotlinLogging.logger {}
-
-@RestController
-@RequestMapping("${Rest.URL}/scriptExecute")
-class ScriptExecutePageRest : AbstractScriptExecutePageRest() {
-  @Autowired
-  private lateinit var baseDao: ScriptDao
-
-  @Autowired
-  private lateinit var groupService: GroupService
-
-  @PostConstruct
-  private fun postConstruct() {
-    this.scriptDao = baseDao
-  }
-
-  @Autowired
-  override lateinit var pagesRest: ScriptPagesRest
-
-  @GetMapping("dynamic")
-  fun getForm(
-    request: HttpServletRequest,
-    @RequestParam("id") idString: String?,
-    @RequestParam("example") example: Int?
-  ): FormLayoutData {
-    var scriptDO: ScriptDO? = null
-    val script = Script()
-    var id: Long? = null
-    var exampleIdx: Int? = null // fix, because idString is like ?example=#
-    if (example != null) {
-      exampleIdx = example
-    } else if (idString?.startsWith("?example=") == true) {
-      exampleIdx = idString.removePrefix("?example=").toIntOrNull()
-    } else {
-      id = NumberHelper.parseLong(idString)
-    }
-    if (id != null) {
-      scriptDO = scriptDao.find(id) ?: throw IllegalArgumentException("Script not found.")
-      script.copyFrom(scriptDO)
-    } else {
-      script.availableVariables =
-        scriptExecution.getVariableNames(script, script.parameters, scriptDao, pagesRest).joinToString()
-      if (exampleIdx != null) {
-        script.script = ExampleScripts.loadScript(exampleIdx)
-      }
-    }
-    val variables = mutableMapOf&lt;String, Any&gt;()
-    val layout = getLayout(request, script, variables, scriptDO)
-    return FormLayoutData(script, layout, createServerData(request), variables)
-  }
-
-  override fun onAfterLayout(layout: UILayout, script: Script, scriptDO: ScriptDO?) {
-    if (scriptDO != null) {
-      layout.add(
-        MenuItem(
-          "EDIT",
-          i18nKey = "scripting.title.edit",
-          url = PagesResolver.getEditPageUrl(
-            ScriptPagesRest::
-            class.java, scriptDO.id
-          ),
-          type = MenuItemTargetType.REDIRECT
-        )
-      )
-    }
-    val executableByMails = mutableSetOf&lt;String&gt;()
-    script.executableByUsers?.forEach { it -&gt;
-      val user = UserGroupCache.getInstance().getUser(it.id)
-      user?.email?.let { email -&gt;
-        if (email.isNotBlank()) {
-          executableByMails.add(email)
-        }
-      }
-    }
-    script.executableByGroups?.let { groups -&gt;
-      groups.mapNotNull { it.id }.let {
-        if (it.isNotEmpty()) {
-          groupService.getGroupUsers(it.toLongArray())?.forEach { user -&gt;
-            user.email?.let { email -&gt;
-              if (email.isNotBlank()) {
-                executableByMails.add(email)
-              }
-            }
-          }
-        }
-      }
-    }
-    script.executableByEmails = executableByMails.joinToString()
-    if (executableByMails.isNotEmpty()) {
-      layout.add(UIReadOnlyField("executableByEmails", label = "scripting.script.executableByUsers"))
-    }
-    layout.add(
-      MenuItem(
-        "logViewer",
-        i18nKey = "system.admin.logViewer.title",
-        url = PagesResolver.getDynamicPageUrl(
-          LogViewerPageRest::
-          class.java, id = ensureUserLogSubscription().id
-        ),
-        type = MenuItemTargetType.REDIRECT,
-      )
-    )
-  }
-
-  private fun ensureUserLogSubscription(): LogSubscription {
-    val username = ThreadLocalUserContext.loggedInUser!!.username ?: throw InternalError("User not given")
-    return LogSubscription.ensureSubscription(
-      title = "Scripting",
-      user = username,
-      create = { title, user -&gt;
-        LogSubscription(
-          title,
-          user,
-          LogEventLoggerNameMatcher("org.projectforge.rest.scripting", "org.projectforge.business.scripting"),
-          maxSize = 10000,
-        )
-      })
-  }
-}</pre>
-<h2>Git History</h2><div class="hist"><pre>868d6abb7 2025 -&gt; 2026
-f84a49eba Scripting: Description for script parameters added.
-63081666f Source file headers: 2024-&gt; 2025.
-53b501ab6 Example scripts fixed. TimesheetDO.getDuration() -&gt; TimesheetDO.duration.
-87dd5b87c AuftragsCache refactored, migration stuff... (all tests OK)
-1b50060c3 BaseDao: renamed: get -&gt; find, save -&gt; insert, getList -&gt; select, load -&gt; select
-67805f2fc ThreadLocalUserContext.user -&gt; ThreadLocalUserContext.loggedInUser (renamed for avoiding mis-understandings in code).
-4c04cfd65 MAJOR-CHANGE! Migration of integer id's to Long id's (including fk's etc.)
-77bade6df javax.* -&gt; jakarta.*
-b6092df09 Copyright 2023 -&gt; 2024</pre></div>
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="utf-8"><title>#2288: PollMailService.kt</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333}a{color:#0366d6}.meta{background:#f0f0f0;border-radius:6px;padding:1em;margin:1em 0;font-size:.9em}.commentary{margin:.8em 0;background:#fff;padding:.5em 1em;border-radius:6px;border-left:4px solid #ddd;line-height:1.7}table{border-collapse:collapse;width:100%;margin:.8em 0;font-size:.9em}th,td{border:1px solid #ddd;padding:.4em .6em}th{background:#f0f0f0}code{background:#e8e8e8;border-radius:3px;padding:.1em .3em;font-size:.9em}.nav{font-size:.9em;color:#888;margin-bottom:1em}.history{background:#fffbe6;border-radius:6px;padding:1em;margin:1em 0;font-size:.9em;border-left:4px solid #ffc107}</style></head>
+<body><div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="2287.html">← Prev</a> · <a href="2289.html">Next →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-rest/src/main/kotlin/org/projectforge/rest/poll/PollMailService.kt" target="_blank" title="View source on GitHub">📄 source</a></div>
+<h1>#2288: <code>PollMailService.kt</code></h1>
+<div class="meta"><code>projectforge-rest/src/main/kotlin/org/projectforge/rest/poll/PollMailService.kt</code> <p><strong>Path:</strong> <code>projectforge-rest/src/main/kotlin/org/projectforge/rest/poll/PollMailService.kt</code> · <strong>Type:</strong> Kotlin class</p><p><strong>Purpose:</strong> Part of the ProjectForge poll module.</p><p><strong>Source:</strong> <a href="https://github.com/micromata/projectforge/blob/develop/projectforge-rest/src/main/kotlin/org/projectforge/rest/poll/PollMailService.kt">GitHub</a></p> <span style="color:#888">120 lines total</span></div>
+<div class="history"><table><tr><th>Commit</th><th>Date</th><th>Message</th></tr><tr><td><code>868d6abb</code></td><td></td><td>2025 -&amp;gt; 2026</td></tr>
+<tr><td><code>63081666</code></td><td></td><td>Source file headers: 2024-&amp;gt; 2025.</td></tr>
+<tr><td><code>cbb7e189</code></td><td></td><td>Answers not saving Fixed, CronJob NPE Fixed,</td></tr>
+<tr><td><code>4942c854</code></td><td></td><td>Migration stuff in progress...</td></tr>
+<tr><td><code>38e376a2</code></td><td></td><td>Merge commit 'f8c97b8b3d20fa403a197a5c4b4b5ca3c3bc825d' into mgc-remove</td></tr>
+<tr><td><code>4c04cfd6</code></td><td></td><td>MAJOR-CHANGE! Migration of integer id's to Long id's (including fk's etc.)</td></tr>
+<tr><td><code>ed2bb05b</code></td><td></td><td>Excel Export fix</td></tr>
+<tr><td><code>b2e9145a</code></td><td></td><td>Excel Export with Annotations, New Poll Design, Email for FAU and Attendes, Custom Email Field in Po</td></tr>
+<tr><td><code>c2144ae1</code></td><td></td><td>Excel Export with Email, Excel Fix, Attende Condition, PremadeQuestion Dropdown,</td></tr>
+<tr><td><code>9ef69659</code></td><td></td><td>Bug Fixes AZUPF-55,56,30,52,62</td></tr>
+</table></div>
+<h2>What it does</h2>
+<div class="commentary"><p>Spring service class. Key methods: <code>sendMail()</code>, <code>getAllMails()</code>, <code>getAllFullAccessEmails()</code>, <code>getAllAttendeesEmails()</code>. Package: <code>org.projectforge.rest.poll</code>. Patterns: Spring service, dependency injection, lateinit DI.</p></div>
+<h2>Key takeaways</h2>
+<div class="commentary"><ul><li><strong>10 commits</strong> (sample): <code>868d6abb</code>: 2025 -&amp;gt; 2026; <code>63081666</code>: Source file headers: 2024-&amp;gt; 2025.; <code>cbb7e189</code>: Answers not saving Fixed, CronJob NPE Fixed,.</li>
+<li><strong>Spring-managed:</strong> Dependencies injected via <code>@Autowired lateinit</code> — standard ProjectForge pattern.</li></ul></div>
+<div class="nav" style="margin-top:2em"><a href="2287.html">← Prev</a> · <a href="2289.html">Next →</a></div>
 </body></html>

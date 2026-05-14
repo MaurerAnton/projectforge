@@ -1,0 +1,50 @@
+Here is the HTML translated to Spanish, with the language set to Spanish, the title updated, and the language switcher active.
+
+```html
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>#50: BankAccountDao.kt [ES]</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333}h2{margin-top:2em;border-bottom:1px solid #ddd;padding-bottom:.2em}a{color:#0366d6;text-decoration:none}.meta{background:#f0f0f0;border-radius:6px;padding:1em;margin:1em 0;font-size:.9em}.code-block{background:#f8f8f8;border:1px solid #ddd;border-radius:4px;padding:.5em;margin:.5em 0;overflow-x:auto}.code-block pre{margin:0;font-family:'Consolas',monospace;font-size:.85em;line-height:1.5}.commentary{margin:1em 0;line-height:1.7;background:#fff;padding:.5em 1em;border-radius:6px;border-left:4px solid #ddd}code{background:#e8e8e8;border-radius:3px;padding:.1em .3em;font-size:.9em}.nav{font-size:.9em;color:#888;margin-bottom:1em}table{border-collapse:collapse;width:100%;margin:1em 0;font-size:.9em}th,td{border:1px solid #ddd;padding:.5em;text-align:left}th{background:#f0f0f0}.warn{background:#fff3cd;border:1px solid #ffc107;border-radius:4px;padding:.5em 1em;margin:.5em 0}</style>
+</head>
+<body>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Índice de documentación</a> · <a href="file-index.html">← Índice de archivos</a> · <a href="49.html">← Anterior</a> · <a href="51.html">Siguiente →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/plugins/org.projectforge.plugins.banking/src/main/kotlin/org/projectforge/plugins/banking/BankAccountDao.kt" target="_blank" title="Ver fuente en GitHub">📄 fuente</a></div>
+<h1>#50: <code>BankAccountDao.kt</code></h1>
+<div class="meta"><code>plugins/org.projectforge.plugins.banking/src/main/kotlin/org/projectforge/plugins/banking/BankAccountDao.kt</code> <p><strong>Ruta:</strong> <code>./plugins/.../BankAccountDao.kt</code> · <strong>Tipo:</strong> DAO Kotlin · <strong>Líneas:</strong> 77 · <strong>Fuente:</strong> <a href="https://github.com/micromata/projectforge/blob/9ed5fbe0f/plugins/org.projectforge.plugins.banking/src/main/kotlin/org/projectforge/plugins/banking/BankAccountDao.kt">GitHub</a></p> <span style="color:#888">77 líneas · 41 código · 31 comentarios · 5 en blanco</span></div>
+
+<h2>Qué hace</h2>
+<div class="commentary"><p>DAO para <strong>cuentas bancarias</strong> — la entidad padre de <a href="46.html">BankAccountBalanceDO</a> (#46). Mismo patrón que <a href="45.html">BankAccountBalanceDao</a> (#45): extiende <code>BaseDao</code>, sobrescribe <code>hasAccess()</code> y <code>newInstance()</code>. Es llamado por <a href="45.html">BankAccountBalanceDao.hasAccess()</a> línea 68 como delegado de autorización.</p></div>
+
+<h2>Lógica de autorización (líneas 43-72)</h2>
+<div class="code-block"><pre>50 if (!accessChecker.isUserMemberOfGroup(user, FINANCE_GROUP))
+51   return false                              <span style="color:#888">← puerta: se requiere grupo de finanzas</span>
+53 if (accessChecker.isUserMemberOfAdminGroup(user))
+54   return true                               <span style="color:#888">← bypass: los administradores siempre tienen acceso</span>
+57 if (!accessChecker.isUserMemberOfGroup(user, FINANCE_GROUP))
+58   return false                              <span style="color:#888">← redundante: misma comprobación que línea 50</span>
+61 if (obj == null && oldObj == null)
+62   return true                               <span style="color:#888">← objetos nulos = acceso de lectura general</span>
+65 return BaseUserGroupRightUtils.hasAccess(...)  <span style="color:#888">← verificar derechos a nivel de objeto</span></pre></div>
+<div class="commentary"><div class="warn"><strong>Las líneas 50 y 57 son redundantes:</strong> Ambas verifican la membresía de <code>FINANCE_GROUP</code>. La línea 57 es inalcanzable si la línea 50 pasa (la línea 51 ya devolvió false para los no miembros). Esto parece ser un copia-pega defensivo de llamar a <code>accessChecker.isUserMemberOfGroup(user, ...)</code> (línea 50) vs <code>accessChecker.isLoggedInUserMemberOfGroup(...)</code> (como se usa en <a href="45.html">#45</a> línea 58).</div></div>
+
+<h2>Flujo de acceso</h2>
+<div class="code-block"><pre>¿El usuario está en FINANCE_GROUP?
+├─ NO  → denegado
+└─ SÍ → ¿El usuario es administrador?
+    ├─ SÍ → concedido (anulación de administrador)
+    └─ NO → ¿El objeto es nulo (nuevo registro o consulta general)?
+        ├─ SÍ → concedido (acceso de lectura para todos los miembros de finanzas)
+        └─ NO → Verificar derechos a nivel de objeto mediante BaseUserGroupRightUtils
+            ├─ tiene derechos → concedido
+            └─ sin derechos → denegado</pre></div>
+
+<h2>Conclusiones clave</h2>
+<div class="commentary"><ul><li><strong>77 líneas, comprobaciones redundantes:</strong> Las líneas 50 y 57 duplican la misma puerta de FINANCE_GROUP — probablemente por evolución del método a lo largo del tiempo.</li>
+<li><strong>Anulación de administrador:</strong> A diferencia de <a href="45.html">BankAccountBalanceDao</a>, este DAO concede explícitamente acceso incondicional a los administradores (línea 53-54).</li>
+<li><strong>Derechos a nivel de objeto:</strong> <code>BaseUserGroupRightUtils.hasAccess()</code> verifica asignaciones de permisos por objeto — más allá de la simple membresía de grupo.</li>
+<li><strong>Objeto nulo = acceso de lectura:</strong> El personal de finanzas puede listar todas las cuentas bancarias incluso sin derechos explícitos sobre el objeto.</li></ul></div>
+
+<div class="nav" style="margin-top:2em;padding-top:1em;border-top:1px solid #ddd"><a href="46.html">← #46: BankAccountBalanceDO.kt</a> · <a href="48.html">#48: BankAccountDO.kt →</a></div>
+</body>
+</html>

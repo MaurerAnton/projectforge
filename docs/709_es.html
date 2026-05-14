@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="es"><head><meta charset="utf-8"><title>#709 [ES]</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:2em;color:#444}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}.warn{background:#fff3cd;border-left:3px solid #ffc107;padding:.5em 1em;margin:1em 0}.tip{background:#d4edda;border-left:3px solid #28a745;padding:.5em 1em;margin:1em 0}</style></head>
+<body><div class="nav"><a href="https://maureranton.github.io/projectforge/">← Índice</a> · <a href="file-index.html">← Índice de archivos</a> · <a href="708.html">← Anterior</a> · <a href="710.html">Siguiente →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/java/org/projectforge/framework/persistence/xstream/HibernateProxyXPathMarshaller.java" target="_blank" title="Ver fuente en GitHub">📄 fuente</a></div>
+<h1>#709: <code>HibernateProxyXPathMarshaller.java</code></h1>
+<div class="meta"><code>projectforge-business/src/main/java/org/projectforge/framework/persistence/xstream/HibernateProxyXPathMarshaller.java</code> Marshaller XStream — marshaller de referencias basado en XPath que desempaqueta proxies de Hibernate durante el recorrido del grafo de entidades, <code>projectforge-business/src/main/java/org/projectforge/framework/persistence/xstream/HibernateProxyXPathMarshaller.java</code> <span style="color:#888">56 líneas · 25 código · 25 comentarios · 6 en blanco</span></div>
+<div class="c">Extiende <code>ReferenceByXPathMarshaller</code> de XStream para interceptar el método <code>convertAnother()</code> — el punto de despacho central donde XStream recorre de un objeto a otro durante la serialización XML de un grafo de entidades. Antes de delegar en la clase padre para el seguimiento de referencias basado en XPath, desempaqueta cualquier <code>HibernateProxy</code> a su implementación de entidad real. Esto asegura que el seguimiento de referencias de XStream opere sobre la identidad real de la entidad en lugar de la identidad del proxy, evitando la serialización duplicada de la misma entidad que aparece tanto a través de referencias directas como de proxy. Este es un componente crítico para serializar grafos de entidades JPA que contienen asociaciones bidireccionales con carga perezosa.</div>
+
+<h2>Arquitectura</h2>
+
+<h3>Jerarquía de clases</h3>
+<p><code>HibernateProxyXPathMarshaller</code> extiende <code>com.thoughtworks.xstream.core.ReferenceByXPathMarshaller</code>, que a su vez extiende <code>AbstractReferenceMarshaller</code> (que extiende <code>TreeMarshaller</code>). La jerarquía de marshalling de XStream es:</p>
+<pre>TreeMarshaller
+  └── AbstractReferenceMarshaller       (añade seguimiento de referencias a objetos)
+       ├── ReferenceByXPathMarshaller   (usa expresiones XPath para referencias)
+       │    └── HibernateProxyXPathMarshaller  (esta clase — añade desempaquetado de proxy)
+       └── ReferenceByIdMarshaller      (usa atributos ID/IDREF para referencias)
+            └── ProxyIdRefMarshaller    (<a href="708.html">#708</a> — estrategia alternativa basada en ID)</pre>
+
+<div class="tip">Tanto <code>HibernateProxyXPathMarshaller</code> como <a href="708.html">ProxyIdRefMarshaller</a> resuelven el mismo problema (marshalling consciente de proxies) pero usan diferentes modos de referencia de XStream: XPath vs. ID/IDREF. La elección entre ellos la realiza <a href="710.html">XStreamMarshallingStrategy</a> (usa XPath) y <a href="709.html">ProxyIdRefMarshallingStrategy</a> (usa ID/IDREF).</div>
+
+<h3>Constructor</h3>
+<p>Toma cuatro parámetros que coinciden con la firma del constructor de <code>ReferenceByXPathMarshaller</code>:</p>
+<table>
+<tr><th>Parámetro</th><th>Tipo</th><th>Propósito</th></tr>
+<tr><td><code>writer</code></td><td><code>HierarchicalStreamWriter</code></td><td>Escritor de salida XML</td></tr>
+<tr><td><code>converterLookup</code></td><td><code>ConverterLookup</code></td><td>Registro de convertidores de XStream</td></tr>
+<tr><td><code>mapper</code></td><td><code>Mapper</code></td><td>Mapper de nombres de clase de XStream</td></tr>
+<tr><td><code>mode</code></td><td><code>int</code></td><td>Modo de referencia XPath (<code>RELATIVE</code>, <code>ABSOLUTE</code>, etc.)</td></tr>
+</table>
+
+<h3>convertAnother(Object item, Converter converter)</h3>
+<p>Este es el único método sobrescrito — el punto único donde se inyecta el desempaquetado de proxy en el flujo de marshalling XPath:</p>
+<ol>
+  <li><strong>Detección de proxy:</strong> Verifica <code>HibernateProxy.class.isAssignableFrom(item.getClass())</code>. Usa <code>isAssignableFrom</code> en lugar de <code>instanceof</code> porque <code>item</code> puede pasarse en un contexto no nulo donde el tipo estático es más amplio.</li>
+  <li><strong>Desempaquetado:</strong> Llama a <code>((HibernateProxy) item).getHibernateLazyInitializer().getImplementation()</code> para obtener la entidad real. Esto desencadena la carga perezosa si el proxy no ha sido inicializado.</li>
+  <li><strong>Delegación:</strong> Pasa el objeto <code>toConvert</code> desempaquetado a <code>super.convertAnother(toConvert, converter)</code>, que maneja el seguimiento de referencias XPath y la escritura XML.</li>
+</ol>
+
+<h3>Modo de referencia XPath</h3>
+<p>El <code>ReferenceByXPathMarshaller</code> de XStream maneja referencias circulares escribiendo expresiones XPath (ej., <code>&lt;task reference="../../../task"&gt;</code>) en lugar de serializar el mismo objeto dos veces. El parámetro <code>mode</code> controla si estas expresiones XPath son relativas o absolutas. Las rutas relativas hacen que el XML sea más resistente a cambios estructurales y generalmente se prefieren para XML orientado a documentos.</p>
+
+<h2>Puntos de integración</h2>
+<ul>
+  <li><strong>Creado por:</strong> <a href="710.html">XStreamMarshallingStrategy</a>, que pasa el modo <code>RELATIVE</code>. Este es el <em>único</em> lugar donde se instancia <code>HibernateProxyXPathMarshaller</code> — la estrategia actúa como fábrica.</li>
+  <li><strong>Opera dentro de:</strong> El pipeline de marshalling en árbol de XStream. Cuando XStream recorre un grafo de objetos, llama a <code>convertAnother()</code> por cada referencia a objeto que encuentra.</li>
+  <li><strong>Referencia a JIRA XSTR-226:</strong> El comentario en la fuente <code>// http://jira.codehaus.org/browse/XSTR-226</code> enlaza al issue original de Codehaus JIRA que motivó esta clase — una limitación conocida en XStream donde los proxies de Hibernate rompían el mecanismo de seguimiento de referencias. Esta clase es la solución para ese issue.</li>
+</ul>
+
+<h2>Decisiones de diseño y advertencias</h2>
+<ul>
+  <li><strong>Desempaquetado de proxy vs. seguimiento de referencias consciente de proxy:</strong> Un diseño alternativo modificaría el seguimiento de referencias para que sea consciente de proxy (mapeando identidad de proxy a identidad de objeto real). Esta clase adopta el enfoque más simple: desempaquetar antes de entrar al rastreador de referencias. La consecuencia es que <code>getImplementation()</code> fuerza la inicialización — un acceso a base de datos para proxies perezosos.</li>
+  <li><strong>Modo XPath fijado a nivel de estrategia:</strong> El <code>mode</code> no es configurable por llamada — se fija en tiempo de construcción por la estrategia. <a href="710.html">XStreamMarshallingStrategy</a> siempre pasa <code>RELATIVE</code>. Si se necesitaran XPath absolutos, se requeriría una nueva clase de estrategia.</li>
+  <li><strong>Potencial de inicialización duplicada:</strong> Si tanto <a href="705.html">HibernateProxyConverter</a> como este marshaller están activos en el mismo pipeline de XStream, un proxy podría desempaquetarse dos veces. Sin embargo, el segundo desempaquetado en un proxy ya inicializado es un no-op barato (Hibernate devuelve la misma instancia de implementación).</li>
+  <li><strong>Clase a nivel de paquete:</strong> Como la mayoría de las clases en este paquete, <code>HibernateProxyXPathMarshaller</code> tiene visibilidad de paquete (<code>public class</code> pero el paquete es interno). Se expone públicamente solo para permitir que la clase de estrategia lo construya.</li>
+</ul>
+
+<h2>Historial de Git</h2><div class="hist"><pre>868d6abb7 2025 -> 2026
+63081666f Encabezados de archivos fuente: 2024-> 2025.
+b6092df09 Copyright 2023 -> 2024
+ab45d51fa Copyright 2001-2022 -> 2001-2023.
+5f7ef41b8 Copyright 2021 -> 2022
+ceb63e8a1 Encabezado de código fuente: (C) 2001-2021.
+7c79f1922 Copyright del encabezado fuente -> 2020.
+32f634b88 Optimizar importaciones
+dd5ca38ac CopyRight de todos los encabezados de archivos Java actualizado o creado.
+9ebb88522 Commit inicial</pre></div>
+</body></html>

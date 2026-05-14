@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>#920 : EmployeeCache.kt [FR]</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:2em;color:#444}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}</style>
+</head>
+<body>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← Index des fichiers</a> · <a href="919.html">← Précédent</a> · <a href="921.html">Suivant →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/kotlin/org/projectforge/business/fibu/EmployeeCache.kt" target="_blank" title="Voir la source sur GitHub">📄 source</a></div>
+<h1>#920 : <code>EmployeeCache.kt</code></h1>
+<div class="meta"><code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/EmployeeCache.kt</code> Type : Composant Spring / Cache · Objectif : Cache en mémoire de tous les employés avec attributs dépendants du temps calculés · Chemin : <code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/EmployeeCache.kt</code> <span style="color:#888">209 lignes · 143 code · 43 commentaires · 23 vides</span></div>
+<div class="c">Cache haute performance qui maintient un instantané de tous les employés non supprimés ainsi que leur <code>statut</code>, <code>congéAnnuel</code> et <code>heuresHebdomadaires</code> actuels — calculés à partir des entrées <code>EmployeeValidSinceAttrDO</code>. Étend <code>AbstractCache</code> qui fournit l'infrastructure de rafraîchissement/expiration. Exposé en tant que singleton <code>@Component</code> accessible via <code>EmployeeCache.instance</code>.</div>
+
+<h2>Architecture &amp; Conception</h2>
+
+<h3>Stockage du cache</h3>
+<p>Le <code>employeeMap</code> interne est un <code>Map&lt;Long, EmployeeDO&gt;</code> indexé par la clé primaire de l'employé en base de données. Il n'est <strong>pas synchronisé</strong> — seulement écrit pendant <code>refresh()</code> et remplacé atomiquement par affectation. L'accès en lecture seule depuis plusieurs threads est sûr car chaque rafraîchissement crée une nouvelle instance de map.</p>
+
+<h3>Stratégie de rafraîchissement</h3>
+<p>La méthode <code>refresh()</code> (appelée par <code>AbstractCache</code> / <code>CacheHelper</code> avec synchronisation) s'exécute dans une transaction en lecture seule isolée :</p>
+<ol>
+<li><strong>Charger tous les employés non supprimés :</strong> <code>from EmployeeDO t where deleted=false</code></li>
+<li><strong>Appliquer les entrées STATUS :</strong> Interroger les dernières entrées <code>validSinceEff</code> de type <code>STATUS</code>, groupées par ID employé, en prenant le premier enregistrement par groupe.</li>
+<li><strong>Appliquer les entrées ANNUAL_LEAVE :</strong> Même modèle de regroupement — résout les jours de congé annuel valides aujourd'hui.</li>
+<li><strong>Appliquer les entrées WEEKLY_HOURS :</strong> Même regroupement — résout les heures de travail hebdomadaires.</li>
+<li><strong>Remplacer la map :</strong> La map finale est assignée à <code>this.employeeMap</code>.</li>
+</ol>
+
+<h3>Résolution des attributs dépendants du temps</h3>
+<p>La méthode <code>getLatestValidSinceEntries(type)</code> exécute une requête JPQL en ordonnant par <code>employee.id, validSince DESC</code>, puis groupe par ID employé en utilisant <code>groupBy</code> de Kotlin. Le <strong>premier élément</strong> de chaque groupe (le <code>validSince</code> le plus récent) est sélectionné. Un commentaire dans la source note qu'une approche basée sur une sous-requête (<code>SELECT MAX(validSince)</code>) a échoué sous PostgreSQL avec des entrées manquantes, conduisant à cette approche de regroupement post-requête.</p>
+
+<h3>Méthodes de requête clés</h3>
+<table>
+<tr><th>Méthode</th><th>Description</th></tr>
+<tr><td><code>getEmployee(id)</code></td><td>Retourne l'employé en cache, en résolvant le champ <code>user</code> via <code>UserGroupCache</code> s'il n'est pas initialisé.</td></tr>
+<tr><td><code>getEmployeeIfNotInitialized(emp)</code></td><td>Vérifie <code>HibernateUtils.isFullyInitialized()</code> ; si l'entité n'est pas complètement chargée, récupère la version en cache.</td></tr>
+<tr><td><code>getEmployeeByUserId(userId)</code></td><td>Recherche inverse — trouve un employé par son ID utilisateur associé.</td></tr>
+<tr><td><code>getEmployeeIdByUserId(userId)</code></td><td>Recherche inverse retournant uniquement l'ID employé (évite le chargement complet de l'entité).</td></tr>
+<tr><td><code>getUser(employee)</code></td><td>Assistant de résolution pour <code>PFUserDO</code> via <code>UserGroupCache</code>.</td></tr>
+<tr><td><code>getUserByEmployee(employeeId)</code></td><td>Résout l'utilisateur à partir de l'ID employé, en passant par l'employé en cache.</td></tr>
+<tr><td><code>setTimeDependentAttrs(employee)</code></td><td>Modifie le <code>statut</code>, <code>congéAnnuel</code> et <code>heuresHebdomadaires</code> d'un <code>EmployeeDO</code> donné à partir des valeurs en cache. Utilisé par la couche DAO pour remplir les champs transitoires.</td></tr>
+<tr><td><code>findByStaffNumber(staffNumber)</code></td><td>Recherche un employé par son numéro d'employé (surchargé pour <code>Int</code> et <code>String</code>).</td></tr>
+</table>
+
+<h3>Requête nommée</h3>
+<p>L'objet compagnon définit <code>queryAllValidSinceValues</code> — une chaîne JPQL utilisée par <code>getLatestValidSinceEntries()</code> :</p>
+<pre>SELECT t FROM EmployeeValidSinceAttrDO t
+WHERE t.type=:type AND t.deleted=false
+ORDER BY t.employee.id, t.validSince DESC</pre>
+
+<h2>Historique Git</h2>
+<div class="hist"><pre>868d6abb7 2025 -> 2026
+6a32032d6 Hibernate.isInitialized(obj) -> HibernateUtils.isFullyInitialized(obj).
+28efde264 Employee : weeklyWorkingHours maintenant comme attr. dépendant du temps. eintritt/austritt : timestamp -> date
+63081666f En-têtes des fichiers source : 2024 -> 2025.
+4ae4f3ea3 Corrections de bugs lors de la mise en production...
+50c3b7b46 Migration en cours... (tous les tests de tous les packages : OK).
+4942c854d Migration en cours...
+d394f410f Migration en cours... (tous les tests de tous les packages : OK).
+b71b5073d Migration en cours... (tous les tests de tous les packages : OK).
+ffb18cf8f Migration en cours...
+1012e347a Migration en cours... (tous les tests de tous les packages : OK).
+2e9839891 Migration en cours...
+ba2479571 Migration en cours...
+b3293f0cc PersistenceService/Context : gestion des statistiques améliorée.
+b5dc26e24 Migration en cours... (tous les tests de tous les packages : OK).
+b0efaddc2 Migration en cours... (tous les tests de tous les packages : OK).
+c14b18a48 Migration en cours... (tous les tests de tous les packages : OK).</pre></div>
+</body>
+</html>

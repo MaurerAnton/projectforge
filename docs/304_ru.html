@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>304: I18nKeyUsageEntry.kt [RU]</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:1.5em;color:#444;font-size:1em}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.lang{font-size:.85em;color:#888;float:right}.lang a{color:#888;text-decoration:none;padding:0 .3em}.lang a.active{color:#0366d6;font-weight:600;text-decoration:underline}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}pre.diff{background:#fff;font-size:.82em;max-height:300px;overflow-y:auto}</style>
+</head>
+<body>
+<div class="lang"><a href="304.html">EN</a> · <a href="304_de.html">DE</a> · <a href="304_ru.html" class="active">RU</a> · <a href="304_fr.html">FR</a> · <a href="304_es.html">ES</a></div>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Индекс</a> · <a href="file-index.html">← Индекс файлов</a> · <a href="1360.html">← Предыдущий</a> · <a href="2729.html">Следующий →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-application/src/main/kotlin/org/projectforge/i18n/I18nKeyUsageEntry.kt" target="_blank" title="Просмотреть исходник на GitHub">📄 исходник</a></div>
+<h1>#304: <code>I18nKeyUsageEntry.kt</code></h1>
+<div class="meta"><code>projectforge-application/src/main/kotlin/org/projectforge/i18n/I18nKeyUsageEntry.kt</code> Класс Kotlin, <code>projectforge-application/src/main/kotlin/org/projectforge/i18n/I18nKeyUsageEntry.kt</code> <span style="color:#888">122 строки · 76 кода · 34 комментария · 12 пустых</span></div>
+<div class="c"><strong>Назначение:</strong> Пакет интернационализации ресурсов: I18nKeyUsageEntry.kt. I18nKeyUsageEntry.kt является частью приложения управления проектами с открытым исходным кодом ProjectForge.</div>
+<h2>Исходный код (первые 100 строк)</h2>
+<pre>/////////////////////////////////////////////////////////////////////////////
+//
+// Project ProjectForge Community Edition
+//         www.projectforge.org
+//
+// Copyright (C) 2001-2026 Micromata GmbH, Germany (www.micromata.com)
+//
+// ProjectForge is dual-licensed.
+//
+// This community edition is free software; you can redistribute it and/or
+// modify it under the terms of the GNU General Public License as published
+// by the Free Software Foundation; version 3 of the License.
+//
+// This community edition is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General
+// Public License for more details.
+//
+// You should have received a copy of the GNU General Public License along
+// with this program; if not, see http://www.gnu.org/licenses/.
+//
+/////////////////////////////////////////////////////////////////////////////
+
+package org.projectforge.i18n
+
+import com.fasterxml.jackson.annotation.JsonIgnore
+import mu.KotlinLogging
+import org.projectforge.framework.json.JsonUtils
+import java.io.File
+
+private val log = KotlinLogging.logger {}
+
+internal class I18nKeyUsageEntry(val i18nKey: String) {
+  var bundleName: String? = null
+  var translation: String? = null
+  var translationDE: String? = null
+  var usedInClasses = mutableListOf&lt;Class&lt;*&gt;&gt;()
+  var usedInFiles = mutableListOf&lt;String&gt;()
+
+  val classes: String
+    @JsonIgnore
+    get() = usedInClasses.sortedBy { it.name }.joinToString { it.simpleName }
+
+  val files: String
+    @JsonIgnore
+    get() = usedInFiles.sorted().joinToString()
+
+  /**
+   * If file represents a Java or Kotlin class, the class will be get byName and the class will be added instead of
+   * the file.
+   */
+  fun addUsage(file: File) {
+    val clazz = getClassByFile(file)
+    if (clazz != null) {
+      addUsage(clazz)
+    } else {
+      val path = file.absolutePath.replace(basePath, ".")
+      if (!usedInFiles.contains(path)) {
+        usedInFiles.add(path)
+        usedInFiles.sort()
+      }
+    }
+  }
+
+  /**
+   * Adds the class to the list of used classes.
+   * The list will be sorted by class name.
+   * @param clazz The class to add.
+   * @return true if the class was added, false if the class was already in the list.
+   * @see usedInClasses
+   */
+  fun addUsage(clazz: Class&lt;*&gt;) {
+    if (!usedInClasses.contains(clazz)) {
+      usedInClasses.add(clazz)
+      usedInClasses.sortBy { it.name }
+    }
+  }
+
+  override fun toString(): String {
+    return JsonUtils.toJson(this)
+  }
+
+  companion object {
+    private val classCacheMap = mutableMapOf&lt;File, Class&lt;*&gt;&gt;()
+    private val basePath = I18nKeysSourceAnalyzer.basePath.toFile().absolutePath
+
+    fun read(str: String): I18nKeyUsageEntry? {
+      return JsonUtils.fromJson(str, I18nKeyUsageEntry::class.java)
+    }
+
+    internal fun getClassByFile(file: File, showError: Boolean = true): Class&lt;*&gt;? {
+      classCacheMap[file]?.let { return it }
+      val className = if (file.extension == "java") {
+        file.absolutePath.substringAfter("/src/main/java/").removeSuffix(".java").replace('/', '.')
+      } else if (file.extension == "kt") {
+        file.absolutePath.substringAfter("/src/main/kotlin/").removeSuffix(".kt").replace('/', '.')
+      } else {
+        return null
+      }
+      if (</pre>
+<h2>История Git</h2>
+<div class="hist">
+<pre>868d6abb7 2025 -> 2026
+63081666f Заголовки исходных файлов: 2024-> 2025.
+16b6494b4 Миграция в процессе...
+b6092df09 Авторские права 2023 -> 2024
+ab45d51fa Авторские права 2001-2022 -> 2001-2023.</pre>
+<h3>868d6abb7</h3><div class="c"><strong>2025 -> 2026</strong><pre class="diff">868d6abb75cd191a892911ac8e45058932cf9074
+diff --git a/projectforge-application/src/main/kotlin/org/projectforge/i18n/I18nKeyUsageEntry.kt b/projectforge-application/src/main/kotlin/org/projectforge/i18n/I18nKeyUsageEntry.kt
+index 75d73217c..443b2a9f8 100644
+--- a/projectforge-application/src/main/kotlin/org/projectforge/i18n/I18nKeyUsageEntry.kt
++++ b/projectforge-application/src/main/kotlin/org/projectforge/i18n/I18nKeyUsageEntry.kt
+@@ -3,7 +3,7 @@
+ // Project ProjectForge Community Edition
+ //         www.projectforge.org
+ //
+-// Copyright (C) 2001-2025 Micromata GmbH, Germany (www.micromata.com)
++// Copyright (C) 2001-2026 Micromata GmbH, Germany (www.micromata.com)
+ //
+ // ProjectForge is dual-licensed.
+ //</pre></div><h3>63081666f</h3><div class="c"><strong>Заголовки исходных файлов: 2024-> 2025.</strong><pre class="diff">63081666f620fb87315f01b817e560e0b2f6a33a
+diff --git a/projectforge-application/src/main/kotlin/org/projectforge/i18n/I18nKeyUsageEntry.kt b/projectforge-application/src/main/kotlin/org/projectforge/i18n/I18nKeyUsageEntry.kt
+index 281446e2d..75d73217c 100644
+--- a/projectforge-application/src/main/kotlin/org/projectforge/i18n/I18nKeyUsageEntry.kt
++++ b/projectforge-application/src/main/kotlin/org/projectforge/i18n/I18nKeyUsageEntry.kt
+@@ -3,7 +3,7 @@
+ // Project ProjectForge Community Edition
+ //         www.projectforge.org
+ //
+-// Copyright (C) 2001-2024 Micromata GmbH, Germany (www.micromata.com)
++// Copyright (C) 2001-2025 Micromata GmbH, Germany (www.micromata.com)
+ //
+ // ProjectForge is dual-licensed.
+ //</pre></div><h3>16b6494b4</h3><div class="c"><strong>Миграция в процессе...</strong><pre class="diff">16b6494b42ddee3749b299fb9f81a84647d711af
+diff --git a/projectforge-application/src/main/kotlin/org/projectforge/i18n/I18nKeyUsageEntry.kt b/projectforge-application/src/main/kotlin/org/projectforge/i18n/I18nKeyUsageEntry.kt
+index 1a429f70c..281446e2d 100644
+--- a/projectforge-application/src/main/kotlin/org/projectforge/i18n/I18nKeyUsageEntry.kt
++++ b/projectforge-application/src/main/kotlin/org/projectforge/i18n/I18nKeyUsageEntry.kt
+@@ -62,6 +62,13 @@ internal class I18nKeyUsageEntry(val i18nKey: String) {
+     }
+   }
+ 
++  /**
++   * Adds the class to the list of used classes.
++   * The list will be sorted by class name.
++   * @param clazz The class to add.
++   * @return true if the class was added, false if the class was already in the list.
++   * @see usedInClasses
++   */
+   fun addUsage(clazz: Class&lt;*&gt;) {
+     if (!usedInClasses.contains(clazz)) {
+       usedInClasses.add(clazz)
+@@ -75,7 +82,7 @@ internal class I18nKeyUsageEntry(val i18nKey: String) {
+ 
+   companion object {
+     private val classCacheMap = mutableMapOf&lt;File, Class&lt;*&gt;&gt;()
+-    private val basePath = I18nKeysSourceAnalyzer.basePath!!.toFile().absolutePath
++    private val basePath = I18nKeysSourceAnalyzer.basePath.toFile().absolutePath
+ 
+     fun read(str: String): I18nKeyUsageEntry? {
+       return JsonUtils.fromJson(str, I18nKeyUsageEntry::class.java)</pre></div><h3>b6092df09</h3><div class="c"><strong>Авторские права 2023 -> 2024</strong><pre class="diff">b6092df0927c4a3b161e888445f31dcab57493f2
+diff --git a/projectforge-application/src/main/kotlin/org/projectforge/i18n/I18nKeyUsageEntry.kt b/projectforge-application/src/main/kotlin/org/projectforge/i18n/I18nKeyUsageEntry.kt
+index f6b6fadf6..1a429f70c 100644
+--- a/projectforge-application/src/main/kotlin/org/projectforge/i18n/I18nKeyUsageEntry.kt
++++ b/projectforge-application/src/main/kotlin/org/projectforge/i18n/I18nKeyUsageEntry.kt
+@@ -3,7 +3,7 @@
+ // Project ProjectForge Community Edition
+ //         www.projectforge.org
+ //
+-// Copyright (C) 2001-2023 Micromata GmbH, Germany (www.micromata.com)
++// Copyright (C) 2001-2024 Micromata GmbH, Germany (www.micromata.com)
+ //
+ // ProjectForge is dual-licensed.
+ //</pre></div><h3>ab45d51fa</h3><div class="c"><strong>Авторские права 2001-2022 -> 2001-2023.</strong><pre class="diff">ab45d51fa419ede6174b31d69987f96d4b841ff9
+diff --git a/projectforge-application/src/main/kotlin/org/projectforge/i18n/I18nKeyUsageEntry.kt b/projectforge-application/src/main/kotlin/org/projectforge/i18n/I18nKeyUsageEntry.kt
+index 1f811e3e8..f6b6fadf6 100644
+--- a/projectforge-application/src/main/kotlin/org/projectforge/i18n/I18nKeyUsageEntry.kt
++++ b/projectforge-application/src/main/kotlin/org/projectforge/i18n/I18nKeyUsageEntry.kt
+@@ -3,7 +3,7 @@
+ // Project ProjectForge Community Edition
+ //         www.projectforge.org
+ //
+-// Copyright (C) 2001-2022 Micromata GmbH, Germany (www.micromata.com)
++// Copyright (C) 2001-2023 Micromata GmbH, Germany (www.micromata.com)
+ //
+ // ProjectForge is dual-licensed.
+ //</pre></div>
+</div>
+</body>
+</html>

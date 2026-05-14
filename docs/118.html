@@ -1,40 +1,54 @@
 <!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>#118</title>
 <style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333}a{color:#0366d6}.meta{font-size:.9em;margin:1em 0}.nav{font-size:.9em;color:#888;margin-bottom:1em}.commentary{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}code{background:#f0f0f0;padding:0 .2em;border-radius:2px}</style></head>
 <body>
-<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="117.html">← Prev</a> · <a href="119.html">Next →</a></div>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="117.html">← Prev</a> · <a href="119.html">Next →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/plugins/org.projectforge.plugins.datatransfer/src/test/kotlin/org/projectforge/plugins/datatransfer/DataTransferNotificationMailTest.kt" target="_blank" title="View source on GitHub">📄 source</a></div>
 
-<h1>#118: <code>DataTransferNotificationTest.kt</code></h1>
-<div class="meta"><strong>Path:</strong> <code>plugins/...datatransfer/src/test/kotlin/.../DataTransferNotificationTest.kt</code> · <strong>Lines:</strong> 108 · <strong>Type:</strong> Kotlin JUnit 5 unit test (no Spring context)</div>
+<h1>#118: <code>DataTransferNotificationMailTest.kt</code></h1>
+<div class="meta"><code>plugins/org.projectforge.plugins.datatransfer/src/test/kotlin/org/projectforge/plugins/datatransfer/DataTransferNotificationMailTest.kt</code> <strong>Path:</strong> <code>plugins/...datatransfer/src/test/kotlin/.../DataTransferNotificationMailTest.kt</code> · <strong>Lines:</strong> 205 · <strong>Type:</strong> Kotlin JUnit 5 integration test <span style="color:#888">205 lines · 171 code · 22 comments · 12 blank</span></div>
 
 <div class="commentary">
-<p><strong>Pure unit test for the observer notification recipient logic</strong> — verifies <em>who</em> gets notified for each event type. Unlike <a href="117.html">DataTransferNotificationMailTest</a> (which tests the full mail pipeline), this test isolates the recipient selection algorithm. Does not extend <code>AbstractTestBase</code> — runs without Spring context, making it fast.</p>
+<p><strong>End-to-end integration test for the observer notification mail system</strong> — exercises the full pipeline: create area with observers → upload files → run notification job → verify email content. The largest DataTransfer test at 205 lines. Uses Spring autowiring, JCR test repo, and Groovy mail template rendering.</p>
 </div>
 
 <div class="commentary">
-<h3>Test method: <code>registerRecipientsTest()</code></h3>
-<p>Uses a helper <code>testAudit(uploadUserId, byUserId, eventType, observerIds, expected)</code> that:</p>
+<h3>Test flow</h3>
 <ol>
-<li>Creates mock <code>PFUserDO</code> objects for uploader, the user performing the action, and observers</li>
-<li>Simulates an audit event by calling the notification logic directly</li>
-<li>Asserts that only the <strong>expected</strong> set of observer IDs receives a notification</li>
+<li>Creates two test users (<code>user1</code> = area admin, <code>user2</code> = observer)</li>
+<li>Creates a data transfer area with <code>user2</code> as observer (<code>observerIds</code>) and <code>user2.userWantsToObserve = true</code></li>
+<li><code>user1</code> uploads several files, triggering audit entries</li>
+<li><code>user1</code> renames a file — verifies <code>filename_old</code> is preserved in audit</li>
+<li><code>user1</code> deletes a file — verifies delete event recorded</li>
+<li>Runs <code>DataTransferNotificationJob</code> which:
+  <ul>
+    <li>Queries audit entries with <code>notified=false</code></li>
+    <li>Renders <a href="112.html">dataTransferMail.html</a> Freemarker template with audit data</li>
+    <li>Uses <code>DomainService</code> to generate the area link URL</li>
+    <li>Marks entries as <code>notified=true</code></li>
+  </ul></li>
+<li>Verifies mail content: checks that <code>message</code> (i18n string from <a href="104.html">plugin i18n</a>), audit table (columns: Date, File name, Description, Action, User), download events table, and link button are all present</li>
 </ol>
 </div>
 
 <div class="commentary">
-<h3>Notification rules tested</h3>
+<h3>Mail content assertions</h3>
 <ul>
-<li><strong>UPLOAD by another user:</strong> all observers except the uploader should be notified (uploader already knows they uploaded)</li>
-<li><strong>UPLOAD by self:</strong> no one should be notified (observerIds = [1,2,3], uploadUserId = 1, byUserId = 1 → expected = [2,3])</li>
-<li><strong>DELETE by observer themselves:</strong> the deleting observer should not receive a notification about their own action</li>
-<li><strong>DOWNLOAD by external user:</strong> all observers should be notified (external user is not an observer)</li>
-<li><strong>RENAME:</strong> observers are notified, uploader excluded if they're the one renaming</li>
+<li>Uses <code>StringUtils</code> — checks that email body contains expected translatable strings from <code>DataTransferI18nResources.properties</code></li>
+<li>Verifies the <code>pf.getI18nString("plugins.datatransfer.audit.downloadEvents")</code> section header appears</li>
+<li>Verifies the <code>"plugins.datatransfer.mail.link"</code> button label appears</li>
+<li>Domain URL uses <code>DomainService.getDomain()</code> (e.g. <code>https://your-server.com/</code>) + <code>PagesResolver.getPageUrl()</code></li>
 </ul>
-<p>The invariant: you never get notified about your own actions — only other people's activity triggers notifications.</p>
 </div>
 
 <div class="commentary">
-<h3>Design note</h3>
-<p>This is a <strong>unit test</strong> (no database, no JCR, no Spring) that tests just the notification recipient logic. The <code>testAudit</code> helper directly calls the notification method with arranged inputs. The actual <code>DataTransferNotificationJob</code> + mail rendering is tested in <a href="117.html">DataTransferNotificationMailTest</a>. This separation makes the notification logic test fast (milliseconds vs. seconds for integration tests).</p>
+<h3>Dependencies</h3>
+<ul>
+<li><code>DataTransferPageRest</code> — internal REST controller for CRUD operations</li>
+<li><code>DataTransferAreaDO</code>, <code>DataTransferAuditDao</code> — area and audit persistence</li>
+<li><code>AttachmentsService</code> — JCR file operations (backed by test repo)</li>
+<li><code>DomainService</code> — resolves the server's base URL for email links</li>
+<li><code>PagesResolver</code> — constructs frontend page URLs</li>
+<li><code>DataTransferNotificationJob</code> — the job under test (notification scheduling)</li>
+</ul>
 </div>
 
 </body></html>

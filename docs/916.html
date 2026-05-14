@@ -1,66 +1,121 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="utf-8">
-<title>#916: EingangsrechnungsPositionDO.kt</title>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>#916: EingangsrechnungDO.kt</title>
 <style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:2em;color:#444}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}</style>
 </head>
 <body>
-<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="915.html">← Prev</a> · <a href="917.html">Next →</a></div>
-<h1>#916: <code>EingangsrechnungsPositionDO.kt</code></h1>
-<div class="meta">Type: JPA Entity (Data Object) · Purpose: Represents a line item position within an incoming invoice (Eingangsrechnung) · Path: <code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/EingangsrechnungsPositionDO.kt</code></div>
-<div class="c">Core domain entity representing a single position/line item in an incoming invoice. Extends <code>AbstractRechnungsPositionDO</code> and establishes the link to the parent <code>EingangsrechnungDO</code> plus the cost assignments (<code>KostZuweisungDO</code>). Hibernate-search indexed for full-text search.</div>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="915.html">← Prev</a> · <a href="917.html">Next →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/kotlin/org/projectforge/business/fibu/EingangsrechnungDO.kt" target="_blank" title="View source on GitHub">📄 source</a></div>
 
-<h2>Architecture / Design</h2>
-<h3>Inheritance &amp; JPA Mapping</h3>
-<p>Extends <code>AbstractRechnungsPositionDO</code> (the common base class for both incoming and outgoing invoice positions). Declared <code>open</code> (required by Kotlin + Hibernate for lazy-loading proxies). The <code>@Table</code> annotation maps to <code>t_fibu_eingangsrechnung_position</code> with a <strong>composite unique constraint</strong> on <code>(eingangsrechnung_fk, number)</code> — ensuring position numbers are unique within a single invoice.</p>
+<h1>#916: <code>EingangsrechnungDO.kt</code></h1>
 
+<div class="meta"><code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/EingangsrechnungDO.kt</code> 
+  <strong>Type:</strong> JPA Entity (Data Object)<br>
+  <strong>Package:</strong> <code>org.projectforge.business.fibu</code><br>
+  <strong>Path:</strong> <code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/EingangsrechnungDO.kt</code><br>
+  <strong>Author:</strong> Kai Reinhard (k.reinhard@micromata.de)
+ <span style="color:#888">167 lines · 108 code · 37 comments · 22 blank</span></div>
+
+<div class="c">
+  <p>Represents an <strong>incoming invoice</strong> (<em>Eingangsrechnung</em>) — a bill received from a creditor. Extends <code>AbstractRechnungDO</code>, inheriting common invoice fields (date, net/gross amounts, payment info, status). Adds incoming-invoice-specific fields like creditor details, bank account information (IBAN/BIC), and a creditor-side reference number. The entity is indexed by Hibernate Search and implements <code>Comparable</code> for sorting.</p>
+</div>
+
+<h2>Database Mapping</h2>
 <table>
-<tr><th>Field</th><th>Type</th><th>JPA / Notes</th></tr>
-<tr><td><code>eingangsrechnung</code></td><td><code>EingangsrechnungDO?</code></td><td><code>@ManyToOne(LAZY)</code> — parent invoice reference. Uses <code>@JsonBackReference</code> to break serialization cycle. Serialized as ID-only via <code>@JsonSerialize(IdOnlySerializer)</code>.</td></tr>
-<tr><td><code>rechnungId</code></td><td><code>Long?</code></td><td><code>@Transient</code> — convenience getter that delegates to <code>eingangsrechnung?.id</code>. Overrides abstract property from <code>AbstractRechnungsPositionDO</code>.</td></tr>
-<tr><td><code>kostZuweisungen</code></td><td><code>MutableList&lt;KostZuweisungDO&gt;?</code></td><td><code>@OneToMany(mappedBy="eingangsrechnungsPosition")</code> with <code>@OrderColumn(name="index")</code>. <code>@JsonManagedReference</code> (the "owning" side of the JSON pair). Annotated with <code>@PersistenceBehavior(autoUpdateCollectionEntries=true)</code>.</td></tr>
+  <tr><th>Table</th><td><code>t_fibu_eingangsrechnung</code></td></tr>
+  <tr><th>Indexes</th><td><code>idx_fk_t_fibu_eingangsrechnung_konto_id</code> on <code>konto_id</code></td></tr>
+  <tr><th>Annotations</th><td><code>@Indexed</code> (Hibernate Search)</td></tr>
 </table>
 
-<h3>Key Methods</h3>
+<h2>Named Queries</h2>
+<table>
+  <tr><th>Constant</th><th>Query</th><th>Purpose</th></tr>
+  <tr><td><code>SELECT_MIN_MAX_DATE</code></td><td><code>select min(datum), max(datum) from EingangsrechnungDO</code></td><td>Calculates the year range of all invoices for UI navigation</td></tr>
+</table>
+
+<h2>Fields</h2>
+
+<h3>Creditor Information</h3>
+<table>
+  <tr><th>Field</th><th>Type</th><th>Column</th><th>Constraints</th><th>Search</th><th>Description</th></tr>
+  <tr><td><code>kreditor</code></td><td><code>String?</code></td><td>—</td><td>Length 255</td><td>@FullTextField</td><td>Creditor name</td></tr>
+  <tr><td><code>customernr</code></td><td><code>String?</code></td><td>—</td><td>—</td><td>@FullTextField</td><td>Customer number at the creditor</td></tr>
+</table>
+
+<h3>Invoice Identification</h3>
+<table>
+  <tr><th>Field</th><th>Type</th><th>Column</th><th>Constraints</th><th>Search</th><th>Description</th></tr>
+  <tr><td><code>referenz</code></td><td><code>String?</code></td><td>—</td><td>Length 1000</td><td>@FullTextField</td><td>Creditor's invoice number / reference</td></tr>
+</table>
+
+<h3>Bank Account</h3>
+<table>
+  <tr><th>Field</th><th>Type</th><th>Column</th><th>Constraints</th><th>Search</th><th>Description</th></tr>
+  <tr><td><code>iban</code></td><td><code>String?</code></td><td>—</td><td>Length 50</td><td>@FullTextField</td><td>Creditor's IBAN (for SEPA payments)</td></tr>
+  <tr><td><code>bic</code></td><td><code>String?</code></td><td>—</td><td>Length 11</td><td>@FullTextField</td><td>Creditor's BIC/SWIFT code</td></tr>
+</table>
+
+<h3>Other</h3>
+<table>
+  <tr><th>Field</th><th>Type</th><th>Column</th><th>Constraints</th><th>Search</th><th>Description</th></tr>
+  <tr><td><code>receiver</code></td><td><code>String?</code></td><td>—</td><td>—</td><td>@FullTextField</td><td>The person/entity receiving the invoice</td></tr>
+  <tr><td><code>paymentType</code></td><td><code>PaymentType?</code></td><td><code>payment_type</code></td><td>Length 20, @Enumerated(STRING)</td><td>@GenericField (via bridge)</td><td>Payment method (e.g. bank transfer)</td></tr>
+</table>
+
+<h2>Computed / Transient Properties</h2>
+<table>
+  <tr><th>Property</th><th>Type</th><th>Description</th></tr>
+  <tr><td><code>displayName</code></td><td><code>String</code></td><td><code>"kreditor"</code> or <code>"kreditor: referenz"</code></td></tr>
+  <tr><td><code>ibanFormatted</code></td><td><code>String?</code></td><td>IBAN formatted with spaces via <code>IBANUtils.format()</code></td></tr>
+  <tr><td><code>isValid</code></td><td><code>Boolean</code></td><td><code>!deleted</code> — invoice is valid if not soft-deleted</td></tr>
+  <tr><td><code>abstractPositionen</code></td><td><code>List?</code></td><td>Casts <code>positionen</code> to abstract type</td></tr>
+</table>
+
+<h2>Position Management</h2>
+<p>Inherits from <code>AbstractRechnungDO</code> and specializes the position list as <code>MutableList&lt;EingangsrechnungsPositionDO&gt;</code>, annotated with:</p>
 <ul>
-<li><strong><code>checkKostZuweisungId()</code></strong> — Validates that a cost assignment belongs to this position by comparing the position's FK reference.</li>
-<li><strong><code>newClone()</code></strong> — Creates a deep copy (without IDs) including all cost assignments. Uses <code>copyValuesFrom()</code> excluding <code>"id"</code> and <code>"kostZuweisungen"</code>, then clones each <code>KostZuweisungDO</code> individually.</li>
-<li><strong><code>newInstance()</code></strong> — Factory method returning a new empty <code>EingangsrechnungsPositionDO</code>.</li>
+  <li><code>@JsonManagedReference</code> — JSON serialization parent side of bidirectional relationship</li>
+  <li><code>@SoftDeleteCollection</code> — soft-delete support for positions</li>
+  <li><code>@PersistenceBehavior(autoUpdateCollectionEntries = true)</code> — Hibernate cascading for child entries</li>
+  <li><code>@OneToMany(mappedBy = "eingangsrechnung", cascade = PERSIST, MERGE, REFRESH, DETACH)</code> — no REMOVE cascade (orphanRemoval = false)</li>
+  <li><code>@OrderColumn(name = "number")</code> / <code>@ListIndexBase(1)</code> — 1-based position numbering</li>
 </ul>
 
-<h3>JSON Serialization Strategy</h3>
-<p>Uses <code>@JsonBackReference</code> on <code>eingangsrechnung</code> and <code>@JsonManagedReference</code> on <code>kostZuweisungen</code> to handle bidirectional relationships without infinite recursion. The parent invoice is serialized as ID-only, keeping JSON responses compact.</p>
+<h3>Position Helper Methods</h3>
+<table>
+  <tr><th>Method</th><th>Description</th></tr>
+  <tr><td><code>ensureAndGetPositionen()</code></td><td>Lazily initializes the positions list if null</td></tr>
+  <tr><td><code>addPositionWithoutCheck(position)</code></td><td>Adds a position, casts to <code>EingangsrechnungsPositionDO</code>, sets back-reference</td></tr>
+  <tr><td><code>setAbstractRechnung(position)</code></td><td>Sets the <code>eingangsrechnung</code> back-reference on a position</td></tr>
+</table>
+
+<h2>Comparable Implementation</h2>
+<p>Sorts by: <code>datum</code> (desc), then <code>kreditor</code> (string-compare), then <code>referenz</code> (string-compare).</p>
+
+<h2>Inheritance Chain</h2>
+<p><code>EingangsrechnungDO</code> → <code>AbstractRechnungDO</code> → <code>DefaultBaseDO</code></p>
+<p>Also implements <code>DisplayNameCapable</code> and <code>Comparable&lt;EingangsrechnungDO&gt;</code>.</p>
 
 <h2>Git History</h2>
-<div class="hist"><pre>868d6abb7 2025 -> 2026
-aa20b7708 NewGroupSelectPanel fixed (used in wizard). (Eingangs)RechnungsPositionDO: @get:JoinColumn -> mappedBy.
+<div class="hist"><pre>
+868d6abb7 2025 -> 2026
+8c2bf04f0 WIP: currency conversion with Claude Code.
+a77a6570f WIP: Import of creditor invoices
+1e0e7225b KostzuweisungsExport of invoices ignores now invalid invoices and 0.00 positions.
 63081666f Source file headers: 2024-> 2025.
 0237d5eba Json serialization refactored: IdOnlySerializer and IdsOnlySerializer introduced.
-db2599ab8 History in orderbook, incming/outgoing invoices and projects.
 4bc37b3a1 Migration stuff in progress...
+b47c21af6 Refactored caching and calculations with invoices (not yet finished)
 fa194d7f8 Migration stuff in progress...
-4c04cfd65 MAJOR-CHANGE! Migration of integer id's to Long id's (including fk's etc.)
+f5c09f87f Migration stuff in progress...
+4f5a458c9 Migration stuff in progress...
 c04fb0d51 Migration stuff in progress...
 06828f490 Migration stuff in progress...
 b6092df09 Copyright 2023 -> 2024
 ab45d51fa Copyright 2001-2022 -> 2001-2023.
-f984352a0 (Eingangs)Rechnung(sposition): @JsonBackReference/@JsonManagedReference: KostZuweisungDO
-a9cf30719 (Eingangs)Rechnung(sposition): @JsonBackReference/@JsonManagedReference.
-5f7ef41b8 Copyright 2021 -> 2022
-c0f2b9de0 Tenants functionality removed everywhere (untested).
-ceb63e8a1 Source code header: (C) 2001-2021.
-b79632fa2 Add annotation to EingangsrechnungsPositionDO
-7c79f1922 Copyright of source header -> 2020.
-1cf12f943 Rechnungsposition->Kostzuweisung: Infinitive loop in json serialization fixed.
-55d9ef9ce Nothing, code format
-e3a1188d6 EingangsrechnungPositionDO: performance issue: lazy loading of parent Eingangsrechnung.
-bc7b1761c Eingangsrechnungen: Kostzuweisungen fixed.
-e92b3afd0 Jackson: JsonBackReference/JsonManagedReference -> JsonIdentityInfo
-8675a1dbe Found big performance issue: Declared all Kotlin JPA entities and their properties as open. Lazy loading wasn't supported by Hibernate and results in thousands of JPA queries...
-a55ef0c14 Heavy WIP: refactoring of (Eingangs)Rechnung*. Found a big performance killer!!!!!
-812b5b751 Heavy WIP: refactoring of (Eingangs)Rechnung*. Found a big performance killer!!!!!
-2c92507bc {Eingangs}RechnungsPositionDO.rechnungId is now val (not needed as var) and should be JPA transient.
-f2b55f6aa RechnungsPositionDO.java - RechnungsPositionDO.kt EingangsrechnungsPositionDO.java -> EingangsrechnungsPositionDO.kt AbstractRechnungsPositionDO.java -> AbstractRechnungsPositionDO.kt</pre></div>
+</pre></div>
+
 </body>
 </html>

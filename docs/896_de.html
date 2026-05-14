@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>#896: AuftragRight.kt [DE]</title>
+<style>
+body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}
+h1{border-bottom:2px solid #333;padding-bottom:.3em}
+h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}
+h3{margin-top:2em;color:#444}
+a{color:#0366d6}
+.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}
+.nav{font-size:.9em;color:#888;margin-bottom:1em}
+.meta{font-size:.9em;margin:1em 0;color:#555}
+code{background:#f0f0f0;padding:0 .2em;font-size:.93em}
+pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}
+table{border-collapse:collapse;width:100%;margin:1em 0}
+th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}
+th{background:#f5f5f5;font-weight:600}
+.hist{font-size:.85em;color:#555}
+</style>
+</head>
+<body>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← Dateiindex</a> · <a href="895.html">← Vorherige</a> · <a href="897.html">Nächste →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/kotlin/org/projectforge/business/fibu/AuftragRight.kt" target="_blank" title="Quelltext auf GitHub ansehen">📄 Quelle</a></div>
+
+<h1>#896: <code>AuftragRight.kt</code></h1>
+
+<div class="meta"><code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/AuftragRight.kt</code> 
+<p><strong>Typ:</strong> Zugriffsrechte-Klasse (<code>UserRightAccessCheck&lt;AuftragDO?&gt;</code>)</p>
+<p><strong>Paket:</strong> <code>org.projectforge.business.fibu</code></p>
+<p><strong>Vollständiger Pfad:</strong> <code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/AuftragRight.kt</code></p>
+ <span style="color:#888">174 Zeilen · 113 Code · 54 Kommentare · 7 Leerzeichen</span></div>
+
+<div class="c">
+<p>Definiert die Zugriffskontrollregeln für das Auftragsbuch (<em>Auftragsbuch</em>). Erweitert <code>UserRightAccessCheck&lt;AuftragDO?&gt;</code> und bietet eine feingranulare, mehrstufige Zugriffskontrolle basierend auf der Benutzergruppenmitgliedschaft und der Benutzerrollenzuweisung. Verwaltet die Sichtbarkeit für Ansprechpartner, Projektmanager, Projektassistenten, Controlling-Mitarbeiter und Finanzgruppenmitglieder, mit speziellen Regeln für vollständig fakturierte Aufträge und den Schutz des Flags <code>vollstaendigFakturiert</code>.</p>
+</div>
+
+<h2>Klassendefinition</h2>
+<pre>class AuftragRight : UserRightAccessCheck&lt;AuftragDO?&gt;(
+    UserRightId.PM_ORDER_BOOK, UserRightCategory.PM,
+    *UserRightServiceImpl.FALSE_READONLY_PARTLYREADWRITE_READWRITE
+)</pre>
+
+<h2>Rechtewerte</h2>
+<p>Verfügbare Werte: <code>FALSE</code>, <code>READONLY</code>, <code>PARTLYREADWRITE</code>, <code>READWRITE</code>.</p>
+<p><strong>Besonderes Verhalten von PARTLYREADWRITE:</strong> Benutzer, die Mitglieder von FIBU_ORGA_GROUPS <em>und</em> PROJECT_MANAGER/PROJECT_ASSISTANT sind, haben nur Zugriff auf ihre eigenen Projekte (zugewiesen durch Projektmanager-Gruppen). Die Wahl von <code>READWRITE</code> gewährt vollen Zugriff auf alle Aufträge.</p>
+
+<h2><code>hasSelectAccess(user): Boolean</code></h2>
+<p>Gibt <code>true</code> zurück, wenn der Benutzer das Recht READONLY, PARTLYREADWRITE oder READWRITE auf die Recht-ID <code>PM_ORDER_BOOK</code> hat. Dies bestimmt, ob das Auftragsbuch überhaupt als Modul sichtbar ist.</p>
+
+<h2><code>hasAccess(user, obj, oldObj, operationType): Boolean</code></h2>
+<p>Die zentrale Zugriffsentscheidungsmethode mit mehrschichtigen Prüfungen:</p>
+
+<h3>Schicht 1: Controlling-Gruppe</h3>
+<p>Mitglieder von <code>CONTROLLING_GROUP</code> haben uneingeschränkten SELECT-Zugriff. Andere Operationstypen werden an die nächste Schicht weitergeleitet.</p>
+
+<h3>Schicht 2: Grundlegende Rechteprüfung</h3>
+<ul>
+<li>SELECT: erfordert READONLY, PARTLYREADWRITE oder READWRITE</li>
+<li>INSERT/UPDATE/DELETE: erfordert PARTLYREADWRITE oder READWRITE</li>
+</ul>
+
+<h3>Schicht 3: Schutz des Flags <code>vollstaendigFakturiert</code></h3>
+<p>Nur Mitglieder von <code>FINANCE_GROUP</code> dürfen das Flag <code>vollstaendigFakturiert</code> bei Auftragspositionen ändern:</p>
+<ul>
+<li>Bei INSERT: Jede Position mit <code>vollstaendigFakturiert == true</code> löst eine <code>AccessException</code> aus</li>
+<li>Bei UPDATE: Beim Vergleich jeder Position mit ihrer Datenbankversion (<code>oldObj</code>) löst jede Änderung an <code>vollstaendigFakturiert</code> eine <code>AccessException</code> aus</li>
+<li>Gelöschte Positionen werden übersprungen</li>
+<li>Neu hinzugefügte Positionen (keine <code>dbPosition</code>) werden wie bei INSERT geprüft</li>
+</ul>
+
+<h3>Schicht 4: Projektbasierter Zugriff</h3>
+<p>Für Benutzer, die NICHT in FIBU_ORGA_GROUPS mit READONLY/READWRITE-Recht sind (d. h. Projektmanager, Projektassistenten oder PARTLYREADWRITE-Benutzer):</p>
+<ul>
+<li><strong>Direkte Zuweisung:</strong> Der Benutzer ist der <code>contactPerson</code> des Auftrags → Zugriff gewährt</li>
+<li><strong>Projektmitgliedschaft:</strong> Der Benutzer gehört zur <code>projektManagerGroup</code> des Projekts, ist der <code>headOfBusinessManager</code> des Projekts oder der <code>salesManager</code> des Projekts → Zugriff gewährt</li>
+<li><strong>Einschränkung bei vollständiger Fakturierung:</strong> Wenn der Auftrag <strong>vollständig fakturiert</strong> ist (<code>isVollstaendigFakturiert</code>), ist der Zugriff auf Aufträge beschränkt, deren Leistungszeitraum-Enddatum (oder Angebotsdatum als Fallback) innerhalb von <code>MAX_DAYS_OF_VISIBILITY_4_PROJECT_MANGER</code> (1800 Tage ≈ 5 Jahre) liegt</li>
+<li><strong>Nicht vollständig fakturiert:</strong> Voller Zugriff wird gewährt</li>
+<li>Wenn keine der oben genannten Bedingungen zutrifft, wird der Zugriff verweigert</li>
+</ul>
+
+<h2>Gruppenrechte-Initialisierung (<code>init</code>-Block)</h2>
+<table>
+<tr><th>Gruppe</th><th>Standard / Verfügbare Werte</th></tr>
+<tr><td>FIBU_ORGA_PM_GROUPS</td><td>FALSE, READONLY, PARTLYREADWRITE, READWRITE (Standard für Projektmanager und Organisationsgruppen)</td></tr>
+<tr><td><code>PROJECT_MANAGER</code></td><td>PARTLYREADWRITE (Standardsatz)</td></tr>
+<tr><td><code>PROJECT_ASSISTANT</code></td><td>FALSE, PARTLYREADWRITE</td></tr>
+<tr><td>Controlling-Benutzer</td><td>READONLY (über <code>setReadOnlyForControlling()</code>)</td></tr>
+</table>
+
+<h2>Konstanten</h2>
+<table>
+<tr><th>Konstante</th><th>Wert</th><th>Beschreibung</th></tr>
+<tr><td><code>MAX_DAYS_OF_VISIBILITY_4_PROJECT_MANGER</code></td><td><code>1800</code></td><td>Aufträge, die älter als ~5 Jahre sind, werden für Projektmanager ausgeblendet, wenn sie vollständig fakturiert sind</td></tr>
+</table>
+
+<h2>Git-Verlauf</h2>
+<div class="hist"><pre>868d6abb7 2025 -> 2026
+63081666f Quelltextdatei-Header: 2024 -> 2025.
+61f05ce90 Migration stuff in progress...
+87dd5b87c AuftragsCache refactored, migration stuff... (all tests OK)
+4efcbd0fb Migration stuff in progress...
+06828f490 Migration stuff in progress...
+b6092df09 Copyright 2023 -> 2024
+ab45d51fa Copyright 2001-2022 -> 2001-2023.
+73b0be50b org.apache.commons.collections -> org.apache.commons.collections4
+d628fc93f Auftragsbuch: Zugriff für Hauptgeschäftsführer und Vertriebsleiter.
+5f7ef41b8 Copyright 2021 -> 2022
+9aefe1981 AuftragRight: Sichtbarkeit für Projektmanager bei veralteten Aufträgen verbessert.
+7429a0554 AuftragRight -> Kotlin</pre></div>
+</body>
+</html>

@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>#137: LicenseDao.java [RU]</title>
+<style>
+body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}
+h1{border-bottom:2px solid #333;padding-bottom:.3em}
+h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}
+h3{margin-top:2em;color:#444}
+a{color:#0366d6}
+.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}
+.nav{font-size:.9em;color:#888;margin-bottom:1em}
+.lang{font-size:.85em;color:#888;float:right}
+.lang a{color:#888;text-decoration:none;padding:0 .3em}
+.lang a.active{color:#0366d6;font-weight:600;text-decoration:underline}
+.meta{font-size:.9em;margin:1em 0;color:#555}
+code{background:#f0f0f0;padding:0 .2em;font-size:.93em}
+pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}
+table{border-collapse:collapse;width:100%;margin:1em 0}
+th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}
+th{background:#f5f5f5;font-weight:600}
+.hist{font-size:.85em;color:#555}
+</style>
+</head>
+<body>
+
+<div class="lang">
+  <a href="137.html">EN</a> · 
+  <a href="137_de.html">DE</a> · 
+  <a href="137_ru.html" class="active">RU</a> · 
+  <a href="137_fr.html">FR</a> · 
+  <a href="137_es.html">ES</a>
+</div>
+
+<div class="nav">
+  <a href="https://maureranton.github.io/projectforge/">← Индекс</a> · 
+  <a href="file-index.html">← Индекс файлов</a> · 
+  <a href="3084.html">← Предыдущий</a> · 
+  <a href="228.html">Следующий →</a> · 
+  <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/plugins/org.projectforge.plugins.licensemanagement/src/main/java/org/projectforge/plugins/licensemanagement/LicenseDao.java" target="_blank" title="Просмотреть исходник на GitHub">📄 исходник</a>
+</div>
+
+<h1>#137: <code>LicenseDao.java</code></h1>
+
+<div class="meta">
+  <code>plugins/org.projectforge.plugins.licensemanagement/src/main/java/org/projectforge/plugins/licensemanagement/LicenseDao.java</code> 
+  Тип: Java · Роль: Объект доступа к данным · 
+  Исходник: plugins/org.projectforge.plugins.licensemanagement/src/main/java/org/projectforge/plugins/licensemanagement/LicenseDao.java 
+  <span style="color:#888">93 строки · 49 кода · 34 комментария · 10 пустых</span>
+</div>
+
+<div class="c">
+  Объект доступа к данным для сущностей лицензий. Расширяет BaseDao, предоставляя CRUD-операции, поиск через Hibernate Search и доступ к данным на уровне бизнес-логики.
+</div>
+
+<h2>Структура кода</h2>
+<p>Пакет: <code>org.projectforge.plugins.licensemanagement</code></p>
+<p>Классы: <code>LicenseDao</code></p>
+<p>Расширяет: <code>BaseDao</code></p>
+<p>Методы (4): <code>setOwners</code>, <code>getSortedOwners</code>, <code>getSortedOwnernames</code>, <code>newInstance</code></p>
+<p>Поля (1): <code>usersProvider</code></p>
+<p>Импорты: 9 пакетов</p>
+
+<h2>Исходный код (сокращённый)</h2>
+<pre>
+package org.projectforge.plugins.licensemanagement;
+
+import org.apache.commons.collections4.CollectionUtils;
+import org.projectforge.business.user.UserDao;
+import org.projectforge.common.StringHelper;
+import org.projectforge.framework.persistence.api.BaseDao;
+import org.projectforge.framework.persistence.user.entities.PFUserDO;
+import org.projectforge.web.user.UsersProvider;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
+
+import java.util.Collection;
+
+/**
+ *
+ * @author Kai Reinhard (k.reinhard@micromata.de)
+ *
+ */
+@Service
+public class LicenseDao extends BaseDao&lt;LicenseDO&gt;
+{
+  private final UsersProvider usersProvider;
+
+  @Autowired
+  UserDao userDao;
+
+  public LicenseDao()
+  {
+    super(LicenseDO.class);
+    userRightId = LicensemanagementPluginUserRightsId.PLUGIN_LICENSE_MANAGEMENT;
+    usersProvider = new UsersProvider(userDao);
+  }
+
+  /**
+   * Обратите внимание: будет изменена только строка license.owners (но не сохранена)!
+   *
+   * @param license
+   * @param owners Полный список всех владельцев (идентификаторы пользователей), назначенных этой лицензии.
+   * @return
+   */
+  public void setOwners(final LicenseDO license, final Collection&lt;PFUserDO&gt; owners)
+  {
+    license.setOwnerIds(usersProvider.getUserIds(owners));
+  }
+
+  public Collection&lt;PFUserDO&gt; getSortedOwners(final LicenseDO license)
+  {
+    return usersProvider.getSortedUsers(license.getOwnerIds());
+  }
+
+  public String getSortedOwnernames(final LicenseDO license)
+  {
+    final Collection&lt;PFUserDO&gt; sortedOwners = getSortedOwners(license);
+    if (CollectionUtils.isEmpty(sortedOwners)) {
+      return &quot;&quot;;
+    }
+    final StringBuilder buf = new StringBuilder();
+    boolean first = true;
+    for (final PFUserDO owner : sortedOwners) {
+      first = StringHelper.append(buf, first, owner.getFullname(), &quot;, &quot;);
+    }
+    return buf.toString();
+  }
+
+  @Override
+  public LicenseDO newInstance()
+  {
+    return new LicenseDO();
+  }
+}
+</pre>
+
+<h2>История Git</h2>
+<div class="hist">
+<pre>
+868d6abb7 2025 -> 2026
+63081666f Заголовки исходных файлов: 2024 -> 2025.
+a72903e36 *.java, *.kt: StringBuffer -> StringBuilder.
+5bafe7941 @Repository -> @Service. @Transactional-аннотации удалены.
+b6092df09 Авторские права 2023 -> 2024
+</pre>
+</div>
+
+</body>
+</html>

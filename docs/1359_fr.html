@@ -1,0 +1,239 @@
+<!DOCTYPE html><html lang="fr"><head><meta charset="utf-8"><title>1359 : CollectionUtils.kt [FR]</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:1.5em;color:#444;font-size:1em}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.lang{font-size:.85em;color:#888;float:right}.lang a{color:#888;text-decoration:none;padding:0 .3em}.lang a.active{color:#0366d6;font-weight:600;text-decoration:underline}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}pre.diff{background:#fff;font-size:.82em;max-height:300px;overflow-y:auto}</style></head>
+<body><div class="lang"><a href="1359.html">EN</a> · <a href="1359_de.html">DE</a> · <a href="1359_ru.html">RU</a> · <a href="1359_fr.html" class="active">FR</a> · <a href="1359_es.html">ES</a></div>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← Index des fichiers</a> · <a href="3073.html">← Précédent</a> · <a href="466.html">Suivant →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/kotlin/org/projectforge/framework/persistence/utils/CollectionUtils.kt" target="_blank" title="Voir la source sur GitHub">📄 source</a></div>
+<h1>#1359 : <code>CollectionUtils.kt</code></h1>
+<div class="meta"><code>projectforge-business/src/main/kotlin/org/projectforge/framework/persistence/utils/CollectionUtils.kt</code> Classe Kotlin, <code>projectforge-business/src/main/kotlin/org/projectforge/framework/persistence/utils/CollectionUtils.kt</code> <span style="color:#888">169 lignes · 105 code · 51 commentaires · 13 vides</span></div>
+<div class="c"><strong>Objectif :</strong> Fichier source : framework/persistence/utils/CollectionUtils.kt. CollectionUtils.kt fait partie de l'application open-source de gestion de projet ProjectForge.</div>
+<h2>Source (100 premières lignes)</h2>
+<pre>/////////////////////////////////////////////////////////////////////////////
+//
+// Projet ProjectForge Community Edition
+//         www.projectforge.org
+//
+// Copyright (C) 2001-2026 Micromata GmbH, Allemagne (www.micromata.com)
+//
+// ProjectForge est sous double licence.
+//
+// Cette édition communautaire est un logiciel libre ; vous pouvez la redistribuer et/ou
+// la modifier selon les termes de la GNU General Public License telle que publiée
+// par la Free Software Foundation ; version 3 de la Licence.
+//
+// Cette édition communautaire est distribuée dans l'espoir qu'elle sera utile,
+// mais SANS AUCUNE GARANTIE ; sans même la garantie implicite de
+// QUALITÉ MARCHANDE ou d'ADÉQUATION À UN USAGE PARTICULIER. Voir la GNU General
+// Public License pour plus de détails.
+//
+// Vous devriez avoir reçu une copie de la GNU General Public License avec
+// ce programme ; sinon, consultez http://www.gnu.org/licenses/.
+//
+/////////////////////////////////////////////////////////////////////////////
+
+package org.projectforge.framework.persistence.utils
+
+import org.projectforge.framework.persistence.api.IdObject
+import kotlin.reflect.full.isSubclassOf
+import kotlin.reflect.jvm.jvmErasure
+
+object CollectionUtils {
+    class CompareCollectionsResult&lt;T&gt;(
+        /** Nouvelles entrées dans src, pas encore dans dest. */
+        val added: Collection&lt;T&gt;? = null,
+        /** Entrées supprimées dans src, à supprimer dans dest. */
+        val removed: Collection&lt;T&gt;? = null,
+        /** Entrées dans src et dest. */
+        val kept: Collection&lt;T&gt;? = null,
+    ) {
+        /**
+         * Renvoie la première entrée des entrées ajoutées, supprimées ou conservées. Nécessaire pour vérifier si les entrées doivent
+         * être historisées ou non.
+         */
+        val anyOrNull: T?
+            get() = added?.firstOrNull() ?: removed?.firstOrNull() ?: kept?.firstOrNull()
+    }
+
+    fun getTypeClassOfEntries(col: Collection&lt;*&gt;?): Class&lt;*&gt; {
+        return getTypeClassOfEntriesOrNull(col)!!
+    }
+
+    fun getTypeClassOfEntriesOrNull(col: Collection&lt;*&gt;?): Class&lt;*&gt;? {
+        col ?: return null
+        return col.firstOrNull()?.javaClass
+    }
+
+    fun isCollection(property: kotlin.reflect.KProperty1&lt;*, *&gt;): Boolean {
+        return property.returnType.jvmErasure.isSubclassOf(Collection::class)
+    }
+
+    /**
+     * Joint les identifiants de la collection donnée en une chaîne CSV. Les entrées sont triées par identifiant.
+     * Utilisé par exemple dans les entrées d'historique, représentant les entrées supprimées et ajoutées d'une collection.
+     */
+    fun joinToStringOfIds(col: Collection&lt;IdObject&lt;Long&gt;&gt;?, filterNotNull: Boolean = true): String? {
+        col ?: return null
+        return joinToString(col, filterNotNull, idOnly = true)
+    }
+
+    /**
+     * Joint la collection donnée en une chaîne CSV. Les entrées sont triées.
+     */
+    fun joinToString(col: Collection&lt;Any?&gt;?, filterNotNull: Boolean = true, idOnly: Boolean = false): String? {
+        col ?: return null
+        var filtered = if (filterNotNull) col.filterNotNull() else col
+        if (filtered.isEmpty()) {
+            return ""
+        }
+        val first = filtered.first()
+        if (first is Comparable&lt;*&gt;) { // Le tri est possible :
+            filtered = filtered.sortedWith(compareBy { it as Comparable&lt;*&gt; })
+        } else if (first is IdObject&lt;*&gt; &amp;&amp; first.id is Comparable&lt;*&gt;) { // Le tri est possible :
+            filtered = filtered.sortedWith(compareBy { ((it as IdObject&lt;*&gt;).id as? Comparable&lt;*&gt;) })
+        }
+        return filtered.joinToString(separator = ",") { if (idOnly) toString(it) else it.toString() }
+    }
+
+    private fun toString(entry: Any?): String {
+        return if (entry == null) {
+            "null"
+        } else if (entry is IdObject&lt;*&gt;) {
+            entry.id.toString()
+        } else {
+            entry.toString()
+        }
+    }
+
+    /**
+     * Compare deux collections et renvoie les entrées ajoutées, supprimées et conservées.
+     * @param src Collection source.
+     * @param dest Collection de destination.</pre>
+<h2>Historique Git</h2>
+<div class="hist">
+<pre>868d6abb7 2025 -> 2026
+48a93dedb Journal console coloré. L'export UserGroupCache pour le débogage et la comparaison fonctionne maintenant. CollectionUtil amélioré. KotlinStringExtension.shortenMiddle() ajouté.
+63081666f En-têtes des fichiers source : 2024 -> 2025.
+61f05ce90 Travail de migration en cours...
+5989b32fd BaseDao : mécanisme de onChangeLister refactorisé.</pre>
+<h3>868d6abb7</h3><div class="c"><strong>2025 -> 2026</strong><pre class="diff">868d6abb75cd191a892911ac8e45058932cf9074
+diff --git a/projectforge-business/src/main/kotlin/org/projectforge/framework/persistence/utils/CollectionUtils.kt b/projectforge-business/src/main/kotlin/org/projectforge/framework/persistence/utils/CollectionUtils.kt
+index 7ca7f9101..52deaa7d3 100644
+--- a/projectforge-business/src/main/kotlin/org/projectforge/framework/persistence/utils/CollectionUtils.kt
++++ b/projectforge-business/src/main/kotlin/org/projectforge/framework/persistence/utils/CollectionUtils.kt
+@@ -3,7 +3,7 @@
+ // Projet ProjectForge Community Edition
+ //         www.projectforge.org
+ //
+-// Copyright (C) 2001-2025 Micromata GmbH, Allemagne (www.micromata.com)
++// Copyright (C) 2001-2026 Micromata GmbH, Allemagne (www.micromata.com)
+ //
+ // ProjectForge est sous double licence.
+ //</pre></div><h3>48a93dedb</h3><div class="c"><strong>Journal console coloré. L'export UserGroupCache pour le débogage et la comparaison fonctionne maintenant. CollectionUtil amélioré. KotlinStringExtension.shortenMiddle() ajouté.</strong><pre class="diff">48a93dedb542a7f4100f86f6f4c9c1b8b8f41027
+diff --git a/projectforge-business/src/main/kotlin/org/projectforge/framework/persistence/utils/CollectionUtils.kt b/projectforge-business/src/main/kotlin/org/projectforge/framework/persistence/utils/CollectionUtils.kt
+index 91ad1f77c..7ca7f9101 100644
+--- a/projectforge-business/src/main/kotlin/org/projectforge/framework/persistence/utils/CollectionUtils.kt
++++ b/projectforge-business/src/main/kotlin/org/projectforge/framework/persistence/utils/CollectionUtils.kt
+@@ -61,17 +61,37 @@ object CollectionUtils {
+      * Joint les identifiants de la collection donnée en une chaîne CSV. Les entrées sont triées par identifiant.
+      * Utilisé par exemple dans les entrées d'historique, représentant les entrées supprimées et ajoutées d'une collection.
+      */
+-    fun joinToStringOfIds(col: Collection&lt;IdObject&lt;Long&gt;&gt;?): String? {
++    fun joinToStringOfIds(col: Collection&lt;IdObject&lt;Long&gt;&gt;?, filterNotNull: Boolean = true): String? {
+         col ?: return null
+-        return joinToString(col.map { it.id })
++        return joinToString(col, filterNotNull, idOnly = true)
+     }
+ 
+     /**
+      * Joint la collection donnée en une chaîne CSV. Les entrées sont triées.
+      */
+-    fun &lt;T : Comparable&lt;T&gt;&gt; joinToString(col: Collection&lt;T?&gt;?): String? {
++    fun joinToString(col: Collection&lt;Any?&gt;?, filterNotNull: Boolean = true, idOnly: Boolean = false): String? {
+         col ?: return null
+-        return col.filterNotNull().sorted().joinToString(separator = ",")
++        var filtered = if (filterNotNull) col.filterNotNull() else col
++        if (filtered.isEmpty()) {
++            return ""
++        }
++        val first = filtered.first()
++        if (first is Comparable&lt;*&gt;) { // Le tri est possible :
++            filtered = filtered.sortedWith(compareBy { it as Comparable&lt;*&gt; })
++        } else if (first is IdObject&lt;*&gt; &amp;&amp; first.id is Comparable&lt;*&gt;) { // Le tri est possible :
++            filtered = filtered.sortedWith(compareBy { ((it as IdObject&lt;*&gt;).id as? Comparable&lt;*&gt;) })
++        }
++        return filtered.joinToString(separator = ",") { if (idOnly) toString(it) else it.toString() }
++    }
++
++    private fun toString(entry: Any?): String {
++        return if (entry == null) {
++            "null"
++        } else if (entry is IdObject&lt;*&gt;) {
++            entry.id.toString()
++        } else {
++            entry.toString()
++        }
+     }
+ 
+     /**</pre></div><h3>63081666f</h3><div class="c"><strong>En-têtes des fichiers source : 2024 -> 2025.</strong><pre class="diff">63081666f620fb87315f01b817e560e0b2f6a33a
+diff --git a/projectforge-business/src/main/kotlin/org/projectforge/framework/persistence/utils/CollectionUtils.kt b/projectforge-business/src/main/kotlin/org/projectforge/framework/persistence/utils/CollectionUtils.kt
+index 795d4b20b..91ad1f77c 100644
+--- a/projectforge-business/src/main/kotlin/org/projectforge/framework/persistence/utils/CollectionUtils.kt
++++ b/projectforge-business/src/main/kotlin/org/projectforge/framework/persistence/utils/CollectionUtils.kt
+@@ -3,7 +3,7 @@
+ // Projet ProjectForge Community Edition
+ //         www.projectforge.org
+ //
+-// Copyright (C) 2001-2024 Micromata GmbH, Allemagne (www.micromata.com)
++// Copyright (C) 2001-2025 Micromata GmbH, Allemagne (www.micromata.com)
+ //
+ // ProjectForge est sous double licence.
+ //</pre></div><h3>61f05ce90</h3><div class="c"><strong>Travail de migration en cours...</strong><pre class="diff">61f05ce90d175668026491c93a758f1ec6524c32
+diff --git a/projectforge-business/src/main/kotlin/org/projectforge/framework/persistence/utils/CollectionUtils.kt b/projectforge-business/src/main/kotlin/org/projectforge/framework/persistence/utils/CollectionUtils.kt
+index 9ea824f86..795d4b20b 100644
+--- a/projectforge-business/src/main/kotlin/org/projectforge/framework/persistence/utils/CollectionUtils.kt
++++ b/projectforge-business/src/main/kotlin/org/projectforge/framework/persistence/utils/CollectionUtils.kt
+@@ -23,7 +23,6 @@
+ 
+ package org.projectforge.framework.persistence.utils
+ 
+-import kotlinx.collections.immutable.toImmutableList
+ import org.projectforge.framework.persistence.api.IdObject
+ import kotlin.reflect.full.isSubclassOf
+ import kotlin.reflect.jvm.jvmErasure
+@@ -92,10 +91,10 @@ object CollectionUtils {
+             if (useDest.isNullOrEmpty()) {
+                 return CompareCollectionsResult()
+             }
+-            return CompareCollectionsResult(removed = useDest.toImmutableList())
++            return CompareCollectionsResult(removed = useDest.toList())
+         }
+         if (useDest.isNullOrEmpty()) {
+-            return CompareCollectionsResult(added = useSrc.toImmutableList())
++            return CompareCollectionsResult(added = useSrc.toList())
+         }
+         val added = getAddedEntries(src = useSrc, dest = useDest)
+         val removed = getAddedEntries(src = useDest, dest = useSrc)</pre></div><h3>5989b32fd</h3><div class="c"><strong>BaseDao : mécanisme de onChangeLister refactorisé.</strong><pre class="diff">5989b32fdbe63a7ade7eabba11a8c2b042ecd66b
+diff --git a/projectforge-business/src/main/kotlin/org/projectforge/framework/persistence/utils/CollectionUtils.kt b/projectforge-business/src/main/kotlin/org/projectforge/framework/persistence/utils/CollectionUtils.kt
+index 332777d2b..9ea824f86 100644
+--- a/projectforge-business/src/main/kotlin/org/projectforge/framework/persistence/utils/CollectionUtils.kt
++++ b/projectforge-business/src/main/kotlin/org/projectforge/framework/persistence/utils/CollectionUtils.kt
+@@ -25,6 +25,8 @@ package org.projectforge.framework.persistence.utils
+ 
+ import kotlinx.collections.immutable.toImmutableList
+ import org.projectforge.framework.persistence.api.IdObject
++import kotlin.reflect.full.isSubclassOf
++import kotlin.reflect.jvm.jvmErasure
+ 
+ object CollectionUtils {
+     class CompareCollectionsResult&lt;T&gt;(
+@@ -52,6 +54,10 @@ object CollectionUtils {
+         return col.firstOrNull()?.javaClass
+     }
+ 
++    fun isCollection(property: kotlin.reflect.KProperty1&lt;*, *&gt;): Boolean {
++        return property.returnType.jvmErasure.isSubclassOf(Collection::class)
++    }
++
+     /**
+      * Joint les identifiants de la collection donnée en une chaîne CSV. Les entrées sont triées par identifiant.
+      * Utilisé par exemple dans les entrées d'historique, représentant les entrées supprimées et ajoutées d'une collection.</pre></div>
+</div>
+</body></html>

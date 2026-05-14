@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>#1235 [DE]</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:2em;color:#444}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}</style>
+</head>
+<body>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← Datei-Index</a> · <a href="1234.html">← Vorherige</a> · <a href="1236.html">Nächste →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/kotlin/org/projectforge/framework/persistence/api/MagicFilter.kt" target="_blank" title="Quelltext auf GitHub ansehen">📄 Quelle</a></div>
+<h1>#1235: <code>MagicFilter.kt</code></h1>
+<div class="meta"><code>projectforge-business/src/main/kotlin/org/projectforge/framework/persistence/api/MagicFilter.kt</code> Datenklasse / Filter — Persistenz-Suche, <code>projectforge-business/src/main/kotlin/org/projectforge/framework/persistence/api/MagicFilter.kt</code> <span style="color:#888">142 Zeilen · 86 Code · 46 Kommentare · 10 leer</span></div>
+<div class="c">Das zentrale Filtermodell für ProjectForge-Listenseiten und die Suche. Stellt benutzerdefinierte Suchkriterien als Sammlung typisierter <code>MagicFilterEntry</code>-Objekte dar und unterstützt Feldsuche, Bereichssuche, Volltextsuche, Verlaufssuche, Sortierung, Paginierung und Soft-Delete-Filterung. Erweitert <code>AbstractFavorite</code> für die Benutzervoreinstellungs-Persistenz über <code>UserPrefDao</code>.</div>
+
+<h2>Architektur</h2>
+
+<h3>Klassenhierarchie</h3>
+<pre>AbstractFavorite (Name, ID)
+  └── MagicFilter</pre>
+<p>Als <code>AbstractFavorite</code> kann MagicFilter als benannter Filtervorzug für jeden Benutzer und jeden Entitätstyp gespeichert/geladen werden. Die Jackson-JSON-Serialisierung wird über <code>@JsonTypeInfo</code> für polymorphe Deserialisierung konfiguriert.</p>
+
+<h3>Kernfelder</h3>
+<table>
+<tr><th>Feld</th><th>Typ</th><th>Standard</th><th>Zweck</th></tr>
+<tr><td><code>entries</code></td><td><code>MutableList&lt;MagicFilterEntry&gt;</code></td><td>leer</td><td>Typisierte Suchkriterien: Feldsuche, Bereichssuche, Verlaufssuche, Volltextsuche</td></tr>
+<tr><td><code>sortProperties</code></td><td><code>MutableList&lt;SortProperty&gt;</code></td><td>leer</td><td>Sortierreihenfolge-Spezifikation</td></tr>
+<tr><td><code>sortAndLimitMaxRowsWhileSelect</code></td><td><code>Boolean</code></td><td><code>true</code></td><td>Ob Sortierung und Zeilenbegrenzung während des DB-Selects oder nach der Abfrage angewendet werden sollen</td></tr>
+<tr><td><code>maxRows</code></td><td><code>Int</code></td><td><code>QUERY_FILTER_MAX_ROWS</code> (50.000)</td><td>Maximale Anzahl von Ergebnissen</td></tr>
+<tr><td><code>deleted</code></td><td><code>Boolean?</code></td><td><code>false</code></td><td>Soft-Delete-Filter: null=alle, true=nur gelöschte, false=nur aktive</td></tr>
+<tr><td><code>searchString</code></td><td><code>String?</code></td><td><code>null</code></td><td>Volltextsuche über alle indizierten Felder</td></tr>
+<tr><td><code>searchHistory</code></td><td><code>String?</code></td><td><code>null</code></td><td>Komma-getrennte Liste der zu durchsuchenden Verlaufseintragstypen</td></tr>
+<tr><td><code>autoWildcardSearch</code></td><td><code>Boolean</code></td><td><code>false</code></td><td>Wenn wahr, wird alphanumerischen Suchstrings ein Platzhalter angehängt</td></tr>
+<tr><td><code>extended</code></td><td><code>MutableMap&lt;String, Any&gt;</code></td><td>leer</td><td>Erweiterungszuordnung für benutzerdefinierte Filtervariablen</td></tr>
+<tr><td><code>multiSelection</code></td><td><code>Boolean?</code></td><td><code>null</code></td><td>Mehrfachauswahl-Modus-Flag (blendet Filter-UI aus, wenn aktiv)</td></tr>
+</table>
+
+<h3>Schlüsseloperationen</h3>
+<table>
+<tr><th>Methode</th><th>Zweck</th></tr>
+<tr><td><code>init()</code></td><td>Wiederaufbau nach der Deserialisierung. Konvertiert Benutzer-IDs in Anzeigenamen, bereinigt leere Einträge. Muss nach dem Laden aus UserPrefDao aufgerufen werden.</td></tr>
+<tr><td><code>reset()</code></td><td>Löscht alle Einträge, Sortiereigenschaften und die erweiterte Zuordnung; setzt gelöschte und searchHistory auf Standardwerte zurück</td></tr>
+<tr><td><code>isModified(other: MagicFilter): Boolean</code></td><td>Tiefenvergleich von Einträgen, Name und ID, um Filteränderungen zu erkennen (für Schmutzprüfung von Favoriten)</td></tr>
+<tr><td><code>clone(): MagicFilter</code></td><td>Tiefenklon über Jackson-Serialisierungs-/Deserialisierungs-Roundtrip</td></tr>
+<tr><td><code>paginationPageSize: Int?</code></td><td>Extrahiert den <code>PAGINATION_PAGE_SIZE</code>-Wert aus Einträgen, falls vorhanden</td></tr>
+</table>
+
+<h3>MagicFilterEntry-Struktur</h3>
+<p>Jeder Eintrag hat:
+<code>field</code> — der Eigenschaftsname der Entität (oder ein spezieller Wert für die Verlaufssuche),
+<code>value</code> — ein <code>Value</code>-Objekt mit <code>value</code> (exakt), <code>fromValue</code>/<code>toValue</code> (Bereich), <code>values</code> (Mehrfachauswahlliste), <code>id</code>, <code>label</code>, <code>displayName</code>,
+<code>synthetic</code> — ob der Eintrag automatisch generiert wurde (nicht vom Benutzer erstellt).</p>
+
+<h3>Spezielle Eintragsfelder</h3>
+<ul>
+<li><code>"deleted"</code> — wird als gelöschtes Flag behandelt, nicht als regulärer Feldfilter</li>
+<li><code>MODIFIED_HISTORY_VALUE</code> / <code>MODIFIED_INTERVAL</code> / <code>MODIFIED_BY_USER</code> — Hibernate Envers Verlaufssuche</li>
+<li><code>"pageSize"</code> — Legacy-Name, wird in MagicFilterProcessor automatisch in <code>paginationPageSize</code> umbenannt</li>
+</ul>
+
+<h3>Serialisierung &amp; Persistenz</h3>
+<p><code>UserPrefDao</code> speichert MagicFilter-Instanzen als JSON. Die <code>clone()</code>-Methode verwendet denselben ObjectMapper für das Tiefenklonen. Nach der Deserialisierung muss <code>init()</code> aufgerufen werden, da bestimmte Felder (wie Benutzer-Anzeigenamen) nicht serialisiert werden.</p>
+
+<h2>Git-Verlauf</h2><div class="hist"><pre>868d6abb7 2025 -> 2026
+63081666f Quelltextdatei-Header: 2024 -> 2025.
+0237d5eba JSON-Serialisierung umgestaltet: IdOnlySerializer und IdsOnlySerializer eingeführt.
+7957637da Migrationsarbeit läuft... (alle Tests aller Pakete: OK).
+4c04cfd65 GROSSE-ÄNDERUNG! Migration von Integer-IDs zu Long-IDs (einschließlich Fremdschlüsseln usw.)
+b6092df09 Copyright 2023 -> 2024
+ab45d51fa Copyright 2001-2022 -> 2001-2023.
+267283973 PROJECTFORGE-3730: Validierungsmeldung für Listenseiten anzeigen, wenn die Ergebnisliste aufgrund von maxRows in QueryFilter abgeschnitten wurde.
+9c4cc0ae3 WIP: AGGrid in Listenseiten verwenden.
+4a8ee9d9c WIP: AG-Grid, Mehrfachauswahl
+5f7ef41b8 Copyright 2021 -> 2022
+d5dda1711 Fehlerbehebung in der Listensuche: Suche nach Schlüsselwörtern und geändert-von-Benutzer wird jetzt in der Verlaufssuche unterstützt.
+c0f2b9de0 Mandanten-Funktionalität überall entfernt (ungtestet).
+ceb63e8a1 Quelltextkopfzeile: (C) 2001-2021.
+c24251ff3 EmployeeSelect.
+1f0ceacca MagicFilter: searchString automatisch als str* ändern
+243613fe9 MagicFilter.searchString wieder hinzugefügt, Übersetzung hinzugefügt.
+7c79f1922 Copyright der Quelltextkopfzeile -> 2020.
+96c77adec Jacksons ObjectMapper ist threadsicher, Instanzen wiederverwenden anstatt bei jedem Aufruf neue zu erstellen.
+dc60c1487 MagicFilter.autoWildcardSearch
+031b5b380 MagicFilter.autostartWithSearch
+f49bf10fc MagicFilter.init implementiert zum Setzen von z. B. Benutzername als Label für Benutzereinträge (erster Test).
+ebf676abd Code-Warnungen behoben.
+507854213 WIP: MagicFilter...
+715c606d5 MagicFilter.reset setzt jetzt Sortiereigenschaften und andere Felder zurück.
+1ead8c5fc sortEntries entfernt (doppelt)
+e5da9d15f MagicFilter.sortEntries hinzugefügt.
+080a49c05 WIP: MagicFilter umgestaltet....
+98c37568e WIP: MagicFilter: erweiterte Kontrollkästchen (AddressRest).
+b46e659aa WIP: MagicFilter
+07394ee16 WIP: MagicFilter
+0649cacbe BaseDao neu organisiert: QueryFilter wurde nach BaseDaoLegacyQueryBuilder verschoben, MagicFilter-Abfragen WIP.
+f6e36c350 WIP: MagicFilter und REST-Dienste unterstützen BaseSearchFilter nicht mehr.
+c1d561619 MagicFilter: Setze filter.searchString auf null, wenn keine Einträge angegeben sind (das Zurücksetzen des Suchstrings war vorher nicht möglich).
+a29a8008c Kotlin: Code-Warnungen behoben.
+10e2ddd1c MagicFilter: filterFavorites, isCurrentFilterModified.
+8872c5094 MagicFilter{Entry}.isModified.
+79c46553c MagicFilter: UND-Suche und Wert als String wird jetzt als normaler String interpretiert.
+692f3488e MagicFilter ignoriert jetzt den Suchstring von BasesearchFilter. Stattdessen sollte MagicFilter verwendet werden.
+ef0b4f83c WIP: MagicFilter.
+faec5af58 MagicFilter: JSON-Serialisierung durch @JsonTypeInfo-Annotation behoben.
+fadbfeb2c WIP: MagicFilter, currentFilter, Favoriten, UserPrefCache/Dao...
+6035ac70a WIP: Favoriten und Magic-Filter.
+05244ff19 CopyRight aller Kotlin-Dateikopfzeilen aktualisiert oder erstellt.
+bd3a3e824 Modul projectforge-jax-rs umbenannt in projectforge-rest.
+9034a4bc0 Compiler-Warnungen behoben...
+fffe8bf6d WIP: Magic Filter.</pre></div>
+</body>
+</html>

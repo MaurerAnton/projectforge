@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="de">
+<head><meta charset="UTF-8"><title>#997: Kost2Dao.kt [DE]</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:2em;color:#444}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}</style></head>
+<body>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← Dateiindex</a> · <a href="996.html">← Vorherige</a> · <a href="998.html">Nächste →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/kotlin/org/projectforge/business/fibu/kost/Kost2Dao.kt" target="_blank" title="Quellcode auf GitHub ansehen">📄 Quelle</a></div>
+<h1>#997: <code>Kost2Dao.kt</code></h1>
+<div class="meta"><code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/kost/Kost2Dao.kt</code> Typ: DAO / Service · Zweck: Datenzugriff für Kostenstellen-Entitäten (Kost2) · Quelle: projectforge-business/src/main/kotlin/org/projectforge/business/fibu/kost/Kost2Dao.kt <span style="color:#888">218 Zeilen · 149 Code · 47 Kommentare · 22 leer</span></div>
+<div class="c">Spring <code>@Service</code> zur Verwaltung von Persistenzoperationen für <code>Kost2DO</code>-Entitäten. Erweitert <code>BaseDao</code> um CRUD-, Such- und Validierungslogik. Behandelt Projektverknüpfung, Kostenartenzuweisung, Eindeutigkeitssicherung und Cache-Aktualisierungen nach dem Speichern.</div>
+<h2>Wichtige Methoden</h2>
+<table>
+<tr><th>Methode</th><th>Beschreibung</th></tr>
+<tr><td><code>setProjekt(kost2, projektId)</code></td><td>Verknüpft eine Kost2 mit einem Projekt und übernimmt dessen Nummernkreis/Bereich/Teilbereich</td></tr>
+<tr><td><code>setKost2Art(kost2, kost2ArtId)</code></td><td>Setzt die Kost2Art (Kostenart) auf einen Kost2-Eintrag</td></tr>
+<tr><td><code>getKost2(kostString)</code></td><td>Sucht Kost2 anhand eines formatierten Strings (z. B. "5.123.45.67")</td></tr>
+<tr><td><code>getKost2(nk, b, tb, art)</code></td><td>Sucht Kost2 anhand einzelner numerischer Komponenten</td></tr>
+<tr><td><code>getActiveKost2(nk, b, tb)</code></td><td>Gibt aktive Kost2-Einträge für ein bestimmtes 6-stelliges Präfix zurück</td></tr>
+<tr><td><code>getActiveKost2(projekt)</code></td><td>Bequemlichkeit: aktive Kost2-Einträge für ein Projekt</td></tr>
+</table>
+<h2>Auswahl-/Filterarchitektur</h2>
+<p>Die Überschreibung <code>select(filter)</code> führt eine zweiphasige Abfrage durch:</p>
+<ol>
+<li><strong>Datenbankabfrage:</strong> Verwendet <code>QueryFilter</code> mit einem Join auf <code>kost2Art</code>, sortiert nach allen numerischen Komponenten</li>
+<li><strong>In-Memory-Filterung:</strong> Filtert nach <code>effectiveKostentraegerStatus</code> (der den ENDED-Status vom verknüpften Projekt erben kann). Unterstützt: ACTIVE, NONACTIVE, ENDED, NOT_ENDED und ALL</li>
+</ol>
+<h2>Validierung (onInsertOrModify)</h2>
+<ul>
+<li>Wenn ein <code>Projekt</code> verknüpft ist, wird überprüft, ob Nummernkreis/Bereich/Teilbereich der Kost2 mit den ID-Komponenten des Projekts übereinstimmen</li>
+<li>Nummernkreis 4 oder 5 erfordert eine Projektzuordnung</li>
+<li>Prüft auf doppelte Kost2-Einträge (Geschäftsschlüsselkonflikt) mittels benannter Abfragen</li>
+</ul>
+<h2>Abhängigkeiten</h2>
+<ul>
+<li><code>ProjektDao</code> — für Projektsuche und -validierung</li>
+<li><code>Kost2ArtDao</code> — für Kostenartenzuweisung</li>
+<li><code>KostCache</code> — aktualisiert über <code>afterInsertOrModify</code> nach jedem Speichern</li>
+<li>Zugriffsrecht: <code>UserRightId.FIBU_COST_UNIT</code></li>
+</ul>
+<h2>Quellcode (gekürzt)</h2>
+<pre>@Service
+open class Kost2Dao : BaseDao&lt;Kost2DO&gt;(Kost2DO::class.java) {
+    @Autowired private lateinit var projektDao: ProjektDao
+    @Autowired private lateinit var kost2ArtDao: Kost2ArtDao
+    @Autowired private lateinit var kostCache: KostCache
+
+    override fun select(filter: BaseSearchFilter): List&lt;Kost2DO&gt; {
+        val myFilter = if (filter is KostFilter) filter else KostFilter(filter)
+        val queryFilter = QueryFilter(myFilter).apply { createJoin("kost2Art") }
+        val allKost2 = select(queryFilter)
+        return when {
+            myFilter.isActive -> allKost2.filter {
+                it.effectiveKostentraegerStatus == ACTIVE || it.effectiveKostentraegerStatus == null
+            }
+            myFilter.isNonActive -> allKost2.filter { it.effectiveKostentraegerStatus == NONACTIVE }
+            myFilter.isEnded -> allKost2.filter { it.effectiveKostentraegerStatus == ENDED }
+            myFilter.isNotEnded -> allKost2.filter { it.effectiveKostentraegerStatus != ENDED }
+            else -> allKost2
+        }
+    }
+}</pre>
+<h2>Git-Verlauf</h2>
+<div class="hist"><pre>868d6abb7 2025 -> 2026
+8239a53ee Kost2: Virtuelle Status-Vererbung von ProjektDO implementiert
+63081666f Quellcode-Dateiköpfe: 2024 -> 2025.
+770891c57 Bugfix CandH:CollectionHandler
+d394f410f Migration stuff (alle Tests OK).
+d67bce18b Migration stuff in Arbeit...
+5989b32fd BaseDao: onChangeLister umgestaltet.
+1b50060c3 BaseDao: get->find, save->insert, getList->select, load->select
+3aeda5ef5 Große Änderung: InTrans entfernt, PfPersistenceContext als ThreadLocal.
+85b4e1175 PfPersistenceService: query -> executeQuery.
+b095e6f7d Große Änderung der Transaktionsverwaltung.
+4c04cfd65 MAJOR-CHANGE! Integer-IDs zu Long-IDs.
+5bafe7941 @Repository -> @Service. @Transactional entfernt.
+f2f7cff74 Migration stuff in Arbeit... (Datei erstellt)</pre></div>
+</body>
+</html>

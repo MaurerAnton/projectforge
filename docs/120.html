@@ -1,35 +1,45 @@
 <!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>#120</title>
 <style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333}a{color:#0366d6}.meta{font-size:.9em;margin:1em 0}.nav{font-size:.9em;color:#888;margin-bottom:1em}.commentary{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}code{background:#f0f0f0;padding:0 .2em;border-radius:2px}</style></head>
 <body>
-<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="119.html">← Prev</a> · <a href="121.html">Next →</a></div>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="119.html">← Prev</a> · <a href="121.html">Next →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/plugins/org.projectforge.plugins.datatransfer/src/test/kotlin/org/projectforge/plugins/datatransfer/DataTransferPublicAccessTest.kt" target="_blank" title="View source on GitHub">📄 source</a></div>
 
-<h1>#120: <code>DataTransferTestService.kt</code></h1>
-<div class="meta"><strong>Path:</strong> <code>plugins/...datatransfer/src/test/kotlin/.../DataTransferTestService.kt</code> · <strong>Lines:</strong> 222 · <strong>Type:</strong> Kotlin <code>@Service</code> — test helper bean</div>
+<h1>#120: <code>DataTransferPublicAccessTest.kt</code></h1>
+<div class="meta"><code>plugins/org.projectforge.plugins.datatransfer/src/test/kotlin/org/projectforge/plugins/datatransfer/DataTransferPublicAccessTest.kt</code> <strong>Path:</strong> <code>plugins/...datatransfer/src/test/kotlin/.../DataTransferPublicAccessTest.kt</code> · <strong>Lines:</strong> 227 · <strong>Type:</strong> Kotlin JUnit 5 integration test <span style="color:#888">227 lines · 177 code · 24 comments · 26 blank</span></div>
 
 <div class="commentary">
-<p><strong>Shared test fixture service</strong> used by every DataTransfer integration test (<a href="114.html">#114</a>, <a href="115.html">#115</a>, <a href="116.html">#116</a>, <a href="117.html">#117</a>, <a href="119.html">#119</a>). Provides reusable methods for creating test users, areas, audit entries, mock files, and mock HTTP interactions. Registered as a Spring <code>@Service</code> so all tests get the same instance via <code>@Autowired</code>.</p>
+<p><strong>Integration test for the public (external) DataTransfer REST layer</strong> — the most comprehensive DataTransfer test at 227 lines. Tests the anonymous access flow: external link → login → upload/download/delete → logout, using mocked HTTP requests and JCR files.</p>
 </div>
 
 <div class="commentary">
-<h3>Key methods</h3>
+<h3>Components under test</h3>
 <ul>
-<li><code>addPluginEntitiesForTestMode()</code> — <strong>static companion method</strong> called in class <code>init {}</code> blocks of all test classes. Registers DataTransfer plugin entities (<code>DataTransferAreaDO</code>, etc.) with <code>MyJpaWithExtLibrariesScanner</code> — required because test mode doesn't auto-scan plugin packages</li>
-<li><code>createPersonalBox(user)</code> — ensures a personal box exists for the given user (calls <code>dataTransferAreaDao.ensurePersonalBox()</code>)</li>
-<li><code>createArea(adminUser, ...)</code> — factory method creating a <code>DataTransferAreaDO</code> with configurable admins, observers, expiry, access token/password</li>
-<li><code>createTestUsers()</code> / <code>createTestUser(name)</code> — creates <code>PFUserDO</code> instances for test scenarios</li>
-<li><code>createTestGroup()</code> — creates a <code>GroupDO</code> for group-access tests</li>
-<li><code>createMockFile()</code> — creates a <code>FileObject</code> with mock content (uses <code>ByteArrayInputStream</code> for file data)</li>
-<li><code>uploadFiles()</code> — uploads one or more files to an area via JCR <code>AttachmentsService</code></li>
-<li><code>createAuditEntry()</code> — inserts an audit record with specified event type, user, filename</li>
-<li><code>createMockHttpSession()</code> — creates <code>Mockito.mock(HttpSession::class.java)</code> with configurable attribute map for session-based tests</li>
-<li><code>unzipAndVerify(ZipInputStream)</code> — extracts a ZIP stream and verifies file count/names (used by multi-download tests)</li>
+<li><code>DataTransferPublicSession</code> (<a href="101.html">#101</a>) — session management, brute-force protection</li>
+<li><code>DataTransferPublicPageRest</code> — returns page layout JSON for the anonymous React UI</li>
+<li><code>DataTransferPublicServicesRest</code> (<a href="100.html">#100</a>) — upload, download, delete, multiDownload endpoints</li>
+<li><code>LoginProtection</code> — brute-force time offset enforcement</li>
 </ul>
 </div>
 
 <div class="commentary">
-<h3>Design pattern</h3>
-<p>This follows the <strong>Test Service Object</strong> pattern — a Spring bean that encapsulates test data setup, keeping test classes focused on assertions. All DataTransfer tests autowire this service, call its factory methods to create their test scenario, then verify behavior. The <code>addPluginEntitiesForTestMode()</code> static call in <code>init {}</code> ensures entity registration happens <em>before</em> any <code>@PostConstruct</code> methods or <code>@BeforeEach</code>/<code>beforeAll()</code> lifecycle hooks.</p>
-<p>The <code>@PostConstruct postConstruct()</code> method calls <code>pluginAdminService.initializeAllPluginsForUnitTest()</code> — ensures all plugins (not just DataTransfer) have their entities and services initialized before any test runs.</p>
+<h3>Test scenarios (~10 test methods)</h3>
+<ul>
+<li><strong>Login with valid credentials:</strong> creates an area with <code>external_download_enabled=true</code>, <code>externalAccessToken</code>, <code>externalPassword</code>, calls <code>DataTransferPublicSession.login()</code> — verifies session contains area data</li>
+<li><strong>Login with wrong password:</strong> verifies <code>LoginProtection</code> increments failed attempts, and after repeated failures the time offset kicks in</li>
+<li><strong>Brute-force lockout:</strong> after enough failures, <code>login()</code> returns <code>LOGIN_TIME_OFFSET</code> status — verified by calling login 3+ times faster than the offset window</li>
+<li><strong>Personal box excluded from public access:</strong> <code>isPersonalBox()</code> areas always return <code>LoginResultStatus.FAILED</code> — the paranoia check in <code>checkDataBaseEntry()</code></li>
+<li><strong>Upload:</strong> mocks <code>MultipartFile</code> (Spring's uploaded file wrapper), calls upload REST endpoint, verifies file ID appears in <code>ownedFiles</code> list</li>
+<li><strong>Download:</strong> uploads a file as external user, then downloads it — verifies <code>InputStreamResource</code> content matches</li>
+<li><strong>Delete own file:</strong> verifies <code>isOwnerOfFile()</code> returns true, and delete succeeds</li>
+<li><strong>Cannot delete someone else's file:</strong> external user2 tries to delete user1's upload — verifies <code>isOwnerOfFile()</code> returns false</li>
+<li><strong>Multi-download:</strong> upload 3 files, download all as ZIP — verifies <code>ZipInputStream</code> contains all 3 entries</li>
+<li><strong>Session fixation:</strong> verifies that after login, the <code>JSESSIONID</code> changes (old session invalidated, new session created with transferred area data)</li>
+</ul>
+</div>
+
+<div class="commentary">
+<h3>Mocked HTTP layer</h3>
+<p>Uses Mockito to mock <code>HttpServletRequest</code> and <code>HttpSession</code> — critical because <a href="101.html">DataTransferPublicSession</a> stores data directly in HTTP session attributes. The mock session simulates <code>getSession(false)</code>, <code>getSession(true)</code>, <code>getAttribute("transferAreas")</code>, <code>setAttribute()</code>, and <code>invalidate()</code> — all exercised in the session fixation test.</p>
+<p>Also mocks <code>MultipartFile</code> for upload tests and <code>HttpServletResponse</code> + <code>ServletOutputStream</code> → <code>ByteArrayOutputStream</code> for download content capture.</p>
 </div>
 
 </body></html>

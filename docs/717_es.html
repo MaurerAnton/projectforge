@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>#717 [ES]</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:2em;color:#444}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}.warn{background:#fff3cd;border-left:3px solid #ffc107;padding:.5em 1em;margin:1em 0}.tip{background:#d4edda;border-left:3px solid #28a745;padding:.5em 1em;margin:1em 0}</style>
+</head>
+<body>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Índice</a> · <a href="file-index.html">← Índice de archivos</a> · <a href="716.html">← Anterior</a> · <a href="718.html">Siguiente →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/java/org/projectforge/framework/renderer/PdfRenderer.java" target="_blank" title="Ver fuente en GitHub">📄 fuente</a></div>
+<h1>#717: <code>PdfRenderer.java</code></h1>
+<div class="meta"><code>projectforge-business/src/main/java/org/projectforge/framework/renderer/PdfRenderer.java</code> Servicio Spring / Motor de renderizado PDF, projectforge-business/src/main/java/org/projectforge/framework/renderer/PdfRenderer.java <span style="color:#888">177 líneas · 115 código · 41 comentarios · 21 en blanco</span></div>
+<div class="c">Servicio central de renderizado PDF. Acepta una hoja de estilo XSL-FO, una plantilla Groovy/XML y un mapa de datos, luego produce un arreglo de bytes PDF utilizando Apache FOP con transformación XSLT y preprocesamiento Groovy.</div>
+
+<h2>Arquitectura y canal de procesamiento</h2>
+<p><code>PdfRenderer</code> es un <code>@Service</code> de Spring con un único método público <code>render(String stylesheet, String groovyXml, Map&lt;String, Object&gt; data)</code>. El canal de renderizado procede en cuatro etapas:</p>
+
+<h3>1. Enriquecimiento de datos</h3>
+<p>Antes de cualquier transformación, el mapa de datos se enriquece con variables de plantilla estándar:</p>
+<ul>
+<li><code>createdLabel</code> — cadena "creado" localizada</li>
+<li><code>loggedInUser</code> — el PFUserDO actual</li>
+<li><code>baseDir</code> — ruta del directorio de recursos desde ConfigurationService</li>
+<li><code>logoFile</code> — ruta completa a la imagen de logotipo configurada</li>
+<li><code>appId</code> / <code>appVersion</code> — desde las constantes de ProjectForgeVersion</li>
+<li><code>organization</code> — desde Configuration (con respaldo a appId)</li>
+</ul>
+
+<h3>2. Configuración de FOP</h3>
+<p>Apache FOP se configura con:</p>
+<ul>
+<li>Una <code>FopFactory</code> instanciada con la URI del directorio de recursos de fuentes</li>
+<li>Un <code>FOUserAgent</code> para configuraciones a nivel de agente de usuario</li>
+<li>Un objeto <code>Fop</code> dirigido a la salida <code>MIME_PDF</code> hacia un <code>ByteArrayOutputStream</code></li>
+<li>Nota: El código comentado muestra un intento anterior de <code>setFontBaseURL()</code> que fue eliminado</li>
+</ul>
+
+<h3>3. Preprocesamiento de plantilla Groovy</h3>
+<p>La plantilla XML (<code>groovyXml</code>) pasa por dos pasos del motor Groovy:</p>
+<ol>
+<li><code>preprocessGroovyXml()</code> — preprocesa la plantilla</li>
+<li><code>executeTemplate()</code> — ejecuta la plantilla Groovy con el mapa de datos para producir el XML final</li>
+</ol>
+
+<h3>4. Transformación XSLT + Renderizado FOP</h3>
+<ul>
+<li>La hoja de estilo XSLT se carga desde los recursos a través de <code>ConfigurationService.getResourceAsInputStream()</code></li>
+<li>Se crea un <code>Transformer</code> con parámetros del mapa de datos</li>
+<li>El XML generado por Groovy se alimenta como entrada <code>StreamSource</code></li>
+<li>El resultado se canaliza como <code>SAXResult</code> a través del manejador predeterminado de FOP, produciendo bytes PDF</li>
+</ul>
+
+<h2>Manejo de errores</h2>
+<p>Las excepciones se capturan y envuelven:</p>
+<table>
+<tr><th>Excepción</th><th>Manejo</th></tr>
+<tr><td><code>FOPException</code></td><td>Registrada y envuelta en <code>RuntimeException</code></td></tr>
+<tr><td><code>TransformerException</code></td><td>Registrada y envuelta en <code>RuntimeException</code></td></tr>
+<tr><td><code>IOException</code> (cerrando BAOS)</td><td>Registrada y envuelta en <code>RuntimeException</code></td></tr>
+</table>
+<p>El bloque <code>finally</code> cierra el <code>ByteArrayOutputStream</code> y utiliza <code>IOUtils.closeQuietly()</code> para el flujo de entrada XSLT. Después de cerrar, se llama a <code>baos.toByteArray()</code> — note que esto funciona porque <code>ByteArrayOutputStream.close()</code> es una operación nula.</p>
+
+<h2>Integración con Spring</h2>
+<ul>
+<li><code>@Service</code> — bean de Spring detectado automáticamente</li>
+<li><code>@Autowired</code> — <code>ConfigurationService</code> inyectado</li>
+<li><code>@Value("${projectforge.export.logoFile}")</code> — nombre del archivo de logotipo desde propiedades de la aplicación</li>
+<li>Inicialización perezosa de <code>fontResourcePath</code> a través de <code>getFontResourcePath()</code></li>
+</ul>
+
+<h2>Dependencias</h2>
+<ul>
+<li><strong>Apache FOP</strong>: <code>FopFactory</code>, <code>Fop</code>, <code>FOUserAgent</code>, <code>FOPException</code></li>
+<li><strong>JAXP XSLT</strong>: <code>TransformerFactory</code>, <code>Transformer</code>, <code>StreamSource</code>, <code>SAXResult</code></li>
+<li><strong>Internas</strong>: <code>ConfigurationService</code>, <code>GroovyEngine</code>, <code>Configuration</code>, <code>ProjectForgeVersion</code>, <code>ThreadLocalUserContext</code></li>
+<li><strong>Commons IO</strong>: <code>IOUtils.closeQuietly()</code></li>
+<li><strong>Commons Lang3</strong>: <code>StringUtils.defaultString()</code></li>
+</ul>
+
+<h2>Historial de Git</h2><div class="hist"><pre>868d6abb7 2026-01-01 2025 -> 2026
+63081666f 2025-01-01 Encabezados de archivos fuente: 2024 -> 2025.
+5f9bbfbd3 2024-12-27 Corregir errores tipográficos en el directorio projectforge-business
+67805f2fc 2024-10-08 ThreadLocalUserContext.user -> ThreadLocalUserContext.loggedInUser (renombrado para evitar malentendidos en el código).
+b6092df09 2024-01-09 Copyright 2023 -> 2024
+ab45d51fa 2023-01-01 Copyright 2001-2022 -> 2001-2023.
+5f7ef41b8 2022-02-18 Copyright 2021 -> 2022
+867476f85 2021-04-19 ConfigurationService -> Kotlin (aún no probado).
+ceb63e8a1 2021-03-08 Encabezado de código fuente: (C) 2001-2021.
+4f5a06d6f 2020-05-01 AppVersion eliminado. Información de Git añadida a ProjectForgeVersion.
+7c79f1922 2020-01-03 Copyright del encabezado fuente -> 2020.
+73a9755df 2019-10-11 Más limpieza de código ...
+000ca723d 2019-10-07 Eliminar expresiones booleanas sin sentido (business)
+7e3232e60 2019-08-17 Nuevas versiones de fop y batik. Infierno de JAR de frameworks de logging...
+dd5ca38ac 2019-06-07 CopyRight de todos los encabezados de archivos Java actualizados o creados.
+a5bbdca6a 2017-12-04 Cambiar logger a slf4j
+f979e8a42 2017-11-20 MGC-UPDATE: Actualización a versión 3.0.0-SNAPSHOT
+9ebb88522 2016-07-18 Commit inicial</pre></div>
+</body>
+</html>

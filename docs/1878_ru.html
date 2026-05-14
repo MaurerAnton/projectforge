@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>#1878: CanonicalFileUtils.java [RU]</title>
+<style>
+body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}
+h1{border-bottom:2px solid #333;padding-bottom:.3em}
+h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}
+h3{margin-top:2em;color:#444}
+a{color:#0366d6}
+.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}
+.nav{font-size:.9em;color:#888;margin-bottom:1em}
+.lang{font-size:.85em;color:#888;float:right}
+.lang a{color:#888;text-decoration:none;padding:0 .3em}
+.lang a.active{color:#0366d6;font-weight:600;text-decoration:underline}
+.meta{font-size:.9em;margin:1em 0;color:#555}
+code{background:#f0f0f0;padding:0 .2em;font-size:.93em}
+pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}
+table{border-collapse:collapse;width:100%;margin:1em 0}
+th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}
+th{background:#f5f5f5;font-weight:600}
+.hist{font-size:.85em;color:#555}
+.warn{background:#fff3cd;border-left:3px solid #ffc107;padding:.5em 1em;margin:1em 0}
+.tip{background:#d4edda;border-left:3px solid #28a745;padding:.5em 1em;margin:1em 0}
+</style>
+</head>
+<body>
+<div class="lang"><a href="1878.html">EN</a> · <a href="1878_de.html">DE</a> · <a href="1878_ru.html" class="active">RU</a> · <a href="1878_fr.html">FR</a> · <a href="1878_es.html">ES</a></div>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Индекс</a> · <a href="file-index.html">← Индекс файлов</a> · <a href="1877.html">← Пред.</a> · <a href="1879.html">След. →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-common/src/main/java/org/projectforge/common/CanonicalFileUtils.java" target="_blank" title="Просмотр исходного кода на GitHub">📄 исходник</a></div>
+<h1>#1878: <code>CanonicalFileUtils.java</code></h1>
+<div class="meta"><code>projectforge-common/src/main/java/org/projectforge/common/CanonicalFileUtils.java</code> Вспомогательный класс — пакет org.projectforge.common, projectforge-common/src/main/java/org/projectforge/common/CanonicalFileUtils.java <span style="color:#888">67 строк · 34 кода · 27 комментариев · 6 пустых</span></div>
+<div class="c">Утилита нормализации путей к файлам, которая разрешает символические ссылки, устраняет компоненты пути <code>..</code> и <code>.</code>, а также нормализует разделители пути через <code>File.getCanonicalPath()</code>. Корректно обрабатывает ошибки ввода-вывода, возвращаясь к <code>getAbsolutePath()</code>. Предоставляет перегрузки на основе строк и объектов File для разрешения пути. Используется везде, где ProjectForge необходимо сравнивать пути к файлам или обеспечивать единообразное представление пути.</div>
+<h2>Архитектура</h2>
+<div class="c">
+<h3>Импорты</h3>
+<ul>
+<li><code>java.io.File</code> — абстракция файла JDK</li>
+<li><code>java.io.IOException</code> — проверяемое исключение от <code>getCanonicalPath()</code></li>
+<li><code>org.slf4j.Logger</code> — журналирование ошибок при сбоях ввода-вывода</li>
+</ul>
+
+<h3>Основные операции</h3>
+
+<h4>1. absolutePath(File file) → String</h4>
+<p>Возвращает канонический путь файла в виде строки. Если <code>getCanonicalPath()</code> выбрасывает <code>IOException</code> (например, файл не существует и файловая система не может разрешить его каноническую форму), возвращается <code>getAbsolutePath()</code> и ошибка записывается в журнал.</p>
+
+<h4>2. absolute(File file) → File</h4>
+<p>Та же логика, но возвращает объект <code>File</code> через <code>getCanonicalFile()</code> / <code>getAbsoluteFile()</code>.</p>
+
+<h4>3. absolute(String path) → File</h4>
+<p>Удобная перегрузка, которая оборачивает строковый путь в <code>new File(path)</code> и делегирует выполнение <code>absolute(File)</code>.</p>
+
+<h3>Почему канонический путь?</h3>
+<p>Метод Java <code>File.getCanonicalPath()</code> предоставляет несколько гарантий, которых нет у <code>getAbsolutePath()</code>:</p>
+<ul>
+<li><strong>Разрешение символических ссылок</strong>: В Unix-системах символические ссылки разрешаются до их целевых объектов</li>
+<li><strong>Нормализация</strong>: <code>.</code> (текущий каталог) и <code>..</code> (родительский каталог) разрешаются</li>
+<li><strong>Нормализация регистра файловой системы</strong>: В файловых системах без учёта регистра (Windows, macOS) регистр пути соответствует фактической записи файловой системы</li>
+<li><strong>Удаление избыточных разделителей</strong>: <code>//</code> схлопывается</li>
+</ul>
+<p>Это критически важно для операций, чувствительных к безопасности, где пути из пользовательского ввода должны сравниваться с разрешёнными путями — два разных строковых представления могут ссылаться на один и тот же файл (например, <code>/home/user/../user/file</code> и <code>/home/user/file</code>).</p>
+
+<h3>Стратегия обработки ошибок</h3>
+<p>Класс использует шаблон <strong>плавной деградации</strong>: если каноническое разрешение не удаётся (IOException), он возвращается к абсолютному пути и записывает ошибку в журнал. Это важно, поскольку <code>getCanonicalPath()</code> может выбросить IOException по причинам, не зависящим от приложения (например, права доступа к файловой системе, проблемы с монтированием NFS или отсутствие файла). Запасной вариант гарантирует, что приложение продолжит работу, хотя и с потенциально ненормализованным путём.</p>
+
+<h3>Обработка null</h3>
+<p>Все методы корректно обрабатывают входной <code>null</code> — возвращают <code>null</code> без выбрасывания NullPointerException. Это упрощает код вызывающего, устраняя необходимость проверок на null перед вызовом утилиты.</p>
+
+<h3>Контекст использования в ProjectForge</h3>
+<p>CanonicalFileUtils используется в таких сценариях, как:</p>
+<ul>
+<li><strong>Загрузка/скачивание файлов</strong>: Нормализация указанных пользователем путей к файлам для хранения</li>
+<li><strong>Загрузка конфигурационных файлов</strong>: Разрешение путей к конфигурационным файлам, которые могут содержать относительные ссылки</li>
+<li><strong>Сравнение путей</strong>: Определение, ссылаются ли два пути на один и тот же файл (например, обнаружение дублирующихся загрузок файлов)</li>
+<li><strong>Проверки безопасности</strong>: Обеспечение того, чтобы запрошенный путь к файлу не выходил за пределы базового каталога через обход <code>..</code></li>
+<li><strong>Мастер настройки</strong>: Разрешение выбранных пользователем каталогов (класс появляется в истории git, связанной с мастером настройки)</li>
+</ul>
+
+<div class="warn">Сообщение журнала "<code>Внутренняя ошибка при попытке получить канонический путь</code>" может вводить в заблуждение — IOException от <code>getCanonicalPath()</code> не обязательно является "внутренней ошибкой", а часто представляет собой условие окружения (отсутствующий файл, отказано в доступе). Возврат к <code>getAbsolutePath()</code> молча принимает потенциально ненормализованный путь.</div>
+
+<div class="tip">Класс намеренно минимален (3 метода, ~30 строк логики). Он выделяет очень специфическую задачу — нормализацию пути с плавным запасным вариантом — из более широкого класса <code>FileHelper</code>. Это следует принципу единственной ответственности, сохраняя утилиты сфокусированными и тестируемыми.</div>
+</div>
+<h2>История Git</h2>
+<div class="hist"><pre>868d6abb7 2025 -> 2026
+63081666f Заголовки исходных файлов: 2024 -> 2025.
+b6092df09 Авторские права 2023 -> 2024
+ab45d51fa Авторские права 2001-2022 -> 2001-2023.
+5f7ef41b8 Авторские права 2021 -> 2022
+ceb63e8a1 Заголовок исходного кода: (C) 2001-2021.
+7c79f1922 Авторские права в заголовке исходного кода -> 2020.
+bd25a85fb WIP: Мастер настройки (Swing и Lanterna)</pre></div>
+</body>
+</html>

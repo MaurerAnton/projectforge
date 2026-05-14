@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>#1865: CarddavTestClient [DE]</title>
+<style>
+body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}
+h1{border-bottom:2px solid #333;padding-bottom:.3em}
+h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}
+h3{margin-top:2em;color:#444}
+a{color:#0366d6}
+.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}
+.nav{font-size:.9em;color:#888;margin-bottom:1em}
+.lang{font-size:.85em;color:#888;float:right}
+.lang a{color:#888;text-decoration:none;padding:0 .3em}
+.lang a.active{color:#0366d6;font-weight:600;text-decoration:underline}
+.meta{font-size:.9em;margin:1em 0;color:#555}
+code{background:#f0f0f0;padding:0 .2em;font-size:.93em}
+pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}
+table{border-collapse:collapse;width:100%;margin:1em 0}
+th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}
+th{background:#f5f5f5;font-weight:600}
+.hist{font-size:.85em;color:#555}
+.warn{background:#fff3cd;border-left:3px solid #ffc107;padding:.5em 1em;margin:1em 0}
+.tip{background:#d4edda;border-left:3px solid #28a745;padding:.5em 1em;margin:1em 0}
+</style>
+</head>
+<body>
+<div class="lang"><a href="1865.html">EN</a> · <a href="1865_de.html" class="active">DE</a> · <a href="1865_ru.html">RU</a> · <a href="1865_fr.html">FR</a> · <a href="1865_es.html">ES</a></div>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← Datei-Index</a> · <a href="1864.html">← Vorherige</a> · <a href="1866.html">Nächste →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-carddav/src/test/kotlin/org/projectforge/carddav/CarddavTestClient.kt" target="_blank" title="Quelltext auf GitHub ansehen">📄 Quelle</a></div>
+<h1>#1865: <code>CarddavTestClient.kt</code></h1>
+<div class="meta"><code>projectforge-carddav/src/test/kotlin/org/projectforge/carddav/CarddavTestClient.kt</code> Testwerkzeug / Entwicklungswerkzeug — Paket org.projectforge.carddav, projectforge-carddav/src/test/kotlin/org/projectforge/carddav/CarddavTestClient.kt <span style="color:#888">468 Zeilen · 372 Code · 60 Kommentare · 36 leer</span></div>
+<div class="c">Eigenständiger CardDAV-Testclient mit einer <code>main()</code>-Funktion und einer HTTP-Client-Klasse. Wird für manuelle Tests und das Debuggen des CardDAV-Servers verwendet. Unterstützt OPTIONS/PROPFIND/GET/REPORT-Anfragen, Sync-Token-Sammlung, VCard-Abruf mit PHOTO-Analyse und den Batch-Export aller Kontakte. Enthält umfangreiche auskommentierte Testsequenzen, die die iterative Entwicklung der CardDAV-Protokollunterstützung zeigen.</div>
+<h2>Architektur</h2>
+<div class="c">
+<p>Dies ist ein <strong>Entwicklungs-Debugging-Werkzeug</strong>, kein Komponententest. Es hat einen <code>main()</code>-Einstiegspunkt und fungiert als eigenständiger CardDAV-Client zum Testen der Serverimplementierung. Die Datei enthält umfangreichen auskommentierten Code, der die Entwicklung der CardDAV-Protokolltests zeigt.</p>
+
+<h3>Importe und Abhängigkeiten</h3>
+<table>
+<tr><th>Import</th><th>Zweck</th></tr>
+<tr><td><code>org.apache.hc.client5.http.*</code></td><td>Apache HttpClient 5 für die HTTP-Kommunikation (HttpGet, CloseableHttpClient, HttpClients, ClassicHttpResponse, ContentType, HttpEntity, HttpClientResponseHandler, StringEntity, ClassicRequestBuilder, HttpCoreContext)</td></tr>
+<tr><td><code>org.projectforge.common.extensions.abbreviate</code></td><td>Kotlin-Erweiterungsfunktion zum Kürzen langer Zeichenketten in der Protokollausgabe</td></tr>
+<tr><td><code>java.util.Base64</code></td><td>JDK Base64-Kodierer für den HTTP-Basisauthentifizierungs-Header</td></tr>
+</table>
+
+<h3>Klassenstruktur: CardDavTestClient</h3>
+
+<h4>Konstruktorparameter</h4>
+<ul>
+<li><code>baseUrl: String</code> — Basis-URL des Servers (Standard: http://localhost:8080/carddav)</li>
+<li><code>username: String</code> — CardDAV-Benutzername für die Basisauthentifizierung</li>
+<li><code>password: String</code> — CardDAV-Passwort (DAV-Token)</li>
+<li><code>lastSyncToken: String?</code> — Optionales Sync-Token für inkrementelle Synctests</li>
+</ul>
+
+<h4>Innere Klasse: ResponseData</h4>
+<p>Einfache Datenklasse, die <code>content: String</code>, <code>status: Int</code> und <code>headers: String</code> aus HTTP-Antworten enthält.</p>
+
+<h4>Authentifizierung</h4>
+<p>Verwendet die HTTP-Basisauthentifizierung mit dem Header <code>Authorization: Basic {base64(benutzername:passwort)}</code>, der einmalig bei der Initialisierung erstellt wird.</p>
+
+<h4>Antwort-Handler</h4>
+<p>Ein funktionaler <code>HttpClientResponseHandler</code>, der die Antwort-Entität als UTF-8-Text liest und den Statuscode sowie die Header extrahiert.</p>
+
+<h3>Wichtige Methoden</h3>
+
+<h4>run() — Standard-Testsequenz</h4>
+<p>Führt einen CardDAV-Protokollablauf aus: <strong>OPTIONS → GET (VCard) → GET (Foto)</strong>. Der Großteil des ursprünglichen Testcodes (PROPFIND, REPORT, Sync-Collection) ist auskommentiert, wobei XML-Anfragekörperbeispiele als Referenz erhalten bleiben.</p>
+
+<h4>fetchAllVCards() — Batch-VCard-Export</h4>
+<p>Ruft alle VCards vom Server mithilfe einer CardDAV <code>addressbook-query</code> REPORT-Anfrage ab, speichert jede VCard unter <code>/tmp/carddav-vcards/</code> und analysiert PHOTO-Einträge. Meldet Statistiken zu:
+<ul>
+<li>JPEG/PNG/GIF-URL-Referenzen vs. eingebettete Base64-Bilder</li>
+<li>Kontakte ohne Foto</li>
+<li>Fehleranzahlen</li>
+</ul>
+<p>Diese Methode war maßgeblich am Debuggen der CardDAV-Fotobehandlung (URL- vs. eingebetteter Modus) beteiligt.</p>
+
+<h4>sendRequest() — Generische HTTP-Anfrage</h4>
+<p>Erstellt und führt HTTP-Anfragen mit konfigurierbarer Methode, Pfad, Körper, Authentifizierung und Protokollierung aus. Verwendet <code>ClassicRequestBuilder</code> von Apache HttpClient 5.</p>
+
+<h4>analyzePhoto(vcard) — PHOTO-Eigenschafts-Parser</h4>
+<p>Analysiert VCard-Daten, um den Fotokodierungsmodus zu bestimmen:
+<ul>
+<li><strong>URL-Modus</strong>: <code>PHOTO;VALUE=URI:https://...</code> — Foto wird über URL bereitgestellt</li>
+<li><strong>Eingebetteter Modus</strong>: <code>PHOTO;ENCODING=b;TYPE=JPEG:base64daten...</code> oder <code>data:image/jpeg;base64,...</code></li>
+</ul>
+Behandelt VCard-Zeilenumbrüche (Fortsetzungszeilen, die mit Leerzeichen beginnen).</p>
+
+<h3>Main-Funktion — CLI-Schnittstelle</h3>
+<pre>Verwendung: CardDavTestClient &lt;benutzername&gt; &lt;dav-token&gt; [--fetch-all]
+  --fetch-all: Alle VCards vom Server abrufen und unter /tmp/carddav-vcards/ speichern</pre>
+<p>Positionsargumente: Benutzername, DAV-Token, optionale Basis-URL, optionales Sync-Token.</p>
+
+<div class="warn">Die Datei enthält auskommentierte Referenzdaten, die echte CardDAV-Serverantworten zeigen:
+<pre>
+Anfrage mit Methode=OPTIONS für Milton (uri=/users/benutzername/, session-id=null)
+Basisauthentifizierung fehlgeschlagen, Header 'authorization' nicht gefunden.
+PROPFIND-Aufruf erkannt: /users/benutzername/
+PROPFIND für Milton (uri=/users/benutzername/addressBooks/default/
+REPORT für Milton (uri=/users/benutzername/addressBooks/default/
+</pre>
+Dies zeigt, dass der CardDAV-Server ursprünglich auf dem <strong>Milton</strong> WebDAV-Framework basierte und die aktuelle Implementierung dieses Protokoll nativ neu implementiert.</div>
+
+<div class="tip">Die Datei dient sowohl als Testclient als auch als lebendige Dokumentation der CardDAV-Protokollimplementierung. Die auskommentierten PROPFIND/REPORT-Anfragekörper sind gültiges CardDAV-XML, das das erwartete Serververhalten dokumentiert.</div>
+</div>
+<h2>Git-Verlauf</h2>
+<div class="hist"><pre>868d6abb7 2025 -> 2026
+bbf6b792c VCard-Upload: spezielle Behandlung von Formularfeldern.
+f2ceb72f1 CardDav: Foto-URLs relativ.
+63081666f Quelltextdatei-Header: 2024 -> 2025.
+943947aaa Adressen: Unterstützung von GIF und JPEG (auch für CardDAV-Server).
+fc6301b43 WIP: CardDavServer.
+c4062ed97 WIP: Carddav
+40e554cbe WIP: Carddav</pre></div>
+</body>
+</html>

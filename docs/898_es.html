@@ -1,0 +1,100 @@
+Here's the complete HTML translated to Spanish, with `lang="es"`, the language switcher set to ES, and the title updated with `[ES]`:
+
+```html
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>#898: AuftragsCacheService.kt [ES]</title>
+<style>
+body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}
+h1{border-bottom:2px solid #333;padding-bottom:.3em}
+h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}
+h3{margin-top:2em;color:#444}
+a{color:#0366d6}
+.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}
+.nav{font-size:.9em;color:#888;margin-bottom:1em}
+.meta{font-size:.9em;margin:1em 0;color:#555}
+code{background:#f0f0f0;padding:0 .2em;font-size:.93em}
+pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}
+table{border-collapse:collapse;width:100%;margin:1em 0}
+th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}
+th{background:#f5f5f5;font-weight:600}
+.hist{font-size:.85em;color:#555}
+</style>
+</head>
+<body>
+
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Índice</a> · <a href="file-index.html">← Índice de archivos</a> · <a href="897.html">← Anterior</a> · <a href="899.html">Siguiente →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/kotlin/org/projectforge/business/fibu/AuftragsCacheService.kt" target="_blank" title="Ver fuente en GitHub">📄 fuente</a></div>
+
+<h1>#898: <code>AuftragsCacheService.kt</code></h1>
+
+<div class="meta"><code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/AuftragsCacheService.kt</code> 
+  <strong>Tipo:</strong> Spring Service &middot;
+  <strong>Propósito:</strong> Consultas rápidas a base de datos basadas en tuplas para datos de pedidos &middot;
+  <strong>Paquete:</strong> <code>org.projectforge.business.fibu</code><br>
+  <strong>Ruta de fuente:</strong> <code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/AuftragsCacheService.kt</code>
+ <span style="color:#888">167 líneas · 135 código · 25 comentarios · 7 en blanco</span></div>
+
+<div class="c">
+  <strong>Propósito:</strong> Proporciona acceso a base de datos de solo lectura de alto rendimiento para pedidos (<code>AuftragDO</code>), posiciones de pedido (<code>AuftragsPositionDO</code>) y calendarios de pago (<code>PaymentScheduleDO</code>) utilizando consultas nativas de tuplas JPQL. Evita la hidratación completa de entidades y la sobrecarga de carga diferida seleccionando solo las columnas necesarias para la representación de listas y la población de caché.
+</div>
+
+<h2>Arquitectura y Diseño</h2>
+
+<h3>Declaración del Servicio</h3>
+<p>La clase está anotada con <code>@Service</code> y depende de <code>PfPersistenceService</code> mediante <code>@Autowired</code>. Todos los métodos usan <code>runIsolatedReadOnly</code> para ejecutar consultas en un contexto de persistencia nuevo, evitando la contaminación de la caché de sesión del llamante.</p>
+
+<table>
+  <tr><th>Dependencia</th><th>Tipo</th><th>Rol</th></tr>
+  <tr><td><code>PfPersistenceService</code></td><td>Framework</td><td>Proporciona contextos JPA aislados de solo lectura para consultas rápidas de tuplas</td></tr>
+</table>
+
+<h3>Métodos</h3>
+
+<h4><code>selectAuftragsList(): List&lt;AuftragDO&gt;</code></h4>
+<p>Devuelve todos los pedidos (incluyendo eliminados) con un conjunto de columnas seleccionadas. Mapea cada <code>Tuple</code> a un <code>AuftragDO</code> parcialmente poblado usando los helpers getter de <code>TupleUtils</code>. Las claves foráneas (<code>kundeId</code>, <code>projektId</code>, <code>contactPersonId</code>) se resuelven mediante <code>em.getReference()</code> para evitar consultas adicionales — Hibernate devuelve un proxy perezoso sin acceder a la base de datos.</p>
+
+<h4><code>selectNonDeletedAuftragsPositions(): List&lt;AuftragsPositionDO&gt;</code></h4>
+<p>Devuelve posiciones de pedido no eliminadas. Patrón de mapeo de tuplas similar con una optimización de rendimiento adicional: <code>bemerkung</code> (comentario) se abrevia a 30 caracteres mediante <code>abbreviate(30)</code>, reduciendo la huella de memoria para las vistas de lista. La referencia de tarea (<code>taskId</code>) crea un stub <code>TaskDO</code> con solo el ID establecido.</p>
+
+<h4><code>selectNonDeletedPaymentSchedules(): List&lt;PaymentScheduleDO&gt;</code></h4>
+<p>Devuelve calendarios de pago no eliminados, creando objetos <code>AuftragDO</code> stub (solo ID) para la referencia de clave foránea <code>auftragId</code>.</p>
+
+<h3>Definiciones de Consultas (Objeto Compañero)</h3>
+<p>Tres consultas JPQL se definen como constantes <code>private val</code> en el objeto compañero, usando interpolación <code>${AuftragDO::class.simpleName}</code> para referencias de entidad seguras en cuanto a tipos:</p>
+
+<table>
+  <tr><th>Constante</th><th>Entidad Destino</th><th>Filtro</th></tr>
+  <tr><td><code>SELECT_ORDERS</code></td><td><code>AuftragDO</code></td><td>Ninguno (todos los registros, incluidos eliminados)</td></tr>
+  <tr><td><code>SELECT_POSITIONS</code></td><td><code>AuftragsPositionDO</code></td><td><code>WHERE deleted = false</code></td></tr>
+  <tr><td><code>SELECT_PAYMENTS_SCHEDULES</code></td><td><code>PaymentScheduleDO</code></td><td><code>WHERE deleted = false</code></td></tr>
+</table>
+
+<h3>Estrategia de Rendimiento</h3>
+<ul>
+  <li>Las consultas de tuplas seleccionan solo las columnas necesarias; no se cargan grafos de entidad completos.</li>
+  <li><code>em.getReference()</code> crea proxies perezosos para asociaciones FK, evitando JOINs.</li>
+  <li><code>runIsolatedReadOnly</code> asegura que cada llamada tenga un contexto de persistencia limpio, evitando interferencias con la transacción activa del llamante.</li>
+  <li>La llamada <code>abbreviate(30)</code> en <code>bemerkung</code> minimiza la presión del montón para campos de comentarios grandes durante la representación de listas.</li>
+</ul>
+
+<h2>Clases Relacionadas</h2>
+<ul>
+  <li><strong>Consumido por:</strong> <code>AuftragsCache</code> — usa estos resultados de tuplas para construir la caché del libro de pedidos en memoria</li>
+  <li><strong>Usa:</strong> <code>TupleUtils</code> — accesores de columnas de tuplas seguros en cuanto a tipos (<code>getLong</code>, <code>getString</code>, <code>getBigDecimal</code>, etc.)</li>
+  <li><strong>Usa:</strong> <code>PfPersistenceService</code> — abstracción de persistencia del framework</li>
+</ul>
+
+<h2>Historial de Git</h2>
+<div class="hist"><pre>
+868d6abb7 2025 -> 2026
+49b1d6b8d Pronóstico y libro de pedidos: tipo de pronóstico para pedidos/posiciones agregado (mes actual o mes siguiente)
+7163b8c4e WIP: Instantáneas del libro de pedidos, ForecastExport corregido (faltaban el nombre del cliente y del proyecto)
+63081666f Encabezados de archivos fuente: 2024 -> 2025.
+ae2c04ee0 Trabajo de migración en progreso... (todas las pruebas de todos los paquetes: OK).
+89ea9a532 Trabajo de migración en progreso... (todas las pruebas de todos los paquetes: OK).
+</pre></div>
+
+</body>
+</html>

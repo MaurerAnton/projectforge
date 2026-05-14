@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>#873 [FR]</title>
+<style>
+body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}
+h1{border-bottom:2px solid #333;padding-bottom:.3em}
+h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}
+h3{margin-top:2em;color:#444}
+a{color:#0366d6}
+.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}
+.nav{font-size:.9em;color:#888;margin-bottom:1em}
+.meta{font-size:.9em;margin:1em 0;color:#555}
+code{background:#f0f0f0;padding:0 .2em;font-size:.93em}
+pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}
+table{border-collapse:collapse;width:100%;margin:1em 0}
+th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}
+th{background:#f5f5f5;font-weight:600}
+.hist{font-size:.85em;color:#555}
+.warn{background:#fff3cd;border-left:3px solid #ffc107;padding:.5em 1em;margin:1em 0}
+</style>
+</head>
+<body>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← Index des fichiers</a> · <a href="872.html">← Précédent</a> · <a href="874.html">Suivant →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/kotlin/org/projectforge/business/common/BaseUserGroupRightUtils.kt" target="_blank" title="Voir la source sur GitHub">📄 source</a></div>
+<h1>#873 : <code>BaseUserGroupRightUtils.kt</code></h1>
+<div class="meta"><code>projectforge-business/src/main/kotlin/org/projectforge/business/common/BaseUserGroupRightUtils.kt</code> <strong>Type :</strong> Objet Kotlin (utilitaire statique) · <strong>Objectif :</strong> Logique centrale des droits d'accès · <strong>Source :</strong> <code>projectforge-business/src/main/kotlin/org/projectforge/business/common/BaseUserGroupRightUtils.kt</code> <span style="color:#888">136 lignes · 93 lignes de code · 33 commentaires · 10 lignes vides</span></div>
+<div class="c">Objet utilitaire autonome contenant la logique centrale de résolution des droits d'accès. Détermine si un utilisateur a un accès PROPRIÉTAIRE, COMPLET, LECTURE SEULE, MINIMAL ou AUCUN à un objet <code>BaseUserGroupRightsDO</code> en vérifiant les champs d'identifiants CSV par rapport à l'appartenance à un groupe et à la correspondance directe d'identifiant utilisateur. Utilisé à la fois par <code>BaseUserGroupRight</code> (<a href="864.html">#864</a>) et <code>TeamCalCache</code>.</div>
+
+<h2>API</h2>
+
+<h3><code>isOwner(utilisateur, obj)</code> / <code>isOwner(idUtilisateur, obj)</code></h3>
+<p>Renvoie <code>true</code> si <code>idUtilisateur == obj.proprietaireId</code> (les deux non nuls). Vérification d'identité simple.</p>
+
+<h3><code>getAccessType(obj, idUtilisateur) : DataobjectAccessType</code></h3>
+<p>La méthode de résolution centrale. Évalue l'accès par ordre de priorité :</p>
+<ol>
+<li><strong>Protection nulle :</strong> Renvoie <code>AUCUN</code> si obj ou idUtilisateur est nul</li>
+<li><strong>Vérification propriétaire :</strong> Renvoie <code>PROPRIÉTAIRE</code> si <code>idUtilisateur == obj.proprietaireId</code></li>
+<li><strong>Accès complet :</strong> Vérifie <code>fullAccessGroupIds</code> et <code>fullAccessUserIds</code></li>
+<li><strong>Accès lecture seule :</strong> Vérifie <code>readonlyAccessGroupIds</code> et <code>readonlyAccessUserIds</code></li>
+<li><strong>Accès minimal :</strong> Vérifie <code>minimalAccessGroupIds</code> et <code>minimalAccessUserIds</code></li>
+<li><strong>Repli :</strong> Renvoie <code>AUCUN</code></li>
+</ol>
+
+<h3><code>hasReadAccess(obj, idUtilisateur, leverException?) : Boolean</code></h3>
+<p>Renvoie <code>true</code> si le type d'accès est <code>LECTURE SEULE</code>, <code>COMPLET</code> ou <code>PROPRIÉTAIRE</code>. Sinon, renvoie <code>false</code>, ou lève <code>AccessException("access.exception.noReadAccess")</code> si <code>leverException</code> est vrai.</p>
+
+<h3><code>hasWriteAccess(obj, idUtilisateur, leverException?) : Boolean</code></h3>
+<p>Renvoie <code>true</code> si le type d'accès est <code>COMPLET</code> ou <code>PROPRIÉTAIRE</code>. Sinon, renvoie <code>false</code>, ou lève <code>AccessException("access.exception.noWriteAccess")</code>.</p>
+
+<h3><code>hasAccess(obj, idUtilisateur, typeOperation, leverException?)</code></h3>
+<p>Aiguille vers <code>hasReadAccess</code> ou <code>hasWriteAccess</code> selon <code>typeOperation.estTypeEcriture</code>.</p>
+
+<h3><code>hasAccess(obj, ancienObj, idUtilisateur, typeOperation, leverException?)</code></h3>
+<p>Pour les opérations d'écriture, vérifie d'abord l'objet <em>ancien</em> (permettant la modification si l'utilisateur avait déjà un accès en écriture). Se replie sur la vérification du nouvel objet. Pour les opérations de lecture, vérifie <code>ancienObj ?: obj</code>.</p>
+
+<h2>Logique interne</h2>
+
+<h3><code>estMembreDUnAuMoins(groupIds, userIds, idUtilisateur) : Boolean</code></h3>
+<p>Méthode privée qui effectue la vérification réelle d'appartenance au groupe/utilisateur :</p>
+<ul>
+<li>Si <code>groupIds</code> n'est pas vide, vérifie <code>UserGroupCache.getInstance().isUserMemberOfAtLeastOneGroup(idUtilisateur, *groupIds)</code></li>
+<li>Si <code>userIds</code> contient l'<code>idUtilisateur</code> donné, renvoie vrai</li>
+<li>Utilise <code>StringHelper.splitToLongObjects()</code> pour analyser les colonnes CSV en <code>Array&lt;Long&gt;</code></li>
+</ul>
+
+<h2>Flux de données</h2>
+<pre>
+BaseUserGroupRightsDO (colonnes CSV)
+  │
+  ├─ StringHelper.splitToLongObjects()
+  │
+  ├─ UserGroupCache.isUserMemberOfAtLeastOneGroup()  ← groupes
+  └─ Comparaison directe d'identifiant utilisateur    ← utilisateurs
+  │
+  ▼
+DataobjectAccessType (PROPRIÉTAIRE / COMPLET / LECTURE SEULE / MINIMAL / AUCUN)
+  │
+  ▼
+hasReadAccess / hasWriteAccess → Booléen
+</pre>
+
+<h2>Justification de la conception</h2>
+<p>Le modèle <code>object</code> (singleton Kotlin) a été choisi car la logique d'accès est purement fonctionnelle — pas d'état ni de dépendances, seulement du calcul. Cela permet de l'appeler depuis n'importe où (services, caches, constructeurs d'entités) sans surcharge d'injection.</p>
+
+<p>L'évaluation par niveaux (propriétaire → complet → lecture seule → minimal → aucun) signifie que la première correspondance l'emporte. Si un utilisateur est à la fois dans le groupe d'accès complet <em>et</em> dans le groupe de lecture seule, il obtient l'accès <code>COMPLET</code>. Le paramètre <code>ancienObj</code> dans <code>hasAccess</code> prend en charge le modèle où l'autorisation de modifier un objet est vérifiée par rapport à l'état avant modification — critique pour les opérations de mise à jour où les listes d'accès de l'objet peuvent changer dans le cadre de l'édition.</p>
+
+<h2>Dépendances externes</h2>
+<ul>
+<li><code>UserGroupCache</code> — cache singleton pour les recherches d'appartenance à un groupe</li>
+<li><code>StringHelper.splitToLongObjects()</code> — analyse les chaînes d'identifiants CSV en <code>Array&lt;Long&gt;</code></li>
+<li><code>AccessException</code> — levée lorsque <code>leverException = true</code> et que l'accès est refusé</li>
+</ul>
+
+<h2>Historique Git</h2>
+<div class="hist"><pre>
+868d6abb7 2025 -> 2026
+63081666f En-têtes de fichiers source : 2024 -> 2025.
+4c04cfd65 CHANGEMENT MAJEUR ! Migration des identifiants entiers vers des identifiants Long
+b6092df09 Copyright 2023 -> 2024
+ab45d51fa Copyright 2001-2022 -> 2001-2023.
+232a91c5a BaseUserGroupRightUtils implémenté. WIP BankingPlugin et gestion des travaux.
+</pre></div>
+</body>
+</html>

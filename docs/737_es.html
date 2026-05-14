@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="es"><head><meta charset="utf-8"><title>#737 [ES]</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333}h2{margin-top:1.5em}a{color:#0366d6}.meta{font-size:.9em;margin:1em 0}.nav{font-size:.9em;color:#888;margin-bottom:1em}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}code{background:#f0f0f0;padding:0 .2em}pre{background:#f5f5f5;padding:.5em;margin:.5em 0;border-radius:3px;font-size:.85em;overflow-x:auto}</style></head>
+<body>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Índice</a> · <a href="file-index.html">← Índice de archivos</a> · <a href="736.html">← Anterior</a> · <a href="738.html">Siguiente →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/java/org/projectforge/framework/utils/KeyValuePairParser.java" target="_blank" title="Ver fuente en GitHub">📄 fuente</a></div>
+
+<h1>#737: <code>KeyValuePairParser.java</code></h1>
+<div class="meta"><code>projectforge-business/src/main/java/org/projectforge/framework/utils/KeyValuePairParser.java</code> <strong>Líneas:</strong> 301 · <strong>Autor:</strong> Kai Reinhard · <strong>Tipo:</strong> Analizador léxico/parser escrito a mano en Java — cero dependencias <span style="color:#888">301 líneas · 229 código · 34 comentarios · 38 en blanco</span></div>
+
+<div class="c"><h2>Propósito</h2>
+<p>Un <strong>analizador de flujo escrito a mano</strong> que lee pares <code>clave=valor</code> desde un <code>java.io.Reader</code>, un carácter a la vez. Sin expresiones regulares, sin bibliotecas de análisis de terceros — solo análisis puro carácter por carácter con estado, utilizando un búfer de retroceso de 5 elementos. Este es el tipo de código que existía antes de que bibliotecas como <a href="https://commons.apache.org/proper/commons-csv/">Apache Commons CSV</a> se volvieran estándar — o escrito porque el autor quería control exacto sobre los mensajes de error y casos límite sin sobrecarga de dependencias.</p>
+<p>El analizador soporta: <strong>valores entre comillas</strong> (con <code>"</code>), <strong>comillas escapadas</strong> dentro de cadenas entrecomilladas (<code>""</code> → una <code>"</code> literal), <strong>carácter separador configurable</strong> (por defecto el de <code>KeyValuePairWriter.DEFAULT_SEPARATOR_CHAR</code>), <strong>seguimiento de línea/columna</strong> para mensajes de error, y <strong>omisión de espacios en blanco</strong>. Formato de entrada: <code>clave1=valor1,clave2="valor entre comillas, con coma",clave3=123</code>.</p></div>
+
+<div class="c"><h2>Arquitectura: un mini analizador léxico</h2>
+<p>301 líneas. El analizador está estructurado como un <strong>analizador léxico clásico de dos fases</strong>:</p>
+<ol><li><strong>Lector de caracteres (<code>read()</code> / <code>nextToken()</code> / <code>unread()</code>):</strong> lee un carácter del <code>Reader</code>, rastrea números de línea/columna, maneja saltos de línea <code>\r\n</code> (Windows) y <code>\n</code> (Unix), y clasifica el token como <code>EOF</code>, <code>EOL</code> o <code>CHAR</code>. El método <code>nextToken()</code> es el tokenizador</li>
+<li><strong>Analizador sintáctico (<code>parseKey()</code> / <code>parseValue()</code>):</strong> consume tokens para construir las cadenas de clave y valor. <code>parse()</code> es el punto de entrada que llama a parseKey+parseValue en un bucle hasta EOF/EOL</li></ol>
+<p>Esta es la misma arquitectura que un <strong>front-end de compilador</strong> — tokenizador + analizador sintáctico — solo que para datos clave=valor en lugar de lenguajes de programación.</p></div>
+
+<div class="c"><h2>Búfer de retroceso</h2>
+<p>Un <code>int[] pushbackBuffer</code> de 5 elementos con índice <code>pushbackIndex</code>. Cuando el analizador lee un carácter de más (por ejemplo, en <code>skipWhitespaces()</code>), <strong>devuelve el carácter</strong> mediante <code>unread(int b)</code>. El búfer actualiza los contadores de línea/columna al retroceder saltos de línea — crítico para mensajes de error precisos. 5 elementos son suficientes para cualquier anticipación necesaria en este analizador (la anticipación máxima es de 1-2 caracteres). Esta es la implementación estándar de <strong>anticipación de 1 carácter</strong> — la forma más simple de retroceso.</p></div>
+
+<div class="c"><h2>Manejo de valores entre comillas — la lógica más compleja</h2>
+<p><code>parseValue()</code> (líneas 141-189) implementa un <strong>analizador de campos entrecomillados estilo CSV</strong> completo:</p>
+<ol><li>Omite espacios en blanco, lee el primer carácter</li>
+<li>Si el primer carácter es <code>"</code>, entra en <strong>modo entrecomillado</strong> (<code>quoted=true</code>)</li>
+<li>En modo entrecomillado:
+<ul><li><code>""</code> → comilla escapada (agrega una <code>"</code> al valor)</li>
+<li><code>"</code> seguido de separador o espacio+separador → fin del valor</li>
+<li><code>"</code> seguido de cualquier otra cosa → error (<code>UNEXPECTED_CHARACTER_AFTER_QUOTATION_MARK</code>)</li>
+<li>Cualquier otro carácter → se agrega al búfer del valor</li></ul></li>
+<li>En modo no entrecomillado:
+<ul><li>Carácter separador → fin del valor</li>
+<li><code>"</code> → error (<code>UNEXPECTED_QUOTATIONMARK</code> — las comillas solo se permiten en modo entrecomillado)</li>
+<li>Cualquier otro carácter → se agrega</li></ul></li>
+<li>Si se alcanza EOF/EOL mientras está entrecomillado → error (<code>QUOTATIONMARK_MISSED_AT_END_OF_CELL</code>)</li></ol>
+<p>Esto sigue la <a href="https://datatracker.ietf.org/doc/html/rfc4180">especificación CSV RFC 4180</a> para campos entrecomillados, pero simplificada — sin campos entrecomillados multilínea, sin detección de encabezados, sin inferencia de tipos.</p></div>
+
+<div class="c"><h2>Manejo de errores — información de ubicación precisa</h2>
+<p>Cada mensaje de error incluye <strong>número de línea y número de columna</strong> — por ejemplo, <code>"Unexpected quotation mark... Error in line: 3 (14)"</code>. Esto es crítico para depurar archivos de configuración. El método estático <code>createMessage()</code> formatea los errores con el patrón: <code>msg + " Error in line: " + line + " (" + col + ")" + (s != null ? ": " + s : "")</code>. Los contadores <code>lineno</code> y <code>colno</code> son mantenidos por <code>read()</code> (incrementa línea en <code>\n</code>) y <code>nextToken()</code> (incrementa columna en cada carácter).</p></div>
+
+<div class="c"><h2>Contexto de uso</h2>
+<p>Este analizador se utiliza para leer <strong>archivos de configuración</strong> y <strong>entradas de parámetros de scripts</strong> — lugares donde los usuarios o administradores escriben datos clave=valor en archivos de texto simples. Ejemplo de archivo analizado por esto:</p>
+<pre>nombre=ProjectForge
+versión="8.0.0"
+descripción="Sistema ERP con hoja de tiempos, calendario y contabilidad"
+maxUsuarios=100</pre>
+<p>El analizador lee línea por línea (<code>EOL</code> detiene cada llamada a <code>parse()</code>), produciendo un <code>Map&lt;String, String&gt;</code>. La clase complementaria <a href="738.html">KeyValuePairWriter</a> hace lo inverso — escribe mapas en formato de texto clave=valor.</p></div>
+
+</body></html>

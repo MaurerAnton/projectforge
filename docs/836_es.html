@@ -1,0 +1,112 @@
+Here's the HTML translated to Spanish, with `lang="es"`, the language switcher set to ES, and `[ES]` added to the title.
+
+```html
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>#836: DoubletsResultFilter.kt [ES]</title>
+<style>
+  body { font-family: system-ui, sans-serif; max-width: 960px; margin: 2em auto; padding: 0 1em; background: #fafafa; color: #222; line-height: 1.6; }
+  h1 { border-bottom: 2px solid #333; padding-bottom: 0.3em; }
+  h2 { margin-top: 2.5em; border-bottom: 1px solid #ddd; padding-bottom: 0.2em; color: #333; }
+  h3 { margin-top: 2em; color: #444; }
+  a { color: #0366d6; }
+  .c { border-left: 3px solid #ddd; padding: .5em 1em; margin: 1em 0; background: #fff; }
+  .nav { font-size: .9em; color: #888; margin-bottom: 1em; }
+  .meta { font-size: .9em; margin: 1em 0; color: #555; }
+  code { background: #f0f0f0; padding: 0 .2em; font-size: .93em; }
+  pre { background: #f5f5f5; padding: .8em 1em; border: 1px solid #ddd; border-radius: 4px; overflow-x: auto; font-size: .88em; line-height: 1.4; }
+  table { border-collapse: collapse; width: 100%; margin: 1em 0; }
+  th, td { border: 1px solid #ddd; padding: .5em .8em; text-align: left; font-size: .9em; }
+  th { background: #f5f5f5; font-weight: 600; }
+  .hist { font-size: .85em; color: #555; }
+</style>
+</head>
+<body>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Índice</a> · <a href="file-index.html">← Índice de archivos</a> · <a href="835.html">← Anterior</a> · <a href="837.html">Siguiente →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/kotlin/org/projectforge/business/address/DoubletsResultFilter.kt" target="_blank" title="Ver fuente en GitHub">📄 fuente</a></div>
+
+<h1>#836: <code>DoubletsResultFilter.kt</code></h1>
+<div class="meta"><code>projectforge-business/src/main/kotlin/org/projectforge/business/address/DoubletsResultFilter.kt</code> <strong>Filtro de resultados Kotlin</strong> — filtro posterior de deduplicación de direcciones. Implementa <code>CustomResultFilter&lt;AddressDO&gt;</code> para detectar y extraer entradas de direcciones duplicadas (dobletes) basándose en la comparación de nombres completos normalizados. Ubicación: <code>projectforge-business/src/main/kotlin/org/projectforge/business/address/DoubletsResultFilter.kt</code> <span style="color:#888">57 líneas · 30 código · 23 comentarios · 4 en blanco</span></div>
+
+<div class="c">
+<strong>Propósito:</strong> Cuando una libreta de direcciones crece orgánicamente (importaciones, entradas manuales, migración de datos), se acumulan contactos duplicados — a menudo con variaciones menores en el formato pero nombres normalizados idénticos. Este filtro permite que la interfaz de la lista de direcciones muestre una vista de "Mostrar solo dobletes", ayudando a los administradores a encontrar y fusionar duplicados.
+</div>
+
+<h2>Arquitectura</h2>
+
+<div class="c">
+Implementa <strong><code>CustomResultFilter&lt;AddressDO&gt;</code></strong> — una interfaz del framework ProjectForge para el filtrado posterior a la consulta. A diferencia del filtrado del lado de la base de datos (cláusulas <code>WHERE</code>), los filtros de resultados se ejecutan en memoria sobre el conjunto de resultados devuelto por el DAO. Esto es necesario para la deduplicación porque:<br><br>
+• Los duplicados pueden abarcar diferentes filas de la base de datos con diferentes IDs<br>
+• La lógica de normalización (<code>getNormalizedFullname</code>) implica manipulación de cadenas que no se puede expresar fácilmente en SQL/HQL<br>
+• El filtro necesita acumular estado a través de múltiples elementos — el método <code>match()</code> se llama para cada elemento en orden, pero muta conjuntos internos
+</div>
+
+<h3>Máquina de estados</h3>
+<div class="c">
+El filtro opera como una <strong>máquina de estados de dos conjuntos y dos pasos</strong>:<br><br>
+<strong>Paso 1 (acumulación):</strong> A medida que cada elemento de dirección se pasa a <code>match()</code>:<br>
+• Si el nombre completo normalizado ya está en <code>fullnames</code>, es un doblete — se añade a <code>doubletFullnames</code><br>
+• Si no está en <code>fullnames</code>, es una primera ocurrencia — se añade a <code>all</code> y <code>fullnames</code><br><br>
+<strong>Paso 2 (vaciado):</strong> Cuando se detecta un doblete, todas las direcciones vistas previamente cuyos nombres coincidan con cualquier nombre de doblete se añaden a la lista de resultados. El conjunto <code>addedDoublets</code> evita añadir la misma dirección dos veces.
+</div>
+
+<h3>Elecciones de estructura de datos</h3>
+<table>
+<tr><th>Campo</th><th>Tipo</th><th>Propósito</th></tr>
+<tr><td><code>fullnames</code></td><td><code>MutableSet&lt;String&gt;</code> (HashSet)</td><td>Rastrea todos los nombres normalizados únicos vistos hasta ahora — búsqueda O(1)</td></tr>
+<tr><td><code>doubletFullnames</code></td><td><code>MutableSet&lt;String&gt;</code> (HashSet)</td><td>Rastrea nombres confirmados con ≥2 ocurrencias — usado para vaciado retroactivo</td></tr>
+<tr><td><code>all</code></td><td><code>MutableList&lt;AddressDO&gt;</code> (ArrayList)</td><td>Lista ordenada de todas las direcciones procesadas — necesaria porque las entradas anteriores no se devolvieron como coincidencias</td></tr>
+<tr><td><code>addedDoublets</code></td><td><code>MutableSet&lt;Long?&gt;</code> (HashSet)</td><td>Guardia de deduplicación — evita añadir el mismo ID de dirección dos veces al resultado</td></tr>
+</table>
+
+<h2>Recorrido del algoritmo</h2>
+<pre>
+Para cada dirección en el resultado de la consulta (ordenado por nombre):
+
+1. Omitir direcciones eliminadas → devolver falso
+  
+2. Calcular normalizedFullname = AddressDao.getNormalizedFullname(elemento)
+   (eliminar espacios en blanco, minúsculas, etc.)
+
+3. Verificar fullnames.contains(normalizedFullname):
+   
+   NO (primera ocurrencia):
+     all.add(elemento)
+     fullnames.add(normalizedFullname)
+     return false  (no incluir aún en resultados)
+   
+   SÍ (duplicado detectado):
+     doubletFullnames.add(normalizedFullname)
+     
+     // Vaciar: añadir todas las direcciones vistas previamente que compartan este nombre
+     for (adr in all):
+       if (addedDoublets.contains(adr.id)) continue  // saltar ya añadido
+       if (doubletFullnames.contains(getNormalizedFullname(adr))):
+         list.add(adr)                                // inyectar en resultado
+         addedDoublets.add(adr.id)                    // marcar como inyectado
+     
+     // El elemento actual (el duplicado) también se devuelve
+     return true
+</pre>
+
+<h2>Historial de Git</h2>
+<div class="hist">
+<pre>868d6abb7 2025 → 2026 (actualización de año de copyright)
+63081666f Encabezados de archivos fuente: 2024→2025
+4c04cfd65 MAJOR: Migración de IDs enteros a IDs Long (cascadas FK)
+067a4cbb1 Migración en progreso...
+0d183e5df Migración en progreso...
+b7b459e73 Migración en progreso...
+</pre>
+El archivo surgió durante el período de migración <code>int→Long</code>, cuando los filtros de resultados se reestructuraron para usar IDs <code>Long</code>.
+</div>
+
+<h2>Justificación del diseño</h2>
+<div class="c">
+<strong>¿Por qué un filtro posterior en lugar de un GROUP BY + HAVING en la base de datos?</strong> Un <code>GROUP BY normalized_name HAVING COUNT(*) > 1</code> en SQL requeriría que la función de normalización se pudiera expresar en SQL (posible pero frágil con diferencias de dialectos SQL) y no proporcionaría los objetos de entidad exactos necesarios para el diálogo de fusión de la interfaz. El enfoque de filtro posterior mantiene la lógica de normalización en Java/Kotlin, donde está tipificada, es comprobable y consistente con el resto de la aplicación.<br><br>
+<strong>¿Por qué el patrón de vaciado retroactivo?</strong> La interfaz <code>match()</code> devuelve <code>true</code>/<code>false</code> por elemento (incluir/excluir de los resultados). Los elementos procesados antes de detectar un doblete ya estaban excluidos (devolvían <code>false</code>). El vaciado retroactivo inyecta esas instancias anteriores mutando directamente la lista de resultados. Esto es un efecto secundario intencional — el filtro tiene acceso de escritura a la lista y lo usa para compensar la naturaleza de flujo continuo de la API <code>match()</code>.
+</div>
+
+</body>
+</html>

@@ -1,43 +1,58 @@
-<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>1051</title>
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>#1051</title>
 <style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:2em;color:#444}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}</style></head>
-<body><div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="1050.html">← Prev</a> · <a href="1052.html">Next →</a></div>
-<h1>1051: <code>ScriptExecutor.kt</code></h1>
-<div class="meta">Core Service / Script Engine, projectforge-business/src/main/kotlin/org/projectforge/business/scripting/ScriptExecutor.kt</div>
-<div class="c">Abstract base class for all script executors (Groovy and Kotlin). Manages script compilation from source with #INCLUDE resolution, auto-import injection, variable binding (daos, appId, taskTree, caches, etc.), and script parameter handling. Builds the effective script by merging user code with auto-generated imports and language-specific bindings. Also houses the factory method <code>createScriptExecutor()</code> that auto-detects Kotlin vs Groovy based on <code>val/var/fun</code> keyword presence and the companion <code>STANDARD_IMPORTS</code> set for all scriptable domain types.</div>
-<h2>Git History</h2><div class="hist"><pre>9c7f57f30 Add OrderbookSnapshotScriptingService for script access to order book snapshots
-10d4e0aad Add EmployeeScriptingService for script access to employee data
+<body><div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="1050.html">← Prev</a> · <a href="1052.html">Next →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/kotlin/org/projectforge/business/scripting/ScriptDO.kt" target="_blank" title="View source on GitHub">📄 source</a></div>
+<h1>#1051: <code>ScriptDO.kt</code></h1>
+<div class="meta"><code>projectforge-business/src/main/kotlin/org/projectforge/business/scripting/ScriptDO.kt</code> JPA Entity (Script), projectforge-business/src/main/kotlin/org/projectforge/business/scripting/ScriptDO.kt <span style="color:#888">436 lines · 321 code · 54 comments · 61 blank</span></div>
+<div class="c">Central entity for stored scripts. Maps to <code>T_SCRIPT</code> table. Supports three script types (KOTLIN, GROOVY, INCLUDE), six parameter slots, execution as another user (sudo), executable-by user/group restrictions, script backup storage, file attachments, and recursive include resolution.</div>
+
+<h2>Entity Design</h2>
+<h3>Script Types</h3>
+<p>Enum <code>ScriptType</code>: <code>KOTLIN</code> (Kotlin .kts), <code>GROOVY</code>, and <code>INCLUDE</code> (script sniplet, not executable standalone).</p>
+
+<h3>Execution Control</h3>
+<ul>
+<li><code>executeAsUser</code>: If set, script runs with this user's full permissions (sudo).</li>
+<li><code>executableByGroupIds</code>, <code>executableByUserIds</code>: CSV lists controlling which non-admin users can execute (used by <code>MyScriptDao</code>).</li>
+</ul>
+
+<h3>Parameter System</h3>
+<p>Six static parameter slots (<code>parameter1-6Name</code>, <code>parameter1-6Type</code>, <code>parameter1-6Description</code>). <code>getParameterList()</code> builds a <code>List&lt;ScriptParameter&gt;</code> with type safety. <code>setParameterList()</code> rebuilds individual fields from a list.</p>
+
+<h3>Script Content</h3>
+<p>Script body stored as <code>ByteArray</code> BLOB with <code>@NoHistory</code> (not tracked in history). Instead, <code>scriptBackup</code> stores the previous version. <code>scriptAsString</code> is a <code>@Transient</code> property with UTF-8 conversion convenience. Supports <code>AttachmentsInfo</code> for file attachments.</p>
+
+<h3>Include System</h3>
+<p><code>includes</code> (transient) stores referenced <code>ScriptDO</code> objects. <code>includesRecursive</code> walks the include tree with circular reference detection (by ID), producing a flattened set of all transitively included scripts.</p>
+
+<h2>Git History</h2><div class="hist"><pre>
 868d6abb7 2025 -> 2026
-0f74c4b76 Scripting supports now ExportFile for returning single files as script result.
-4550ccc8a MonthlyEmployeeReport: show weekly net and gross hours. Fix select in AuftragDao.positionen.status Scripting: Add PFCaches as variable. GlobalDefaultExceptionHandling: Exception handling improved.
+f84a49eba Scripting: Description for script parameters added.
 63081666f Source file headers: 2024-> 2025.
-aeff942b5 Script execution improved (logging for end user). DynamicTable.jsx: (refresh implementation fixed, refreshMethod is now supported.)
-b6eb06c26 Initial test scripts for new PF instances fixed.
-36c9acc50 It was a hard, hard work, but Kotlin scripts are running, yeah!
-921638f43 WIP
-caea043eb Migration stuff in progress... (all tests of all packages: OK).
-d394f410f Migration stuff in progress... (all tests of all packages: OK).
-2e9839891 Migration stuff in progress...
-4c8365b88 Kotlin scripting refactored (All tests OK)
-61f05ce90 Migration stuff in progress...
-4c04cfd65 MAJOR-CHANGE! Migration of integer id's to Long id's (including fk's etc.)
-67ce75fe9 Migration stuff in progress...
-fba4da3f5 ForecastExport now usable for scripts. AuftragFilter.projectList added, RechnungCache stores now invoice positions for better forecast performance.
+0237d5eba Json serialization refactored: IdOnlySerializer and IdsOnlySerializer.
+5f9bbfbd3 Fix typos in projectforge-business directory.
+a72903e36 *.java, *.kt: StringBuffer -> StringBuilder.
+ad9ac6b63 Migration stuff in progress...
+f5c09f87f Migration stuff in progress...
+c1d14ecdb Migration stuff in progress...
+c04fb0d51 Migration stuff in progress...
+06828f490 Migration stuff in progress...
 b6092df09 Copyright 2023 -> 2024
 ab45d51fa Copyright 2001-2022 -> 2001-2023.
-be07a5dd8 ScriptExecutor: doesn't throw Exception on endless recursion include anymore.
 12dc9eb8f Scripting: show included scripts in list view.
-6fb55191f ScriptingTaskTree -> Kotlin, fun matchesMarker implemented.
-47aec0fc2 WIP: sudo scripting and executable scripts by normal users.
-456f86d97 WIP: sudo scripting and executable scripts by normal users.
-bebba9753 WIP: sudo scripting and executable scripts by normal users.
-8cc24f533 ScriptExecutor: RoundUnit imported.
-007959e2c WIP: scripting: CurrencyFormatter import fixed.
-a10660bc8 WIP: scripting.
-52ef31ca5 WIP: scripting
-1b5d679ad Example scripts and UIEditor supports now kotlin/groovy
-2ba9c104f WIP: scripting: download all backups and effective script.
-7059cacd4 WIP: Scripting: support of parameter names including white spaces and non java identifiers.
-de0d98425 WIP: scripting: fix for null script values.
-2c7de7186 WIP: Scripting.
-d37760c3e Scripting refactored.</pre></div>
+dcbdb9fba ScriptDO.description: markdown format is now supported.
+37935341a WIP: sudo scripting and executable scripts by normal users.
+9e7810a92 WIP: Scripting #INCLUDE is now supported.
+97e4bd526 Scripting: pantha rein. ACE editor added.
+5f7ef41b8 Copyright 2021 -> 2022
+c0f2b9de0 Tenants functionality removed everywhere.
+ceb63e8a1 Source code header: (C) 2001-2021.
+6fd010dd6 Kotlin scripting works now with ugly work-around for Spring boot fat jar.
+52d9c1d88 WIP: Kotlin scripts...
+7c79f1922 Copyright of source header -> 2020.
+45e1c6d2b LicenseDO, ScriptDO: NoHistory annotation fixed.
+8675a1dbe Declared all Kotlin JPA entities and their properties as open.
+2e254d6b0 Add ScriptRest page
+859c69ede Code warnings fixed.
+353dad6ae ScriptDO.java -> ScriptDO.kt
+</pre></div>
 </body></html>

@@ -1,32 +1,38 @@
 <!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>#113</title>
 <style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333}a{color:#0366d6}.meta{font-size:.9em;margin:1em 0}.nav{font-size:.9em;color:#888;margin-bottom:1em}.commentary{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}code{background:#f0f0f0;padding:0 .2em;border-radius:2px}</style></head>
 <body>
-<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="112.html">← Prev</a> · <a href="114.html">Next →</a></div>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="112.html">← Prev</a> · <a href="114.html">Next →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/plugins/org.projectforge.plugins.datatransfer/src/main/resources/mail/dataTransferFilesBeingDeletedMail.html" target="_blank" title="View source on GitHub">📄 source</a></div>
 
-<h1>#113: <code>org.projectforge.plugins.core.AbstractPlugin</code></h1>
-<div class="meta"><strong>Path:</strong> <code>plugins/...datatransfer/src/main/resources/META-INF/services/org.projectforge.plugins.core.AbstractPlugin</code> · <strong>Lines:</strong> 1 · <strong>Type:</strong> Java <a href="https://docs.oracle.com/javase/8/docs/api/java/util/ServiceLoader.html">ServiceLoader</a> configuration</div>
+<h1>#113: <code>dataTransferFilesBeingDeletedMail.html</code></h1>
+<div class="meta"><code>plugins/org.projectforge.plugins.datatransfer/src/main/resources/mail/dataTransferFilesBeingDeletedMail.html</code> <strong>Path:</strong> <code>plugins/...datatransfer/src/main/resources/mail/dataTransferFilesBeingDeletedMail.html</code> · <strong>Lines:</strong> 43 · <strong>Type:</strong> Freemarker HTML email template <span style="color:#888">43 lines · 39 code · 4 comments · 0 blank</span></div>
 
 <div class="commentary">
-<p><strong>Plugin registration via Java SPI.</strong> This file tells the Java <code>ServiceLoader</code> mechanism that <code>org.projectforge.plugins.datatransfer.DataTransferPlugin</code> is an implementation of <code>org.projectforge.plugins.core.AbstractPlugin</code>. When ProjectForge starts up, <code>PluginsRegistry</code> scans <code>META-INF/services/</code> across all JARs on the classpath, instantiates each listed class, and registers the plugin in the system.</p>
-
-<p>Single line: <code>org.projectforge.plugins.datatransfer.DataTransferPlugin</code></p>
+<p><strong>Expiry notification email</strong> — sent by a scheduled job to area owners when files are approaching their auto-deletion date. Uses ProjectForge's Freemarker-based mail system with <code>#INCLUDE{...}</code> directives for shared header/footer components (<code>mailHead.html</code>, <code>mailOpening.html</code>, <code>mailClosing.html</code>, <code>mailFooter.html</code>).</p>
 </div>
 
 <div class="commentary">
-<h3>How it works</h3>
-<p>The file name is the <strong>fully qualified interface/abstract class name</strong> (<code>org.projectforge.plugins.core.AbstractPlugin</code>), and its content is the <strong>implementing class name</strong>. This is the standard <a href="https://docs.oracle.com/javase/tutorial/ext/basics/spi.html">Java SPI (Service Provider Interface)</a> pattern — the same mechanism used by JDBC drivers and SLF4J bindings.</p>
-
-<p>Every ProjectForge plugin has this file at <code>META-INF/services/org.projectforge.plugins.core.AbstractPlugin</code> with its main plugin class. When <code>PluginsRegistry</code> (in <code>projectforge-business</code>) calls <code>ServiceLoader.load(AbstractPlugin.class)</code>, all plugin JARs on the classpath are discovered without hardcoded references.</p>
-</div>
-
-<div class="commentary">
-<h3>ServiceLoader files across the project</h3>
-<p>This pattern appears for every plugin — same file name, different content. Also used for other framework extensibility points:</p>
+<h3>Template variables</h3>
 <ul>
-<li><code>META-INF/services/org.projectforge.framework.persistence.api.UserRightId</code> — user right registration</li>
-<li><code>META-INF/services/org.projectforge.business.configuration.ConfigurationParam</code> — configuration parameter registration</li>
-<li><code>META-INF/services/org.projectforge.business.jobs.JobHandler</code> — scheduled job registration</li>
+<li><code>pf</code> — ProjectForge Freemarker context, exposes <code>getI18nString()</code> and <code>formatBytes()</code></li>
+<li><code>attachments</code> — list of <code>AttachmentInfo</code> objects with fields: <code>link</code> (direct URL to the area), <code>dataTransferArea.getDisplayName(locale)</code>, <code>attachment.name</code>, <code>attachment.size</code>, <code>expiryDate</code>, <code>expiresInTimeLeft</code></li>
+<li><code>locale</code> — user's locale for i18n lookups</li>
 </ul>
+</div>
+
+<div class="commentary">
+<h3>Content structure</h3>
+<ol>
+<li>i18n header: "List of files being deleted:" — from key <code>plugins.datatransfer.mail.notificationBeforeDeletion.info</code></li>
+<li>Table columns: Area name, File name, File size, Expiry date, Time left</li>
+<li>Each file is a clickable link to its data transfer area (<code>target="_blank" rel="noreferrer"</code>)</li>
+<li>Info paragraph at bottom: explains that clicking a file and pressing "Update" renews the expiry — from key <code>plugins.datatransfer.mail.notificationBeforeDeletion.hint</code></li>
+</ol>
+<p>The i18n keys used are defined in <a href="104.html">DataTransferI18nResources.properties</a> (keys 46-48).</p>
+</div>
+
+<div class="commentary">
+<h3>Rendering engine</h3>
+<p>Uses <strong>Freemarker</strong> (<code>&lt;%= ... %&gt;</code> output expressions, <code>&lt;% ... %&gt;</code> control flow) — distinct from ProjectForge's Groovy scripting engine. The <code>#INCLUDE{...}</code> syntax is a ProjectForge extension to Freemarker for reusable email components. The <code>pf</code> object is bound to the Freemarker context by <code>MailService</code> in the core framework.</p>
 </div>
 
 </body></html>

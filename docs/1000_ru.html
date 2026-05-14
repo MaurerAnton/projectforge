@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head><meta charset="UTF-8"><title>#1000: KostZuweisungDO.kt +[RU]</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:2em;color:#444}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}</style></head>
+<body>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Индекс</a> · <a href="file-index.html">← Индекс файлов</a> · <a href="999.html">← Назад</a> · <a href="1001.html">Вперёд →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/kotlin/org/projectforge/business/fibu/kost/KostZuweisungDO.kt" target="_blank" title="Просмотреть исходный код на GitHub">📄 Исходник</a></div>
+<h1>#1000: <code>KostZuweisungDO.kt</code></h1>
+<div class="meta"><code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/kost/KostZuweisungDO.kt</code> Тип: JPA-сущность (DO) · Назначение: распределение затрат, связывающее счета/зарплаты с Kost1/Kost2 · Исходник: projectforge-business/src/main/kotlin/org/projectforge/business/fibu/kost/KostZuweisungDO.kt <span style="color:#888">266 строк · 190 кода · 55 комментариев · 21 пустая</span></div>
+<div class="c">Представляет собой назначение затрат (KostZuweisung) — распределение сумм счетов или выплат заработной платы сотрудников по конкретным центрам затрат (Kost1 и Kost2). Каждое назначение фиксирует чистую сумму и ссылается ровно на один из следующих объектов: позиция исходящего счёта, позиция входящего счёта или запись о зарплате сотрудника.</div>
+<h2>Дизайн сущности</h2>
+<table>
+<tr><th>Поле</th><th>Тип</th><th>Колонка БД</th><th>Описание</th></tr>
+<tr><td><code>index</code></td><td><code>Short</code></td><td>INT</td><td>Индекс в массиве назначений позиции</td></tr>
+<tr><td><code>netto</code></td><td><code>BigDecimal?</code></td><td>DECIMAL(12,2)</td><td>Чистая сумма, распределённая на этот центр затрат</td></tr>
+<tr><td><code>kost1</code></td><td><code>Kost1DO?</code></td><td>FK kost1_fk</td><td>Центр затрат уровня 1 (ManyToOne, lazy)</td></tr>
+<tr><td><code>kost2</code></td><td><code>Kost2DO?</code></td><td>FK kost2_fk</td><td>Центр затрат уровня 2 (ManyToOne, lazy)</td></tr>
+<tr><td><code>rechnungsPosition</code></td><td><code>RechnungsPositionDO?</code></td><td>FK rechnungs_pos_fk</td><td>Позиция исходящего счёта (nullable)</td></tr>
+<tr><td><code>eingangsrechnungsPosition</code></td><td><code>EingangsrechnungsPositionDO?</code></td><td>FK eingangsrechnungs_pos_fk</td><td>Позиция входящего счёта (nullable)</td></tr>
+<tr><td><code>employeeSalary</code></td><td><code>EmployeeSalaryDO?</code></td><td>FK employee_salary_fk</td><td>Запись о зарплате сотрудника (nullable)</td></tr>
+<tr><td><code>comment</code></td><td><code>String?</code></td><td>VARCHAR(4000)</td><td>Необязательный комментарий</td></tr>
+</table>
+<h3>Вычисляемые (транзитные) свойства</h3>
+<table>
+<tr><th>Свойство</th><th>Тип</th><th>Описание</th></tr>
+<tr><td><code>brutto</code></td><td><code>BigDecimal</code></td><td>Валовая сумма, рассчитанная из чистой суммы + НДС родительской позиции</td></tr>
+<tr><td><code>kost1Id</code></td><td><code>Long?</code></td><td>Сокращение для kost1.id</td></tr>
+<tr><td><code>kost2Id</code></td><td><code>Long?</code></td><td>Сокращение для kost2.id</td></tr>
+<tr><td><code>isEmpty</code></td><td><code>Boolean</code></td><td>True, если netto равно null или нулю</td></tr>
+</table>
+<h2>Ограничение взаимного исключения</h2>
+<p>KostZuweisung должен быть назначен ровно одному финансовому объекту. Сеттер для каждой из трёх ссылок обеспечивает взаимное исключение на уровне Java: установка <code>rechnungsPosition</code> вызывает исключение, если <code>eingangsrechnungsPosition</code> или <code>employeeSalary</code> уже установлены, и наоборот. Метод <code>hasErrors()</code> проверяет, что назначен ровно один объект (возвращает ключ ошибки i18n в случае нарушения).</p>
+<h2>Детали персистентности</h2>
+<ul>
+<li>Отображается на <code>T_FIBU_KOST_ZUWEISUNG</code></li>
+<li><strong>Три уникальных ограничения</strong>, по одному для каждого типа финансового объекта: (index, rechnungs_pos_fk, kost1_fk, kost2_fk), (index, eingangsrechnungs_pos_fk, kost1_fk, kost2_fk), (index, employee_salary_fk, kost1_fk, kost2_fk)</li>
+<li>Пять индексов для производительности запросов по внешним ключам</li>
+<li>Расширяет <code>DefaultBaseDO</code>, реализует <code>DisplayNameCapable</code></li>
+<li><code>@JsonBackReference</code> на <code>rechnungsPosition</code> и <code>eingangsrechnungsPosition</code> предотвращает бесконечную рекурсию при JSON-сериализации</li>
+<li><code>@JsonSerialize(using = IdOnlySerializer)</code> на всех ссылках ManyToOne для компактных ответов API</li>
+</ul>
+<h2>Вспомогательные методы</h2>
+<ul>
+<li><code>setAbstractRechnungsPosition(position)</code> — полиморфный сеттер, диспетчеризующий по типу</li>
+<li><code>newClone()</code> — создаёт глубокую копию (без ID) для клонирования счетов</li>
+<li>Equals/hashCode на основе index + ID родительской позиции (бизнес-ключ по всем трём типам родителей)</li>
+</ul>
+<h2>Исходный код (сокращён)</h2>
+<pre>@Entity @Indexed @Table(name = "T_FIBU_KOST_ZUWEISUNG", ...)
+open class KostZuweisungDO : DefaultBaseDO(), DisplayNameCapable {
+    open var index: Short = 0
+    open var netto: BigDecimal? = null
+    open var kost1: Kost1DO? = null
+    open var kost2: Kost2DO? = null
+    open var rechnungsPosition: RechnungsPositionDO? = null
+        set(value) { if (value != null && (eingangsrechnungsPosition != null
+            || employeeSalary != null)) throw IllegalStateException(...) }
+
+    val brutto: BigDecimal
+        @Transient get() {
+            val vat = when {
+                rechnungsPosition != null -> rechnungsPosition!!.vat
+                eingangsrechnungsPosition != null -> eingangsrechnungsPosition!!.vat
+                else -> null
+            }
+            return CurrencyHelper.getGrossAmount(netto, vat)
+        }
+    // newClone(), hasErrors(), setAbstractRechnungsPosition(), и т.д.
+}</pre>
+<h2>История Git</h2>
+<div class="hist"><pre>868d6abb7 2025 -> 2026
+63081666f Заголовки исходных файлов: 2024-> 2025.
+0237d5eba Json: IdOnlySerializer и IdsOnlySerializer.
+db2599ab8 История в книге заказов, счетах и проектах.
+c8f8ed935 Все сущности FetchType.LAZY.
+b04a74ffb DisplayHistoryEntry: новая концепция.
+0b32a3f37 Разное по миграции...
+4c04cfd65 MAJOR-CHANGE! Integer id's to Long id's.
+f984352a0 JsonBackReference/JsonManagedReference: KostZuweisungDO
+ca27394ef Константы рефакторинг.
+b78b870bd ShortDisplayNameCapable -> DisplayNameCapable.
+8675a1dbe Kotlin JPA сущности объявлены open (исправление ленивой загрузки)
+1cf12f943 Kostzuweisung: Исправлена бесконечная петля в json-сериализации.
+812b5b751 Большой WIP: рефакторинг (Eingangs)Rechnung* убийца производительности
+339e017b4 @PropertyInfo поддерживается для геттеров.
+3bd2b6e9d RechnungRest: Добавить список позиций
+100cc30f0 KostZuweisungDO.java -> KostZuweisungDO.kt</pre></div>
+</body>
+</html>

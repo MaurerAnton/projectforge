@@ -1,0 +1,150 @@
+Here is the HTML translated to Spanish, with the language set to `es` and the title updated to include `[ES]`.
+
+```html
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>#882 [ES]</title>
+<style>
+body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}
+h1{border-bottom:2px solid #333;padding-bottom:.3em}
+h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}
+h3{margin-top:2em;color:#444}
+a{color:#0366d6}
+.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}
+.nav{font-size:.9em;color:#888;margin-bottom:1em}
+.meta{font-size:.9em;margin:1em 0;color:#555}
+code{background:#f0f0f0;padding:0 .2em;font-size:.93em}
+pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}
+table{border-collapse:collapse;width:100%;margin:1em 0}
+th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}
+th{background:#f5f5f5;font-weight:600}
+.hist{font-size:.85em;color:#555}
+</style>
+</head>
+<body>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Índice</a> · <a href="file-index.html">← Índice de archivos</a> · <a href="881.html">← Anterior</a> · <a href="883.html">Siguiente →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/kotlin/org/projectforge/business/dvelop/ExtractPFTradingPartners.kt" target="_blank" title="Ver fuente en GitHub">📄 fuente</a></div>
+
+<h1>#882: <code>ExtractPFTradingPartners.kt</code></h1>
+
+<div class="meta"><code>projectforge-business/src/main/kotlin/org/projectforge/business/dvelop/ExtractPFTradingPartners.kt</code> 
+<p><strong>Tipo:</strong> Spring <code>@Service</code> — Motor de extracción de datos</p>
+<p><strong>Propósito:</strong> Extrae socios comerciales (proveedores, clientes) de las tablas de la base de datos financiera de ProjectForge y los convierte en objetos <code>TradingPartner</code> adecuados para la importación inicial en D-velop.</p>
+<p><strong>Ruta de origen:</strong> <code>projectforge-business/src/main/kotlin/org/projectforge/business/dvelop/ExtractPFTradingPartners.kt</code></p>
+ <span style="color:#888">385 líneas · 319 código · 38 comentarios · 28 en blanco</span></div>
+
+<div class="c">
+<p>Actúa como el <strong>puente</strong> entre los datos financieros heredados de ProjectForge (facturas de entrada, facturas de salida y datos maestros de clientes) y el modelo de socios comerciales de D-velop. Escanea 5 años de datos de facturas, desduplica entidades entre cuentas, maneja el patrón de cuentas "diversas" (varios), analiza direcciones de facturación en texto libre en campos estructurados y clasifica las entidades como PROVEEDOR, CLIENTE o SOCIO. También proporciona funcionalidad de exportación a Excel para conciliación.</p>
+</div>
+
+<h2>Arquitectura</h2>
+
+<h3>Clase interna: <code>Context</code></h3>
+<p>Un acumulador mutable que recopila los socios comerciales extraídos durante el proceso de extracción en múltiples fases:</p>
+<table>
+<tr><th>Miembro</th><th>Descripción</th></tr>
+<tr><td><code>vendors</code></td><td><code>MutableList&lt;TradingPartner&gt;</code> — Socios acreedores/proveedores extraídos de facturas de entrada</td></tr>
+<tr><td><code>customers</code></td><td><code>MutableList&lt;TradingPartner&gt;</code> — Socios clientes extraídos de facturas de salida + datos maestros de clientes</td></tr>
+<tr><td><code>sequence</code></td><td>Contador autoincremental que comienza en 7,000,000 para generar números de socio únicos</td></tr>
+<tr><td><code>allPartners</code></td><td>Lista combinada, desduplicada y ordenada de todos los socios (proveedores + clientes)</td></tr>
+<tr><td><code>nextVal</code></td><td>Devuelve e incrementa el contador de secuencia</td></tr>
+<tr><td><code>getVendorByDatevKonto(konto)</code></td><td>Busca un proveedor comparando el número de cuenta (konto) con <code>importCode</code></td></tr>
+<tr><td><code>cleanUp()</code></td><td>Limpia el campo temporal <code>importCode</code> si coincide con el número de socio (ya no es necesario después de la migración)</td></tr>
+</table>
+
+<h3>Fases de extracción</h3>
+
+<h4>Fase 1: <code>extractTradingVendors(invoices)</code></h4>
+<p>Procesa <code>EingangsrechnungDO</code> (facturas de entrada/acreedores):</p>
+<ul>
+<li>Omite facturas sin un nombre de <code>kreditor</code> o asignación de <code>konto</code></li>
+<li><strong>Cuentas "Diversas":</strong> Si la descripción de la cuenta contiene "divers", cada nombre de proveedor único recibe un nuevo número de socio sintético (de <code>nextVal</code>) porque múltiples acreedores comparten la misma cuenta</li>
+<li><strong>Cuentas normales:</strong> Un socio por número de cuenta; el <code>importCode</code> se establece en el número de cuenta para referencia cruzada durante fases posteriores</li>
+<li>Todos los proveedores obtienen <code>datevKonto</code> configurado con el número de cuenta y se anteponen observaciones con información de la cuenta</li>
+</ul>
+
+<h4>Fase 2: <code>extractTradingCustomersInvoices(invoices, context)</code></h4>
+<p>Procesa <code>RechnungDO</code> (facturas de salida/clientes):</p>
+<ul>
+<li>Si la factura tiene un <code>kunde</code> (cliente) vinculado, delega en <code>handleKunde()</code></li>
+<li>Si no hay cliente pero existe una cuenta, intenta coincidir con proveedores existentes (actualizándolos a SOCIO) o crea nuevas entradas de cliente</li>
+<li>Omite cuentas "diversas" (no se necesita socio comercial)</li>
+</ul>
+
+<h4>Fase 3: <code>extractTradingCustomers(customers, context)</code></h4>
+<p>Procesa <code>KundeDO</code> (datos maestros de clientes) para cualquier cliente no capturado ya a través de facturas. Llama a <code>context.cleanUp()</code> al final.</p>
+
+<h3>Lógica central de desduplicación: <code>handleKunde()</code></h3>
+<p>El método más complejo de este servicio. Para cada <code>KundeDO</code>:</p>
+<ol>
+<li>Verifica si ya existe un cliente con el mismo número → omite la creación, opcionalmente completa <code>datevKonto</code></li>
+<li>Verifica si la cuenta coincide con un proveedor existente → actualiza el proveedor a SOCIO, reasigna el número de cliente como número principal</li>
+<li>De lo contrario, crea un nuevo cliente; los clientes activos son aquellos con estado <code>ACQUISITION</code> o <code>ACTIVE</code> (o nulo)</li>
+</ol>
+
+<h3>Análisis de direcciones: <code>checkBillAddress()</code></h3>
+<p>Analiza direcciones de facturación en texto libre de las cadenas <code>customerAddress</code> de las facturas utilizando una heurística ascendente:</p>
+<ol>
+<li>Divide la dirección en líneas no vacías</li>
+<li>Filtra las líneas iniciales que coinciden con palabras de relleno conocidas ("Herr", "Frau", "Firma", "An", "Portal", "Klinikdienst")</li>
+<li>Última línea: país o código postal+ciudad (intenta <code>extractZipCodeCity()</code>)</li>
+<li>Penúltima: línea de calle</li>
+<li>Cualquier línea restante se antepone a <code>billToAddressAdditional</code></li>
+</ol>
+
+<h3><code>extractZipCodeCity(line)</code></h3>
+<p>Utiliza un patrón regex <code>^[0-9 ]{5,10}</code> para extraer un código postal alemán de 5+ dígitos. Elimina los prefijos de país "D-" y "D ". Devuelve <code>Pair&lt;String, String&gt;</code> de (código postal, ciudad) o nulo si no hay coincidencia.</p>
+
+<h3>Métodos auxiliares</h3>
+<table>
+<tr><th>Método</th><th>Descripción</th></tr>
+<tr><td><code>appendRemarks(partner, remarks)</code></td><td>Añade texto a <code>partner.remarks</code> con separador de nueva línea</td></tr>
+<tr><td><code>prependRemarks(partner, konto)</code></td><td>Antepone información de DATEV-Konto (número + descripción) a las observaciones</td></tr>
+<tr><td><code>checkIfGiven(vararg str)</code></td><td>Devuelve <code>true</code> si alguna cadena no está en blanco</td></tr>
+<tr><td><code>lineEquals(line, vararg strs)</code></td><td>Comparación recortada sin distinción de mayúsculas/minúsculas</td></tr>
+<tr><td><code>createVendor(number, kreditor, konto)</code></td><td>Fábrica para TradingPartners de proveedores</td></tr>
+<tr><td><code>createCustomer(...)</code></td><td>Fábrica para TradingPartners de clientes</td></tr>
+</table>
+
+<h3>Exportación a Excel: <code>extractTradingPartnersAsExcel()</code></h3>
+<p>Crea un libro de Excel de dos hojas usando <code>ExcelWorkbook</code>:</p>
+<ul>
+<li><strong>Hoja 1:</strong> "D.velop TradingPartners" — la lista pasada como parámetro</li>
+<li><strong>Hoja 2:</strong> "ProjectForge TradingPartners" — lista recién extraída de la base de datos</li>
+</ul>
+<p>Las columnas incluyen número, datevKonto, importCode, tipo, empresa, nombre corto, observaciones, activo y todos los campos de dirección de facturación. Los valores de enumeración (<code>contactType</code>, <code>type</code>, <code>active</code>) se resuelven a su representación de cadena <code>value</code>.</p>
+
+<h3>Dependencias inyectadas</h3>
+<table>
+<tr><th>Dao</th><th>Propósito</th></tr>
+<tr><td><code>EingangsrechnungDao</code></td><td>Consultar facturas de entrada/acreedores</td></tr>
+<tr><td><code>KundeDao</code></td><td>Consultar datos maestros de clientes</td></tr>
+<tr><td><code>RechnungDao</code></td><td>Consultar facturas de salida/clientes</td></tr>
+</table>
+
+<h2>Historial de Git</h2>
+<div class="hist"><pre>868d6abb7 2025 -> 2026
+78a38ca8f ExcelUtils.createFont y utilizado por todas las rutinas de creación de fuentes en Excel.
+63081666f Encabezados de archivos fuente: 2024 -> 2025.
+1b50060c3 BaseDao: renombrado: get -> find, save -> insert, getList -> select, load -> select
+87aaf6a5a Trabajo de migración en curso... BaseDao refactorizado (aún no terminado) métodos internal* renombrados.
+e33c8b9c2 Trabajo de migración en curso...
+b6092df09 Derechos de autor 2023 -> 2024
+b710c3267 WIP D.velop
+3ef41086d WIP D.velop
+be750e77e WIP D.velop
+5145a8199 WIP D.velop
+9ebb99c88 WIP D.velop
+cb2915283 WIP D.velop
+b46787d5f WIP D-velop
+2fe7d6f33 WIP D-velop
+975af1cd6 WIP D-velop
+1dee5f23f WIP D-velop
+3ec5c7354 WIP D-velop
+cb6d633f9 WIP D-velop
+eb005b878 WIP D-velop
+</pre></div>
+</body>
+</html>

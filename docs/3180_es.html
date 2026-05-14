@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="es"><head><meta charset="utf-8"><title>#3180: AbstractUnsecureBasePage.java [ES]</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:2em;color:#444}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.lang{font-size:.85em;color:#888;float:right}.lang a{color:#888;text-decoration:none;padding:0 .3em}.lang a.active{color:#0366d6;font-weight:600;text-decoration:underline}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}</style></head>
+<body><div class="lang"><a href="3180.html">EN</a> · <a href="3180_de.html">DE</a> · <a href="3180_ru.html">RU</a> · <a href="3180_fr.html">FR</a> · <a href="3180_es.html" class="active">ES</a></div>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Índice</a> · <a href="file-index.html">← Índice de archivos</a> · <a href="1044.html">← Anterior</a> · <a href="459.html">Siguiente →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-wicket/src/main/java/org/projectforge/web/wicket/AbstractUnsecureBasePage.java" target="_blank" title="Ver fuente en GitHub">📄 fuente</a></div>
+<h1>#3180: <code>AbstractUnsecureBasePage.java</code></h1>
+<div class="meta"><code>projectforge-wicket/src/main/java/org/projectforge/web/wicket/AbstractUnsecureBasePage.java</code> Tipo: Java · Rol: Página · Fuente: projectforge-wicket/src/main/java/org/projectforge/web/wicket/AbstractUnsecureBasePage.java <span style="color:#888">291 líneas · 165 código · 88 comentarios · 38 en blanco</span></div>
+<div class="c">Implementación de página Wicket para AbstractUnsecureBase. Compone paneles, formularios y navegación.</div>
+<h2>Estructura del código</h2>
+<p>Paquete: <code>org.projectforge.web.wicket</code></p>
+<p>Clases: <code>AbstractUnsecureBasePage</code></p>
+<p>Extiende: <code>WebPage</code></p>
+<p>Métodos (23): <code>getObject</code>, <code>onComponentTag</code>, <code>createInvisibleDummyComponent</code>, <code>getJstemplate</code>, <code>renderHead</code>, <code>onBeforeRender</code>, <code>getAppVersion</code>, <code>getAppReleaseDate</code>, <code>getAppReleaseTimestamp</code>, <code>getUrl</code>, <code>getImageUrl</code>, <code>getUrl</code>, <code>redirectToUrl</code>, <code>getWindowTitle</code>, <code>onBodyTag</code>, <code>getWicketApplication</code>, <code>escapeHtml</code>, <code>getMySession</code>, <code>getUser</code>, <code>getUserId</code>, <code>getLocalizedMessage</code>, <code>initializeContextMenu</code>, <code>getUserGroupCache</code></p>
+<p>Campos (3): <code>serialVersionUID</code>, <code>jsTemplate</code>, <code>alreadySubmitted</code></p>
+<p>Importaciones: 31 paquetes</p>
+<h2>Código fuente (resumido)</h2>
+<pre>
+package org.projectforge.web.wicket;
+
+import org.apache.commons.text.StringEscapeUtils;
+import org.apache.wicket.Session;
+import org.apache.wicket.behavior.AttributeAppender;
+import org.apache.wicket.markup.ComponentTag;
+import org.apache.wicket.markup.head.IHeaderResponse;
+import org.apache.wicket.markup.head.OnDomReadyHeaderItem;
+import org.apache.wicket.markup.head.StringHeaderItem;
+import org.apache.wicket.markup.html.TransparentWebMarkupContainer;
+import org.apache.wicket.markup.html.WebMarkupContainer;
+import org.apache.wicket.markup.html.WebPage;
+import org.apache.wicket.markup.html.basic.Label;
+import org.apache.wicket.markup.html.image.ContextImage;
+import org.apache.wicket.markup.html.link.AbstractLink;
+import org.apache.wicket.markup.html.link.ExternalLink;
+import org.apache.wicket.model.Model;
+import org.apache.wicket.request.http.handler.RedirectRequestHandler;
+import org.apache.wicket.request.mapper.parameter.PageParameters;
+import org.apache.wicket.util.template.PackageTextTemplate;
+import org.projectforge.Constants;
+import org.projectforge.ProjectForgeVersion;
+import org.projectforge.business.configuration.DomainService;
+import org.projectforge.business.user.UserGroupCache;
+import org.projectforge.framework.persistence.user.api.ThreadLocalUserContext;
+import org.projectforge.framework.persistence.user.entities.PFUserDO;
+import org.projectforge.rest.pub.LogoServiceRest;
+import org.projectforge.web.WebConfiguration;
+import org.projectforge.web.WicketSupport;
+import org.projectforge.web.session.MySession;
+
+import java.text.MessageFormat;
+import java.util.HashMap;
+import java.util.Map;
+
+/**
+ * Derive de esta página solo si no se requiere inicio de sesión.
+ *
+ * @author Kai Reinhard (k.reinhard@micromata.de)
+ */
+public abstract class AbstractUnsecureBasePage extends WebPage {
+  private static final long serialVersionUID = 7396310612549535899L;
+
+  private static PackageTextTemplate jsTemplate;
+
+  protected WebMarkupContainer body, html;
+
+  protected boolean alreadySubmitted = false;
+
+  /**
+   * Constructor que se invoca cuando se accede a la página sin sesión.
+   *
+   * @param parameters Parámetros de la página
+   */
+  @SuppressWarnings(&quot;serial&quot;)
+  public AbstractUnsecureBasePage(final PageParameters parameters) {
+    super(parameters);
+
+    html = new TransparentWebMarkupContainer(&quot;html&quot;);
+    add(html);
+    add(new Label(&quot;windowTitle&quot;, new Model&lt;String&gt;() {
+      @Override
+      public String getObject() {
+        return getWindowTitle();
+      }
+    }));
+
+    body = new WebMarkupContainer(&quot;body&quot;) {
+      @Override
+      protected void onComponentTag(final ComponentTag tag) {
+        onBodyTag(tag);
+      }
+    };
+
+    if (WicketApplication.getTestsystemMode()) {
+      body.add(new AttributeAppender(&quot;style&quot;, &quot;background:&quot; + WicketApplication.getTestsystemColor() + &quot; !important;&quot;));
+    }
+
+    add(body);
+    final String logoFile = LogoServiceRest.getLogoUrl();
+    if (logoFile != null) {
+      body.add(new ContextImage(&quot;logoLeftImage&quot;, &quot;/rsPublic/&quot; + logoFile));
+    } else {
+      body.add(new Label(&quot;logoLeftImage&quot;, &quot;[invisible]&quot;).setVisible(false));
+    }
+
+    final WebMarkupContainer developmentSystem = new WebMarkupContainer(&quot;developmentSystem&quot;);
+    developmentSystem.setOutputMarkupId(true);
+    developmentSystem.setMarkupId(&quot;pf_develHint&quot;);
+    body.add(developmentSystem);
+    if (WebConfiguration.isDevelopmentMode() == false &amp;&amp; WicketApplication.getTestsystemMode() == false) {
+      developmentSystem.setVisible(false);
+    }
+
+    final PFUserDO user = ThreadLocalUserContext.getLoggedInUser();
+    AbstractLink link;
+    link = new ExternalLink(&quot;footerNewsLink&quot;, Constants.WEB_DOCS_NEWS_LINK);
+    body.add(link);
+    link.add(new Label(&quot;version&quot;, &quot;Versión &quot; + ProjectForgeVersion.VERSION_NUMBER + &quot;, &quot; + ProjectForgeVersion.BUILD_DATE)
+            .setRenderBodyOnly(true));
+    link.setOutputMarkupId(true);
+    link.setMarkupId(&quot;pf_footerNewsLink&quot;);
+  }
+
+  /**
+   * Método de conveniencia para crear un componente que está en el archivo de marcado pero no debe ser visible.
+   *
+   * @param wicketId
+   * @return
+   */
+  public static Label createInvisibleDummyComponent(final String wicketId) {
+    final Label dummyLabel = new Label(wicketId);
+    dummyLabel.setVisible(false);
+    return dummyLabel;
+  }
+
+  /**
+   * @return la plantilla js
+   */
+// ... (truncado, total 269 líneas)</pre>
+
+<h2>Historial de Git</h2><div class="hist"><pre>868d6abb7 2025 -> 2026
+63081666f Encabezados de archivos fuente: 2024 -> 2025.
+67805f2fc ThreadLocalUserContext.user -> ThreadLocalUserContext.loggedInUser (renombrado para evitar malentendidos en el código).
+4c04cfd65 CAMBIO-MAYOR! Migración de id's enteros a id's Long (incluyendo claves foráneas, etc.)
+4efcbd0fb Migración en progreso...</pre></div>
+</body></html>

@@ -2,42 +2,30 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>#926: EmployeeScriptingService.kt</title>
+<title>#926: EmployeeSalaryService.kt</title>
 <style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:2em;color:#444}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}</style>
 </head>
 <body>
-<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="925.html">← Prev</a> · <a href="927.html">Next →</a></div>
-<h1>#926: <code>EmployeeScriptingService.kt</code></h1>
-<div class="meta">Type: Scripting Proxy Service · Purpose: Read-only wrapper around EmployeeService for Groovy/Kotlin script access · Path: <code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/EmployeeScriptingService.kt</code></div>
-<div class="c">Scripting proxy that wraps <code>EmployeeService</code> providing <strong>read-only</strong> access to employee business logic for Groovy/Kotlin scripts. Available in scripts as: <code>employeeService</code>. Exposes time-dependent attribute lookups, active-status checks, employee search, and monthly report generation. This is the newer, preferred scripting interface compared to <code>EmployeeScriptingDao</code>.</div>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="925.html">← Prev</a> · <a href="927.html">Next →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/kotlin/org/projectforge/business/fibu/EmployeeSalaryService.kt" target="_blank" title="View source on GitHub">📄 source</a></div>
+<h1>#926: <code>EmployeeSalaryService.kt</code></h1>
+<div class="meta"><code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/EmployeeSalaryService.kt</code> Type: Spring Service · Purpose: Service layer for querying employee salary records · Path: <code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/EmployeeSalaryService.kt</code> <span style="color:#888">45 lines · 19 code · 22 comments · 4 blank</span></div>
+<div class="c">Thin service layer wrapping <code>PfPersistenceService</code>. Provides a single query method to retrieve all salary records for a given year and month. Designed for reporting scenarios (monthly salary overview). Uses read-only transactions.</div>
 
 <h2>Architecture &amp; Design</h2>
 
-<h3>Delegation Pattern</h3>
-<p>Every method delegates directly to the underlying <code>EmployeeService</code> instance (constructor-injected as <code>__employeeService</code>). The proxy follows the same pattern as <code>ScriptingDao</code> but wraps a service instead of a DAO — providing business logic rather than just entity access.</p>
+<h3>Single Method</h3>
+<p><code>selectByMonth(year: Int, month: Month): List&lt;EmployeeSalaryDO&gt;</code> — Executes the named query <code>EmployeeSalaryDO.SELECT_SALARIES_BY_MONTH</code> within a read-only transaction via <code>persistenceService.runReadOnly</code>. The <code>Month</code> enum parameter is converted to its integer value (1-12).</p>
 
-<h3>Exposed Methods</h3>
-<table>
-<tr><th>Method</th><th>Underlying Service Call</th><th>Purpose</th></tr>
-<tr><td><code>getWeeklyWorkingHours(employee)</code></td><td><code>EmployeeService.getWeeklyWorkingHours(employee)</code></td><td>Weekly hours valid today</td></tr>
-<tr><td><code>getWeeklyWorkingHours(employee, validAtDate, checkAccess)</code></td><td><code>EmployeeService.getWeeklyWorkingHours(employee, validAtDate, checkAccess)</code></td><td>Weekly hours at historical date — CRITICAL for scripts needing historical data</td></tr>
-<tr><td><code>getAnnualLeaveDays(employee)</code></td><td><code>EmployeeService.getAnnualLeaveDays(employee)</code></td><td>Annual leave valid today</td></tr>
-<tr><td><code>getAnnualLeaveDays(employee, validAtDate, checkAccess)</code></td><td><code>EmployeeService.getAnnualLeaveDays(employee, validAtDate, checkAccess)</code></td><td>Annual leave at historical date</td></tr>
-<tr><td><code>isEmployeeActive(employee, showRecentlyLeavers)</code></td><td><code>EmployeeService.isEmployeeActive()</code></td><td>Active-status check</td></tr>
-<tr><td><code>getEmployeeStatus(employee, checkAccess)</code></td><td><code>EmployeeService.getEmployeeStatus()</code></td><td>Current <code>EmployeeStatus</code> enum</td></tr>
-<tr><td><code>selectAllActive(checkAccess, showRecentLeft)</code></td><td><code>EmployeeService.selectAllActive()</code></td><td>All active employees</td></tr>
-<tr><td><code>findByUserId(userId)</code></td><td><code>EmployeeService.findByUserId()</code></td><td>Lookup by user ID</td></tr>
-<tr><td><code>findByStaffnumber(staffnumber)</code></td><td><code>EmployeeService.findByStaffnumber()</code></td><td>Lookup by staff number (Int and String overloads)</td></tr>
-<tr><td><code>selectAllValidSinceAttrs(employee, type, deleted, checkAccess)</code></td><td><code>EmployeeService.selectAllValidSinceAttrs()</code></td><td>All time-dependent attributes with optional filtering</td></tr>
-<tr><td><code>getReportOfMonth(year, month, user)</code></td><td><code>EmployeeService.getReportOfMonth()</code></td><td>Monthly employee report with aggregated timesheet data</td></tr>
-</table>
-
-<h3>Design Rationale</h3>
-<p>Scripts need access to business logic like "get weekly hours for employee at date X" or "is this employee active?" — not just CRUD. This proxy exposes only read-only methods. Scripts should never mutate data through this interface; mutations go through dedicated scripting DAOs.</p>
+<h3>Design Note</h3>
+<p>This is a separate service (not part of <code>EmployeeSalaryDao</code>) for clean separation: the DAO handles CRUD, while this service handles bulk queries for reporting. It directly uses <code>PfPersistenceService</code> rather than the DAO layer, accessing named queries defined on <code>EmployeeSalaryDO</code>.</p>
 
 <h2>Git History</h2>
-<div class="hist"><pre>8d821622d EmployeeScriptingService.getReportOfMonth
-b589ea0c1 EmployeeScriptingService.kt: selectAllValidSinceAttrs added.
-10d4e0aad Add EmployeeScriptingService for script access to employee data</pre></div>
+<div class="hist"><pre>868d6abb7 2025 -> 2026
+63081666f Source file headers: 2024-> 2025.
+1012e347a Migration stuff in progress... (all tests of all packages: OK).
+190c0aea1 Migration stuff in progress... (all tests of all packages: OK).
+ba2479571 Migration stuff in progress...
+b3293f0cc PersistenceService/Context: stats handling improved.
+b47c21af6 Refactored caching and calculations with invoices (not yet finished)</pre></div>
 </body>
 </html>

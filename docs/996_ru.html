@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head><meta charset="UTF-8"><title>#996: Kost2DO.kt + [RU]</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:2em;color:#444}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}</style></head>
+<body>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Индекс</a> · <a href="file-index.html">← Индекс файлов</a> · <a href="995.html">← Назад</a> · <a href="997.html">Вперёд →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/kotlin/org/projectforge/business/fibu/kost/Kost2DO.kt" target="_blank" title="Просмотреть исходник на GitHub">📄 исходник</a></div>
+<h1>#996: <code>Kost2DO.kt</code></h1>
+<div class="meta"><code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/kost/Kost2DO.kt</code> Тип: JPA-сущность (DO) · Назначение: Сущность центра затрат Kost2 с 8-значным номером + тип затрат · Источник: projectforge-business/src/main/kotlin/org/projectforge/business/fibu/kost/Kost2DO.kt <span style="color:#888">252 строки · 149 кода · 78 комментариев · 25 пустых</span></div>
+<div class="c">Представляет центр затрат Kost2 — более детальную сущность затрат (по сравнению с Kost1). Kost2 идентифицируется комбинацией 3 числовых компонентов (Nummernkreis, Bereich, Teilbereich = 6 цифр) и Kost2Art (тип затрат, 2 цифры). Каждый Kost2 принадлежит проекту и имеет определённую классификацию типа затрат.</div>
+<h2>Дизайн сущности</h2>
+<table>
+<tr><th>Поле</th><th>Тип</th><th>Колонка БД</th><th>Описание</th></tr>
+<tr><td><code>kostentraegerStatus</code></td><td><code>KostentraegerStatus?</code></td><td>VARCHAR(30)</td><td>ACTIVE, NONACTIVE или ENDED</td></tr>
+<tr><td><code>nummernkreis</code></td><td><code>Int</code></td><td>INT</td><td>Первая цифра (1-9)</td></tr>
+<tr><td><code>bereich</code></td><td><code>Int</code></td><td>INT</td><td>Цифры 2-4; для 5.xxx это номер клиента</td></tr>
+<tr><td><code>teilbereich</code></td><td><code>Int</code></td><td>INT</td><td>Цифры 5-6</td></tr>
+<tr><td><code>kost2Art</code></td><td><code>Kost2ArtDO?</code></td><td>FK kost2_art_id</td><td>ManyToOne к типу затрат (2-значная классификация)</td></tr>
+<tr><td><code>workFraction</code></td><td><code>BigDecimal?</code></td><td>PRECISION(10,5)</td><td>Доля распределения работ</td></tr>
+<tr><td><code>description</code></td><td><code>String?</code></td><td>VARCHAR(4000)</td><td>Описание</td></tr>
+<tr><td><code>comment</code></td><td><code>String?</code></td><td>VARCHAR(4000)</td><td>Необязательный комментарий</td></tr>
+<tr><td><code>projekt</code></td><td><code>ProjektDO?</code></td><td>FK projekt_id</td><td>Связанный проект (ленивая загрузка)</td></tr>
+</table>
+<h3>Вычисляемые (транзиентные) свойства</h3>
+<table>
+<tr><th>Свойство</th><th>Тип</th><th>Описание</th></tr>
+<tr><td><code>effectiveKostentraegerStatus</code></td><td><code>KostentraegerStatus?</code></td><td>Наследует ENDED от проекта, если проект имеет статус ENDED или удалён</td></tr>
+<tr><td><code>nummer</code></td><td><code>Int</code></td><td>Вычисляемое 8-значное целое (через KostFormatter.getKostAsInt)</td></tr>
+<tr><td><code>formattedNumber</code></td><td><code>String</code></td><td>Форматируется как #.###.##.## (индексировано для поиска)</td></tr>
+<tr><td><code>rawNumberString</code></td><td><code>String</code></td><td>8-значная компактная строка для индексации поиска</td></tr>
+<tr><td><code>toolTip</code></td><td><code>String</code></td><td>Форматированная подсказка через OldKostFormatter</td></tr>
+</table>
+<h3>Именованные запросы</h3>
+<table>
+<tr><th>Имя</th><th>Назначение</th></tr>
+<tr><td><code>FIND_BY_NK_BEREICH_TEILBEREICH_KOST2ART</code></td><td>Поиск по всем 4 компонентам</td></tr>
+<tr><td><code>FIND_OTHER_BY_NK_BEREICH_TEILBEREICH_KOST2ART</code></td><td>Поиск дубликата (исключая себя) для проверки уникальности</td></tr>
+<tr><td><code>FIND_ACTIVES_BY_NK_BEREICH_TEILBEREICH</code></td><td>Поиск активных записей по 6-значному префиксу</td></tr>
+</table>
+<h2>Виртуальное наследование статуса</h2>
+<p>Свойство <code>effectiveKostentraegerStatus</code> реализует ключевой паттерн проектирования (введён в коммите <code>8239a53ee</code>): если связанный <code>Projekt</code> имеет статус <code>ENDED</code> или удалён, Kost2 считается ENDED независимо от собственного статуса. Это предотвращает несогласованность данных при закрытии проектов.</p>
+<h2>Детали персистентности</h2>
+<ul>
+<li>Отображается на <code>T_FIBU_KOST2</code> с уникальным ограничением по всем 4 числовым компонентам</li>
+<li>Индексы на <code>kost2_art_id</code> и <code>projekt_id</code> для производительности соединений</li>
+<li>Расширяет <code>DefaultBaseDO</code>, реализует <code>Comparable&lt;Kost2DO&gt;</code> и <code>DisplayNameCapable</code></li>
+<li>Реализует фабрику <code>@JsonCreator</code> для десериализации из Long ID</li>
+<li>Equals/hashCode использует nummernkreis, bereich, teilbereich и kost2Art</li>
+<li>Все свойства Kotlin объявлены как <code>open</code> для поддержки прокси-объектов ленивой загрузки Hibernate</li>
+</ul>
+<h2>Исходный код (сокращён)</h2>
+<pre>@Entity @Indexed @Table(name = "T_FIBU_KOST2", ...)
+open class Kost2DO : DefaultBaseDO(), Comparable&lt;Kost2DO&gt;, DisplayNameCapable {
+    open var kostentraegerStatus: KostentraegerStatus? = null
+
+    val effectiveKostentraegerStatus: KostentraegerStatus?
+        get() {
+            val projektRef = PfCaches.instance.getProjektIfNotInitialized(projekt) ?: projekt
+            if (projektRef != null &&
+                (projektRef.status == ProjektStatus.ENDED || projektRef.deleted))
+                return KostentraegerStatus.ENDED
+            return kostentraegerStatus
+        }
+
+    open var nummernkreis: Int = 0
+    open var bereich: Int = 0
+    open var teilbereich: Int = 0
+    open var kost2Art: Kost2ArtDO? = null
+    open var projekt: ProjektDO? = null
+    // ... вычисляемые свойства formattedNumber, rawNumberString, toolTip
+}</pre>
+<h2>История Git</h2>
+<div class="hist"><pre>868d6abb7 2025 -> 2026
+5c652782f AbstractTestBase инициализирует PfCaches.
+dca4456f7 Исправлено для тестовых случаев.
+8239a53ee Kost2: Виртуальное наследование статуса от ProjektDO
+38e843800 CostSearch: поиск по простой числовой строке.
+63081666f Заголовки исходных файлов: 2024 -> 2025.
+0237d5eba Json: IdOnlySerializer и IdsOnlySerializer.
+98555d5d8 Исправление ошибки: поиск по номерам.
+b3782c8a8 Разное по миграции...
+c8f8ed935 Все сущности FetchType.LAZY.
+4c04cfd65 КРУПНОЕ ИЗМЕНЕНИЕ! Integer id изменены на Long id.
+a1cf6f591 Очистка кода
+b78b870bd ShortDisplayNameCapable -> DisplayNameCapable
+8675a1dbe Kotlin JPA сущности объявлены open (исправление ленивой загрузки)
+252b28955 JsonCreator для десериализации из Int
+d849a79cc JsonCreator для десериализации из Number
+0de418e75 DTO Tenant добавлен в BaseDTO.
+6d1f7a7cd Kost2DO.java -> Kost2DO.kt</pre></div>
+</body>
+</html>

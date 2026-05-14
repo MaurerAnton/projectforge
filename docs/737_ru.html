@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>#737 [RU]</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333}h2{margin-top:1.5em}a{color:#0366d6}.meta{font-size:.9em;margin:1em 0}.nav{font-size:.9em;color:#888;margin-bottom:1em}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}code{background:#f0f0f0;padding:0 .2em}pre{background:#f5f5f5;padding:.5em;margin:.5em 0;border-radius:3px;font-size:.85em;overflow-x:auto}</style>
+</head>
+<body>
+
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Индекс</a> · <a href="file-index.html">← Индекс файлов</a> · <a href="736.html">← Назад</a> · <a href="738.html">Вперёд →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/java/org/projectforge/framework/utils/KeyValuePairParser.java" target="_blank" title="Посмотреть исходник на GitHub">📄 исходник</a></div>
+
+<h1>#737: <code>KeyValuePairParser.java</code></h1>
+<div class="meta"><code>projectforge-business/src/main/java/org/projectforge/framework/utils/KeyValuePairParser.java</code> <strong>Строк:</strong> 301 · <strong>Автор:</strong> Kai Reinhard · <strong>Тип:</strong> Ручной лексер/парсер на Java — без зависимостей <span style="color:#888">301 строка · 229 кода · 34 комментария · 38 пустых</span></div>
+
+<div class="c"><h2>Назначение</h2>
+<p><strong>Ручной потоковый парсер</strong>, который читает пары <code>ключ=значение</code> из <code>java.io.Reader</code>, по одному символу за раз. Никаких регулярных выражений, никаких сторонних библиотек для парсинга — только чистый посимвольный парсинг с сохранением состояния и 5-элементным буфером возврата. Это тот код, который существовал до того, как библиотеки вроде <a href="https://commons.apache.org/proper/commons-csv/">Apache Commons CSV</a> стали стандартом — или написан, потому что автор хотел полного контроля над сообщениями об ошибках и граничными случаями без накладных расходов на зависимости.</p>
+<p>Парсер поддерживает: <strong>значения в кавычках</strong> (с <code>"</code>), <strong>экранированные кавычки</strong> внутри строк в кавычках (<code>""</code> → литерал <code>"</code>), <strong>настраиваемый символ-разделитель</strong> (по умолчанию из <code>KeyValuePairWriter.DEFAULT_SEPARATOR_CHAR</code>), <strong>отслеживание строки/столбца</strong> для сообщений об ошибках и <strong>пропуск пробелов</strong>. Формат ввода: <code>ключ1=значение1,ключ2="значение в кавычках, с запятой",ключ3=123</code>.</p></div>
+
+<div class="c"><h2>Архитектура: миниатюрный лексер</h2>
+<p>301 строка. Парсер построен как классический <strong>двухфазный лексер</strong>:</p>
+<ol><li><strong>Читатель символов (<code>read()</code> / <code>nextToken()</code> / <code>unread()</code>):</strong> читает один символ из <code>Reader</code>, отслеживает номера строк/столбцов, обрабатывает <code>\r\n</code> (Windows) и <code>\n</code> (Unix) как конец строки и классифицирует токен как <code>EOF</code>, <code>EOL</code> или <code>CHAR</code>. Метод <code>nextToken()</code> является токенизатором</li>
+<li><strong>Парсер (<code>parseKey()</code> / <code>parseValue()</code>):</strong> потребляет токены для построения строк ключа и значения. <code>parse()</code> — точка входа, которая вызывает parseKey+parseValue в цикле до достижения EOF/EOL</li></ol>
+<p>Это та же архитектура, что и у <strong>фронтенда компилятора</strong> — токенизатор + парсер — только для данных вида ключ=значение вместо языков программирования.</p></div>
+
+<div class="c"><h2>Буфер возврата</h2>
+<p>5-элементный <code>int[] pushbackBuffer</code> с индексом <code>pushbackIndex</code>. Когда парсер читает на один символ слишком много (например, в <code>skipWhitespaces()</code>), он <strong>возвращает символ обратно</strong> через <code>unread(int b)</code>. Буфер обновляет счётчики строк/столбцов при возврате символов новой строки — критически важно для точных сообщений об ошибках. 5 элементов достаточно для любого опережающего просмотра, необходимого этому парсеру (максимальный опережающий просмотр — 1-2 символа). Это стандартная реализация <strong>опережающего просмотра на 1 символ</strong> — простейшая форма возврата.</p></div>
+
+<div class="c"><h2>Обработка значений в кавычках — самая сложная логика</h2>
+<p><code>parseValue()</code> (строки 141-189) реализует полноценный <strong>парсер полей в кавычках в стиле CSV</strong>:</p>
+<ol><li>Пропускает пробелы, читает первый символ</li>
+<li>Если первый символ — <code>"</code>, переходит в <strong>режим кавычек</strong> (<code>quoted=true</code>)</li>
+<li>В режиме кавычек:
+<ul><li><code>""</code> → экранированная кавычка (добавляет один <code>"</code> к значению)</li>
+<li><code>"</code> после которой идёт разделитель или пробел+разделитель → конец значения</li>
+<li><code>"</code> после которой идёт что-то ещё → ошибка (<code>UNEXPECTED_CHARACTER_AFTER_QUOTATION_MARK</code>)</li>
+<li>Любой другой символ → добавляется в буфер значения</li></ul></li>
+<li>В режиме без кавычек:
+<ul><li>Символ-разделитель → конец значения</li>
+<li><code>"</code> → ошибка (<code>UNEXPECTED_QUOTATIONMARK</code> — кавычки разрешены только в режиме кавычек)</li>
+<li>Любой другой символ → добавляется</li></ul></li>
+<li>Если достигнут EOF/EOL, когда значение в кавычках → ошибка (<code>QUOTATIONMARK_MISSED_AT_END_OF_CELL</code>)</li></ol>
+<p>Это соответствует <a href="https://datatracker.ietf.org/doc/html/rfc4180">спецификации CSV RFC 4180</a> для полей в кавычках, но в упрощённом виде — без многострочных полей в кавычках, без определения заголовков, без определения типов.</p></div>
+
+<div class="c"><h2>Обработка ошибок — точная информация о местоположении</h2>
+<p>Каждое сообщение об ошибке включает <strong>номер строки и номер столбца</strong> — например, <code>"Неожиданный знак кавычки... Ошибка в строке: 3 (14)"</code>. Это критически важно для отладки конфигурационных файлов. Статический метод <code>createMessage()</code> форматирует ошибки по шаблону: <code>msg + " Ошибка в строке: " + line + " (" + col + ")" + (s != null ? ": " + s : "")</code>. Счётчики <code>lineno</code> и <code>colno</code> поддерживаются методами <code>read()</code> (увеличивает строку при <code>\n</code>) и <code>nextToken()</code> (увеличивает столбец для каждого символа).</p></div>
+
+<div class="c"><h2>Контекст использования</h2>
+<p>Этот парсер используется для чтения <strong>конфигурационных файлов</strong> и <strong>входных параметров скриптов</strong> — мест, где пользователи или администраторы записывают данные в формате ключ=значение в простых текстовых файлах. Пример файла, разбираемого этим парсером:</p>
+<pre>name=ProjectForge
+version="8.0.0"
+description="ERP-система с табелем учёта времени, календарём и бухгалтерией"
+maxUsers=100</pre>
+<p>Парсер читает построчно (<code>EOL</code> останавливает каждый вызов <code>parse()</code>), создавая <code>Map&lt;String, String&gt;</code>. Сопутствующий класс <a href="738.html">KeyValuePairWriter</a> делает обратное — записывает карты в текстовый формат ключ=значение.</p></div>
+
+</body>
+</html>

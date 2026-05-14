@@ -1,50 +1,19 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<title>File #45: BankAccountBalanceDao.kt</title>
-<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em}a{color:#0366d6;text-decoration:none}.meta{background:#f0f0f0;border-radius:6px;padding:1em;margin:1em 0;font-size:.9em}.code-block{background:#f8f8f8;border:1px solid #ddd;border-radius:4px;padding:.5em;margin:.5em 0;overflow-x:auto}.code-block pre{margin:0;font-family:'Consolas',monospace;font-size:.85em;line-height:1.5}.commentary{margin:1em 0;line-height:1.7;background:#fff;padding:.5em 1em;border-radius:6px;border-left:4px solid #ddd}code{background:#e8e8e8;border-radius:3px;padding:.1em .3em;font-size:.9em}.nav{font-size:.9em;color:#888;margin-bottom:1em}table{border-collapse:collapse;width:100%;margin:1em 0;font-size:.9em}th,td{border:1px solid #ddd;padding:.5em;text-align:left}th{background:#f0f0f0}.warn{background:#fff3cd;border:1px solid #ffc107;border-radius:4px;padding:.5em 1em;margin:.5em 0}</style>
-</head>
-<body>
-<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Documentation index</a> · <a href="file-index.html">← File index</a> · <a href="44.html">← Prev</a> · <a href="46.html">Next →</a></div>
-<h1>File #45: <code>BankAccountBalanceDao.kt</code></h1>
-<div class="meta"><p><strong>Path:</strong> <code>./plugins/org.projectforge.plugins.banking/.../BankAccountBalanceDao.kt</code> · <strong>Type:</strong> Kotlin source (DAO) · <strong>Lines:</strong> 84 · <strong>Source:</strong> <a href="https://github.com/micromata/projectforge/blob/9ed5fbe0f/plugins/org.projectforge.plugins.banking/src/main/kotlin/org/projectforge/plugins/banking/BankAccountBalanceDao.kt">GitHub</a></p></div>
-
-<h2>What it does</h2>
-<div class="commentary"><p>The <strong>Data Access Object</strong> for bank account balances — the first actual Kotlin source file in the documentation. Follows the standard ProjectForge DAO pattern: GPLv3 header (lines 1-22), extends <code>BaseDao&lt;T&gt;</code> (line 38), implements <code>hasAccess()</code> for authorization (lines 42-69), provides a named query method <code>getByTimePeriod()</code> (lines 75-83). Annotated <code>@Service</code> for Spring dependency injection.</p></div>
-
-<h2>Architecture</h2>
-<div class="code-block"><pre>38 class BankAccountBalanceDao : <mark style="background:#e8e8e8">BaseDao&lt;BankAccountBalanceDO&gt;</mark>(BankAccountBalanceDO::class.java)</pre></div>
-<div class="commentary"><p><code>BaseDao</code> is ProjectForge's core persistence framework — provides CRUD operations, access checking infrastructure, and named query execution. Every entity in the system has a matching DAO that extends this base class, overriding <code>hasAccess()</code> and <code>newInstance()</code>.</p></div>
-
-<h2>Authorization chain (lines 42-69)</h2>
-<div class="code-block"><pre>42 override fun hasAccess(user, obj, oldObj, operationType, throwException): Boolean {
-49   val bankAccount = obj?.bankAccount
-50   if (obj != null && bankAccount == null)
-51     return BaseDOPersistenceService.returnFalseOrThrowException(...)  <span style="color:#888">← #1: missing bank account</span>
-58   if (!accessChecker.isLoggedInUserMemberOfGroup(ProjectForgeGroup.FINANCE_GROUP))
-60     return BaseDOPersistenceService.returnFalseOrThrowException(...)  <span style="color:#888">← #2: not in finance group</span>
-68   return bankAccountDao.hasAccess(user, bankAccount, oldBankAccount, ...) <span style="color:#888">← #3: delegate to parent</span>
-69 }</pre></div>
-<div class="commentary"><p>Three-step access check:</p>
-<table><tr><th>Step</th><th>Check</th><th>Failure message</th></tr>
-<tr><td>1</td><td>Object has a bank account reference</td><td>"Bank account not given."</td></tr>
-<tr><td>2</td><td>User is member of <code>FINANCE_GROUP</code></td><td>"User not member of financial staff."</td></tr>
-<tr><td>3</td><td>Delegates to <code>bankAccountDao.hasAccess()</code> — checks access to the parent bank account object</td><td>As determined by BankAccountDao</td></tr></table></div>
-
-<h2>Named query (lines 75-83)</h2>
-<div class="code-block"><pre>75 fun getByTimePeriod(accountId: Int): List&lt;BankAccountBalanceDO&gt; {
-76   val account = bankAccountDao.find(accountId)<span style="color:#ff6b6b">!!</span>
-78   return persistenceService.executeNamedQuery(
-79     BankAccountBalanceDO.<span style="background:#d4edda">FIND_BY_BANK_ACCOUNT</span>, ...)</pre></div>
-<div class="commentary"><div class="warn"><strong>Line 76: <code>!!</code> operator</strong> — will throw <code>NullPointerException</code> if <code>bankAccountDao.find(accountId)</code> returns null (bank account not found). The comment says "For access checking" — the <code>find()</code> call implicitly validates the account exists before fetching balances.</div></div>
-
-<h2>Key takeaways</h2>
-<div class="commentary"><ul><li><strong>84 lines, standard DAO pattern:</strong> Extends BaseDao, overrides hasAccess and newInstance, adds business-specific query methods.</li>
-<li><strong>Three-tier access check:</strong> Object integrity → group membership → parent object permission — a nested authorization pattern common across all DAOs.</li>
-<li><strong>FINANCE_GROUP:</strong> Only finance team members can access bank account balances — role-based authorization hardcoded in the DAO, not in Spring Security annotations.</li>
-<li><strong>KotlinLogging:</strong> Uses <code>mu.KotlinLogging</code> from <a href="33.html">#33</a> (kotlin-logging 3.0.5) — the standard logging framework across all Kotlin source files.</li></ul></div>
-
-<div class="nav" style="margin-top:2em;padding-top:1em;border-top:1px solid #ddd"><a href="44.html">← #44: build.gradle.kts</a> · <a href="46.html">#46: BankAccountBalanceDO.kt →</a></div>
-</body>
-</html>
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>#45: build.gradle.kts</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:2em;color:#444}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.lang{font-size:.85em;color:#888;float:right}.lang a{color:#888;text-decoration:none;padding:0 .3em}.lang a.active{color:#0366d6;font-weight:600;text-decoration:underline}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}.warn{background:#fff3cd;border-left:3px solid #ffc107;padding:.5em 1em;margin:1em 0}.tip{background:#d4edda;border-left:3px solid #28a745;padding:.5em 1em;margin:1em 0}</style></head>
+<body><div class="lang"><a href="45.html" class="active">EN</a> · <a href="45_de.html">DE</a> · <a href="45_ru.html">RU</a> · <a href="45_fr.html">FR</a> · <a href="45_es.html">ES</a></div>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="2982.html">← Prev</a> · <a href="3158.html">Next →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/plugins/org.projectforge.plugins.banking/build.gradle.kts" target="_blank">📄 source</a></div>
+<h1>#45: <code>build.gradle.kts</code></h1>
+<div class="meta"><code>plugins/org.projectforge.plugins.banking/build.gradle.kts</code> · Gradle Build Config · 19 lines · 15 code · 0 comments · 4 blank</div>
+<div class="c">
+<p>Part of the <strong>Banking plugin</strong>. Gradle Build Config.</p>
+<p>Gradle build configuration defining dependencies, plugins, and build settings.</p>
+</div>
+<h2>Git History</h2>
+<div class="hist"><table>
+<tr><th>Commit</th><th>Description</th></tr>
+<tr><td><code>e21feaa61</code></td><td>Gradle games... (minor edit, updated imports)</td></tr>
+<tr><td><code>41e2d26e7</code></td><td>WIP: gradle... (minor edit, build config)</td></tr>
+<tr><td><code>e31db0a87</code></td><td>WIP: gradle... (minor edit, build config)</td></tr>
+<tr><td><code>176cb32d7</code></td><td>WIP: Gradle (substantial changes, build config)</td></tr>
+</table></div>
+</body></html>

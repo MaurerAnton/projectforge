@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>#890: AuftragAndRechnungDaoHelper.kt [DE]</title>
+<style>
+body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}
+h1{border-bottom:2px solid #333;padding-bottom:.3em}
+h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}
+h3{margin-top:2em;color:#444}
+a{color:#0366d6}
+.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}
+.nav{font-size:.9em;color:#888;margin-bottom:1em}
+.meta{font-size:.9em;margin:1em 0;color:#555}
+code{background:#f0f0f0;padding:0 .2em;font-size:.93em}
+pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}
+table{border-collapse:collapse;width:100%;margin:1em 0}
+th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}
+th{background:#f5f5f5;font-weight:600}
+.hist{font-size:.85em;color:#555}
+</style>
+</head>
+<body>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← Dateiindex</a> · <a href="889.html">← Vorherige</a> · <a href="891.html">Nächste →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/kotlin/org/projectforge/business/fibu/AuftragAndRechnungDaoHelper.kt" target="_blank" title="Quellcode auf GitHub anzeigen">📄 Quelle</a></div>
+
+<h1>#890: <code>AuftragAndRechnungDaoHelper.kt</code></h1>
+
+<div class="meta"><code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/AuftragAndRechnungDaoHelper.kt</code> 
+<p><strong>Typ:</strong> Hilfsobjekt (Kotlin <code>object</code>)</p>
+<p><strong>Paket:</strong> <code>org.projectforge.business.fibu</code></p>
+<p><strong>Vollständiger Pfad:</strong> <code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/AuftragAndRechnungDaoHelper.kt</code></p>
+ <span style="color:#888">129 Zeilen · 98 Code · 23 Kommentare · 8 leer</span></div>
+
+<div class="c">
+<p>Gemeinsam genutztes Hilfsobjekt, das Datenbank-Filterkriterien-Builder und Validierungslogik bereitstellt, die sowohl von <code>AuftragDao</code> (Aufträge) als auch von <code>RechnungDao</code> (Rechnungen) verwendet werden. Zentralisiert gemeinsame Muster wie die Filterung nach Leistungszeitraum, die Erstellung von Datumsbereichsabfragen und die Validierung beim Speichern von Rechnungen (Fälligkeitsberechnung, Konsistenz von Zahlungsdatum/-betrag).</p>
+</div>
+
+<h2>Öffentliche Methoden</h2>
+
+<h3><code>createCriterionForPeriodOfPerformance(myFilter)</code></h3>
+<p><strong>Rückgabe:</strong> <code>Optional&lt;DBPredicate&gt;</code></p>
+<p>Erstellt ein Prädikat zum Filtern nach Überschneidung des Leistungszeitraums. Verwendet die Filterfelder <code>periodOfPerformanceStartDate</code> und <code>periodOfPerformanceEndDate</code>. Die Logik prüft auf überlappende Datumsbereiche:</p>
+<ul>
+<li>Beide Daten angegeben → <code>popEnd >= startDate AND popBegin <= endDate</code></li>
+<li>Nur Startdatum → <code>popEnd >= startDate</code></li>
+<li>Nur Enddatum → <code>popBegin <= endDate</code></li>
+<li>Keines → leer</li>
+</ul>
+
+<h3><code>createQueryFilterWithDateRestriction(myFilter)</code></h3>
+<p><strong>Rückgabe:</strong> <code>QueryFilter</code></p>
+<p>Erstellt einen <code>QueryFilter</code> aus einem <code>RechnungFilter</code> und fügt Datumsbereichsbeschränkungen für das Feld <code>"datum"</code> (Rechnungsdatum) hinzu. Unterstützt Von-Datum, Bis-Datum oder beide Bereiche mittels der Operatoren <code>between</code>, <code>ge</code> und <code>le</code>.</p>
+
+<h3><code>onSaveOrModify(rechnung)</code></h3>
+<p><strong>Parameter:</strong> <code>AbstractRechnungDO</code></p>
+<p>Hauptvalidierungsmethode, die vor dem Speichern einer Rechnung aufgerufen wird. Delegiert an drei private Helfer:</p>
+<ul>
+<li><code>checkAndCalculateFaelligkeit()</code> — Berechnet automatisch <code>faelligkeit</code> (Fälligkeitsdatum) aus <code>rechnungsDatum + zahlungsZielInTagen</code>, jedoch nur, wenn das Fälligkeitsdatum null und die Zahlungsfrist gesetzt ist</li>
+<li><code>checkAndCalculateDiscountMaturity()</code> — Berechnet automatisch <code>discountMaturity</code> (Skontofälligkeit) aus <code>rechnungsDatum + discountZahlungsZielInTagen</code>, nur wenn der Skontosatz nicht null/nicht null ist und die Skontofälligkeit null ist</li>
+<li><code>validateBezahlDatumAndZahlBetrag()</code> — Erzwingt gegenseitige Konsistenz: Wenn <code>bezahlDatum</code> gesetzt ist, muss <code>zahlBetrag</code> gesetzt (und ungleich null) sein, und umgekehrt. Wirft bei Verstößen eine <code>UserException</code> mit spezifischen i18n-Schlüsseln</li>
+</ul>
+
+<h2>Entwurfsnotizen</h2>
+<ul>
+<li>Alle Methoden sind <code>@JvmStatic</code> für nahtlose Java-Interoperabilität</li>
+<li>Verwendet das Interface <code>SearchFilterWithPeriodOfPerformance</code> für polymorphe Filterbehandlung</li>
+<li>Fälligkeitsdaten werden mit <code>PFDateTime</code> (für Fälligkeitsdatum) und <code>PFDay</code> (für Skontofälligkeit) berechnet</li>
+<li>Die Skontofälligkeit wird nur berechnet, wenn <code>discountPercent</code> ungleich null ist; bei null wird keine Skontofälligkeit gesetzt</li>
+</ul>
+
+<h2>Git-Verlauf</h2>
+<div class="hist"><pre>868d6abb7 2025 -> 2026
+f4540acfa WIP: Import von Kreditorenrechnungen
+63081666f Quellcode-Dateiköpfe: 2024 -> 2025.
+cec9dd314 Rechnungen: Skontofälligkeit korrigiert
+b6092df09 Copyright 2023 -> 2024
+ab45d51fa Copyright 2001-2022 -> 2001-2023.
+5f7ef41b8 Copyright 2021 -> 2022
+a7fceb731 Einige Compiler-Warnungen behoben.
+db3b02da7 UserException von business in common-Paket verschoben
+ceb63e8a1 Quellcode-Kopfzeile: (C) 2001-2021.
+a0232cdba Code-Warnungen.
+b209e00ba PFDay.from -> from, fromOrNow, fromOrNull, PFDateTime.from -> from, fromOrNow, fromOrNull
+611b20d4e WIP: java.sql.Date -> LocalDate.
+7c1c48782 Ersetzen weiterer Instanzen von java.sql.Date durch java.time.LocalDate
+78b436d9e Ersetzen von Instanzen von java.util.date und java.sql.Date durch java.time.LocalDate
+7c79f1922 Copyright des Quellcode-Kopfes -> 2020.
+a1c287b49 Kalenderwoche ist jetzt global gleich (unabhängig vom Gebietsschema des Benutzers)
+61b23c3fd DateHelper-Methoden entfernt (ersetzt durch PFDay/PFDateTime).</pre></div>
+</body>
+</html>

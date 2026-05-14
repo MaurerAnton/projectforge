@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>#912: CurrencyConversionServiceSupport.kt [FR]</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:2em;color:#444}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}</style>
+</head>
+<body>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← Index des fichiers</a> · <a href="911.html">← Précédent</a> · <a href="913.html">Suivant →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/kotlin/org/projectforge/business/fibu/CurrencyConversionServiceSupport.kt" target="_blank" title="Voir la source sur GitHub">📄 source</a></div>
+
+<h1>#912: <code>CurrencyConversionServiceSupport.kt</code></h1>
+
+<div class="meta"><code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/CurrencyConversionServiceSupport.kt</code> 
+  <strong>Type :</strong> Service Spring interne<br>
+  <strong>Paquetage :</strong> <code>org.projectforge.business.fibu</code><br>
+  <strong>Chemin :</strong> <code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/CurrencyConversionServiceSupport.kt</code><br>
+  <strong>Auteur :</strong> Kai Reinhard (k.reinhard@micromata.de)
+ <span style="color:#888">304 lignes · 183 lignes de code · 103 commentaires · 18 lignes vides</span></div>
+
+<div class="c">
+  <p><strong>Classe de support interne</strong> pour les opérations de conversion de devises. Gère la persistance en base de données, la validation et le contrôle d'accès. Marqué <code>internal</code> — ne fait pas partie de l'API publique. <code>CurrencyConversionService</code> est la façade publique ; cette classe effectue les opérations réelles sur les données et l'invalidation du cache.</p>
+</div>
+
+<h2>Architecture</h2>
+
+<h3>Dépendances</h3>
+<table>
+  <tr><th>Dépendance</th><th>Rôle</th></tr>
+  <tr><td><code>BaseDOPersistenceService</code></td><td>Opérations génériques d'insertion/mise à jour/marquage comme supprimé/annulation de suppression</td></tr>
+  <tr><td><code>PfPersistenceService</code></td><td>Requêtes JPA directes (requêtes nommées, recherche par identifiant)</td></tr>
+  <tr><td><code>CurrencyPairDao</code></td><td>Vérifications du contrôle d'accès</td></tr>
+  <tr><td><code>CurrencyConversionCache</code></td><td>Invalidation après les opérations d'écriture</td></tr>
+</table>
+
+<h2>Méthodes clés</h2>
+
+<h3>Méthodes de requête</h3>
+<table>
+  <tr><th>Méthode</th><th>Description</th></tr>
+  <tr><td><code>findRate(id)</code></td><td>Sélectionne un taux par identifiant ; vérifie optionnellement l'accès de sélection de l'utilisateur</td></tr>
+  <tr><td><code>selectAllRates(pair, deleted?)</code></td><td>Utilise la requête nommée <code>FIND_ALL_BY_PAIR</code> ; filtre optionnellement par l'indicateur de suppression</td></tr>
+  <tr><td><code>getActiveRate(rates, date)</code></td><td>Trouve le taux actif dans une liste par le <code>validFrom</code> le plus récent qui n'est pas postérieur à la date donnée</td></tr>
+</table>
+
+<h3>Validation</h3>
+<p><code>validate(rate)</code> vérifie l'unicité via des requêtes nommées :</p>
+<ul>
+  <li>Nouvelles entrées : <code>FIND_BY_PAIR_AND_DATE</code> — vérifie si un taux existe déjà pour cette paire et cette date</li>
+  <li>Entrées existantes : <code>FIND_OTHER_BY_PAIR_AND_DATE</code> — exclut le taux actuel</li>
+</ul>
+<p>Si un taux <strong>supprimé</strong> correspondant est trouvé, il est retourné à l'appelant pour <strong>réutilisation</strong> (modèle annulation de suppression + copie). Cela permet aux utilisateurs de recréer des taux à des dates qui étaient auparavant actives mais qui ont été supprimées de manière logicielle.</p>
+
+<h3>CRUD avec réutilisation d'entrée supprimée</h3>
+<p>Les deux méthodes <code>insert()</code> et <code>updateRate()</code> implémentent un algorithme spécial pour gérer les entrées supprimées de manière logicielle :</p>
+<ol>
+  <li><code>validate(rate)</code> retourne une entrée supprimée existante si elle correspond</li>
+  <li>Si une correspondance supprimée existe : les champs de l'entrée supprimée sont copiés à partir du nouveau taux, puis elle est annulée de suppression, et la nouvelle entrée est ignorée</li>
+  <li>Pour les mises à jour : l'enregistrement existant est marqué comme supprimé, et l'enregistrement correspondant précédemment supprimé est annulé de suppression et mis à jour</li>
+  <li>Le cache est invalidé dans un bloc <code>finally</code></li>
+</ol>
+
+<h3>Assistants de sauvegarde/mise à jour et suppression</h3>
+<table>
+  <tr><th>Méthode</th><th>Description</th></tr>
+  <tr><td><code>saveOrUpdate(rate)</code></td><td>Insertion ou mise à jour générique, invalide le cache</td></tr>
+  <tr><td><code>delete(rate)</code></td><td>Supprime de manière logicielle un taux, invalide le cache</td></tr>
+  <tr><td><code>markRateAsDeleted(pair, rate)</code></td><td>Flux complet de marquage comme supprimé : validation + markDeleted + invalidation du cache</td></tr>
+  <tr><td><code>markRateAsDeleted(pairId, rateId)</code></td><td>Surcharge de commodité qui résout la paire par identifiant</td></tr>
+  <tr><td><code>insert(pairId, rate)</code></td><td>Insertion avec modèle d'appel différé : résoudre la paire, puis déléguer</td></tr>
+  <tr><td><code>insert(pair, rate)</code></td><td>Logique d'insertion réelle avec validation et réutilisation d'entrée supprimée</td></tr>
+  <tr><td><code>updateRate(pair, rate)</code></td><td>Mise à jour avec validation, vérification d'accès et réutilisation d'entrée supprimée pour les changements de date</td></tr>
+</table>
+
+<h3>Contrôle d'accès</h3>
+<p>Toutes les méthodes de mutation (insertion, mise à jour, suppression) vérifient que l'utilisateur connecté dispose du droit d'accès approprié via <code>currencyPairDao.checkLoggedInUser*Access()</code>. Le paramètre <code>checkAccess</code> (par défaut <code>true</code>) permet de contourner ces vérifications pour les opérations d'importation/par lots.</p>
+
+<h2>Historique Git</h2>
+<div class="hist"><pre>
+868d6abb7 2025 -> 2026
+b78da69bc BaseDao.baseDOChangedRegistry est maintenant privé.
+75ea9dc1a WIP : conversion de devises avec Claude Code.
+07edc85de WIP : conversion de devises avec Claude Code.
+bd69407de Révision initiale avec Claude Code.
+</pre></div>
+
+</body>
+</html>

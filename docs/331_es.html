@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="es"><head><meta charset="utf-8"><title>#331: SwingSetupWizard.kt [ES]</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:2em;color:#444}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.lang{font-size:.85em;color:#888;float:right}.lang a{color:#888;text-decoration:none;padding:0 .3em}.lang a.active{color:#0366d6;font-weight:600;text-decoration:underline}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}</style></head>
+<body><div class="lang"><a href="331.html">EN</a> · <a href="331_de.html">DE</a> · <a href="331_ru.html">RU</a> · <a href="331_fr.html">FR</a> · <a href="331_es.html" class="active">ES</a></div>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Índice</a> · <a href="file-index.html">← Índice de archivos</a> · <a href="657.html">← Anterior</a> · <a href="3097.html">Siguiente →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-application/src/main/kotlin/org/projectforge/setup/wizard/swing/SwingSetupWizard.kt" target="_blank" title="Ver fuente en GitHub">📄 fuente</a></div>
+<h1>#331: <code>SwingSetupWizard.kt</code></h1>
+<div class="meta"><code>projectforge-application/src/main/kotlin/org/projectforge/setup/wizard/swing/SwingSetupWizard.kt</code> Tipo: Kotlin · Rol: Asistente de configuración · Fuente: projectforge-application/src/main/kotlin/org/projectforge/setup/wizard/swing/SwingSetupWizard.kt <span style="color:#888">149 líneas · 107 código · 26 comentarios · 16 en blanco</span></div>
+<div class="c">Archivo de código fuente en <code>projectforge-application/src/main/kotlin/org/projectforge/setup/wizard/swing/SwingSetupWizard.kt</code> que contiene código Kotlin para la capa del Asistente de configuración.</div>
+<h2>Estructura del código</h2>
+<p>Anotaciones: <code>return</code>, <code>JvmStatic</code></p>
+<p>Clases: <code>SwingSetupWizard</code></p>
+<p>Super-tipo(s): <code>AbstractSetupWizard</code></p>
+<p>Funciones (6): <code>windowClosing</code>, <code>run</code>, <code>setActiveWindow</code>, <code>finish</code>, <code>run</code>, <code>main</code></p>
+<p>Propiedades (18): <code>context</code>, <code>chooseDirectoryScreen</code>, <code>finalizeScreen</code>, <code>frame</code>, <code>cardLayout</code>, <code>cards</code>, <code>lock</code>, <code>condition</code>, <code>applicationClass</code>, <code>quitStrategyClass</code>, <code>getApplicationMethod</code>, <code>setQuitStrategyMethod</code>, <code>disableSuddenTerminationMethod</code>, <code>application</code>, <code>quitStrategy</code>, <code>scrPane</code>, <code>window</code>, <code>cl</code></p>
+<p>Importaciones: 16 paquetes</p>
+<p>Paquete: <code>org.projectforge.setup.wizard.swing</code></p>
+<h2>Código fuente (resumido)</h2>
+<pre>
+package org.projectforge.setup.wizard.swing
+
+import org.projectforge.common.CanonicalFileUtils
+import org.projectforge.common.EmphasizedLogSupport
+import org.projectforge.setup.SetupData
+import org.projectforge.setup.wizard.AbstractSetupWizard
+import java.awt.CardLayout
+import java.awt.GridBagConstraints
+import java.awt.GridBagLayout
+import java.awt.event.WindowAdapter
+import java.awt.event.WindowEvent
+import java.io.File
+import java.io.IOException
+import java.util.concurrent.locks.ReentrantLock
+import javax.swing.JFrame
+import javax.swing.JPanel
+import javax.swing.JScrollPane
+import kotlin.concurrent.withLock
+
+class SwingSetupWizard(presetAppHomeDir: File? = null) : AbstractSetupWizard() {
+    override val context: SwingGUIContext
+    private val chooseDirectoryScreen: SwingChooseDirectoryScreen
+    private val finalizeScreen: SwingFinalizeScreen
+    private val frame = JFrame(&quot;Configuración de ProjectForge&quot;)
+    private val cardLayout: CardLayout
+    private val cards: JPanel
+    private val lock = ReentrantLock()
+    private val condition = lock.newCondition()
+
+    init {
+        frame.setSize(1024, 600)
+        frame.layout = GridBagLayout()
+        frame.defaultCloseOperation = JFrame.DO_NOTHING_ON_CLOSE
+        try {
+            // Necesita reflexión porque las clases de Apple pueden no estar disponibles:
+            val applicationClass = Class.forName(&quot;com.apple.eawt.Application&quot;)
+            val quitStrategyClass = Class.forName(&quot;com.apple.eawt.QuitStrategy&quot;)
+            val getApplicationMethod = applicationClass.getDeclaredMethod(&quot;getApplication&quot;)
+            val setQuitStrategyMethod = applicationClass.getDeclaredMethod(&quot;setQuitStrategy&quot;, quitStrategyClass)
+            val disableSuddenTerminationMethod = applicationClass.getDeclaredMethod(&quot;disableSuddenTermination&quot;)
+
+            val application = getApplicationMethod.invoke(null)
+            val quitStrategy = quitStrategyClass.enumConstants.find { it.toString() == &quot;CLOSE_ALL_WINDOWS&quot; }//.QuitStrategy.CLOSE_ALL_WINDOWS
+            setQuitStrategyMethod.invoke(application, quitStrategy)  //Application.getApplication().setQuitStrategy(QuitStrategy.CLOSE_ALL_WINDOWS)
+            disableSuddenTerminationMethod.invoke(application) // Application.getApplication().disableSuddenTermination()
+        } catch (ex: Exception) {
+            log.debug(&quot;No es un sistema MacOS o la JVM de MacOS no soporta com.apple.eawt.Application (correcto).&quot;)
+        }
+        frame.addWindowListener(object : WindowAdapter() {
+            override fun windowClosing(e: WindowEvent?) {
+                exit()
+            }
+        })
+
+        context = SwingGUIContext(this, frame)
+        context.setupData.applicationHomeDir = presetAppHomeDir
+
+        chooseDirectoryScreen = SwingChooseDirectoryScreen(context)
+        finalizeScreen = SwingFinalizeScreen(context)
+
+        cardLayout = CardLayout()
+        cards = JPanel(cardLayout)
+        cards.add(chooseDirectoryScreen.mainPanel, ScreenID.CHOOSE_DIR.name)
+        cards.add(finalizeScreen.mainPanel, ScreenID.FINALIZE.name)
+        val scrPane = JScrollPane(cards)
+        frame.contentPane.add(scrPane, SwingUtils.constraints(0, 0, fill = GridBagConstraints.BOTH, weightx = 1.0, weighty = 1.0))
+
+        frame.isVisible = true
+    }
+
+    /**
+     * @return La configuración del usuario o null, si el usuario canceló el asistente mediante la salida.
+     */
+    override fun run(): SetupData? {
+        super.initialize()
+        lock.withLock {
+            condition.await()
+        }
+        return super.run()
+    }
+
+    override fun setActiveWindow(nextScreen: ScreenID) {
+        val window = when (nextScreen) {
+            ScreenID.CHOOSE_DIR -&gt; chooseDirectoryScreen
+            else -&gt; finalizeScreen
+        }
+        window.redraw()
+        val cl = cards.layout as CardLayout
+        cl.show(cards, nextScreen.name)
+    }
+
+
+    override fun finish() {
+        frame.dispose()
+        lock.withLock {
+            condition.signal()
+        }
+    }
+
+    companion object {
+        private val log = org.slf4j.LoggerFactory.getLogger(SwingSetupWizard::class.java)
+
+        @JvmStatic
+        fun run(appHomeDir: File? = null): SetupData? {
+            log.info(&quot;Iniciando asistente GUI...&quot;)
+            return try {
+                SwingSetupWizard(appHomeDir).run()
+            } catch (ex: IOException) {
+                EmphasizedLogSupport(log)
+                        .log(&quot;No se puede iniciar el asistente de configuración gráfico, parece que no hay un escritorio disponible.&quot;)
+                        .logEnd()
+                return null
+            }
+        }
+
+        @JvmStatic
+        fun main(args: Array&lt;String&gt;) {
+            try {
+                val result = SwingSetupWizard().run()
+// ... (truncado, total 127 líneas)</pre>
+
+<h2>Historial Git</h2><div class="hist"><pre>868d6abb7 2025 -&gt; 2026
+63081666f Encabezados de archivos fuente: 2024-&gt; 2025.
+b6092df09 Copyright 2023 -&gt; 2024
+ab45d51fa Copyright 2001-2022 -&gt; 2001-2023.
+5f7ef41b8 Copyright 2021 -&gt; 2022</pre></div>
+</body></html>

@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>#721 [FR]</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:2em;color:#444}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}.warn{background:#fff3cd;border-left:3px solid #ffc107;padding:.5em 1em;margin:1em 0}.tip{background:#d4edda;border-left:3px solid #28a745;padding:.5em 1em;margin:1em 0}</style>
+</head>
+<body>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← Index des fichiers</a> · <a href="720.html">← Précédent</a> · <a href="722.html">Suivant →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/java/org/projectforge/framework/time/DateHolder.java" target="_blank" title="Voir la source sur GitHub">📄 source</a></div>
+<h1>#721 : <code>DateHolder.java</code></h1>
+<div class="meta"><code>projectforge-business/src/main/java/org/projectforge/framework/time/DateHolder.java</code> Wrapper de date mutable avec précision, projectforge-business/src/main/java/org/projectforge/framework/time/DateHolder.java <span style="color:#888">640 lignes · 314 code · 247 commentaires · 79 vides</span></div>
+<div class="c">Conteneur de date/heure mutable et conscient de la précision, encapsulant un objet PFDateTime. Prend en charge la troncature/l'arrondi via DatePrecision, l'arithmétique de date, l'ajout de jours ouvrés, la navigation aux limites (début/fin de jour/semaine/mois/année) et les opérations de comparaison. Implémente Cloneable, Serializable et Comparable.</div>
+
+<h2>Conception principale</h2>
+<p><code>DateHolder</code> est un wrapper mutable autour d'une instance interne <code>PFDateTime</code>, associée à une énumération <code>DatePrecision</code> qui contrôle la façon dont les champs sont tronqués ou arrondis. Tous les setters appellent <code>ensurePrecision()</code>, qui invoque <code>PFDateTime.withPrecision(precision)</code> pour mettre à zéro ou arrondir les champs en dessous du niveau de précision déclaré.</p>
+
+<h3>Troncature DatePrecision</h3>
+<ul>
+<li><code>SECONDE</code> — Millisecondes mises à zéro</li>
+<li><code>MINUTE</code> — Secondes et millisecondes mises à zéro</li>
+<li><code>MINUTE_15</code> — Minutes arrondies à la quinzaine inférieure (0-14→0, 15-29→15, 30-44→30, 45-59→45)</li>
+<li><code>HEURE_DU_JOUR</code> — Minutes, secondes, millisecondes mises à zéro</li>
+<li><code>JOUR</code> — Partie horaire mise à zéro (minuit)</li>
+</ul>
+
+<h2>Aperçu des constructeurs</h2>
+<p>16 constructeurs couvrant toutes les combinaisons de : <code>Date</code> (ou rien pour l'heure actuelle), <code>DatePrecision</code>, <code>TimeZone</code> et <code>Locale</code>. Tous garantissent la précision après l'initialisation. Le constructeur sans argument crée un <code>PFDateTime.now()</code> sans précision définie.</p>
+
+<h2>Accesseurs de champs (délégués à PFDateTime)</h2>
+<table>
+<tr><th>Méthode</th><th>Retourne</th></tr>
+<tr><td><code>getUtilDate()</code></td><td><code>java.util.Date</code></td></tr>
+<tr><td><code>getLocalDate()</code></td><td><code>java.time.LocalDate</code></td></tr>
+<tr><td><code>getYear()</code></td><td>int</td></tr>
+<tr><td><code>getMonth()</code></td><td>enum <code>java.time.Month</code></td></tr>
+<tr><td><code>getMonthValue()</code></td><td>1–12 (base 1)</td></tr>
+<tr><td><code>getWeekOfYear()</code></td><td>int (délègue à la logique <code>DateHelper.getWeekOfYear</code>)</td></tr>
+<tr><td><code>getDayOfYear()</code></td><td>1–366</td></tr>
+<tr><td><code>getDayOfMonth()</code></td><td>1–31</td></tr>
+<tr><td><code>getDayOfWeek()</code></td><td><code>java.time.DayOfWeek</code></td></tr>
+<tr><td><code>getHourOfDay()</code></td><td>0–23</td></tr>
+<tr><td><code>getMinute()</code></td><td>0–59</td></tr>
+<tr><td><code>getSecond()</code></td><td>0–59</td></tr>
+<tr><td><code>getMilliSecond()</code></td><td>0–999</td></tr>
+<tr><td><code>getTimeInMillis()</code></td><td>millisecondes depuis l'époque</td></tr>
+<tr><td><code>getTimeOfDay()</code></td><td>secondes depuis minuit (heure*3600 + min*60 + sec)</td></tr>
+</table>
+
+<h2>Navigation aux limites (toutes retournent <code>this</code> pour le chaînage)</h2>
+<table>
+<tr><th>Méthode</th><th>Effet</th></tr>
+<tr><td><code>setBeginOfYear()</code></td><td>1er janvier, 00:00:00.000</td></tr>
+<tr><td><code>setEndOfYear()</code></td><td>31 décembre, 23:59:59.999</td></tr>
+<tr><td><code>setBeginOfMonth()</code></td><td>1er du mois, 00:00:00.000</td></tr>
+<tr><td><code>setEndOfMonth()</code></td><td>Dernier jour du mois, 23:59:59.999</td></tr>
+<tr><td><code>setBeginOfWeek()</code></td><td>Premier jour de la semaine (selon la locale), 00:00:00.000</td></tr>
+<tr><td><code>setEndOfWeek()</code></td><td>Dernier jour de la semaine, 23:59:59.999</td></tr>
+<tr><td><code>setBeginOfDay()</code></td><td>00:00:00.000</td></tr>
+<tr><td><code>setEndOfDay()</code></td><td>23:59:59.999</td></tr>
+<tr><td><code>isBeginOfWeek()</code></td><td>Vrai si le jour == premierJourDeLaSemaine ET l'heure == 00:00:00.000</td></tr>
+</table>
+
+<h2>Comparaison et arithmétique</h2>
+<table>
+<tr><th>Méthode</th><th>Description</th></tr>
+<tr><td><code>before(DateHolder|Date)</code></td><td>Délègue à <code>java.util.Date.before()</code></td></tr>
+<tr><td><code>after(DateHolder|Date)</code></td><td>Délègue à <code>java.util.Date.after()</code></td></tr>
+<tr><td><code>isBetween(Date|DateHolder, Date|DateHolder)</code></td><td>Vérification d'intervalle inclusif ; gère les limites nulles</td></tr>
+<tr><td><code>isSameDay(Date|DateHolder)</code></td><td>Compare année + jourDeLAnnée via <code>PFDateTime.isSameDay()</code></td></tr>
+<tr><td><code>daysBetween(Date|DateHolder)</code></td><td>Retourne (autre - ceci) en jours calendaires</td></tr>
+<tr><td><code>add(int field, int amount)</code></td><td>Ajoute des unités en utilisant <code>PFDateCompatibilityUtils</code> pour le mapping des champs</td></tr>
+<tr><td><code>addWorkingDays(int days)</code></td><td>Ajoute des jours ouvrés (max 10 000) ; utilise <code>PFDayUtils.addWorkingDays()</code></td></tr>
+<tr><td><code>compareTo(DateHolder)</code></td><td>Délègue à <code>PFDateTime.compareTo()</code></td></tr>
+</table>
+
+<h2>Contrat d'égalité</h2>
+<p><code>equals()</code> et <code>hashCode()</code> prennent en compte à la fois <code>getTimeInMillis()</code> et <code>getPrecision()</code>. Deux DateHolder sont égaux uniquement s'ils représentent exactement la même milliseconde et ont le même niveau de précision.</p>
+
+<h2>Note historique</h2>
+<div class="warn">Cette classe était à l'origine basée sur <code>java.util.Calendar</code> et a été migrée vers <code>PFDateTime</code> (basé sur <code>java.time</code>) entre décembre 2019 et janvier 2020. Toute manipulation de champ est désormais déléguée à PFDateTime. La méthode <code>add(int field, int amount)</code> utilise encore les constantes de champ héritées de <code>Calendar</code> mappées via <code>PFDateCompatibilityUtils</code>.</div>
+
+<h2>Historique Git</h2>
+<div class="hist"><pre>868d6abb7 2026-01-01 2025 -> 2026
+63081666f 2025-01-01 En-têtes de fichiers source : 2024 -> 2025.
+b6092df09 2024-01-09 Copyright 2023 -> 2024
+ab45d51fa 2023-01-01 Copyright 2001-2022 -> 2001-2023.
+5f7ef41b8 2022-02-18 Copyright 2021 -> 2022
+ceb63e8a1 2021-03-08 En-tête du code source : (C) 2001-2021.
+b209e00ba 2020-01-30 PFDay.from -> from, fromOrNow, fromOrNull, PFDateTime.from -> from, fromOrNow, fromOrNull
+345e8a999 2020-01-30 DateHolder(LocalDate...) -> PFDay.from(LocalDate...).
+8cf9911d4 2020-01-28 HRPlanningList : Correction de EditPage
+6874f66b4 2020-01-25 FirstDayOfWeek...
+7c1c48782 2020-01-21 Remplacement de plusieurs instances de java.sql.Date par java.time.LocalDate ...
+e4bcd0f56 2020-01-14 DateHolder.getMonthValue ajouté.
+7c79f1922 2020-01-03 Copyright de l'en-tête source -> 2020.
+a1c287b49 2019-12-28 La semaine de l'année est désormais globalement la même ...
+4b53b6562 2019-12-24 PFDate -> PFDay, IPFDate introduit..
+fbb345c70 2019-12-24 Substitution erronée de "calendar" -> "datetime" lors du refactoring annulée.
+8c31eba2a 2019-12-23 Gros WIP : migration de Calendar, DateHolder, DayHolder etc.
+1a1c010ef 2019-12-23 DateHelper/DateHolder : documenté que le mois est basé sur 0.
+24019a0f5 2019-12-19 Élimination des occurrences de DateHolder
+4cd7c8e69 2019-12-05 Remplacement des méthodes DateHolder et DayHolder par PFDateTime
+48b2b1bfa 2019-10-20 DateHolder.setBeginOfWeek() : compteur de paranoïa ajouté pour éviter les boucles infinies ...
+1812702d5 2019-10-20 DateHolder.setBeginOfWeek() corrigé. Calendar.set(DAY_OF_WEEK, firstDayOfWeek) semble fonctionner différemment sous Java 11 ...
+97991a2c4 2019-10-09 Revert "Simplifier les instructions return booléennes (business)"
+40480b54d 2019-10-07 Simplifier les instructions return booléennes (business)
+000ca723d 2019-10-07 Supprimer les expressions booléennes inutiles (business)
+1ef12e5e7 2019-06-10 Doc
+dd5ca38ac 2019-06-07 Mise à jour ou création du copyright de tous les en-têtes de fichiers Java.
+f979e8a42 2017-11-20 MGC-UPDATE : Mise à jour vers la version 3.0.0-SNAPSHOT
+9ebb88522 2016-07-18 Commit initial</pre></div>
+</body>
+</html>

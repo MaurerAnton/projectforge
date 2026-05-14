@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>#1154 [FR]</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:2em;color:#444}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}</style>
+</head>
+<body>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← Index des fichiers</a> · <a href="1153.html">← Précédent</a> · <a href="1155.html">Suivant →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/kotlin/org/projectforge/business/vacation/service/VacationSendMailService.kt" target="_blank" title="Voir la source sur GitHub">📄 source</a></div>
+<h1>#1154 : <code>VacationSendMailService.kt</code></h1>
+<div class="meta"><code>projectforge-business/src/main/kotlin/org/projectforge/business/vacation/service/VacationSendMailService.kt</code> Service, projectforge-business/src/main/kotlin/org/projectforge/business/vacation/service/VacationSendMailService.kt <span style="color:#888">310 lignes · 234 code · 50 commentaires · 26 vides</span></div>
+<div class="c">Envoie des notifications par e-mail aux vacanciers, managers, remplaçants et au personnel RH lorsque des entrées de congé sont créées, modifiées ou supprimées.</div>
+
+<h2>Architecture</h2>
+<p><code>VacationSendMailService</code> est un <code>@Service</code> qui assemble <code>ConfigurationService</code> (configuration du serveur mail, adresse e-mail RH), <code>EmployeeDao</code> (recherche d'employés/utilisateurs) et <code>SendMail</code> (infrastructure de messagerie). Il est invoqué exclusivement depuis les hooks de cycle de vie <code>after*</code> de <code>VacationDao</code>.</p>
+
+<h3>Flux de notification</h3>
+<ol>
+<li><code>checkAndSendMail(obj, operationType, dbObj)</code> — Point d'entrée. Vérifie que le serveur mail est configuré, construit un conteneur <code>VacationInfo</code>.</li>
+<li>Pour les entrées de congé spéciales avec le statut IN_PROGRESS ou APPROVED, envoie à l'adresse e-mail RH (configurée dans l'administration).</li>
+<li>Envoie au vacancier (s'il n'a pas effectué lui-même la modification — vérifié via <code>ThreadLocalUserContext.loggedInUserId</code>).</li>
+<li>Envoie au manager (s'il n'est pas l'acteur).</li>
+<li>Envoie au remplaçant principal et à tous les autres remplaçants (dédupliqués via un ensemble).</li>
+</ol>
+
+<h3>Composition des e-mails</h3>
+<p>La méthode <code>prepareMail()</code> crée un objet <code>Mail</code> avec un contenu HTML généré à partir du modèle Groovy <code>mail/vacationMail.html</code>. Le modèle reçoit une carte contenant :</p>
+<ul>
+<li><code>vacationInfo</code> — classe interne <code>VacationInfo</code> avec tous les noms d'utilisateurs résolus, e-mails, dates formatées et jours ouvrés</li>
+<li><code>vacation</code> — l'objet brut <code>VacationDO</code></li>
+<li><code>mailInfo</code> — sujet, type d'opération (insert/update/delete/undelete) et mode (propre/manager/remplacement/RH)</li>
+</ul>
+
+<h3>Classe interne VacationInfo</h3>
+<p>Ce conteneur de données résout toutes les références aux employés (vacancier, manager, remplaçant, autres remplaçants) en objets <code>PFUserDO</code> et formate les dates, les jours ouvrés, les indicateurs de demi-journée et le statut spécial. La méthode <code>updateI18n(recipient)</code> re-résout les chaînes visibles par l'utilisateur pour la locale du destinataire, permettant une livraison d'e-mails localisée aux destinataires dans différents paramètres linguistiques.</p>
+
+<h3>Génération d'URL</h3>
+<p>L'objet compagnon construit paresseusement un lien vers la page d'édition des congés via <code>SendMail.buildUrl()</code> combiné avec <code>MenuItemDefId.VACATION.url</code>, produisant des liens profonds comme <code>/vacation/edit/123?returnToCaller=account</code>.</p>
+
+<h2>Justification de la conception</h2>
+<p>L'envoi d'e-mails est séparé du DAO pour maintenir les préoccupations de persistance isolées. Le service utilise <code>VacationInfo</code> comme classe de données intermédiaire plutôt que de passer l'entité directement aux modèles — cela garantit que les modèles n'accèdent jamais aux proxies JPA chargés paresseusement (ce qui échouerait en dehors d'une transaction). La méthode <code>updateI18n</code> prend en charge l'exigence multi-locale d'une entreprise allemande avec des employés internationaux. Le chemin de notification RH pour les congés spéciaux assure une surveillance de conformité même lorsque les employés et les managers sont la même personne.</p>
+
+<h2>Historique Git</h2>
+<div class="hist"><pre>868d6abb7 2025 -> 2026
+600951ee0 2025 -> 2026
+b131193e7 Variables membres refactorisées en utilisant by lazy {}...
+d5cc73eb6 Variables membres refactorisées en utilisant by lazy {}...
+63081666f En-têtes de fichiers source : 2024 -> 2025.
+199c26801 En-têtes de fichiers source : 2024 -> 2025.
+e1db80611 Correctif : com.sun.mail ajouté.
+0a78bc22c Correctif : com.sun.mail ajouté.
+1b50060c3 BaseDao : renommé get->find, save->insert, getList->select, load->select
+514533e99 BaseDao : renommé get->find, save->insert, getList->select, load->select
+87aaf6a5a Migration : BaseDao refactorisé...
+41217b065 Migration : BaseDao refactorisé...
+67805f2fc ThreadLocalUserContext.user -> loggedInUser
+58ffda82b ThreadLocalUserContext.user -> loggedInUser
+4c04cfd65 CHANGEMENT-MAJEUR ! Migration des identifiants entiers vers des identifiants Long.
+fd13c259a CHANGEMENT-MAJEUR ! Migration des identifiants entiers vers des identifiants Long.
+06828f490 Migration en cours...
+4b3872a1b Migration en cours...
+b6092df09 Copyright 2023 -> 2024
+9a0609dd1 Copyright 2023 -> 2024
+</pre></div>
+</body>
+</html>

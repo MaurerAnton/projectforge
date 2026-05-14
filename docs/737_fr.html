@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>#737 [FR]</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333}h2{margin-top:1.5em}a{color:#0366d6}.meta{font-size:.9em;margin:1em 0}.nav{font-size:.9em;color:#888;margin-bottom:1em}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}code{background:#f0f0f0;padding:0 .2em}pre{background:#f5f5f5;padding:.5em;margin:.5em 0;border-radius:3px;font-size:.85em;overflow-x:auto}</style>
+</head>
+<body>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← Index des fichiers</a> · <a href="736.html">← Précédent</a> · <a href="738.html">Suivant →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/java/org/projectforge/framework/utils/KeyValuePairParser.java" target="_blank" title="Voir la source sur GitHub">📄 source</a></div>
+
+<h1>#737 : <code>KeyValuePairParser.java</code></h1>
+<div class="meta"><code>projectforge-business/src/main/java/org/projectforge/framework/utils/KeyValuePairParser.java</code> <strong>Lignes :</strong> 301 · <strong>Auteur :</strong> Kai Reinhard · <strong>Type :</strong> Analyseur lexical/analyseur syntaxique Java écrit à la main — zéro dépendance <span style="color:#888">301 lignes · 229 code · 34 commentaires · 38 lignes vides</span></div>
+
+<div class="c"><h2>Objectif</h2>
+<p>Un <strong>analyseur de flux écrit à la main</strong> qui lit les paires <code>clé=valeur</code> à partir d’un <code>java.io.Reader</code>, un caractère à la fois. Pas d’expression régulière, pas de bibliothèque d’analyse tierce — juste une analyse étatique pure, caractère par caractère, avec un tampon de réinjection de 5 éléments. C’est le genre de code qui existait avant que des bibliothèques comme <a href="https://commons.apache.org/proper/commons-csv/">Apache Commons CSV</a> ne deviennent standard — ou écrit parce que l’auteur voulait un contrôle précis sur les messages d’erreur et les cas limites sans surcharge de dépendances.</p>
+<p>L’analyseur prend en charge : <strong>les valeurs entre guillemets</strong> (avec <code>"</code>), <strong>les guillemets échappés</strong> dans les chaînes entre guillemets (<code>""</code> → un <code>"</code> littéral), <strong>un caractère séparateur configurable</strong> (par défaut depuis <code>KeyValuePairWriter.DEFAULT_SEPARATOR_CHAR</code>), <strong>le suivi ligne/colonne</strong> pour les messages d’erreur, et <strong>le saut des espaces</strong>. Format d’entrée : <code>clé1=valeur1,clé2="valeur entre guillemets, avec virgule",clé3=123</code>.</p></div>
+
+<div class="c"><h2>Architecture : un mini analyseur lexical</h2>
+<p>301 lignes. L’analyseur est structuré comme un <strong>analyseur lexical classique en deux phases</strong> :</p>
+<ol><li><strong>Lecteur de caractères (<code>read()</code> / <code>nextToken()</code> / <code>unread()</code>) :</strong> lit un caractère depuis le <code>Reader</code>, suit les numéros de ligne/colonne, gère les sauts de ligne <code>\r\n</code> (Windows) et <code>\n</code> (Unix), et classe le jeton comme <code>EOF</code>, <code>EOL</code> ou <code>CHAR</code>. La méthode <code>nextToken()</code> est le tokeniseur</li>
+<li><strong>Analyseur syntaxique (<code>parseKey()</code> / <code>parseValue()</code>) :</strong> consomme les jetons pour construire les chaînes clé et valeur. <code>parse()</code> est le point d’entrée qui appelle parseKey+parseValue en boucle jusqu’à EOF/EOL</li></ol>
+<p>C’est la même architecture qu’un <strong>front-end de compilateur</strong> — tokeniseur + analyseur syntaxique — juste pour des données clé=valeur au lieu de langages de programmation.</p></div>
+
+<div class="c"><h2>Tampon de réinjection</h2>
+<p>Un <code>int[] pushbackBuffer</code> de 5 éléments avec un index <code>pushbackIndex</code>. Lorsque l’analyseur lit un caractère trop loin (par exemple dans <code>skipWhitespaces()</code>), il <strong>réinjecte le caractère</strong> via <code>unread(int b)</code>. Le tampon met à jour les compteurs de ligne/colonne lors de la réinjection de sauts de ligne — essentiel pour des messages d’erreur précis. 5 éléments suffisent pour toute anticipation nécessaire à cet analyseur (l’anticipation maximale est de 1 à 2 caractères). C’est l’implémentation standard de <strong>l’anticipation à 1 caractère</strong> — la forme la plus simple de retour arrière.</p></div>
+
+<div class="c"><h2>Gestion des valeurs entre guillemets — la logique la plus complexe</h2>
+<p><code>parseValue()</code> (lignes 141-189) implémente un <strong>analyseur de champ entre guillemets complet de type CSV</strong> :</p>
+<ol><li>Ignore les espaces, lit le premier caractère</li>
+<li>Si le premier caractère est <code>"</code>, entre en <strong>mode guillemets</strong> (<code>quoted=true</code>)</li>
+<li>En mode guillemets :
+<ul><li><code>""</code> → guillemet échappé (ajoute un <code>"</code> à la valeur)</li>
+<li><code>"</code> suivi d’un séparateur ou d’un espace+séparateur → fin de la valeur</li>
+<li><code>"</code> suivi de tout autre chose → erreur (<code>UNEXPECTED_CHARACTER_AFTER_QUOTATION_MARK</code>)</li>
+<li>Tout autre caractère → ajouté au tampon de valeur</li></ul></li>
+<li>En mode sans guillemets :
+<ul><li>Caractère séparateur → fin de la valeur</li>
+<li><code>"</code> → erreur (<code>UNEXPECTED_QUOTATIONMARK</code> — les guillemets ne sont autorisés qu’en mode guillemets)</li>
+<li>Tout autre caractère → ajouté</li></ul></li>
+<li>Si EOF/EOL est atteint alors qu’on est en mode guillemets → erreur (<code>QUOTATIONMARK_MISSED_AT_END_OF_CELL</code>)</li></ol>
+<p>Cela suit la <a href="https://datatracker.ietf.org/doc/html/rfc4180">spécification CSV RFC 4180</a> pour les champs entre guillemets, mais simplifié — pas de champs entre guillemets multilignes, pas de détection d’en-tête, pas d’inférence de type.</p></div>
+
+<div class="c"><h2>Gestion des erreurs — informations de localisation précises</h2>
+<p>Chaque message d’erreur inclut <strong>le numéro de ligne et le numéro de colonne</strong> — par exemple <code>"Guillemet inattendu... Erreur à la ligne : 3 (14)"</code>. C’est essentiel pour déboguer les fichiers de configuration. La méthode statique <code>createMessage()</code> formate les erreurs avec le motif : <code>msg + " Erreur à la ligne : " + line + " (" + col + ")" + (s != null ? " : " + s : "")</code>. Les compteurs <code>lineno</code> et <code>colno</code> sont maintenus par <code>read()</code> (incrémente la ligne sur <code>\n</code>) et <code>nextToken()</code> (incrémente la colonne à chaque caractère).</p></div>
+
+<div class="c"><h2>Contexte d’utilisation</h2>
+<p>Cet analyseur est utilisé pour lire <strong>les fichiers de configuration</strong> et <strong>les entrées de paramètres de script</strong> — des endroits où les utilisateurs ou administrateurs écrivent des données clé=valeur dans des fichiers texte simples. Exemple de fichier analysé par celui-ci :</p>
+<pre>nom=ProjectForge
+version="8.0.0"
+description="Système ERP avec feuille de temps, calendrier et comptabilité"
+maxUtilisateurs=100</pre>
+<p>L’analyseur lit ligne par ligne (<code>EOL</code> arrête chaque appel à <code>parse()</code>), produisant une <code>Map&lt;String, String&gt;</code>. La classe compagnon <a href="738.html">KeyValuePairWriter</a> fait l’inverse — écrit des cartes au format texte clé=valeur.</p></div>
+
+</body></html>

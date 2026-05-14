@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>#102: DataTransferPublicSession.kt [DE]</title>
+<style>
+body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}
+h1{border-bottom:2px solid #333;padding-bottom:.3em}
+h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}
+h3{margin-top:2em;color:#444}
+a{color:#0366d6}
+.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}
+.nav{font-size:.9em;color:#888;margin-bottom:1em}
+.lang{font-size:.85em;color:#888;float:right}
+.lang a{color:#888;text-decoration:none;padding:0 .3em}
+.lang a.active{color:#0366d6;font-weight:600;text-decoration:underline}
+.meta{font-size:.9em;margin:1em 0;color:#555}
+code{background:#f0f0f0;padding:0 .2em;font-size:.93em}
+pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}
+table{border-collapse:collapse;width:100%;margin:1em 0}
+th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}
+th{background:#f5f5f5;font-weight:600}
+.hist{font-size:.85em;color:#555}
+</style>
+</head>
+<body>
+<div class="lang"><a href="102.html">EN</a> · <a href="102_de.html" class="active">DE</a> · <a href="102_ru.html">RU</a> · <a href="102_fr.html">FR</a> · <a href="102_es.html">ES</a></div>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← Dateiindex</a> · <a href="575.html">← Vorherige</a> · <a href="283.html">Nächste →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/plugins/org.projectforge.plugins.datatransfer/src/main/kotlin/org/projectforge/plugins/datatransfer/restPublic/DataTransferPublicSession.kt" target="_blank" title="Quellcode auf GitHub anzeigen">📄 Quelle</a></div>
+<h1>#102: <code>DataTransferPublicSession.kt</code></h1>
+<div class="meta"><code>plugins/org.projectforge.plugins.datatransfer/src/main/kotlin/org/projectforge/plugins/datatransfer/restPublic/DataTransferPublicSession.kt</code> Typ: Kotlin · Rolle: Plugin-Registrierung · Quelle: plugins/org.projectforge.plugins.datatransfer/src/main/kotlin/org/projectforge/plugins/datatransfer/restPublic/DataTransferPublicSession.kt <span style="color:#888">281 Zeilen · 216 Code · 46 Kommentare · 19 leer</span></div>
+<div class="c">REST-API-Endpunkt für DataTransferPublicSession. Verarbeitet HTTP-Anfragen und gibt JSON-Antworten für das React-Frontend zurück.</div>
+<h2>Codestruktur</h2>
+<p>Annotationen: <code>param</code>, <code>Suppress</code>, <code>Service</code>, <code>JsonIgnore</code>, <code>Autowired</code></p>
+<p>Klassen: <code>DataTransferPublicSession</code>, <code>TransferAreaData</code>, <code>CheckAccessResult</code></p>
+<p>Funktionen (9): <code>checkLogin</code>, <code>login</code>, <code>checkDataBaseEntry</code>, <code>register</code>, <code>unregister</code>, <code>logout</code>, <code>isOwnerOfFile</code>, <code>registerFileAsOwner</code>, <code>getSessionMap</code></p>
+<p>Eigenschaften (28): <code>id</code>, <code>accessToken</code>, <code>password</code>, <code>userInfo</code>, <code>ownedFiles</code>, <code>dataTransferArea</code>, <code>failedAccessMessage</code>, <code>dataTransferAreaDao</code>, <code>data</code>, <code>area</code>, <code>errorMessage</code>, <code>loginProtection</code>, <code>clientIpAddress</code>, <code>offset</code>, <code>seconds</code>, <code>numberOfFailedAttempts</code>, <code>loginResultStatus</code>, <code>dbo</code>, <code>errorMessage</code>, <code>map</code>, <code>map</code>, <code>id</code>, <code>data</code>, <code>map</code>, <code>data</code>...</p>
+<p>Importe: 12 Pakete</p>
+<p>Paket: <code>org.projectforge.plugins.datatransfer.restPublic</code></p>
+<h2>Quellcode (gekürzt)</h2>
+<pre>
+package org.projectforge.plugins.datatransfer.restPublic
+
+import com.fasterxml.jackson.annotation.JsonIgnore
+import mu.KotlinLogging
+import org.projectforge.business.login.LoginProtection
+import org.projectforge.business.login.LoginResultStatus
+import org.projectforge.framework.ToStringUtil
+import org.projectforge.framework.i18n.translate
+import org.projectforge.plugins.datatransfer.DataTransferAreaDO
+import org.projectforge.plugins.datatransfer.DataTransferAreaDao
+import org.projectforge.rest.config.RestUtils
+import org.springframework.beans.factory.annotation.Autowired
+import org.springframework.stereotype.Service
+import jakarta.servlet.http.HttpServletRequest
+
+private val log = KotlinLogging.logger {}
+
+/**
+ * Eine minimale Sitzungsverwaltung, um lästige erneute Anmeldungen für externe Benutzer des Datentransfer-Tools zu vermeiden.
+ */
+@Service
+class DataTransferPublicSession {
+  internal class TransferAreaData(
+    var id: Long,
+    var accessToken: String,
+    @JsonIgnore var password: String?,
+    var userInfo: String?,
+    var ownedFiles: MutableList&lt;String&gt; = mutableListOf()
+  )
+
+  internal class CheckAccessResult(
+    val dataTransferArea: DataTransferAreaDO? = null,
+    val failedAccessMessage: String? = null
+  )
+
+
+  @Autowired
+  private lateinit var dataTransferAreaDao: DataTransferAreaDao
+
+  /**
+   * Prüft, ob der Benutzer einen gültigen Eintrag (accessToken/Passwort) in seiner Sitzung hat.
+   * @param areaId Suchbereich nach ID in der Benutzersitzung.
+   * @param accessToken Suchbereich nach accessToken in der Benutzersitzung.
+   */
+  internal fun checkLogin(
+    request: HttpServletRequest,
+    areaId: Long? = null,
+    accessToken: String? = null
+  ): Pair&lt;DataTransferAreaDO, TransferAreaData&gt;? {
+    check(areaId != null || !accessToken.isNullOrBlank())
+    val data = if (areaId != null) {
+      getSessionMap(request)?.get(areaId)
+    } else {
+      getSessionMap(request)?.entries?.find { it.value.accessToken == accessToken }?.value
+    } ?: return null
+    val area = dataTransferAreaDao.getAnonymousArea(data.accessToken) ?: return null
+    val errorMessage = checkDataBaseEntry(request, area, data.id, data.accessToken, data.password, data.userInfo)
+    if (errorMessage != null) {
+      unregister(request, data.id) // Abmelden, erneute Anmeldung erzwingen.
+      return null
+    }
+    log.info {
+      &quot;Externe Benutzerinfo aus Sitzung wiederhergestellt: ${ToStringUtil.toJsonString(data)}, ip=${
+        RestUtils.getClientIp(
+          request
+        )
+      }&quot;
+    }
+    return Pair(area, data)
+  }
+
+  /**
+   * Versucht, den Benutzer anzumelden. Verwendet LoginProtection. Prüft nicht, ob der Benutzer bereits angemeldet ist.
+   * Die Sitzungs-ID wird geändert (Session Fixation), aber alle zuvor angemeldeten Bereiche werden in die neue Sitzung übernommen.
+   */
+  internal fun login(
+    request: HttpServletRequest,
+    accessToken: String?,
+    password: String?,
+    userInfo: String?
+  ): CheckAccessResult {
+    if (accessToken == null || password == null) {
+      return CheckAccessResult(failedAccessMessage = LoginResultStatus.FAILED.localizedMessage)
+    }
+    val loginProtection = LoginProtection.instance()
+    val clientIpAddress = RestUtils.getClientIp(request)
+    val offset = loginProtection.getFailedLoginTimeOffsetIfExists(accessToken, clientIpAddress)
+    if (offset &gt; 0) {
+      // Zeitversatz besteht noch. Anmeldeversuch ignorieren.
+      val seconds = (offset / 1000).toString()
+      log.warn(&quot;Das Konto für &#x27;${accessToken}&#x27;, ip=$clientIpAddress, userInfo=&#x27;$userInfo&#x27; ist für $seconds Sekunden aufgrund fehlgeschlagener Anmeldeversuche gesperrt. Bitte versuchen Sie es später erneut.&quot;)
+      val numberOfFailedAttempts = loginProtection.getNumberOfFailedLoginAttempts(accessToken, clientIpAddress)
+      val loginResultStatus = LoginResultStatus.LOGIN_TIME_OFFSET
+      loginResultStatus.setMsgParams(
+        seconds,
+        numberOfFailedAttempts.toString()
+      )
+      return CheckAccessResult(failedAccessMessage = loginResultStatus.localizedMessage)
+    }
+
+    val dbo = dataTransferAreaDao.getAnonymousArea(accessToken)
+    if (dbo == null) {
+      log.warn { &quot;Datentransferbereich mit externalAccessToken &#x27;$accessToken&#x27; nicht gefunden. Angefragt von ip=$clientIpAddress, userInfo=&#x27;$userInfo&#x27;.&quot; }
+      loginProtection.incrementFailedLoginTimeOffset(accessToken, clientIpAddress)
+      return CheckAccessResult(failedAccessMessage = LoginResultStatus.FAILED.localizedMessage)
+    }
+    val errorMessage = checkDataBaseEntry(request, dbo, dbo.id!!, accessToken, password, userInfo)
+    if (errorMessage != null) {
+      loginProtection.incrementFailedLoginTimeOffset(accessToken, clientIpAddress)
+      return CheckAccessResult(failedAccessMessage = errorMessage)
+    }
+    // Erfolgreich angemeldet:
+    loginProtection.clearLoginTimeOffset(accessToken, null, clientIpAddress)
+    log.info { &quot;Datentransferbereich mit externalAccessToken &#x27;$accessToken&#x27;: Anmeldung erfolgreich von ip=$clientIpAddress, userInfo=&#x27;$userInfo&#x27;.&quot; }
+
+    // Session Fixation: JSESSIONID nach der Anmeldung ändern (aus Sicherheitsgründen / XSS-Angriff auf die Anmeldeseite)
+    request.getSession(false)?.let { session -&gt;
+      if (!session.isNew) {
+        val map = getSessionMap(request)
+// ... (gekürzt, insgesamt 259 Zeilen)</pre>
+
+<h2>Git-Verlauf</h2>
+<div class="hist"><pre>868d6abb7 2025 -> 2026
+63081666f Quellcode-Dateiköpfe: 2024 -> 2025.
+4c04cfd65 MAJOR-CHANGE! Migration von Integer-IDs zu Long-IDs (einschließlich Fremdschlüsseln usw.)
+77bade6df javax.* -> jakarta.*
+b6092df09 Copyright 2023 -> 2024</pre></div>
+</body>
+</html>

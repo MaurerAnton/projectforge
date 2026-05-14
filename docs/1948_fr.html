@@ -1,0 +1,88 @@
+Here is the complete HTML translated into French, with the language set to `fr` and the title updated to include `[FR]`.
+
+```html
+<!DOCTYPE html><html lang="fr"><head><meta charset="utf-8"><title>[FR] #1948</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:2em;color:#444}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}</style></head>
+<body><div class="nav"><a href="https://maureranton.github.io/projectforge/">&#8592; Index</a> &#183; <a href="file-index.html">&#8592; Index des fichiers</a> &#183; <a href="1200.html">&#8592; Précédent</a> &#183; <a href="1202.html">Suivant &#8594;</a></div>
+<h1>#1948 : <code>AbstractJob.kt</code></h1>
+<div class="meta"><code>projectforge-common/src/main/kotlin/org/projectforge/jobs/AbstractJob.kt</code> Framework de tâches, projectforge-business/src/main/kotlin/org/projectforge/framework/jobs/AbstractJob.kt <span style="color:#888">43 lignes · 14 code · 25 commentaires · 4 vides</span></div>
+<div class="c">Classe de base abstraite pour les tâches d'arrière-plan dans ProjectForge. Prend en charge les stratégies de file d'attente (aucune, par file, par file et par utilisateur, refus), un délai d'attente optionnel (120 s par défaut), le suivi de la progression (nombre total/traité) et l'annulation via les coroutines Kotlin. Les tâches ont un cycle de vie et exposent <code>readAccess</code> / <code>writeAccess</code> pour les vérifications de permissions. S'intègre avec <code>UserGroupCache</code> pour l'affichage du propriétaire.</div>
+
+<h2>Architecture</h2>
+<h3>Hiérarchie des classes</h3>
+<ul>
+  <li><strong>AbstractJob</strong> — classe abstraite implémentant <code>Comparable&lt;AbstractJob&gt;</code></li>
+  <li>Les sous-classes doivent implémenter <code>suspend fun run()</code></li>
+</ul>
+
+<h3>Énumérations clés</h3>
+<table>
+  <tr><th>Énumération</th><th>Valeurs</th><th>Objectif</th></tr>
+  <tr><td><code>QueueStrategy</code></td><td>NONE, PER_QUEUE, PER_QUEUE_AND_USER, REFUSE_PER_QUEUE, REFUSE_PER_QUEUE_AND_USER</td><td>Contrôle si la tâche bloque/refuse de nouvelles tâches dans la même zone</td></tr>
+  <tr><td><code>Status</code></td><td>RUNNING, WAITING, FINISHED, FAILED, CANCELLED, REFUSED</td><td>Implémente <code>I18nEnum</code> ; détermine l'ordre dans la liste des tâches</td></tr>
+  <tr><td><code>ErrorCode</code></td><td>TIMEOUT_WHILE_WAITING, REFUSED_BY_ANOTHER_RUNNING_JOB</td><td>Raison de l'échec/refus</td></tr>
+</table>
+
+<h3>Cycle de vie d'une tâche</h3>
+<p>Le cycle de vie est géré par <code>JobHandler</code> :</p>
+<ol>
+  <li><code>addJob()</code> — tâche ajoutée au gestionnaire, statut = WAITING</li>
+  <li>Vérification de la file d'attente — comparaison avec les tâches en cours via <code>isBlocking()</code></li>
+  <li><code>onBeforeStart()</code> — crochet avant l'exécution</li>
+  <li><code>start()</code> — définit le statut sur RUNNING, appelle <code>run()</code></li>
+  <li>En cas de succès : <code>onFinish()</code> → <code>onAfterFinish()</code> → <code>onAfterTermination()</code></li>
+  <li>En cas d'annulation : <code>cancel()</code> → <code>onBeforeCancel()</code> → <code>onAfterCancel()</code> → <code>onAfterTermination()</code></li>
+  <li>En cas d'échec : <code>markJobAsFailed()</code> → <code>onAfterException()</code> → <code>onAfterTermination()</code></li>
+</ol>
+
+<h3>Propriétés clés</h3>
+<table>
+  <tr><th>Propriété</th><th>Type</th><th>Description</th></tr>
+  <tr><td><code>title</code></td><td>String</td><td>Titre lisible pour l'affichage/la journalisation</td></tr>
+  <tr><td><code>area</code></td><td>String?</td><td>Regroupe les tâches ; la stratégie de file d'attente est limitée à la même zone</td></tr>
+  <tr><td><code>ownerId</code></td><td>Long?</td><td>Utilisateur ayant démarré la tâche</td></tr>
+  <tr><td><code>id</code></td><td>Int</td><td>ID unique auto-incrémenté de la tâche</td></tr>
+  <tr><td><code>timeout</code></td><td>Int</td><td>Délai d'attente en ms (à partir du paramètre constructeur en secondes)</td></tr>
+  <tr><td><code>timeoutReached</code></td><td>Boolean</td><td>Vrai si la tâche a dépassé le délai d'attente pendant RUNNING</td></tr>
+  <tr><td><code>isActive</code></td><td>Boolean</td><td>Raccourci : status==RUNNING && coroutineJob.isActive</td></tr>
+  <tr><td><code>progressPercentage</code></td><td>Int</td><td>Calculé à partir de processedNumber/totalNumber</td></tr>
+  <tr><td><code>terminatedForDeletion</code></td><td>Boolean</td><td>Vrai si terminé il y a plus d'une heure (nettoyage)</td></tr>
+  <tr><td><code>info</code></td><td>String</td><td>Informations de statut formatées en Markdown (propriétaire, heures, statut, titre)</td></tr>
+</table>
+
+<h3>Permissions</h3>
+<ul>
+  <li><code>readAccess(user)</code> — délègue à <code>writeAccess(user)</code> par défaut</li>
+  <li><code>writeAccess(user)</code> — abstraite, doit être implémentée par la sous-classe</li>
+  <li><code>isOwner</code> — vérifie si l'utilisateur connecté correspond à <code>ownerId</code></li>
+</ul>
+
+<h3>Points d'intégration</h3>
+<ul>
+  <li><strong>JobHandler</strong> — gère les tâches, appelle les méthodes du cycle de vie</li>
+  <li><strong>JobHandlerScheduler</strong> — déclenche <code>tidyUp()</code> chaque minute</li>
+  <li><strong>AccessChecker</strong> — injecté via <code>@Autowired</code></li>
+  <li><strong>Coroutines</strong> — le handle <code>Job</code> est stocké comme <code>coroutinesJob</code></li>
+  <li><strong>I18n</strong> — étiquettes de statut via <code>I18nEnum.i18nKey</code></li>
+</ul>
+
+<h2>Historique Git</h2><div class="hist"><pre>
+868d6abb7 2025 -> 2026
+63081666f En-têtes des fichiers source : 2024 -> 2025.
+cba940301 Migration en cours...
+67805f2fc ThreadLocalUserContext.user -> ThreadLocalUserContext.loggedInUser (renommé)
+4c04cfd65 CHANGEMENT-MAJEUR ! Migration des identifiants entiers vers des identifiants Long (y compris les clés étrangères, etc.)
+b6092df09 Copyright 2023 -> 2024
+ab45d51fa Copyright 2001-2022 -> 2001-2023.
+163492453 WIP : Tâches et enregistrements de comptes bancaires.
+232a91c5a BaseUserGroupRightUtils implémenté. WIP BankingPlugin et gestion des tâches.
+38bec971a ThreadLocal -> Kotlin
+09b3f0df7 WIP : Jobmonitor. ListStatisticsSupport -> MarkdownBuilder
+fcc4c67f6 WIP : Jobmonitor.
+a1646e91a WIP : Plugin bancaire (et nouveau module d'importation).
+d93f61491 WIP : Plugin bancaire (et nouveau module d'importation).
+cd69cc40f WIP : Plugin bancaire (et nouveau module d'importation).
+f68cda98e Jobmonitor.
+67eed70e4 WIP : Plugin bancaire (et nouveau module d'importation). JobHandler/monitor démarré.
+</pre></div>
+</body></html>

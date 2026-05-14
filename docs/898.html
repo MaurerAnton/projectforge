@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>#898: AuftragsPositionsStatusFilter.kt</title>
+<title>#898: AuftragsCacheService.kt</title>
 <style>
 body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}
 h1{border-bottom:2px solid #333;padding-bottom:.3em}
@@ -22,50 +22,75 @@ th{background:#f5f5f5;font-weight:600}
 </head>
 <body>
 
-<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="897.html">← Prev</a> · <a href="899.html">Next →</a></div>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="897.html">← Prev</a> · <a href="899.html">Next →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/kotlin/org/projectforge/business/fibu/AuftragsCacheService.kt" target="_blank" title="View source on GitHub">📄 source</a></div>
 
-<h1>#898: <code>AuftragsPositionsStatusFilter.kt</code></h1>
+<h1>#898: <code>AuftragsCacheService.kt</code></h1>
 
-<div class="meta">
-  <strong>Type:</strong> CustomResultFilter implementation &middot;
-  <strong>Purpose:</strong> Filters orders by status of their positions &middot;
+<div class="meta"><code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/AuftragsCacheService.kt</code> 
+  <strong>Type:</strong> Spring Service &middot;
+  <strong>Purpose:</strong> Fast tuple-based database queries for order data &middot;
   <strong>Package:</strong> <code>org.projectforge.business.fibu</code><br>
-  <strong>Source path:</strong> <code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/AuftragsPositionsStatusFilter.kt</code>
-</div>
+  <strong>Source path:</strong> <code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/AuftragsCacheService.kt</code>
+ <span style="color:#888">167 lines · 135 code · 25 comments · 7 blank</span></div>
 
 <div class="c">
-  A <code>CustomResultFilter&lt;AuftragDO&gt;</code> that matches orders when at least one of their (non-deleted) positions has an <code>AuftragsStatus</code> matching one of the configured filter values. An empty value list matches all orders. String-based construction with error-tolerant parsing and logging for unknown status names.
+  <strong>Purpose:</strong> Provides high-performance read-only database access for orders (<code>AuftragDO</code>), order positions (<code>AuftragsPositionDO</code>), and payment schedules (<code>PaymentScheduleDO</code>) using native JPQL tuple queries. Avoids full entity hydration and lazy-loading overhead by selecting only the columns needed for list rendering and cache population.
 </div>
 
-<h2>Filter Logic</h2>
+<h2>Architecture &amp; Design</h2>
+
+<h3>Service Declaration</h3>
+<p>The class is annotated with <code>@Service</code> and depends on <code>PfPersistenceService</code> via <code>@Autowired</code>. All methods use <code>runIsolatedReadOnly</code> to execute queries in a fresh persistence context, preventing pollution of the caller's session cache.</p>
+
+<table>
+  <tr><th>Dependency</th><th>Type</th><th>Role</th></tr>
+  <tr><td><code>PfPersistenceService</code></td><td>Framework</td><td>Provides isolated read-only JPA contexts for fast tuple queries</td></tr>
+</table>
+
+<h3>Methods</h3>
+
+<h4><code>selectAuftragsList(): List&lt;AuftragDO&gt;</code></h4>
+<p>Returns all orders (including deleted) with a curated column set. Maps each <code>Tuple</code> to a partially-populated <code>AuftragDO</code> using <code>TupleUtils</code> getter helpers. Foreign keys (<code>kundeId</code>, <code>projektId</code>, <code>contactPersonId</code>) are resolved via <code>em.getReference()</code> to avoid additional queries — Hibernate returns a lazy proxy without hitting the database.</p>
+
+<h4><code>selectNonDeletedAuftragsPositions(): List&lt;AuftragsPositionDO&gt;</code></h4>
+<p>Returns non-deleted order positions. Similar tuple mapping pattern with an additional performance optimization: <code>bemerkung</code> (comment) is abbreviated to 30 characters via <code>abbreviate(30)</code>, reducing memory footprint for list views. The task reference (<code>taskId</code>) creates a stub <code>TaskDO</code> with only the ID set.</p>
+
+<h4><code>selectNonDeletedPaymentSchedules(): List&lt;PaymentScheduleDO&gt;</code></h4>
+<p>Returns non-deleted payment schedules, creating stub <code>AuftragDO</code> objects (ID-only) for the foreign key reference <code>auftragId</code>.</p>
+
+<h3>Query Definitions (Companion Object)</h3>
+<p>Three JPQL queries are defined as <code>private val</code> constants in the companion object, using <code>${AuftragDO::class.simpleName}</code> interpolation for type-safe entity references:</p>
+
+<table>
+  <tr><th>Constant</th><th>Target Entity</th><th>Filter</th></tr>
+  <tr><td><code>SELECT_ORDERS</code></td><td><code>AuftragDO</code></td><td>None (all records, including deleted)</td></tr>
+  <tr><td><code>SELECT_POSITIONS</code></td><td><code>AuftragsPositionDO</code></td><td><code>WHERE deleted = false</code></td></tr>
+  <tr><td><code>SELECT_PAYMENTS_SCHEDULES</code></td><td><code>PaymentScheduleDO</code></td><td><code>WHERE deleted = false</code></td></tr>
+</table>
+
+<h3>Performance Strategy</h3>
 <ul>
-  <li>If <code>values</code> is empty → matches all orders</li>
-  <li>Iterates <code>element.positionenExcludingDeleted</code>, returns <code>true</code> if any position's <code>status</code> is contained in the filter values</li>
+  <li>Tuple queries select only the columns needed; no full entity graphs are loaded.</li>
+  <li><code>em.getReference()</code> creates lazy proxies for FK associations, avoiding JOINs.</li>
+  <li><code>runIsolatedReadOnly</code> ensures each call has a clean persistence context, preventing interference with the caller's active transaction.</li>
+  <li>The <code>abbreviate(30)</code> call on <code>bemerkung</code> minimizes heap pressure for large comment fields during list rendering.</li>
 </ul>
 
-<h2>Companion Object</h2>
-<p><code>create(valuesAsStrings: Array&lt;String&gt;)</code> — parses string array into <code>AuftragsStatus</code> enum values, logging unknown entries. The status values this can match include the full <code>AuftragsStatus</code> lifecycle: <code>POTENZIAL</code>, <code>IN_ERSTELLUNG</code>, <code>GELEGT</code>, <code>LOI</code>, <code>BEAUFTRAGT</code>, <code>ESKALATION</code>, <code>ABGESCHLOSSEN</code>, and <code>ABGELEHNT</code>.</p>
+<h2>Related Classes</h2>
+<ul>
+  <li><strong>Consumed by:</strong> <code>AuftragsCache</code> — uses these tuple results to build the in-memory order book cache</li>
+  <li><strong>Uses:</strong> <code>TupleUtils</code> — type-safe tuple column accessors (<code>getLong</code>, <code>getString</code>, <code>getBigDecimal</code>, etc.)</li>
+  <li><strong>Uses:</strong> <code>PfPersistenceService</code> — framework persistence abstraction</li>
+</ul>
 
 <h2>Git History</h2>
 <div class="hist"><pre>
 868d6abb7 2025 -> 2026
+49b1d6b8d Forecast and orderbook: forecast-Type for orders/positions added (current month or following month)
+7163b8c4e WIP: Order book snapshots, ForecastExport fixed (customer and project name were missing)
 63081666f Source file headers: 2024-> 2025.
-3f25c773a Migration stuff in progress...
-0d183e5df Migration stuff in progress...
-923f5c64b Migration stuff in progress...
-b6092df09 Copyright 2023 -> 2024
-ab45d51fa Copyright 2001-2022 -> 2001-2023.
-5f7ef41b8 Copyright 2021 -> 2022
-ceb63e8a1 Source code header: (C) 2001-2021.
-33aac841b WIP: Auftrag -> React (AuftragDao modified).
-d5bfcff96 VacationPeriodFilter added.
-031853218 VacationYearFilter added.
-bc0a52bc7 Vacation stuff...
-b2657ec3a Vacation list, MagicFilterProcessort supports now I18nEnum values.
-7c79f1922 Copyright of source header -> 2020.
-dd5ca38ac CopyRight of all java file-header updated or created.
-2d86a8cd6 PROJECTFORGE-2306 Refactorings for keeping access check at update time
-9ebb88522 Initial commit
+ae2c04ee0 Migration stuff in progress... (all tests of all packages: OK).
+89ea9a532 Migration stuff in progress... (all tests of all packages: OK).
 </pre></div>
 
 </body>

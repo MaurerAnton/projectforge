@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>#757: XmlObjectReader [ES]</title>
+<style>
+  body { font-family: system-ui, sans-serif; max-width: 960px; margin: 2em auto; padding: 0 1em; background: #fafafa; color: #222; line-height: 1.6; }
+  h1 { border-bottom: 2px solid #333; padding-bottom: 0.3em; }
+  h2 { margin-top: 2.5em; border-bottom: 1px solid #ddd; padding-bottom: 0.2em; color: #333; }
+  h3 { margin-top: 2em; color: #444; }
+  a { color: #0366d6; }
+  .c { border-left: 3px solid #ddd; padding: .5em 1em; margin: 1em 0; background: #fff; }
+  .nav { font-size: .9em; color: #888; margin-bottom: 1em; }
+  .lang { font-size: .85em; color: #888; float: right; }
+  .lang a { color: #888; text-decoration: none; padding: 0 .3em; }
+  .lang a.active { color: #0366d6; font-weight: 600; text-decoration: underline; }
+  .meta { font-size: .9em; margin: 1em 0; color: #555; }
+  code { background: #f0f0f0; padding: 0 .2em; font-size: .93em; }
+  pre { background: #f5f5f5; padding: .8em 1em; border: 1px solid #ddd; border-radius: 4px; overflow-x: auto; font-size: .88em; line-height: 1.4; }
+  table { border-collapse: collapse; width: 100%; margin: 1em 0; }
+  th, td { border: 1px solid #ddd; padding: .5em .8em; text-align: left; font-size: .9em; }
+  th { background: #f5f5f5; font-weight: 600; }
+  .hist { font-size: .85em; color: #555; }
+</style>
+</head>
+<body>
+<div class="lang"><a href="755.html">EN</a> · <a href="755_de.html">DE</a> · <a href="755_ru.html">RU</a> · <a href="755_fr.html">FR</a> · <a href="755_es.html" class="active">ES</a></div>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Índice</a> · <a href="file-index.html">← Índice de archivos</a> · <a href="756.html">← Anterior</a> · <a href="758.html">Siguiente →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/java/org/projectforge/framework/xmlstream/XmlObjectReader.java" target="_blank" title="Ver fuente en GitHub">📄 fuente</a></div>
+
+<h1>#757: <code>XmlObjectReader.java</code></h1>
+<div class="meta"><code>projectforge-business/src/main/java/org/projectforge/framework/xmlstream/XmlObjectReader.java</code> <strong>Motor de deserialización Java</strong> — el corazón de la lectura XmlStream. 514 líneas. Utiliza dom4j. Fuente: <code>projectforge-business/src/main/java/org/projectforge/framework/xmlstream/XmlObjectReader.java</code> <span style="color:#888">514 líneas · 402 código · 74 comentarios · 38 en blanco</span></div>
+
+<div class="c">
+<strong>Propósito:</strong> El <strong>núcleo de deserialización</strong> del framework XmlStream — convierte XML (como árboles de <code>Element</code> de dom4j) de vuelta a objetos Java con campos poblados. 514 líneas. Este es el <strong>archivo más grande</strong> del framework XmlStream. Javadoc: <em>"Analiza objetos serializados por XmlObjectWriter. Utiliza dom4j."</em> Funciona en conjunto con <a href="756.html">XmlObjectWriter</a> — el Writer serializa objetos a XML, el Reader deserializa XML de vuelta a objetos.
+</div>
+
+<h2>Arquitectura — Máquina de Estados con Retroceso</h2>
+
+<div class="c">
+<p>El Reader es un <strong>objeto con estado</strong> (a diferencia del Writer sin estado). Mantiene el estado durante una única sesión de lectura:</p>
+<ul>
+<li><code>processedElements</code> (Set&lt;Element&gt;) — qué elementos XML fueron leídos exitosamente. Al finalizar, los elementos NO en este conjunto se consideran "ignorados" y aparecen en advertencias</li>
+<li><code>processedAttributes</code> (Map&lt;Element, Set&lt;String&gt;&gt;) — qué atributos por elemento fueron leídos. Mismo propósito para advertencias</li>
+<li><code>referenceObjects</code> (Map&lt;String, Object&gt;) — caché de objetos deserializados indexados por <code>o-id</code>. Se usa para deduplicación: si dos elementos XML referencian el mismo objeto, se deserializa una vez y se devuelve desde la caché la segunda vez</li>
+<li><code>warnings</code> (String) — advertencias acumuladas sobre elementos/atributos ignorados</li>
+</ul>
+</div>
+
+<h2>Puntos de Entrada — Dos Métodos <code>read()</code></h2>
+
+<div class="c">
+<h3><code>read(String xml)</code> — API pública</h3>
+<p>Toma una cadena XML cruda. La analiza mediante <code>XmlHelper.fromString()</code> → <code>Element</code> de dom4j. Limpia el estado (processedElements, processedAttributes, warnings). Llama al <code>read(Element)</code> interno. Después de la lectura, ejecuta <code>checkForIgnoredElements()</code> — si alguna etiqueta/atributo XML no fue procesado, aparece en advertencias. Devuelve el objeto deserializado raíz.</p>
+
+<h3><code>read(Element el)</code> — API interna</h3>
+<p>Toma un Element de dom4j, encuentra la clase por nombre de etiqueta (mediante <code>getClass()</code>), y llama al <code>read(Class, Element, ...)</code> recursivo. Si no se encuentra la clase — devuelve <code>null</code>.</p>
+</div>
+
+<h2>Resolución de Clase en Tres Niveles — <code>getClass(String elementName)</code></h2>
+
+<div class="c">
+<p>Al encontrar una etiqueta XML, el Reader busca la clase Java correspondiente en tres lugares (en orden de prioridad):</p>
+<ol>
+<li><strong>AliasMap propio:</strong> <code>this.aliasMap.getClassForAlias(name)</code> — si se estableció explícitamente mediante <code>setAliasMap()</code></li>
+<li><strong>XmlRegistry global:</strong> <code>xmlRegistry.getClassForAlias(name)</code> — clases registradas al inicio</li>
+<li><strong>Class.forName() (respaldo):</strong> intenta cargar por FQCN. Si la clase es una interfaz, verifica <code>implementationMapping</code>. Si no se encuentra, registra error y devuelve <code>null</code> (el elemento será ignorado)</li>
+</ol>
+<p>Este sistema de tres niveles permite una gestión flexible de mapeos: AliasMap para sobrescrituras locales, XmlRegistry para reglas globales, Class.forName para compatibilidad hacia atrás con archivos XML antiguos donde las etiquetas eran FQCN.</p>
+</div>
+
+<h2>Método Recursivo Central — <code>read(Class, Element, attrName, attrValue)</code></h2>
+
+<div class="c">
+<p>El <strong>corazón</strong> del Reader. Toma un tipo de campo, elemento XML, y nombre/valor de atributo opcional. La lógica es una cadena de verificaciones de tipo:</p>
+<ol>
+<li><strong>Verificación de referencia:</strong> si el elemento tiene el atributo <code>o-ref-id</code> — es una referencia a un objeto ya deserializado. Busca en <code>referenceObjects</code> y devuelve el objeto en caché (deduplicación). Si no se encuentra ref-id — registra error</li>
+<li><strong>Verificación de convertidor:</strong> si el tipo tiene un <code>IConverter</code> registrado (mediante <code>xmlRegistry.getConverter(clazz)</code>) — llama a <code>converter.fromString()</code>. Para tipos simples: String, Integer, Date, BigDecimal, Boolean</li>
+<li><strong>Verificación de enum:</strong> si la clase es enum, llama a <code>enumFromString()</code>. Intenta <code>Enum.valueOf(clazz, val)</code>. En caso de <code>IllegalArgumentException</code>, hace <strong>un segundo intento con <code>toUpperCase()</code></strong> — compatibilidad hacia atrás con XML antiguo donde los enums estaban en minúsculas. El valor <code>"null"</code> se trata como <code>null</code></li>
+<li><strong>Verificación de colección:</strong> si la clase es Collection (List/Set/SortedSet), crea la implementación apropiada (ArrayList/HashSet/TreeSet), y lee recursivamente todos los elementos XML hijos como elementos de la colección. Si <code>ignoreEmptyCollections=true</code> y la colección está vacía — deja el campo <code>null</code></li>
+<li><strong>Objeto complejo:</strong> para todos los demás tipos (clases con <code>@XmlObject</code>) — crea una instancia mediante <code>BeanHelper.newInstance()</code>, verifica el atributo <code>o-id</code> (lo guarda en <code>referenceObjects</code> para futuras búsquedas ref-id), y llama a <code>read(obj, el)</code> para la población recursiva de campos</li>
+</ol>
+</div>
+
+<h2>Población de Campos — <code>read(Object obj, Element el)</code></h2>
+
+<div class="c">
+<p>Itera todos los campos del objeto (mediante <code>BeanHelper.getAllDeclaredFields()</code> — incluyendo heredados), los hace accesibles (reflexión), y para cada atributo XML y elemento hijo encuentra el campo correspondiente:</p>
+<ul>
+<li>Primero verifica <code>@XmlOmitField</code> — si está presente, el campo se omite</li>
+<li>Busca la anotación <code>@XmlField</code>. Compara el nombre de la etiqueta/atributo con el nombre del campo (sensible a mayúsculas) y con el alias de la anotación</li>
+<li>Si se encuentra el campo — llama a <code>read(field.getType(), element, key, attrValue)</code> para deserialización, luego <code>field.set(obj, value)</code> para asignación</li>
+<li>Si NO se encuentra el campo — registra advertencia <code>"Campo '...' no encontrado."</code> El elemento permanece sin marcar en <code>processedElements</code> y aparecerá en advertencias</li>
+</ul>
+<p><strong>Importante:</strong> los campos <code>o-id</code> y <code>ref-id</code> (atributos XML del Writer) se omiten explícitamente — no se buscan entre los campos del objeto.</p>
+</div>
+
+<h2>Advertencias — <code>checkForIgnoredElements()</code></h2>
+
+<div class="c">
+<p>Después de leer todo el XML, el Reader verifica: ¿todos los elementos del árbol XML fuente fueron marcados como <code>processed</code>? Si no — el XML contiene etiquetas para las cuales no se encontraron campos en la clase Java. Esto puede indicar:</p>
+<ul>
+<li>El XML fue creado por una versión más reciente de ProjectForge (nuevos campos en XML pero no en código)</li>
+<li>Error tipográfico en el nombre del campo o alias</li>
+<li>La clase fue modificada (campo eliminado o renombrado)</li>
+</ul>
+<p>Todos los elementos y atributos no marcados se recogen en una cadena de <code>warnings</code>. Si la cadena supera los 500 caracteres — se trunca (<code>ABBREVIATE_WARNING=500</code>) para evitar saturar los registros.</p>
+</div>
+
+<h2>Métodos Hook de Plantilla para Subclases</h2>
+
+<div class="c">
+<p>Tres métodos protegidos pueden ser sobrescritos en subclases:</p>
+<ul>
+<li><code>newInstance(Class, Element, String, String)</code> — intercepta la creación de objetos. Si devuelve <code>Status.IGNORE</code>, el objeto se omite. Por defecto devuelve <code>null</code> (creación estándar)</li>
+<li><code>addCollectionEntry(Collection, Object, Element)</code> — intercepta la adición a la colección. Si devuelve <code>true</code>, el objeto NO se agrega automáticamente. Por defecto es <code>false</code></li>
+<li><code>setField(Field, Object, Object, Element, String, String)</code> — intercepta la asignación de campo. Por defecto llama a <code>field.set(obj, value)</code></li>
+</ul>
+<p>Estos hooks permiten a las subclases modificar el comportamiento sin reescribir toda la lógica — por ejemplo, omitir ciertos campos, filtrar colecciones o posprocesar objetos.</p>
+</div>
+
+<h2><code>initialize(Class)</code> — Pre-escaneo</h2>
+
+<div class="c">
+<p>Puede llamarse antes de la lectura para <strong>pre-registrar</strong> todas las clases @XmlObject en AliasMap. Recorre recursivamente el árbol de tipos: para una clase con <code>@XmlObject</code>, registra el alias, luego para cada campo no primitivo llama recursivamente a <code>initialize()</code>. Utiliza un conjunto <code>processed</code> para evitar recursión infinita en referencias circulares. Esto permite pasar solo la clase raíz — el Reader mismo encuentra todos los tipos anidados.</p>
+</div>
+
+<h2>Historial Git</h2>
+<div class="hist">
+<pre>868d6abb7 2025 → 2026 (actualización de año de copyright)
+63081666f Encabezados de archivos fuente: 2024→2025
+a72903e36 *.java, *.kt: StringBuffer → StringBuilder
+b6092df09 Copyright 2023 → 2024
+ab45d51fa Copyright 2001-2022 → 2001-2023
+73b0be50b org.apache.commons.collections → org.apache.commons.collections4
+5f7ef41b8 Copyright 2021 → 2022
+cd27dd997 paquete xstream → xmlstream
+ceb63e8a1 Encabezado de código fuente: (C) 2001-2021
+7c79f1922 Copyright del encabezado fuente → 2020
+73a9755df Más limpieza de código (StringBuffer→StringBuilder, operador diamante, etc.)
+32f634b88 Optimizar importaciones
+000ca723d Eliminar expresiones booleanas sin sentido (negocio)
+dd5ca38ac CopyRight de todos los encabezados de archivos java actualizado o creado
+a5bbdca6a Cambiar logger a slf4j
+f979e8a42 MGC-UPDATE: Actualización a versión 3.0.0-SNAPSHOT
+9ebb88522 Commit inicial</pre>
+</div>
+
+<div class="c">
+Cambios clave: <code>73b0be50b</code> migró de commons-collections 3 a commons-collections4 — afectando el uso de <code>CollectionUtils</code>. <code>a72903e36</code> y <code>73a9755df</code> ambos reemplazaron <code>StringBuffer</code> con <code>StringBuilder</code> (no seguro para hilos pero más rápido, ya que el Reader es de un solo hilo por sesión). <code>a5bbdca6a</code> cambió a registro SLF4J.
+</div>
+
+</body>
+</html>

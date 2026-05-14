@@ -1,5 +1,183 @@
-<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>#387</title><style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333}a{color:#0366d6}.meta{font-size:.9em;margin:1em 0}.nav{font-size:.9em;color:#888;margin-bottom:1em}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}</style></head>
-<body><div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="386.html">← Prev</a> · <a href="388.html">Next →</a></div>
-<h1>#387: <code>ExportCell.java</code></h1>
-<div class="meta"><strong>Java model</strong> — single cell in the Excel export hierarchy (<code>Workbook → Sheet → Row → Cell</code>). Fields: <code>value</code> (data), <code>format</code> (using <a href="379.html">CellFormat</a>), <code>formula</code> (optional Excel formula), <code>colspan</code>/<code>rowspan</code> (merged cells). This is the leaf node of the export model tree.</div>
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>387: ExcelImport.java</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:1.5em;color:#444;font-size:1em}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.lang{font-size:.85em;color:#888;float:right}.lang a{color:#888;text-decoration:none;padding:0 .3em}.lang a.active{color:#0366d6;font-weight:600;text-decoration:underline}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}pre.diff{background:#fff;font-size:.82em;max-height:300px;overflow-y:auto}</style></head>
+<body><div class="lang"><a href="387.html" class="active">EN</a> · <a href="387_de.html">DE</a> · <a href="387_ru.html">RU</a> · <a href="387_fr.html">FR</a> · <a href="387_es.html">ES</a></div>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="683.html">← Prev</a> · <a href="3170.html">Next →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/java/org/projectforge/business/excel/ExcelImport.java" target="_blank" title="View source on GitHub">📄 source</a></div>
+<h1>#387: <code>ExcelImport.java</code></h1>
+<div class="meta"><code>projectforge-business/src/main/java/org/projectforge/business/excel/ExcelImport.java</code> Java class, <code>projectforge-business/src/main/java/org/projectforge/business/excel/ExcelImport.java</code> <span style="color:#888">353 lines · 203 code · 126 comments · 24 blank</span></div>
+<div class="c"><strong>Purpose:</strong> Source file: projectforge/business/excel/ExcelImport.java. ExcelImport.java is part of the ProjectForge open-source project management application.</div>
+<h2>Source (first 100 lines)</h2>
+<pre>/////////////////////////////////////////////////////////////////////////////
+//
+// Project ProjectForge Community Edition
+//         www.projectforge.org
+//
+// Copyright (C) 2001-2026 Micromata GmbH, Germany (www.micromata.com)
+//
+// ProjectForge is dual-licensed.
+//
+// This community edition is free software; you can redistribute it and/or
+// modify it under the terms of the GNU General Public License as published
+// by the Free Software Foundation; version 3 of the License.
+//
+// This community edition is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General
+// Public License for more details.
+//
+// You should have received a copy of the GNU General Public License along
+// with this program; if not, see http://www.gnu.org/licenses/.
+//
+/////////////////////////////////////////////////////////////////////////////
+
+package org.projectforge.business.excel;
+
+import org.apache.commons.beanutils.ConvertUtils;
+import org.apache.commons.beanutils.PropertyUtils;
+import org.apache.commons.lang3.ClassUtils;
+import org.apache.commons.lang3.StringUtils;
+import org.apache.poi.hssf.usermodel.HSSFCell;
+import org.apache.poi.hssf.usermodel.HSSFRow;
+import org.apache.poi.hssf.usermodel.HSSFSheet;
+import org.apache.poi.hssf.usermodel.HSSFWorkbook;
+
+import java.io.IOException;
+import java.io.InputStream;
+import java.lang.reflect.Array;
+import java.lang.reflect.InvocationTargetException;
+import java.util.ArrayList;
+import java.util.Date;
+import java.util.List;
+import java.util.Map;
+
+/**
+ * Convert a given Excel-Sheet into an object-Array.
+ *
+ * @param &lt;T&gt; baseclass for each row
+ * @author Wolfgang Jung (w.jung@micromata.de)
+ */
+public class ExcelImport&lt;T&gt;
+{
+  /**
+   * The logger
+   */
+  private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(ExcelImport.class);
+
+  /**
+   * the workbook containing the values.
+   */
+  private final HSSFWorkbook work;
+
+  /**
+   * a optional map for mapping column-names to property-names.
+   */
+  private Map&lt;String, String&gt; columnToPropertyMap;
+
+  /**
+   * the worksheet from which the values should be read.
+   */
+  private int activeSheet = 0;
+
+  /**
+   * the zero-based index with the column-names
+   */
+  private int columnNameRow = 0;
+
+  /**
+   * the zero-based index of the first row containing values
+   */
+  private int startAtRow = 1;
+
+  /**
+   * the classfactory for creating the objects.
+   */
+  private ClassFactory&lt;T&gt; clazzFactory;
+
+  /**
+   * Opens a given Excel-document. The stream is always closed.
+   *
+   * @param xlsStream the stream of the Excel-document.
+   * @throws IOException if the document is not readable
+   */
+  public ExcelImport(final InputStream xlsStream) throws IOException
+  {
+    // Closed by HSSFWorkbook
+    work = new HSSFWorkbook(xlsStream);
+  }
+
+  /**
+   * get a reference to the workbook for special features.</pre>
+<h2>Git History</h2>
+<div class="hist">
+<pre>868d6abb7 2025 -> 2026
+63081666f Source file headers: 2024-> 2025.
+b6092df09 Copyright 2023 -> 2024
+ab45d51fa Copyright 2001-2022 -> 2001-2023.
+c06db1dab Nearly all jars updated (code changes required).</pre>
+<h3>868d6abb7</h3><div class="c"><strong>2025 -> 2026</strong><pre class="diff">868d6abb75cd191a892911ac8e45058932cf9074
+diff --git a/projectforge-business/src/main/java/org/projectforge/business/excel/ExcelImport.java b/projectforge-business/src/main/java/org/projectforge/business/excel/ExcelImport.java
+index e3598d29b..dbb1c0d48 100644
+--- a/projectforge-business/src/main/java/org/projectforge/business/excel/ExcelImport.java
++++ b/projectforge-business/src/main/java/org/projectforge/business/excel/ExcelImport.java
+@@ -3,7 +3,7 @@
+ // Project ProjectForge Community Edition
+ //         www.projectforge.org
+ //
+-// Copyright (C) 2001-2025 Micromata GmbH, Germany (www.micromata.com)
++// Copyright (C) 2001-2026 Micromata GmbH, Germany (www.micromata.com)
+ //
+ // ProjectForge is dual-licensed.
+ //</pre></div><h3>63081666f</h3><div class="c"><strong>Source file headers: 2024-> 2025.</strong><pre class="diff">63081666f620fb87315f01b817e560e0b2f6a33a
+diff --git a/projectforge-business/src/main/java/org/projectforge/business/excel/ExcelImport.java b/projectforge-business/src/main/java/org/projectforge/business/excel/ExcelImport.java
+index 8a1c8f2d9..e3598d29b 100644
+--- a/projectforge-business/src/main/java/org/projectforge/business/excel/ExcelImport.java
++++ b/projectforge-business/src/main/java/org/projectforge/business/excel/ExcelImport.java
+@@ -3,7 +3,7 @@
+ // Project ProjectForge Community Edition
+ //         www.projectforge.org
+ //
+-// Copyright (C) 2001-2024 Micromata GmbH, Germany (www.micromata.com)
++// Copyright (C) 2001-2025 Micromata GmbH, Germany (www.micromata.com)
+ //
+ // ProjectForge is dual-licensed.
+ //</pre></div><h3>b6092df09</h3><div class="c"><strong>Copyright 2023 -> 2024</strong><pre class="diff">b6092df0927c4a3b161e888445f31dcab57493f2
+diff --git a/projectforge-business/src/main/java/org/projectforge/business/excel/ExcelImport.java b/projectforge-business/src/main/java/org/projectforge/business/excel/ExcelImport.java
+index 3189f78de..8a1c8f2d9 100644
+--- a/projectforge-business/src/main/java/org/projectforge/business/excel/ExcelImport.java
++++ b/projectforge-business/src/main/java/org/projectforge/business/excel/ExcelImport.java
+@@ -3,7 +3,7 @@
+ // Project ProjectForge Community Edition
+ //         www.projectforge.org
+ //
+-// Copyright (C) 2001-2023 Micromata GmbH, Germany (www.micromata.com)
++// Copyright (C) 2001-2024 Micromata GmbH, Germany (www.micromata.com)
+ //
+ // ProjectForge is dual-licensed.
+ //</pre></div><h3>ab45d51fa</h3><div class="c"><strong>Copyright 2001-2022 -> 2001-2023.</strong><pre class="diff">ab45d51fa419ede6174b31d69987f96d4b841ff9
+diff --git a/projectforge-business/src/main/java/org/projectforge/business/excel/ExcelImport.java b/projectforge-business/src/main/java/org/projectforge/business/excel/ExcelImport.java
+index 41f18bd64..3189f78de 100644
+--- a/projectforge-business/src/main/java/org/projectforge/business/excel/ExcelImport.java
++++ b/projectforge-business/src/main/java/org/projectforge/business/excel/ExcelImport.java
+@@ -3,7 +3,7 @@
+ // Project ProjectForge Community Edition
+ //         www.projectforge.org
+ //
+-// Copyright (C) 2001-2022 Micromata GmbH, Germany (www.micromata.com)
++// Copyright (C) 2001-2023 Micromata GmbH, Germany (www.micromata.com)
+ //
+ // ProjectForge is dual-licensed.
+ //</pre></div><h3>c06db1dab</h3><div class="c"><strong>Nearly all jars updated (code changes required).</strong><pre class="diff">c06db1dab7a4f114f726cfa4ebcf3716bb1d321f
+diff --git a/projectforge-business/src/main/java/org/projectforge/business/excel/ExcelImport.java b/projectforge-business/src/main/java/org/projectforge/business/excel/ExcelImport.java
+index a0c4b4380..41f18bd64 100644
+--- a/projectforge-business/src/main/java/org/projectforge/business/excel/ExcelImport.java
++++ b/projectforge-business/src/main/java/org/projectforge/business/excel/ExcelImport.java
+@@ -325,7 +325,7 @@ public class ExcelImport&lt;T&gt;
+     if (cell == null) {
+       return null;
+     }
+-    switch (cell.getCellTypeEnum()) {
++    switch (cell.getCellType()) {
+       case NUMERIC:
+         log.debug("using numeric");
+         if (Date.class.isAssignableFrom(destClazz)) {</pre></div>
+</div>
 </body></html>

@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>#751: XmlConstants</title>
+<title>#751: ProjectForgeRootElement</title>
 <style>
   body { font-family: system-ui, sans-serif; max-width: 960px; margin: 2em auto; padding: 0 1em; background: #fafafa; color: #222; line-height: 1.6; }
   h1 { border-bottom: 2px solid #333; padding-bottom: 0.3em; }
@@ -24,74 +24,81 @@
 </style>
 </head>
 <body>
-<div class="lang"><a href="751.html" class="active">EN</a> · <a href="751_de.html">DE</a> · <a href="751_ru.html">RU</a> · <a href="751_fr.html">FR</a> · <a href="751_es.html">ES</a></div>
-<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="750.html">← Prev</a> · <a href="752.html">Next →</a></div>
+<div class="lang"><a href="761.html" class="active">EN</a> · <a href="761_de.html">DE</a> · <a href="761_ru.html">RU</a> · <a href="761_fr.html">FR</a> · <a href="761_es.html">ES</a></div>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="750.html">← Prev</a> · <a href="752.html">Next →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/java/org/projectforge/framework/xmlstream/ProjectForgeRootElement.java" target="_blank" title="View source on GitHub">📄 source</a></div>
 
-<h1>#751: <code>XmlConstants.java</code></h1>
-<div class="meta"><strong>Java constants class</strong> — sentinel values for the XmlStream framework. 36 lines. Source: <code>projectforge-business/src/main/java/org/projectforge/framework/xmlstream/XmlConstants.java</code></div>
+<h1>#751: <code>ProjectForgeRootElement.java</code></h1>
+<div class="meta"><code>projectforge-business/src/main/java/org/projectforge/framework/xmlstream/ProjectForgeRootElement.java</code> <strong>Java abstract class</strong> — base class for all XML export root elements. 98 lines. Source: <code>projectforge-business/src/main/java/org/projectforge/framework/xmlstream/ProjectForgeRootElement.java</code> <span style="color:#888">98 lines · 45 code · 40 comments · 13 blank</span></div>
 
 <div class="c">
-<strong>Purpose:</strong> A global constants class holding three <strong>sentinel values</strong> — magic numbers/strings that are guaranteed never to appear in real data, used by the XmlStream serializer to detect "default value not set" conditions and by converters to represent null.
+<strong>Purpose:</strong> An abstract base class for <strong>XML root elements</strong> in ProjectForge's custom XmlStream serialization system. This is not JAXB or XStream — it's a <strong>lightweight, custom XML framework</strong> built from scratch for project-specific needs: data export/import between ProjectForge instances, user preference persistence, and configuration serialization.
+
+The Javadoc explains: <em>"For export and import it's useful to use an instance of this object to define for example the time zone, version etc."</em> — each exported XML file must carry metadata: which timezone was used during export, which ProjectForge version created the file, and when it was created. Without this information, import on another server could misinterpret dates or fail to apply format migrations.
 </div>
 
-<h2>Three Constants</h2>
+<h2>Three Fields — Three Compatibility Aspects</h2>
 
 <div class="c">
 <ol>
-<li><strong><code>MAGIC_INT_NUMBER = -21111970</code></strong> — A negative eight-digit number that will never be a legitimate ID or quantity. Used as the default value for <code>defaultIntValue</code> in the <code>@XmlField</code> annotation. When an int field equals this value, it is NOT serialized to XML — saving space. Likely derived from a developer's birth date (21.11.1970), a common practice for picking unharmful magic numbers.</li>
-<li><strong><code>MAGIC_STRING = "faiNg8jojae4Aiy5thaiz7Iefu4Egoarafa6Fu3xEekil8ae"</code></strong> — A 46-character random string with no spaces or special characters. Used as the default for <code>defaultStringValue</code>. No real user will ever enter this as a name or description. When matched, the field is skipped during serialization.</li>
-<li><strong><code>NULL_IDENTIFIER = "null"</code></strong> — A special string identifier for null values in XML. When a field is null, <code>XmlObjectWriter</code> writes the literal string <code>"null"</code> (rather than omitting the tag). <code>XmlObjectReader</code> restores <code>null</code> when it reads <code>"null"</code>. The code comment warns: <em>"Not really usable for strings, but should be interpreted as null value by all other converters."</em> For string fields, the literal "null" could be legitimate data, so this only works for numbers, dates, booleans, etc.</li>
+<li><strong><code>created</code> (Date):</strong> when the XML was created. The no-argument <code>setCreated()</code> automatically sets the current time with <strong>second precision</strong> (milliseconds zeroed — <code>withPrecision(DatePrecision.SECOND)</code> using <code>PFDateTime</code>). This matters: if two XML files have the same <code>created</code>, they were exported from the same batch. The importer uses this timestamp to determine which data is newer in conflict scenarios.</li>
+<li><strong><code>timeZone</code> (java.util.TimeZone):</strong> the timezone used during export. Critical for dates: if a server in Berlin exports "2025-05-15 09:00 Europe/Berlin" and import happens in New York, without an explicit timezone the date would be interpreted as 09:00 EST instead of 03:00 EST. An explicit <code>timeZone</code> prevents date shifts during cross-platform import.</li>
+<li><strong><code>version</code> (String, annotated <code>@XmlField(asAttribute=true)</code>):</strong> the ProjectForge version that created the file. Used for format migration — if the importer sees <code>version="7.4"</code>, it knows to apply converters for the 7.4 → 8.0 format. The <code>@XmlField(asAttribute=true)</code> annotation means the version is written as an attribute of the root element: <code>&lt;projectforge version="8.0"&gt;</code>, not a nested tag.</li>
 </ol>
 </div>
 
-<h2>Magic Number / Default Skipping Pattern</h2>
+<h2>Fluent API — All Setters Return <code>this</code></h2>
 
 <div class="c">
-The design: during serialization, if a field's value equals its declared default (from <code>@XmlField</code> annotation), the field is omitted from XML output. During deserialization, if a field is absent from XML, it receives the default value. This shrinks XML output (especially important for boolean fields where <code>false</code> is the typical default) and makes XML more readable by showing only meaningful fields.
-
-The <code>MAGIC_INT_NUMBER</code> and <code>MAGIC_STRING</code> constants serve as the "unset" sentinel — they distinguish between "the developer intentionally set a default of 0/empty-string" and "the developer didn't set any default." The <code>hasDefaultType()</code> method in <code>XmlObjectWriter</code> compares against these sentinels to decide.
+<p>Every setter returns <code>ProjectForgeRootElement</code>, enabling chained initialization:</p>
+<pre>export.setTimeZone(userTZ).setCreated().setVersion("8.0.0");</pre>
+<p>This is convenient for creating exports — all metadata is configured in one line, and the object is ready for serialization.</p>
 </div>
 
-<h2>Why a Constants Class Instead of Enum or Config?</h2>
+<h2>Place in the XmlStream Hierarchy</h2>
 
 <div class="c">
-In modern Java, these could be enum values or configuration properties. But as a constants class:
+<p><code>ProjectForgeRootElement</code> is the abstract base class. Concrete root elements (e.g., <code>ProjectForgeData</code> with root tag <code>&lt;projectforgeData&gt;</code>) extend it and add their own child fields. The entire XmlStream system consists of:</p>
 <ul>
-<li><strong>Package-private visibility</strong> on MAGIC_INT_NUMBER and MAGIC_STRING — not exposed outside the framework</li>
-<li><strong>Compile-time constants</strong> — usable in annotation default values (<code>defaultIntValue() default XmlConstants.MAGIC_INT_NUMBER</code>)</li>
-<li><strong>Zero overhead</strong> — no enum lookup, no config file parsing, no dependency injection</li>
+<li><code>@XmlField</code> (<a href="752.html">#752</a>) / <code>@XmlOmitField</code> (<a href="757.html">#757</a>) — field-level annotations (equivalent to XStream's <code>@XStreamAlias</code>/<code>@XStreamOmitField</code>)</li>
+<li><code>@XmlObject</code> (<a href="754.html">#754</a>) — class-level marker for serializable objects</li>
+<li><code>XmlObjectReader</code> (<a href="755.html">#755</a>) / <code>XmlObjectWriter</code> (<a href="756.html">#756</a>) — read/write engine</li>
+<li><code>Converter</code> hierarchy — type converters (Date→ISO, BigDecimal→String, etc.)</li>
+<li><code>AliasMap</code> (<a href="758.html">#758</a>) — Class↔XML-tag mapping</li>
+<li><code>XmlRegistry</code> — registry of registered XML objects</li>
 </ul>
+<p>This framework <strong>coexists in parallel</strong> with XStream in ProjectForge. XStream is used for user preferences (serialization of RecentQueue, UserPref), while XmlStream is used for data export/import between instances (where format control, validation, and versioning are needed).</p>
 </div>
 
-<h2>Consumer: <code>XmlObjectWriter.isDefaultType()</code> and <code>hasDefaultType()</code></h2>
+<h2>Why Not XStream?</h2>
 
 <div class="c">
-<code>hasDefaultType()</code> checks whether a default was explicitly declared in <code>@XmlField</code>:
+<p>XStream is an excellent library, but it has limitations for the data export use case:</p>
 <ul>
-<li>For <code>Integer</code>: <code>ann.defaultIntValue() != MAGIC_INT_NUMBER</code></li>
-<li>For <code>String</code>/<code>Enum</code>: <code>!MAGIC_STRING.equals(ann.defaultStringValue())</code></li>
-<li>For <code>Boolean</code>: always true (false is a valid default)</li>
-<li>For <code>Double</code>: <code>!Double.isNaN(ann.defaultDoubleValue())</code></li>
+<li><strong>Versioning:</strong> XStream doesn't support format migration. If the XML format changed between ProjectForge versions, XStream would simply fail on deserialization. XmlStream explicitly stores the version and allows applying converters during reading.</li>
+<li><strong>Schema control:</strong> XStream generates XML "as it falls" — Java field names become tag names. XmlStream allows explicitly setting aliases and structure via annotations, which is important for backward compatibility.</li>
+<li><strong>Security:</strong> XStream can deserialize arbitrary Java objects (a known vulnerability). XmlStream only works with types registered in <code>XmlRegistry</code>.</li>
 </ul>
-If no default was declared, the field is always serialized. If a default was declared and the value matches, the field is skipped.
 </div>
 
 <h2>Git History</h2>
 <div class="hist">
 <pre>868d6abb7 2025 → 2026 (copyright year update)
 63081666f Source file headers: 2024→2025
+5f9bbfbd3 Fix typos in projectforge-business directory
 b6092df09 Copyright 2023 → 2024
 ab45d51fa Copyright 2001-2022 → 2001-2023
 5f7ef41b8 Copyright 2021 → 2022
-cd27dd997 package xstream → xmlstream (renamed to avoid XStream library confusion)
+cd27dd997 package xstream → xmlstream
 ceb63e8a1 Source code header: (C) 2001-2021
 7c79f1922 Copyright of source header → 2020
+24019a0f5 Eliminate DateHolder occurences
+32f634b88 Optimize imports
 dd5ca38ac CopyRight of all java file-header updated or created
 9ebb88522 Initial commit</pre>
 </div>
 
 <div class="c">
-The constants have not changed since the initial commit. Only copyright headers and the package rename (<code>xstream</code> → <code>xmlstream</code> at <code>cd27dd997</code>) touched this file. The stability is expected — these are foundational sentinel values; changing them would break serialization compatibility with all previously written XML files.
+Notable changes: <code>24019a0f5</code> — eliminated DateHolder (pre-Java-8 class) from this class, migrating date handling to <code>PFDateTime</code> (ProjectForge's own date/time wrapper around <code>java.util.Date</code> and <code>java.time</code>). <code>5f9bbfbd3</code> — fixed typos in the codebase (including likely in comments or Javadoc). <code>cd27dd997</code> — package renamed from <code>xstream</code> to <code>xmlstream</code> to avoid XStream confusion. The three core fields (<code>created</code>, <code>timeZone</code>, <code>version</code>) and the fluent API pattern have been stable since the initial commit.
 </div>
 
 </body>

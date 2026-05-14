@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>#6: Dockerfile [ES]</title>
+<style>
+  body { font-family: system-ui, sans-serif; max-width: 960px; margin: 2em auto; padding: 0 1em; background: #fafafa; color: #222; line-height: 1.6; }
+  h1 { border-bottom: 2px solid #333; }
+  h2 { margin-top: 2.5em; border-bottom: 1px solid #ddd; padding-bottom: 0.2em; }
+  a { color: #0366d6; text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  .meta { background: #f0f0f0; border-radius: 6px; padding: 1em; margin: 1em 0; font-size: 0.9em; }
+  .code-block { background: #f8f8f8; border: 1px solid #ddd; border-radius: 4px; padding: 0.5em; margin: 0.5em 0; overflow-x: auto; }
+  .code-block pre { margin: 0; font-family: 'Consolas', monospace; font-size: 0.85em; line-height: 1.5; }
+  .commentary { margin: 1em 0; line-height: 1.7; background: #fff; padding: 0.5em 1em; border-radius: 6px; border-left: 4px solid #ddd; }
+  code { background: #e8e8e8; border-radius: 3px; padding: 0.1em 0.3em; font-size: 0.9em; }
+  .nav { font-size: 0.9em; color: #888; margin-bottom: 1em; }
+  ins { background: #d4edda; text-decoration: none; color: #155724; }
+  table { border-collapse: collapse; width: 100%; margin: 1em 0; font-size: 0.9em; }
+  th, td { border: 1px solid #ddd; padding: 0.5em; text-align: left; }
+  th { background: #f0f0f0; }
+  .diagram { background: #f8f8f8; border: 1px solid #ddd; border-radius: 4px; padding: 0.8em; font-family: 'Consolas', monospace; font-size: 0.85em; white-space: pre; }
+</style>
+</head>
+<body>
+<div class="nav">
+  <a href="https://maureranton.github.io/projectforge/">← Índice de documentación</a> · <a href="file-index.html">← Índice de archivos</a> · <a href="5.html">← Anterior</a> · <a href="7.html">Siguiente →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/Dockerfile" target="_blank" title="Ver fuente en GitHub">📄 fuente</a></div>
+<h1>#6: <code>Dockerfile</code></h1>
+<div class="meta"><code>Dockerfile</code> 
+  <p><strong>Ruta:</strong> <code>./Dockerfile</code> · <strong>Tipo:</strong> Instrucciones de compilación Docker · <strong>Líneas:</strong> 43 · <strong>Fuente:</strong> <a href="https://github.com/micromata/projectforge/blob/9ed5fbe0f/Dockerfile">GitHub</a></p>
+ <span style="color:#888">43 líneas · 16 código · 13 comentarios · 14 en blanco</span></div>
+
+<h2>Qué hace</h2>
+<div class="commentary">
+  <p>Construye la imagen Docker de ProjectForge — un <a href="https://docs.docker.com/engine/reference/builder/">Dockerfile</a> de 43 líneas que crea un contenedor mínimo, sin root y con Java 17, que incluye un volumen para datos persistentes. La imagen contiene <strong>4 componentes</strong> conectados por <a href="15.html">entrypoint.sh</a>:</p>
+  <div class="diagram">Componentes del Dockerfile:
+┌─────────────────────────────────────────────┐
+│  /app/application.jar     ← línea 12         │
+│  /app/entrypoint.sh       ← línea 13         │
+│  /ProjectForge/             ← línea 31 (VOLUMEN) │
+│    ├─ environment.sh      ← línea 34           │
+│    └─ projectforge.properties (en tiempo de ejecución) │
+└─────────────────────────────────────────────┘</div>
+</div>
+
+<h2>Sección por sección</h2>
+
+<h3>Líneas 1–7: Imagen base y configuración</h3>
+<div class="code-block"><pre>1  FROM openjdk:17-slim
+4  ARG JAR_FILE
+7  WORKDIR /app</pre></div>
+<div class="commentary">
+  <p><strong>openjdk:17-slim:</strong> La variante slim excluye paquetes innecesarios (compiladores, documentación) — menor superficie de ataque y descarga más rápida. <code>ARG JAR_FILE</code> es un argumento en tiempo de compilación que se pasa mediante <code>--build-arg JAR_FILE=...</code> en <a href="https://docs.docker.com/build/building/variables/#build-arguments">docker build</a>, normalmente definido por <code>build.gradle.kts</code> para apuntar al fat JAR compilado.</p>
+</div>
+
+<h3>Líneas 9–16: Copia de archivos</h3>
+<div class="code-block"><pre>9  RUN mkdir -p /app
+12 COPY ${JAR_FILE} /app/application.jar        <span style="color:#888">← fat JAR de la compilación</span>
+13 COPY docker/entrypoint.sh /app/entrypoint.sh  <span style="color:#888">← script de inicio</span>
+16 RUN chmod +x /app/entrypoint.sh               <span style="color:#888">← hacerlo ejecutable</span></pre></div>
+<div class="commentary">
+  <p>Se copian dos archivos: el fat JAR de Spring Boot (renombrado a <code>application.jar</code>) y el script <a href="15.html">entrypoint.sh</a> (se le otorgan permisos de ejecución). El <code>ARG JAR_FILE</code> de la línea 4 se sustituye aquí durante la compilación.</p>
+</div>
+
+<h3>Línea 19: Exposición de puerto</h3>
+<div class="code-block"><pre>19 EXPOSE 8080</pre></div>
+<div class="commentary">
+  <p>8080 es el <a href="https://docs.spring.io/spring-boot/reference/application-properties.html#application-properties.server.server.port">puerto predeterminado de Spring Boot</a>. Nótese que <a href="https://docs.docker.com/engine/reference/builder/#expose">EXPOSE</a> es <strong>solo documentación</strong> — no publica el puerto realmente. El mapeo real del puerto se realiza en <a href="11.html">docker-compose.yml</a>, línea 12 (<code>ports: - "8080:8080"</code>).</p>
+</div>
+
+<h3>Líneas 22–27: Usuario no root + procps</h3>
+<div class="code-block"><pre>22 RUN addgroup --system projectforge && \
+      adduser --system --ingroup projectforge projectforge
+27 RUN apt-get update && apt-get install -y procps && \
+      rm -rf /var/lib/apt/lists/*</pre></div>
+<div class="commentary">
+  <p>Seguridad: se ejecuta como un usuario <strong>no root</strong> (<code>projectforge:projectforge</code>). La bandera <code>--system</code> crea una cuenta de sistema (sin directorio home, sin shell de inicio de sesión, UID < 1000). El paquete <code>procps</code> proporciona <code>pgrep</code>, necesario para la función <code>checkStopped()</code> en la línea 14 de <a href="15.html">entrypoint.sh</a>. La limpieza <code>rm -rf /var/lib/apt/lists/*</code> es una práctica estándar en Docker — elimina la caché de paquetes para mantener la imagen pequeña.</p>
+</div>
+
+<h3>Líneas 30–32: Volumen</h3>
+<div class="code-block"><pre>31 RUN mkdir -p /ProjectForge && chown -R projectforge:projectforge /ProjectForge
+32 VOLUME /ProjectForge</pre></div>
+<div class="commentary">
+  <p>La declaración <a href="https://docs.docker.com/engine/reference/builder/#volume">VOLUME</a> le indica a Docker que este directorio contiene datos persistentes — el archivo de configuración <code>projectforge.properties</code>, la base de datos HSQLDB embebida y los registros. Sin un volumen, todos los datos se perderían al reiniciar el contenedor. El directorio es propiedad del usuario no root para que el proceso de Java pueda escribir en él.</p>
+</div>
+
+<h3>Línea 34: Plantilla de entorno</h3>
+<div class="code-block"><pre>34 COPY docker/environment.sh /ProjectForge</pre></div>
+<div class="commentary">
+  <p>Copia la plantilla desde <a href="16.html">docker/environment.sh</a> al interior del volumen. Dado que <code>/ProjectForge</code> es un <a href="https://docs.docker.com/engine/storage/volumes/">VOLUMEN</a>, los archivos copiados aquí durante la compilación serán <strong>visibles solo en la primera ejecución</strong> — si se monta un volumen externo, este sobrescribe la copia. Esto es intencional: la plantilla está ahí para la configuración inicial, pero después la versión personalizada del administrador toma el control.</p>
+</div>
+
+<h3>Líneas 37–43: Punto de entrada</h3>
+<div class="code-block"><pre>37 USER projectforge:projectforge                  <span style="color:#888">← cambiar a no root</span>
+40 ENTRYPOINT ["/app/entrypoint.sh"]               <span style="color:#888">← formato exec JSON</span>
+41 # ENTRYPOINT ["java", "-jar", "/app/application.jar"]  <span style="color:#888">← bypass (comentado)</span>
+43 LABEL maintainer="Micromata"</pre></div>
+<div class="commentary">
+  <p><strong>Línea 40:</strong> Utiliza el <a href="https://docs.docker.com/engine/reference/builder/#entrypoint">formato exec JSON</a> de ENTRYPOINT (sintaxis de arreglo) — esto <strong>no</strong> invoca un shell, por lo que las señales se pasan directamente a entrypoint.sh. La línea 41 está comentada: descomentarla para omitir la lógica de apagado en entrypoint.sh y ejecutar Java directamente (útil para depuración).</p>
+</div>
+
+<h2>Conclusiones clave</h2>
+<div class="commentary">
+  <ul>
+    <li><strong>43 líneas, mínimo:</strong> Solo se añade <code>procps</code> (para pgrep) además de la imagen base de Java.</li>
+    <li><strong>Sin root:</strong> Se ejecuta como <code>projectforge:projectforge</code> — buena práctica de seguridad en Docker.</li>
+    <li><strong>Tres copias, un volumen:</strong> JAR + entrypoint → <code>/app</code> (inmutable), environment.sh → <code>/ProjectForge</code> (persistente).</li>
+    <li><strong>JRE ligero:</strong> <code>openjdk:17-slim</code> — el JDK completo no es necesario en tiempo de ejecución.</li>
+    <li><strong>Interruptor de bypass:</strong> Descomentar la línea 41 para saltar entrypoint.sh y ejecutar Java directamente.</li>
+  </ul>
+</div>
+
+<div class="nav" style="margin-top:2em; padding-top:1em; border-top:1px solid #ddd">
+  <a href="16.html">← #16: docker/environment.sh</a> · <a href="18.html">#18: .dockerignore →</a>
+</div>
+</body>
+</html>

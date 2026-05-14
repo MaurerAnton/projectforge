@@ -1,0 +1,229 @@
+<!DOCTYPE html><html lang="fr"><head><meta charset="utf-8"><title>1153: VacationExcelExporter.kt [FR]</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:1.5em;color:#444;font-size:1em}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.lang{font-size:.85em;color:#888;float:right}.lang a{color:#888;text-decoration:none;padding:0 .3em}.lang a.active{color:#0366d6;font-weight:600;text-decoration:underline}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}pre.diff{background:#fff;font-size:.82em;max-height:300px;overflow-y:auto}</style></head>
+<body><div class="lang"><a href="1153.html">EN</a> · <a href="1153_de.html">DE</a> · <a href="1153_ru.html">RU</a> · <a href="1153_fr.html" class="active">FR</a> · <a href="1153_es.html">ES</a></div>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← Index des fichiers</a> · <a href="247.html">← Précédent</a> · <a href="3136.html">Suivant →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/kotlin/org/projectforge/business/vacation/service/VacationExcelExporter.kt" target="_blank" title="Voir la source sur GitHub">📄 source</a></div>
+<h1>#1153: <code>VacationExcelExporter.kt</code></h1>
+<div class="meta"><code>projectforge-business/src/main/kotlin/org/projectforge/business/vacation/service/VacationExcelExporter.kt</code> Classe Kotlin, <code>projectforge-business/src/main/kotlin/org/projectforge/business/vacation/service/VacationExcelExporter.kt</code> <span style="color:#888">389 lignes · 331 code · 39 commentaires · 19 vides</span></div>
+<div class="c"><strong>Objectif :</strong> Fichier source : business/vacation/service/VacationExcelExporter.kt. VacationExcelExporter.kt fait partie de l'application open-source de gestion de projet ProjectForge.</div>
+<h2>Source (100 premières lignes)</h2>
+<pre>/////////////////////////////////////////////////////////////////////////////
+//
+// Project ProjectForge Community Edition
+//         www.projectforge.org
+//
+// Copyright (C) 2001-2026 Micromata GmbH, Germany (www.micromata.com)
+//
+// ProjectForge est sous double licence.
+//
+// Cette édition communautaire est un logiciel libre ; vous pouvez la redistribuer et/ou
+// la modifier selon les termes de la GNU General Public License telle que publiée
+// par la Free Software Foundation ; version 3 de la Licence.
+//
+// Cette édition communautaire est distribuée dans l'espoir qu'elle sera utile,
+// mais SANS AUCUNE GARANTIE ; sans même la garantie implicite de
+// COMMERCIALISATION ou D'ADÉQUATION À UN USAGE PARTICULIER. Voir la GNU General
+// Public License pour plus de détails.
+//
+// Vous devriez avoir reçu une copie de la GNU General Public License avec
+// ce programme ; sinon, consultez http://www.gnu.org/licenses/.
+//
+/////////////////////////////////////////////////////////////////////////////
+
+package org.projectforge.business.vacation.service
+
+import de.micromata.merlin.excel.ExcelRow
+import de.micromata.merlin.excel.ExcelSheet
+import de.micromata.merlin.excel.ExcelWorkbook
+import mu.KotlinLogging
+import org.apache.poi.ss.usermodel.BorderStyle
+import org.apache.poi.ss.usermodel.HorizontalAlignment
+import org.apache.poi.ss.usermodel.IndexedColors
+import org.apache.poi.ss.util.CellRangeAddress
+import org.projectforge.business.fibu.EmployeeDO
+import org.projectforge.business.vacation.model.VacationDO
+import org.projectforge.business.vacation.model.VacationStatus
+import org.projectforge.excel.ExcelUtils
+import org.projectforge.framework.configuration.ConfigXml
+import org.projectforge.framework.i18n.translate
+import org.projectforge.framework.persistence.user.api.ThreadLocalUserContext
+import org.projectforge.framework.persistence.user.entities.PFUserDO
+import org.projectforge.framework.time.DateHelper
+import org.projectforge.framework.time.PFDay
+import org.projectforge.framework.xmlstream.XmlHelper
+import org.springframework.core.io.ByteArrayResource
+import org.springframework.http.HttpHeaders
+import org.springframework.http.ResponseEntity
+import java.io.File
+import java.time.LocalDate
+import java.time.Month
+import java.time.format.TextStyle
+import java.util.*
+
+private val log = KotlinLogging.logger {}
+
+/**
+ * Exporte les entrées de congés des utilisateurs.
+ * @author K. Reinhard (k.reinhard@micromata.de)
+ */
+object VacationExcelExporter {
+  private class Context(val workbook: ExcelWorkbook) {
+    lateinit var currentSheet: ExcelSheet
+      private set
+    val monthSeparatorCols = mutableListOf&lt;Int&gt;()
+    val monthSeparationStyle = ExcelUtils.createCellStyle(
+      workbook,
+      "monthSeparation",
+      fillForegroundColor = IndexedColors.BLACK,
+    )
+    val boldFont = ExcelUtils.createFont(workbook, "bold", bold = true, heightInPoints = 18)
+    val monthStyle =
+      ExcelUtils.createCellStyle(workbook, "month", font = boldFont, alignment = HorizontalAlignment.CENTER)
+    val standardStyle = ExcelUtils.createCellStyle(workbook, "standard", borderStyle = BorderStyle.THIN)
+    val standardDayStyle = ExcelUtils.createCellStyle(
+      workbook,
+      "standardDay",
+      alignment = HorizontalAlignment.CENTER,
+      borderStyle = BorderStyle.THIN,
+    )
+    val holidayAndWeekendStyle = ExcelUtils.createCellStyle(
+      workbook,
+      "holidayWeekendDay",
+      alignment = HorizontalAlignment.CENTER,
+      fillForegroundColor = IndexedColors.TAN,
+      borderStyle = BorderStyle.THIN,
+    )
+    val vacationStyle = ExcelUtils.createCellStyle(
+      workbook,
+      "vacationDay",
+      fillForegroundColor = IndexedColors.GREEN,
+      borderStyle = BorderStyle.THIN,
+    )
+    val unapprovedVacationStyle = ExcelUtils.createCellStyle(
+      workbook,
+      "unapprovedVacationDay",
+      fillForegroundColor = IndexedColors.GREY_40_PERCENT,
+      borderStyle = BorderStyle.THIN,
+    )
+
+    fun withSheet(sheet: ExcelSheet) {</pre>
+<h2>Historique Git</h2>
+<div class="hist">
+<pre>868d6abb7 2025 -> 2026
+78a38ca8f ExcelUtils.createFont et utilisé par toutes les routines de création de polices Excel.
+63081666f En-têtes des fichiers source : 2024 -> 2025.
+b6092df09 Copyright 2023 -> 2024
+4a4c891d4 VacationExcelExporter : Autofiltre ajouté.</pre>
+<h3>868d6abb7</h3><div class="c"><strong>2025 -> 2026</strong><pre class="diff">868d6abb75cd191a892911ac8e45058932cf9074
+diff --git a/projectforge-business/src/main/kotlin/org/projectforge/business/vacation/service/VacationExcelExporter.kt b/projectforge-business/src/main/kotlin/org/projectforge/business/vacation/service/VacationExcelExporter.kt
+index a245235c2..14fba9917 100644
+--- a/projectforge-business/src/main/kotlin/org/projectforge/business/vacation/service/VacationExcelExporter.kt
++++ b/projectforge-business/src/main/kotlin/org/projectforge/business/vacation/service/VacationExcelExporter.kt
+@@ -3,7 +3,7 @@
+ // Project ProjectForge Community Edition
+ //         www.projectforge.org
+ //
+-// Copyright (C) 2001-2025 Micromata GmbH, Germany (www.micromata.com)
++// Copyright (C) 2001-2026 Micromata GmbH, Germany (www.micromata.com)
+ //
+ // ProjectForge est sous double licence.
+ //</pre></div><h3>78a38ca8f</h3><div class="c"><strong>ExcelUtils.createFont et utilisé par toutes les routines de création de polices Excel.</strong><pre class="diff">78a38ca8fe252bcfd1eddfc95318a6507f33bda2
+diff --git a/projectforge-business/src/main/kotlin/org/projectforge/business/vacation/service/VacationExcelExporter.kt b/projectforge-business/src/main/kotlin/org/projectforge/business/vacation/service/VacationExcelExporter.kt
+index 1ddbca545..a245235c2 100644
+--- a/projectforge-business/src/main/kotlin/org/projectforge/business/vacation/service/VacationExcelExporter.kt
++++ b/projectforge-business/src/main/kotlin/org/projectforge/business/vacation/service/VacationExcelExporter.kt
+@@ -67,7 +67,7 @@ object VacationExcelExporter {
+       "monthSeparation",
+       fillForegroundColor = IndexedColors.BLACK,
+     )
+-    val boldFont = workbook.createOrGetFont("bold", bold = true, heightInPoints = 18)
++    val boldFont = ExcelUtils.createFont(workbook, "bold", bold = true, heightInPoints = 18)
+     val monthStyle =
+       ExcelUtils.createCellStyle(workbook, "month", font = boldFont, alignment = HorizontalAlignment.CENTER)
+     val standardStyle = ExcelUtils.createCellStyle(workbook, "standard", borderStyle = BorderStyle.THIN)</pre></div><h3>63081666f</h3><div class="c"><strong>En-têtes des fichiers source : 2024 -> 2025.</strong><pre class="diff">63081666f620fb87315f01b817e560e0b2f6a33a
+diff --git a/projectforge-business/src/main/kotlin/org/projectforge/business/vacation/service/VacationExcelExporter.kt b/projectforge-business/src/main/kotlin/org/projectforge/business/vacation/service/VacationExcelExporter.kt
+index d103929d1..1ddbca545 100644
+--- a/projectforge-business/src/main/kotlin/org/projectforge/business/vacation/service/VacationExcelExporter.kt
++++ b/projectforge-business/src/main/kotlin/org/projectforge/business/vacation/service/VacationExcelExporter.kt
+@@ -3,7 +3,7 @@
+ // Project ProjectForge Community Edition
+ //         www.projectforge.org
+ //
+-// Copyright (C) 2001-2024 Micromata GmbH, Germany (www.micromata.com)
++// Copyright (C) 2001-2025 Micromata GmbH, Germany (www.micromata.com)
+ //
+ // ProjectForge est sous double licence.
+ //</pre></div><h3>b6092df09</h3><div class="c"><strong>Copyright 2023 -> 2024</strong><pre class="diff">b6092df0927c4a3b161e888445f31dcab57493f2
+diff --git a/projectforge-business/src/main/kotlin/org/projectforge/business/vacation/service/VacationExcelExporter.kt b/projectforge-business/src/main/kotlin/org/projectforge/business/vacation/service/VacationExcelExporter.kt
+index 8a3bef0a8..d103929d1 100644
+--- a/projectforge-business/src/main/kotlin/org/projectforge/business/vacation/service/VacationExcelExporter.kt
++++ b/projectforge-business/src/main/kotlin/org/projectforge/business/vacation/service/VacationExcelExporter.kt
+@@ -3,7 +3,7 @@
+ // Project ProjectForge Community Edition
+ //         www.projectforge.org
+ //
+-// Copyright (C) 2001-2023 Micromata GmbH, Germany (www.micromata.com)
++// Copyright (C) 2001-2024 Micromata GmbH, Germany (www.micromata.com)
+ //
+ // ProjectForge est sous double licence.
+ //</pre></div><h3>4a4c891d4</h3><div class="c"><strong>VacationExcelExporter : Autofiltre ajouté.</strong><pre class="diff">4a4c891d4a0be89b4b329545cd516a7b1c958dcf
+diff --git a/projectforge-business/src/main/kotlin/org/projectforge/business/vacation/service/VacationExcelExporter.kt b/projectforge-business/src/main/kotlin/org/projectforge/business/vacation/service/VacationExcelExporter.kt
+index 033c555a6..8a3bef0a8 100644
+--- a/projectforge-business/src/main/kotlin/org/projectforge/business/vacation/service/VacationExcelExporter.kt
++++ b/projectforge-business/src/main/kotlin/org/projectforge/business/vacation/service/VacationExcelExporter.kt
+@@ -30,6 +30,7 @@ import mu.KotlinLogging
+ import org.apache.poi.ss.usermodel.BorderStyle
+ import org.apache.poi.ss.usermodel.HorizontalAlignment
+ import org.apache.poi.ss.usermodel.IndexedColors
++import org.apache.poi.ss.util.CellRangeAddress
+ import org.projectforge.business.fibu.EmployeeDO
+ import org.projectforge.business.vacation.model.VacationDO
+ import org.projectforge.business.vacation.model.VacationStatus
+@@ -141,13 +142,16 @@ object VacationExcelExporter {
+     sheet.poiSheet.printSetup.landscape = true
+     sheet.poiSheet.printSetup.fitWidth = 1.toShort()  // Ne fonctionne pas
+     sheet.poiSheet.printSetup.fitHeight = 0.toShort() // Ne fonctionne pas
+-    val monthRow = sheet.createRow()
++    val firstRow = sheet.createRow()
+     val dateRow = sheet.createRow()
+     val weekDayRow = sheet.createRow()
+     var currentDate = startDate
+     var columnIndex = 0
++    firstRow.getCell(columnIndex).setCellValue(translate("fibu.employees"))
+     sheet.setColumnWidth(columnIndex, COL_WIDTH_USER) // Colonne des vacanciers.
+-    createMonthSeparationCells(context, ++columnIndex, dateRow, weekDayRow, monthRow)
++    firstRow.getCell(++columnIndex).setCellValue(translate("vacation"))
++    sheet.setColumnWidth(columnIndex, 500) // Colonne si l'employé a des congés ou non.
++    createMonthSeparationCells(context, ++columnIndex, dateRow, weekDayRow, firstRow)
+     var paranoiaCounter = 0
+     var firstDayOfMonthCol = columnIndex + 1
+     val columnIndexMap = mutableMapOf&lt;LocalDate, Int&gt;()
+@@ -167,14 +171,14 @@ object VacationExcelExporter {
+         // Nouveau mois commencé.
+         val monthCell =
+           sheet.setMergedRegion(
+-            monthRow.rowNum,
+-            monthRow.rowNum,
++            firstRow.rowNum,
++            firstRow.rowNum,
+             firstDayOfMonthCol,
+             columnIndex,
+             getMonthString(currentDate.minusMonths(1)),
+           )
+         monthCell.setCellStyle(context.monthStyle)
+-        createMonthSeparationCells(context, ++columnIndex, dateRow, weekDayRow, monthRow)
++        createMonthSeparationCells(context, ++columnIndex, dateRow, weekDayRow, firstRow)
+         firstDayOfMonthCol = columnIndex + 1 // Stocke la colonne pour setMergedRegion du nom du mois.
+       }
+     }
+@@ -195,6 +199,7 @@ object VacationExcelExporter {
+         }
+         currentDate = currentDate.plusDays(1)
+       }
++      var firstRowWritten = false
+       entry.vacations.forEach { vacation -&gt;
+         val vacationStart = PFDay.fromOrNull(vacation.startDate)
+         val vacationEnd = PFDay.fromOrNull(vacation.endDate)
+@@ -208,6 +213,11 @@ object VacationExcelExporter {
+           var current: PFDay = vacationStart</pre></div>
+</div>
+</body></html>

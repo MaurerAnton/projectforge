@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>#1235 [RU]</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:2em;color:#444}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}</style>
+</head>
+<body>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Индекс</a> · <a href="file-index.html">← Индекс файлов</a> · <a href="1234.html">← Пред.</a> · <a href="1236.html">След. →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/kotlin/org/projectforge/framework/persistence/api/MagicFilter.kt" target="_blank" title="Просмотр исходного кода на GitHub">📄 исходник</a></div>
+<h1>#1235: <code>MagicFilter.kt</code></h1>
+<div class="meta"><code>projectforge-business/src/main/kotlin/org/projectforge/framework/persistence/api/MagicFilter.kt</code> Класс данных / Фильтр — Поиск по постоянству, <code>projectforge-business/src/main/kotlin/org/projectforge/framework/persistence/api/MagicFilter.kt</code> <span style="color:#888">142 строки · 86 кода · 46 комментариев · 10 пустых</span></div>
+<div class="c">Центральная модель фильтра для страниц списков и поиска ProjectForge. Представляет определяемые пользователем критерии поиска в виде коллекции типизированных объектов <code>MagicFilterEntry</code>, поддерживающих поиск по полю, диапазонный поиск, полнотекстовый поиск, поиск по истории, сортировку, пагинацию и фильтрацию мягкого удаления. Расширяет <code>AbstractFavorite</code> для сохранения пользовательских предпочтений через <code>UserPrefDao</code>.</div>
+
+<h2>Архитектура</h2>
+
+<h3>Иерархия классов</h3>
+<pre>AbstractFavorite (имя, id)
+  └── MagicFilter</pre>
+<p>Будучи <code>AbstractFavorite</code>, MagicFilter может быть сохранён/загружен как именованное предпочтение фильтра для каждого пользователя и каждого типа сущности. Сериализация Jackson JSON настраивается через <code>@JsonTypeInfo</code> для полиморфной десериализации.</p>
+
+<h3>Основные поля</h3>
+<table>
+<tr><th>Поле</th><th>Тип</th><th>По умолчанию</th><th>Назначение</th></tr>
+<tr><td><code>entries</code></td><td><code>MutableList&lt;MagicFilterEntry&gt;</code></td><td>пусто</td><td>Типизированные критерии поиска: поиск по полю, диапазонный поиск, поиск по истории, полнотекстовый поиск</td></tr>
+<tr><td><code>sortProperties</code></td><td><code>MutableList&lt;SortProperty&gt;</code></td><td>пусто</td><td>Спецификация порядка сортировки</td></tr>
+<tr><td><code>sortAndLimitMaxRowsWhileSelect</code></td><td><code>Boolean</code></td><td><code>true</code></td><td>Применять ли сортировку и ограничение строк во время SELECT в БД или после запроса</td></tr>
+<tr><td><code>maxRows</code></td><td><code>Int</code></td><td><code>QUERY_FILTER_MAX_ROWS</code> (50 000)</td><td>Максимальное количество результатов</td></tr>
+<tr><td><code>deleted</code></td><td><code>Boolean?</code></td><td><code>false</code></td><td>Фильтр мягкого удаления: null=все, true=только удалённые, false=только активные</td></tr>
+<tr><td><code>searchString</code></td><td><code>String?</code></td><td><code>null</code></td><td>Полнотекстовый поиск по всем индексированным полям</td></tr>
+<tr><td><code>searchHistory</code></td><td><code>String?</code></td><td><code>null</code></td><td>Разделённый запятыми список типов записей истории для поиска</td></tr>
+<tr><td><code>autoWildcardSearch</code></td><td><code>Boolean</code></td><td><code>false</code></td><td>Если true, добавляет подстановочный знак к буквенно-цифровым строкам поиска</td></tr>
+<tr><td><code>extended</code></td><td><code>MutableMap&lt;String, Any&gt;</code></td><td>пусто</td><td>Карта расширения для пользовательских переменных фильтра</td></tr>
+<tr><td><code>multiSelection</code></td><td><code>Boolean?</code></td><td><code>null</code></td><td>Флаг режима множественного выбора (скрывает интерфейс фильтра при активации)</td></tr>
+</table>
+
+<h3>Ключевые операции</h3>
+<table>
+<tr><th>Метод</th><th>Назначение</th></tr>
+<tr><td><code>init()</code></td><td>Пост-десериализационная перестройка. Преобразует ID пользователей в отображаемые имена, очищает пустые записи. Должен вызываться после загрузки из UserPrefDao.</td></tr>
+<tr><td><code>reset()</code></td><td>Очищает все записи, свойства сортировки и расширенную карту; сбрасывает deleted и searchHistory к значениям по умолчанию</td></tr>
+<tr><td><code>isModified(other: MagicFilter): Boolean</code></td><td>Глубокое сравнение записей, имени и ID для обнаружения изменений фильтра (для проверки избранного на "грязноту")</td></tr>
+<tr><td><code>clone(): MagicFilter</code></td><td>Глубокое клонирование через сериализацию/десериализацию Jackson</td></tr>
+<tr><td><code>paginationPageSize: Int?</code></td><td>Извлекает значение <code>PAGINATION_PAGE_SIZE</code> из записей, если присутствует</td></tr>
+</table>
+
+<h3>Структура MagicFilterEntry</h3>
+<p>Каждая запись имеет:
+<code>field</code> — имя свойства сущности (или специальное значение для поиска по истории),
+<code>value</code> — объект <code>Value</code> с <code>value</code> (точное), <code>fromValue</code>/<code>toValue</code> (диапазон), <code>values</code> (список множественного выбора), <code>id</code>, <code>label</code>, <code>displayName</code>,
+<code>synthetic</code> — является ли запись автоматически сгенерированной (не созданной пользователем).</p>
+
+<h3>Специальные поля записей</h3>
+<ul>
+<li><code>"deleted"</code> — обрабатывается как флаг удаления, а не как обычный фильтр поля</li>
+<li><code>MODIFIED_HISTORY_VALUE</code> / <code>MODIFIED_INTERVAL</code> / <code>MODIFIED_BY_USER</code> — поиск по истории Hibernate Envers</li>
+<li><code>"pageSize"</code> — устаревшее имя, автоматически переименовывается в <code>paginationPageSize</code> в MagicFilterProcessor</li>
+</ul>
+
+<h3>Сериализация и сохранение</h3>
+<p><code>UserPrefDao</code> хранит экземпляры MagicFilter в формате JSON. Метод <code>clone()</code> использует тот же ObjectMapper для глубокого клонирования. После десериализации необходимо вызывать <code>init()</code>, поскольку некоторые поля (например, отображаемые имена пользователей) не сериализуются.</p>
+
+<h2>История Git</h2><div class="hist"><pre>868d6abb7 2025 -> 2026
+63081666f Заголовки исходных файлов: 2024-> 2025.
+0237d5eba Рефакторинг JSON-сериализации: введены IdOnlySerializer и IdsOnlySerializer.
+7957637da Миграция в процессе... (все тесты всех пакетов: ОК).
+4c04cfd65 КРУПНОЕ ИЗМЕНЕНИЕ! Миграция целочисленных id на Long id (включая внешние ключи и т.д.)
+b6092df09 Авторское право 2023 -> 2024
+ab45d51fa Авторское право 2001-2022 -> 2001-2023.
+267283973 PROJECTFORGE-3730: Показывать сообщение валидации для страниц списков, если список результатов был усечён из-за максимального количества строк в QueryFilter.
+9c4cc0ae3 В РАБОТЕ: Использование AGGrid на страницах списков.
+4a8ee9d9c В РАБОТЕ: AG-Grid, множественный выбор
+5f7ef41b8 Авторское право 2021 -> 2022
+d5dda1711 Исправление ошибки в поиске по списку: поиск по ключевым словам и modified-by-user теперь поддерживается в поиске по истории.
+c0f2b9de0 Функциональность арендаторов удалена везде (не тестировалось).
+ceb63e8a1 Заголовок исходного кода: (C) 2001-2021.
+c24251ff3 EmployeeSelect.
+1f0ceacca MagicFilter: автоматическое изменение searchString как str*
+243613fe9 MagicFilter.searchString повторно добавлен, добавлен перевод.
+7c79f1922 Авторское право заголовка исходного кода -> 2020.
+96c77adec ObjectMapper от Jackson потокобезопасен, повторно используйте экземпляры вместо создания новых при каждом вызове.
+dc60c1487 MagicFilter.autoWildcardSearch
+031b5b380 MagicFilter.autostartWithSearch
+f49bf10fc MagicFilter.init реализован для установки, например, имени пользователя в качестве метки для записей пользователей (первый тест).
+ebf676abd Исправлены предупреждения кода.
+507854213 В РАБОТЕ: MagicFilter...
+715c606d5 MagicFilter.reset теперь сбрасывает свойства сортировки и другие поля.
+1ead8c5fc удалены sortEntries (дубликат)
+e5da9d15f MagicFilter.sortEntries добавлен.
+080a49c05 В РАБОТЕ: MagicFilter рефакторинг....
+98c37568e В РАБОТЕ: MagicFilter: расширенные флажки (AddressRest).
+b46e659aa В РАБОТЕ: MagicFilter
+07394ee16 В РАБОТЕ: MagicFilter
+0649cacbe BaseDao реорганизован: QueryFilter теперь перемещён в BaseDaoLegacyQueryBuilder, запросы MagicFilter в работе.
+f6e36c350 В РАБОТЕ: MagicFilter и REST-сервисы больше не поддерживают BaseSearchFilter.
+c1d561619 MagicFilter: Установка filter.searchString в null, если записи не заданы (раньше сброс строки поиска был невозможен).
+a29a8008c Kotlin: исправлены предупреждения кода.
+10e2ddd1c MagicFilter: filterFavorites, isCurrentFilterModified.
+8872c5094 MagicFilter{Entry}.isModified.
+79c46553c MagicFilter: поиск AND и значение в виде строки теперь интерпретируется как обычная строка.
+692f3488e MagicFilter теперь игнорирует строку поиска BasesearchFilter. Вместо этого следует использовать MagicFilter.
+ef0b4f83c В РАБОТЕ: MagicFilter.
+faec5af58 MagicFilter: исправлена JSON-сериализация с помощью аннотации @JsonTypeInfo.
+fadbfeb2c В РАБОТЕ: MagicFilter, currentFilter, favorites, UserPrefCache/Dao...
+6035ac70a В РАБОТЕ: избранное и магический фильтр.
+05244ff19 Обновлены или созданы заголовки всех Kotlin-файлов с авторскими правами.
+bd3a3e824 Модуль projectforge-jax-rs переименован в projectforge-rest.
+9034a4bc0 Исправлены предупреждения компилятора...
+fffe8bf6d В РАБОТЕ: Magic Filter.</pre></div>
+</body>
+</html>

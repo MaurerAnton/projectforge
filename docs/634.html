@@ -1,22 +1,22 @@
-<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>#634</title>
-<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333}a{color:#0366d6}.meta{font-size:.9em;margin:1em 0}.nav{font-size:.9em;color:#888;margin-bottom:1em}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}code{background:#f0f0f0;padding:0 .2em}</style></head>
-<body>
-<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="633.html">← Prev</a> · <a href="635.html">Next →</a></div>
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>#634: DatabaseResultRow.java</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:2em;color:#444}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.lang{font-size:.85em;color:#888;float:right}.lang a{color:#888;text-decoration:none;padding:0 .3em}.lang a.active{color:#0366d6;font-weight:600;text-decoration:underline}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}</style></head>
+<body><div class="lang"><a href="634.html" class="active">EN</a> · <a href="634_de.html">DE</a> · <a href="634_ru.html">RU</a> · <a href="634_fr.html">FR</a> · <a href="634_es.html">ES</a></div>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="633.html">← Prev</a> · <a href="635.html">Next →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/java/org/projectforge/database/DatabaseResultRow.java" target="_blank" title="View source on GitHub">📄 source</a></div>
+<h1>#634: <code>DatabaseResultRow.java</code></h1>
+<div class="meta"><code>projectforge-business/src/main/java/org/projectforge/database/DatabaseResultRow.java</code> Type: Java Class · Package: <code>org.projectforge.database</code> · Source: <code>projectforge-business/src/main/java/org/projectforge/database/DatabaseResultRow.java</code> <span style="color:#888">46 lines · 9 code · 30 comments · 7 blank</span></div>
+<div class="c">Java Class implementing DatabaseResultRow.</div>
+<h2>Methods</h2>
+<table>
+<tr><th>Return</th><th>Method</th><th>Parameters</th></tr>
+<tr><td><code>Kai</code></td><td><code>Reinhard</code></td><td><code>k.reinhard@micromata.de</code></td></tr>
+<tr><td><code>List<DatabaseResultRowEntry></code></td><td><code>getEntries</code></td><td><code></code></td></tr>
+<tr><td><code>DatabaseResultRowEntry</code></td><td><code>getEntry</code></td><td><code>int index</code></td></tr>
+<tr><td><code>DatabaseResultRowEntry</code></td><td><code>getEntry</code></td><td><code>String name</code></td></tr>
+<tr><td><code>void</code></td><td><code>add</code></td><td><code>DatabaseResultRowEntry entry</code></td></tr>
+</table>
 
-<h1>#634: <code>DatabaseSupport.java</code></h1>
-<div class="meta"><strong>Lines:</strong> 101 · <strong>Author:</strong> Kai Reinhard · <strong>Type:</strong> Java singleton — <code>org.projectforge.database</code> package</div>
-
-<div class="c"><p><strong>Database dialect abstraction layer.</strong> Singleton (static <code>getInstance()</code> + <code>setInstance()</code> — set during application startup). Holds the detected <code>DatabaseDialect</code> (PostgreSQL or HSQL) and provides dialect-specific optimizations. 101 lines.</p>
-
-<p><strong>Constructor:</strong> <code>DatabaseSupport(DatabaseDialect dialect)</code> — logs the detected dialect at INFO level: <em>"Setting database dialect to: PostgreSQL"</em>. The dialect is determined by <code>ConfigurationService</code> from the JDBC URL at startup.</p>
-
-<p><strong>Key method — <code>getIntervalInSeconds(fromProperty, toProperty)</code>:</strong> This is the critical performance method. For calculating duration (e.g. timesheet <code>stopTime - startTime</code>), instead of fetching all rows into Java and computing differences in memory (<code>O(n)</code> memory + CPU), it generates a <strong>database-side SUM in SQL</strong>:</p>
-<pre>PostgreSQL: "SUM(EXTRACT(EPOCH FROM toProperty) - EXTRACT(EPOCH FROM fromProperty))"</pre>
-<p>This returns the total seconds as a single database aggregate — <code>O(1)</code> result size regardless of row count. Critical for installations with many timesheet entries. The commented-out alternative <code>EXTRACT(EPOCH FROM SUM(to - from))</code> was considered but the per-row calculation was chosen for precision.</p>
-<p><strong>Fallback:</strong> If the database is not PostgreSQL (i.e. HSQL for testing), returns <code>null</code>. The caller must then fetch all rows and compute the sum in Java. A <strong>one-time warning</strong> is logged (guarded by <code>static boolean errorMessageShown</code>) asking to contact the developer if the installation has &gt;10,000 timesheet entries — the Java-side aggregation becomes slow at scale.</p>
-
-<p><strong><code>getShutdownDatabaseStatement()</code>:</strong> Called by <code>WicketApplication</code> on shutdown. For HSQL (embedded test database), returns <code>"SHUTDOWN COMPACT"</code> — safely closes the embedded database and compacts the data file. For PostgreSQL, returns <code>null</code> — the connection pool handles shutdown.</p>
-
-<p><strong>Design note:</strong> This is the <strong>only</strong> place in the codebase where database-specific SQL is generated. All other SQL is generated by Hibernate/HQL which is database-agnostic. This class exists specifically for the interval optimization which HQL cannot express portably.</p></div>
-
+<h2>Architecture Analysis</h2>
+<div class="c">Resides in <strong>projectforge-business</strong>, the core module containing domain logic, services, and persistence. Defines a <strong>contract/interface</strong> that multiple implementations can satisfy, enabling polymorphic behavior and testability.</div>
+<h2>Git History</h2>
+<div class="hist"><table><tr><th>Commit</th><th>What changed</th></tr><tr><td><code>868d6abb75</code></td><td>2025 -> 2026</td></tr><tr><td><code>63081666f6</code></td><td>Source file headers: 2024-> 2025.</td></tr><tr><td><code>b6092df092</code></td><td>Copyright 2023 -> 2024</td></tr><tr><td><code>ab45d51fa4</code></td><td>Copyright 2001-2022 -> 2001-2023.</td></tr><tr><td><code>f690a0429d</code></td><td>Package renamed: continouosdb -> database.</td></tr></table></div>
 </body></html>

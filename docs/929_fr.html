@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>#929 : EmployeeService.kt [FR]</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:2em;color:#444}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}</style>
+</head>
+<body>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← Index des fichiers</a> · <a href="928.html">← Précédent</a> · <a href="930.html">Suivant →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/kotlin/org/projectforge/business/fibu/EmployeeService.kt" target="_blank" title="Voir la source sur GitHub">📄 source</a></div>
+<h1>#929 : <code>EmployeeService.kt</code></h1>
+<div class="meta"><code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/EmployeeService.kt</code> Type : Service Spring / Logique métier · Objectif : Logique métier employé orientée public — vérifications de statut actif, attributs dépendant du temps, rapports mensuels · Chemin : <code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/EmployeeService.kt</code> <span style="color:#888">445 lignes · 308 code · 96 commentaires · 41 vides</span></div>
+<div class="c">L'API publique principale pour la logique métier des employés. Sert de façade sur <code>EmployeeServiceSupport</code> (implémentation interne), <code>EmployeeDao</code>, <code>EmployeeCache</code> et <code>TimesheetDao</code>. Exposé en tant que singleton via <code>EmployeeService.instance</code>. Enregistre un adaptateur d'historique pour <code>EmployeeValidSinceAttrDO</code> lors de l'initialisation.</div>
+
+<h2>Architecture &amp; Conception</h2>
+
+<h3>Dépendances &amp; Initialisation</h3>
+<table>
+<tr><th>Dépendance</th><th>Rôle</th></tr>
+<tr><td><code>PfCaches</code></td><td>Accès à <code>UserGroupCache</code> pour la résolution des utilisateurs (utilisé dans <code>isEmployeeActive()</code>).</td></tr>
+<tr><td><code>EmployeeDao</code></td><td>Recherche d'entités et opérations de sélection. Dépendance circulaire résolue : <code>EmployeeService</code> se définit sur <code>EmployeeDao.employeeService</code> pendant <code>@PostConstruct</code>.</td></tr>
+<tr><td><code>EmployeeServiceSupport</code></td><td>Service interne contenant la logique d'implémentation réelle (validation, insertion, mise à jour, recherche). Marquée avec la visibilité <code>internal</code>.</td></tr>
+<tr><td><code>HistoryFormatService</code></td><td>Enregistre <code>EmployeeValidSinceAttrHistoryAdapter</code> pour le rendu historique des attributs dépendant du temps.</td></tr>
+<tr><td><code>TimesheetDao</code></td><td>Utilisé par <code>getReportOfMonth()</code> pour agréger les données de feuille de temps par employé/mois.</td></tr>
+</table>
+
+<h3>Logique de statut actif</h3>
+<p><code>isEmployeeActive(employé, afficherRécemmentPartis)</code> : Renvoie vrai si :</p>
+<ul>
+<li><strong>Pas de date de départ :</strong> L'employé est actif si l'utilisateur n'est ni supprimé ni désactivé (utilisateur nul = actif, pour les tests).</li>
+<li><strong>A une date de départ :</strong> L'employé est actif si la date de départ est le jour même ou après la date de référence (<code>maintenant</code>, ou <code>maintenant moins 3 mois</code> si <code>afficherRécemmentPartis=true</code>).</li>
+</ul>
+
+<h3>Méthodes d'attributs dépendant du temps</h3>
+<p>Toutes les méthodes dépendant du temps parcourent les entrées <code>ValidSinceAttrDO</code> triées par <code>validSince DESC</code> et sélectionnent l'entrée dont <code>validSince</code> est le jour même ou avant la date de référence. Les méthodes sont organisées par type d'attribut :</p>
+<ul>
+<li><strong>Congés annuels :</strong> <code>getAnnualLeaveDays()</code> (avec/sans date), <code>selectAnnualLeaveDayEntries()</code> (par employé ou ID), <code>insertAnnualLeaveDays()</code></li>
+<li><strong>Heures hebdomadaires :</strong> <code>getWeeklyWorkingHours()</code> (avec/sans date), <code>selectWeeklyWorkingHoursEntries()</code> (par employé ou ID), <code>insertWeeklyHours()</code></li>
+<li><strong>Statut :</strong> <code>getEmployeeStatus()</code>, <code>selectStatusEntries()</code>, <code>insertStatus()</code></li>
+</ul>
+
+<h3>Opérations CRUD ValidSinceAttr</h3>
+<p>Le service fournit une surface CRUD complète pour <code>EmployeeValidSinceAttrDO</code> :</p>
+<ul>
+<li><code>insert()</code> — Insertion avec ID employé ou entité, délègue à <code>EmployeeServiceSupport</code></li>
+<li><code>updateValidSinceAttr()</code> — Mise à jour avec sémantique de copie (gère la réutilisation d'entrée supprimée)</li>
+<li><code>markValidSinceAttrAsDeleted()</code> — Suppression logicielle</li>
+<li><code>undeleteValidSinceAttr()</code> — Annulation de suppression / restauration</li>
+<li><code>validate()</code> — Renvoie un message d'erreur ou null si valide</li>
+</ul>
+
+<h3>Rapport mensuel des employés</h3>
+<p><code>getReportOfMonth(année, mois, utilisateur)</code> crée un <code>MonthlyEmployeeReport</code>, initialise les limites de date, interroge les feuilles de temps via <code>TimesheetFilter</code> pour l'utilisateur et la plage mensuelle donnés, ajoute chaque feuille de temps (avec info de vérification d'accès) et calcule les durées agrégées par <code>Kost2</code>.</p>
+
+<h2>Historique Git</h2>
+<div class="hist"><pre>868d6abb7 2025 -> 2026
+7893cea1e Sélection d'utilisateur/employé améliorée. EmployeeService.selectAllActive renvoie désormais une liste triée.
+7cdc06ad7 MonthlyEmployeeReport[Week] -> Kotlin
+feb661d79 Employé : affichage de l'historique pour les attributs temporels
+28efde264 Employé : weeklyWorkingHours désormais comme attribut dépendant du temps.
+63081666f En-têtes de fichiers source : 2024 -> 2025.
+4ae4f3ea3 Corrections de bugs lors de la mise en production...
+ddf02927d Travaux de migration en cours...
+4942c854d Travaux de migration en cours...
+b71b5073d Travaux de migration en cours... (tous les tests de tous les packages : OK).
+ffb18cf8f Travaux de migration en cours...
+1012e347a Travaux de migration en cours... (tous les tests de tous les packages : OK).
+e74d3655b Travaux de migration en cours...
+6aca64431 Travaux de migration en cours... (tous les tests de tous les packages : OK).
+016699665 Travaux de migration en cours...
+8bd78b145 Travaux de migration en cours... (tous les tests de tous les packages : OK).
+ac2dbb269 Travaux de migration en cours...
+4b9ffbee2 Travaux de migration en cours... (tous les tests de tous les packages : OK).
+e80642c81 Travaux de migration en cours... (tous les tests de tous les packages : OK).
+1204b927b Travaux de migration en cours... (tous les tests de tous les packages : OK).
+9e38d3c0d Travaux de migration en cours...
+84e863624 Travaux de migration en cours... (tous les tests de tous les packages : OK).
+b79a1edca Travaux de migration en cours... (tous les tests de tous les packages : OK).
+d67bce18b Travaux de migration en cours...
+6f7e0fbc7 Travaux de migration en cours...
+1b50060c3 BaseDao : renommé : get -> find, save -> insert, getList -> select, load -> select
+87aaf6a5a Travaux de migration en cours... BaseDao refactorisé.
+1faf30810 Travaux de migration en cours...
+3aeda5ef5 Gros changement : tous les save|update|...InTrans renommés.
+85b4e1175 PfPersistenceService et PfPersistenceContext : query renommé en executeQuery.
+b095e6f7d Gros changement dans la gestion des transactions.
+f59810cf0 Travaux de migration en cours...
+4c04cfd65 CHANGEMENT-MAJEUR ! Migration des identifiants integer vers Long
+d54f93842 EmployeeServiceImpl -> EmployeeService.</pre></div>
+</body>
+</html>

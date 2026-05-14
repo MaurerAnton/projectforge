@@ -1,0 +1,122 @@
+Here is the Spanish translation of the provided HTML, with all tags preserved, `lang="es"` set, and the title updated with `[ES]`.
+
+```html
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>#1860: AddressService.kt [ES]</title>
+<style>
+  body { font-family: system-ui, sans-serif; max-width: 960px; margin: 2em auto; padding: 0 1em; background: #fafafa; color: #222; line-height: 1.6; }
+  h1 { border-bottom: 2px solid #333; padding-bottom: 0.3em; }
+  h2 { margin-top: 2.5em; border-bottom: 1px solid #ddd; padding-bottom: 0.2em; color: #333; }
+  h3 { margin-top: 2em; color: #444; }
+  a { color: #0366d6; }
+  .c { border-left: 3px solid #ddd; padding: .5em 1em; margin: 1em 0; background: #fff; }
+  .nav { font-size: .9em; color: #888; margin-bottom: 1em; }
+  .meta { font-size: .9em; margin: 1em 0; color: #555; }
+  code { background: #f0f0f0; padding: 0 .2em; font-size: .93em; }
+  pre { background: #f5f5f5; padding: .8em 1em; border: 1px solid #ddd; border-radius: 4px; overflow-x: auto; font-size: .88em; line-height: 1.4; }
+  table { border-collapse: collapse; width: 100%; margin: 1em 0; }
+  th, td { border: 1px solid #ddd; padding: .5em .8em; text-align: left; font-size: .9em; }
+  th { background: #f5f5f5; font-weight: 600; }
+  .hist { font-size: .85em; color: #555; }
+  .warn { background: #fff3cd; border-left: 3px solid #ffc107; padding: .5em 1em; margin: 1em 0; }
+  .tip { background: #d4edda; border-left: 3px solid #28a745; padding: .5em 1em; margin: 1em 0; }
+</style>
+</head>
+<body>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Índice</a> · <a href="file-index.html">← Índice de archivos</a> · <a href="1859.html">← Anterior</a> · <a href="1861.html">Siguiente →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-carddav/src/main/kotlin/org/projectforge/carddav/service/AddressService.kt" target="_blank" title="Ver fuente en GitHub">📄 fuente</a></div>
+
+<h1>#1860: <code>AddressService.kt</code></h1>
+<div class="meta"><code>projectforge-carddav/src/main/kotlin/org/projectforge/carddav/service/AddressService.kt</code> <strong>Kotlin Spring <code>@Service</code></strong> — Fachada del servicio de libreta de direcciones CardDAV. Expone los contactos de ProjectForge (solo favoritos) a través del protocolo CardDAV para sincronización con libretas de direcciones externas (Contactos de Apple, Thunderbird, DAVx⁵, etc.). Ubicación: <code>projectforge-carddav/src/main/kotlin/org/projectforge/carddav/service/AddressService.kt</code> <span style="color:#888">101 líneas · 66 código · 26 comentarios · 9 en blanco</span></div>
+
+<div class="c">
+<strong>Propósito:</strong> CardDAV es una extensión de libreta de direcciones para WebDAV (RFC 6352). Este servicio actúa como puente entre los endpoints HTTP del módulo <code>projectforge-carddav</code> y los datos de direcciones de la capa de negocio. Traduce los objetos de dominio de direcciones de ProjectForge al modelo <code>Contact</code> de CardDAV, aplicando la política de acceso de <strong>solo favoritos</strong>.
+</div>
+
+<h2>Arquitectura</h2>
+
+<div class="c">
+El servicio sigue un patrón de <strong>fachada de solo lectura</strong>. Las operaciones de Crear y Actualizar están comentadas y devuelven objetos <code>Contact()</code> vacíos — la implementación de CardDAV es de solo lectura. El método <code>deleteContact()</code> no elimina realmente la dirección; solo <strong>elimina la dirección de los favoritos del usuario</strong> (establece <code>isFavoriteCard = false</code> en PersonalAddressDO). Esto se debe a que:
+<ul>
+<li>Eliminar la dirección real afectaría a otros usuarios que también la han marcado como favorita</li>
+<li>Los clientes CardDAV esperan "eliminar" contactos de su libreta de direcciones personal, no del directorio corporativo compartido</li>
+<li>Las operaciones de escritura son complejas: análisis de vCard, resolución de conflictos y semántica de sincronización requerirían un trabajo adicional significativo</li>
+</ul>
+</div>
+
+<h3>Grafo de dependencias</h3>
+<pre>
+AddressService (@Service)
+  ├── AddressDAVCache (@Service + AbstractCache)
+  │     ├── AddressDao (persistencia central de direcciones)
+  │     ├── AddressImageCache (fotos de contacto)
+  │     └── VCardUtils (dirección → conversión a vCard)
+  └── PersonalAddressDao (lista de favoritos del usuario)
+</pre>
+
+<div class="c">
+El <code>AddressDAVCache</code> (contexto <a href="844.html">#844</a>) envuelve la costosa generación de vCard (que implica codificación en base64 de fotos de contacto, mapeo de campos y serialización de formato) en un caché basado en TTL. Sin este caché, cada sincronización del cliente CardDAV regeneraría las vCards de todos los contactos — una operación intensiva en CPU para libretas de direcciones con cientos de entradas y fotos.
+</div>
+
+<h3>Superficie de la API</h3>
+<table>
+<tr><th>Método</th><th>Retorna</th><th>Estado</th><th>Comportamiento</th></tr>
+<tr><td><code>getContactList(userDO)</code></td><td><code>List&lt;Contact&gt;</code></td><td>Activo</td><td>Retorna todas las direcciones favoritas como objetos <code>Contact</code> vCard, ordenadas por nombre</td></tr>
+<tr><td><code>getContact(id)</code></td><td><code>Contact?</code></td><td>Comentado</td><td>Retornaría un solo contacto por ID si es favorito</td></tr>
+<tr><td><code>createContact(ab, vcard)</code></td><td><code>Contact</code> (vacío)</td><td>Comentado</td><td>Creación de contacto no soportada — retorna Contact vacío</td></tr>
+<tr><td><code>updateContact(contact, vcard)</code></td><td><code>Contact</code> (vacío)</td><td>Comentado</td><td>Actualizaciones de contacto no soportadas — retorna Contact vacío</td></tr>
+<tr><td><code>deleteContact(contactId)</code></td><td><code>Boolean</code></td><td>Activo</td><td>Elimina la dirección de favoritos (<code>isFavoriteCard = false</code>), retorna true en caso de éxito</td></tr>
+</table>
+
+<h2>Contexto del protocolo CardDAV</h2>
+<div class="c">
+Los clientes CardDAV (por ejemplo, Contactos de Apple en iOS/macOS, Thunderbird con CardBook, DAVx⁵ en Android) envían solicitudes HTTP a los endpoints <code>/{username}/addressBooks/</code>. El servicio es invocado por la capa de servlet/manejador CardDAV cuando:<br><br>
+1. <strong>PROPFIND / address-query REPORT:</strong> El cliente lista todos los contactos → <code>getContactList()</code><br>
+2. <strong>GET /addressBooks/{uid}.vcf:</strong> El cliente obtiene un solo contacto → <code>getContact()</code> (actualmente comentado)<br>
+3. <strong>DELETE /addressBooks/{uid}.vcf:</strong> El cliente elimina de la libreta de direcciones → <code>deleteContact()</code><br>
+4. <strong>PUT:</strong> Crear/actualizar → no soportado<br><br>
+La política de solo favoritos significa que un usuario debe marcar explícitamente los contactos como favoritos en la interfaz web de ProjectForge para que aparezcan en su libreta de direcciones sincronizada. Esto actúa como una puerta intencional — el directorio completo de la empresa suele ser demasiado grande para las libretas de direcciones personales (más de 1000 entradas inundarían la aplicación de contactos de un teléfono).
+</div>
+
+<h2>Historial de Git</h2>
+<div class="hist">
+<pre>868d6abb7 2025 → 2026 (actualización de año de copyright)
+63081666f Encabezados de archivos fuente: 2024→2025
+49cddf9a0 WIP: Carddav (iteraciones de desarrollo)
+3527445db WIP: Carddav
+d0aed59ed Renombre de módulo: projectforge-caldav → projectforge-carddav
+8fc0c831f WIP: CardDav
+27692785d CardDav (solo lectura) iniciado; biblioteca Milton eliminada (problema de costo de licencia)
+40e721b9c VCardUtils commit inicial
+685cfc9bf caldav: AddressCache renombrado a AddressDAVCache
+878cb7169 Correcciones de advertencias del compilador
+ab1776d2a CardDAV.AddressService: código no utilizado eliminado
+dc92ae34c CardDav: AddressCache implementado (generación de vcard muy lenta, necesitaba caché)
+24b4d2e5f WIP: CalDAV (trabajo inicial en CardDAV)
+562515f18 projectforge-caldav refactorizado; RestAuthenticationUtils introducido
+</pre>
+</div>
+
+<h3>Commit clave: <code>dc92ae34c</code></h3>
+<div class="c">
+Este commit introdujo el <code>AddressDAVCache</code> después de descubrir que la generación de vCard era "muy lenta" — una corrección crítica de rendimiento. Generar vCards implica manipulación de cadenas, codificación de imágenes en base64 y formato de fechas para cada contacto. Sin caché, cada solicitud de sincronización CardDAV (que puede ocurrir cada pocos minutos desde dispositivos móviles) regeneraría todas las vCards desde cero.
+</div>
+
+<h3>Commit clave: <code>d0aed59ed</code> — Renombre de módulo</h3>
+<div class="c">
+El módulo se llamaba originalmente <code>projectforge-caldav</code> (Calendario + Contacto juntos) pero se renombró a <code>projectforge-carddav</code> cuando las implementaciones de CalDAV (sincronización de calendario) y CardDAV (sincronización de contactos) se separaron en módulos distintos. Esto refleja la evolución de un módulo DAV monolítico a implementaciones separadas y específicas del protocolo.
+</div>
+
+<h3>Commit clave: <code>27692785d</code> — Eliminación de Milton</h3>
+<div class="c">
+La implementación inicial usaba la biblioteca <strong>Milton</strong> Java WebDAV, pero se eliminó debido a los costos de licencia. La implementación del protocolo DAV se reescribió utilizando un enfoque personalizado y ligero. Este es un punto de dolor común en las implementaciones de WebDAV/CardDAV de código abierto — las bibliotecas Java disponibles (Milton, Bedework) tienen licencias restrictivas o soporte insuficiente para CardDAV.
+</div>
+
+<div class="warn"><strong>Advertencia — Eliminación de Milton:</strong> La biblioteca Milton ofrecía anotaciones convenientes (<code>@AddressBooks</code>, <code>@AddressBook</code>) para el mapeo de endpoints CardDAV. Después de su eliminación, los endpoints CardDAV tuvieron que implementarse manualmente utilizando manejo de servlets sin procesar o anotaciones personalizadas. Esto aumentó la complejidad de implementación para el cumplimiento del protocolo CardDAV (particularmente las solicitudes <code>addressbook-query</code> REPORT y las respuestas <code>PROPFIND</code> con propiedades <code>addressbook-description</code>).</div>
+
+<div class="tip"><strong>Justificación de la política de solo favoritos:</strong> CardDAV se utiliza principalmente para sincronizar contactos con dispositivos móviles y clientes de correo de escritorio. Exponer el directorio completo de la empresa (potencialmente miles de contactos) a cada dispositivo sería poco práctico. Los usuarios marcan selectivamente como favoritos los contactos que necesitan, creando un subconjunto personalizado. El método <code>deleteContact()</code> respeta la naturaleza multiusuario de la libreta de direcciones al eliminar solo el marcador de favorito del usuario, no el registro de dirección subyacente.</div>
+
+</body>
+</html>

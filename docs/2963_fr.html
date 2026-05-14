@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>#2963 : EmployeeSalaryImportPage.java [FR]</title>
+<style>
+body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}
+h1{border-bottom:2px solid #333;padding-bottom:.3em}
+h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}
+h3{margin-top:2em;color:#444}
+a{color:#0366d6}
+.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}
+.nav{font-size:.9em;color:#888;margin-bottom:1em}
+.lang{font-size:.85em;color:#888;float:right}
+.lang a{color:#888;text-decoration:none;padding:0 .3em}
+.lang a.active{color:#0366d6;font-weight:600;text-decoration:underline}
+.meta{font-size:.9em;margin:1em 0;color:#555}
+code{background:#f0f0f0;padding:0 .2em;font-size:.93em}
+pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}
+table{border-collapse:collapse;width:100%;margin:1em 0}
+th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}
+th{background:#f5f5f5;font-weight:600}
+.hist{font-size:.85em;color:#555}
+</style>
+</head>
+<body>
+<div class="lang"><a href="2963.html">EN</a> · <a href="2963_de.html">DE</a> · <a href="2963_ru.html">RU</a> · <a href="2963_fr.html" class="active">FR</a> · <a href="2963_es.html">ES</a></div>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← Index des fichiers</a> · <a href="624.html">← Précédent</a> · <a href="2975.html">Suivant →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-wicket/src/main/java/org/projectforge/web/fibu/EmployeeSalaryImportPage.java" target="_blank" title="Voir la source sur GitHub">📄 source</a></div>
+<h1>#2963 : <code>EmployeeSalaryImportPage.java</code></h1>
+<div class="meta"><code>projectforge-wicket/src/main/java/org/projectforge/web/fibu/EmployeeSalaryImportPage.java</code> Type : Java · Rôle : Comptabilité financière · Source : projectforge-wicket/src/main/java/org/projectforge/web/fibu/EmployeeSalaryImportPage.java <span style="color:#888">140 lignes · 102 code · 22 commentaires · 16 vides</span></div>
+<div class="c">Implémentation de la page Wicket pour EmployeeSalaryImport. Compose les panneaux, formulaires et la navigation.</div>
+<h2>Structure du code</h2>
+<p>Paquetage : <code>org.projectforge.web.fibu</code></p>
+<p>Classes : <code>EmployeeSalaryImportPage</code></p>
+<p>Étend : <code>AbstractImportPage</code></p>
+<p>Méthodes (7) : <code>clear</code>, <code>selectAll</code>, <code>select</code>, <code>deselectAll</code>, <code>checkAccess</code>, <code>setPageParametersOnSuccess</code>, <code>getTitle</code></p>
+<p>Importations : 14 paquetages</p>
+<h2>Code source (abrégé)</h2>
+<pre>
+package org.projectforge.web.fibu;
+
+import de.micromata.merlin.excel.importer.ImportStorage;
+import de.micromata.merlin.excel.importer.ImportedSheet;
+import org.apache.wicket.markup.html.form.upload.FileUpload;
+import org.apache.wicket.request.mapper.parameter.PageParameters;
+import org.projectforge.business.fibu.EmployeeSalaryDO;
+import org.projectforge.business.fibu.datev.EmployeeSalaryImportService;
+import org.projectforge.business.user.UserRightId;
+import org.projectforge.business.user.UserRightValue;
+import org.projectforge.framework.access.AccessChecker;
+import org.projectforge.framework.i18n.I18nHelper;
+import org.projectforge.web.WicketSupport;
+import org.projectforge.web.core.importstorage.AbstractImportPage;
+
+import java.io.InputStream;
+import java.time.Month;
+
+public class EmployeeSalaryImportPage extends AbstractImportPage&lt;EmployeeSalaryImportForm&gt; {
+    private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(EmployeeSalaryImportPage.class);
+
+    public EmployeeSalaryImportPage(final PageParameters parameters) {
+        super(parameters);
+        form = new EmployeeSalaryImportForm(this);
+        body.add(form);
+        form.init();
+        clear(); // réinitialise l'état de la page, efface le stockage d'importation
+        if (parameters != null) {
+            if (parameters.get(0) != null &amp;&amp; parameters.get(0).toString() != null &amp;&amp; parameters.get(0).toString().equals(&quot;success&quot;)) {
+                error(I18nHelper.getLocalizedMessage(&quot;fibu.employee.salaries.import.success&quot;));
+            }
+            if (parameters.contains(&quot;year&quot;)) {
+                form.setSelectedYear(parameters.get(&quot;year&quot;).toInt(form.getDefaultYear()));
+            }
+            if (parameters.contains(&quot;month&quot;)) {
+                form.setSelectedMonth(parameters.get(&quot;month&quot;).toInt(form.getDefaultMonth()));
+            }
+        }
+    }
+
+    @Override
+    protected void clear() {
+        super.clear();
+        form.setDateDropDownsEnabled(true);
+    }
+
+    boolean doImport(final int year, final Month month) {
+        checkAccess();
+        EmployeeSalaryImportService employeeSalaryImportService = WicketSupport.get(EmployeeSalaryImportService.class);
+        final FileUpload fileUpload = form.fileUploadField.getFileUpload();
+        if (fileUpload != null) {
+            final Boolean success = doImportWithExcelExceptionHandling(() -&gt; {
+                final InputStream is = fileUpload.getInputStream();
+                final String clientFileName = fileUpload.getClientFileName();
+                setStorage(employeeSalaryImportService.importData(is, clientFileName, year, month));
+                return true;
+            });
+            return Boolean.TRUE.equals(success);
+        }
+        return false;
+    }
+
+    @Override
+    protected ImportedSheet&lt;?&gt; reconcile(final String sheetName) {
+        checkAccess();
+        final ImportedSheet&lt;?&gt; sheet = super.reconcile(sheetName);
+        EmployeeSalaryImportService employeeSalaryImportService = WicketSupport.get(EmployeeSalaryImportService.class);
+        Month month = Month.of(form.getSelectedMonth());
+        employeeSalaryImportService.reconcile((ImportStorage&lt;EmployeeSalaryDO&gt;) getStorage(), sheetName, form.getSelectedYear(), month);
+        return sheet;
+    }
+
+    @Override
+    protected ImportedSheet&lt;?&gt; commit(final String sheetName) {
+        checkAccess();
+        final ImportedSheet&lt;?&gt; sheet = super.commit(sheetName);
+        EmployeeSalaryImportService employeeSalaryImportService = WicketSupport.get(EmployeeSalaryImportService.class);
+        employeeSalaryImportService.commit(getStorage(), sheetName);
+        return sheet;
+    }
+
+    @Override
+    protected void selectAll(final String sheetName) {
+        checkAccess();
+        super.selectAll(sheetName);
+    }
+
+    @Override
+    protected void select(final String sheetName, final int number) {
+        checkAccess();
+        super.select(sheetName, number);
+    }
+
+    @Override
+    protected void deselectAll(final String sheetName) {
+        checkAccess();
+        super.deselectAll(sheetName);
+    }
+
+    private void checkAccess() {
+        AccessChecker accessChecker = WicketSupport.getAccessChecker();
+        accessChecker.checkLoggedInUserRight(UserRightId.HR_EMPLOYEE, UserRightValue.READWRITE);
+        accessChecker.checkRestrictedOrDemoUser();
+    }
+
+    @Override
+    protected void setPageParametersOnSuccess(PageParameters params) {
+        params.add(&quot;year&quot;, form.getSelectedYear());
+        params.add(&quot;month&quot;, form.getSelectedMonth());
+    }
+
+    @Override
+    protected String getTitle() {
+        return getString(&quot;fibu.employee.salaries.import&quot;);
+    }
+
+}</pre>
+
+<h2>Historique Git</h2><div class="hist"><pre>868d6abb7 2025 -> 2026
+63081666f En-têtes des fichiers source : 2024 -> 2025.
+b71b5073d Migration en cours... (tous les tests de tous les paquetages : OK).
+ffb18cf8f Migration en cours...
+1012e347a Migration en cours... (tous les tests de tous les paquetages : OK).</pre></div>
+</body>
+</html>

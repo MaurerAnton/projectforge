@@ -1,0 +1,132 @@
+<!DOCTYPE html><html lang="fr"><head><meta charset="utf-8"><title>#2329 : SipgateSyncService.kt [FR]</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:2em;color:#444}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.lang{font-size:.85em;color:#888;float:right}.lang a{color:#888;text-decoration:none;padding:0 .3em}.lang a.active{color:#0366d6;font-weight:600;text-decoration:underline}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}</style></head>
+<body><div class="lang"><a href="2329.html">EN</a> · <a href="2329_de.html">DE</a> · <a href="2329_ru.html">RU</a> · <a href="2329_fr.html" class="active">FR</a> · <a href="2329_es.html">ES</a></div>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← Index des fichiers</a> · <a href="2675.html">← Précédent</a> · <a href="1044.html">Suivant →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-rest/src/main/kotlin/org/projectforge/rest/sipgate/SipgateSyncService.kt" target="_blank" title="Voir la source sur GitHub">📄 source</a></div>
+<h1>#2329 : <code>SipgateSyncService.kt</code></h1>
+<div class="meta"><code>projectforge-rest/src/main/kotlin/org/projectforge/rest/sipgate/SipgateSyncService.kt</code> Type : Kotlin · Rôle : Point d'accès REST · Source : projectforge-rest/src/main/kotlin/org/projectforge/rest/sipgate/SipgateSyncService.kt <span style="color:#888">132 lignes · 86 code · 36 commentaires · 10 vides</span></div>
+<div class="c">Service Spring pour SipgateSync. Fournit la logique métier entre les contrôleurs/points d'accès REST et la couche d'accès aux données.</div>
+<h2>Structure du code</h2>
+<p>Annotations : <code>param</code>, <code>micromata</code>, <code>Service</code>, <code>author</code>, <code>Autowired</code></p>
+<p>Classes : <code>SipgateSyncService</code></p>
+<p>Fonctions (4) : <code>getStorage</code>, <code>readStorage</code>, <code>readFromFileOrGetFromRemote</code>, <code>remoteRead</code></p>
+<p>Propriétés (8) : <code>sipgateService</code>, <code>privateStorage</code>, <code>ps</code>, <code>newStorage</code>, <code>newStorage</code>, <code>userDevices</code>, <code>devices</code>, <code>storageFile</code></p>
+<p>Importations : 8 paquetages</p>
+<p>Paquetage : <code>org.projectforge.rest.sipgate</code></p>
+<h2>Code source (abrégé)</h2>
+<pre>
+package org.projectforge.rest.sipgate
+
+import mu.KotlinLogging
+import org.projectforge.business.sipgate.SipgateUserDevices
+import org.projectforge.framework.configuration.ConfigXml
+import org.projectforge.framework.json.JsonUtils
+import org.springframework.beans.factory.annotation.Autowired
+import org.springframework.stereotype.Service
+import java.io.File
+import kotlin.concurrent.thread
+
+private val log = KotlinLogging.logger {}
+
+/**
+ * Lit les numéros, appareils, utilisateurs, etc. depuis le serveur Sipgate distant.
+ * @author K. Reinhard (k.reinhard@micromata.de)
+ */
+@Service
+open class SipgateSyncService {
+  @Autowired
+  internal lateinit var sipgateService: SipgateService
+
+  private var privateStorage: SipgateDataStorage? = null
+
+  /**
+   * Obtient le stockage, s'il existe. Sinon, le stockage est lu depuis le serveur Sipgate distant.
+   * Si le stockage existant est présent mais obsolète, le stockage obsolète est retourné, mais
+   * une tâche asynchrone est lancée pour obtenir les nouvelles données de stockage.
+   */
+  open fun getStorage(): SipgateDataStorage {
+    privateStorage?.let {
+      thread(start = true) {
+        readStorage() // Relecture si obsolète.
+      }
+      return it
+    }
+    return readStorage()
+  }
+
+  /**
+   * Obtient les données du serveur Sipgate distant. Seront mises en cache sous forme de fichier (work/sipgateStorage.json). Les données seront
+   * relues automatiquement après un jour.
+   * @param Si forceSync est défini sur true, la configuration sera obtenue depuis le serveur Sipgate distant. La valeur par défaut est false.
+   */
+  open fun readStorage(forceSync: Boolean = false): SipgateDataStorage {
+    val ps = privateStorage
+    if (forceSync || ps == null || !ps.uptodate) {
+      if (forceSync) {
+        log.info { &quot;La lecture de la configuration Sipgate est forcée.&quot; }
+      } else if (ps == null) {
+        log.info { &quot;La configuration Sipgate n&#x27;existe pas encore..&quot; }
+      } else {
+        log.info { &quot;Configuration Sipgate obsolète.&quot; }
+      }
+      readFromFileOrGetFromRemote(forceSync)
+    }
+    return privateStorage!!
+  }
+
+  private fun readFromFileOrGetFromRemote(forceSync: Boolean = false) {
+    synchronized(this) {
+      try {
+        if (!forceSync &amp;&amp; storageFile.canRead()) {
+          val json = storageFile.readText()
+          log.info { &quot;Lecture des données Sipgate depuis &#x27;${storageFile.absolutePath}&#x27;...&quot; }
+          val newStorage = JsonUtils.fromJson(json, SipgateDataStorage::class.java)
+          if (newStorage?.uptodate == true) {
+            privateStorage = newStorage
+            return
+          }
+          log.info { &quot;Le stockage Sipgate est obsolète (plus d&#x27;un jour), relecture...&quot; }
+        }
+      } catch (ex: Exception) {
+        log.error(&quot;Erreur lors de l&#x27;analyse du stockage sipgate depuis &#x27;${storageFile.absolutePath}&#x27; : ${ex.message}&quot;, ex)
+      }
+      remoteRead()
+    }
+  }
+
+  private fun remoteRead() {
+    log.info { &quot;Lecture des données Sipgate (utilisateurs, appareils, etc.)...&quot; }
+    val newStorage = SipgateDataStorage()
+    newStorage.users = sipgateService.getUsers()
+    try {
+      newStorage.numbers = sipgateService.getNumbers()
+    } catch (ex: Exception) {
+      log.error(&quot;Impossible de lire les numéros (peut-être pas d&#x27;accès) : ${ex.message}&quot;, ex)
+    }
+    val userDevices = mutableListOf&lt;SipgateUserDevices&gt;()
+    newStorage.users?.forEach { user -&gt;
+      val devices = sipgateService.getDevices(user)
+      if (devices.isNotEmpty()) {
+        devices.forEach { it.deleteSecrets() }
+        userDevices.add(SipgateUserDevices(user.id, devices))
+      }
+    }
+    newStorage.userDevices = userDevices
+    newStorage.addresses = sipgateService.getAddresses()
+    privateStorage = newStorage
+    log.info { &quot;Écriture des données Sipgate vers &#x27;${storageFile.absolutePath}&#x27;...&quot; }
+    storageFile.writeText(privateStorage.toString())
+  }
+
+  companion object {
+    private val storageFile by lazy {
+      File(ConfigXml.getInstance().workingDirectory, &quot;sipgateStorage.json&quot;)
+    }
+  }
+}</pre>
+
+<h2>Historique Git</h2><div class="hist"><pre>868d6abb7 2025 -&gt; 2026
+63081666f En-têtes des fichiers source : 2024 -&gt; 2025.
+5bafe7941 @Repository -&gt; @Service. Annotations @Transactional supprimées.
+b6092df09 Copyright 2023 -&gt; 2024
+031eb26c3 WIP : appels téléphoniques pour Sipgate</pre></div>
+</body></html>

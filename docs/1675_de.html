@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>#1675: AuftragsCacheTest.kt [DE]</title>
+<style>
+body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}
+h1{border-bottom:2px solid #333;padding-bottom:.3em}
+h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}
+h3{margin-top:2em;color:#444}
+a{color:#0366d6}
+.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}
+.nav{font-size:.9em;color:#888;margin-bottom:1em}
+.lang{font-size:.85em;color:#888;float:right}
+.lang a{color:#888;text-decoration:none;padding:0 .3em}
+.lang a.active{color:#0366d6;font-weight:600;text-decoration:underline}
+.meta{font-size:.9em;margin:1em 0;color:#555}
+code{background:#f0f0f0;padding:0 .2em;font-size:.93em}
+pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}
+table{border-collapse:collapse;width:100%;margin:1em 0}
+th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}
+th{background:#f5f5f5;font-weight:600}
+.hist{font-size:.85em;color:#555}
+</style>
+</head>
+<body>
+<div class="lang"><a href="1675.html">EN</a> · <a href="1675_de.html" class="active">DE</a> · <a href="1675_ru.html">RU</a> · <a href="1675_fr.html">FR</a> · <a href="1675_es.html">ES</a></div>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← Dateiindex</a> · <a href="1067.html">← Vorherige</a> · <a href="3019.html">Nächste →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/test/kotlin/org/projectforge/business/fibu/AuftragsCacheTest.kt" target="_blank" title="Quelle auf GitHub anzeigen">📄 Quelle</a></div>
+<h1>#1675: <code>AuftragsCacheTest.kt</code></h1>
+<div class="meta"><code>projectforge-business/src/test/kotlin/org/projectforge/business/fibu/AuftragsCacheTest.kt</code> Typ: Kotlin · Rolle: Test · Quelle: projectforge-business/src/test/kotlin/org/projectforge/business/fibu/AuftragsCacheTest.kt <span style="color:#888">179 Zeilen · 145 Code · 26 Kommentare · 8 leer</span></div>
+<div class="c">Komponenten-/Integrationstest für AuftragsCache. Validiert die Korrektheit des Verhaltens der entsprechenden Produktionsklasse.</div>
+<h2>Codestruktur</h2>
+<p>Annotationen: <code>Test</code>, <code>Autowired</code></p>
+<p>Klassen: <code>AuftragsCacheTest</code></p>
+<p>Obertyp(en): <code>AbstractTestBase</code></p>
+<p>Funktionen (1): <code>assertValues</code></p>
+<p>Eigenschaften (6): <code>auftragDao</code>, <code>auftragsCache</code>, <code>rechnungDao</code>, <code>order</code>, <code>order</code>, <code>invoice</code></p>
+<p>Importe: 6 Pakete</p>
+<p>Paket: <code>org.projectforge.business.fibu</code></p>
+<h2>Quellcode (gekürzt)</h2>
+<pre>
+package org.projectforge.business.fibu
+
+import org.junit.jupiter.api.Assertions
+import org.junit.jupiter.api.Test
+import org.projectforge.commons.test.TestUtils.Companion.assertSame
+import org.projectforge.business.test.AbstractTestBase
+import org.springframework.beans.factory.annotation.Autowired
+import java.time.LocalDate
+
+class AuftragsCacheTest : AbstractTestBase() {
+    @Autowired
+    private lateinit var auftragDao: AuftragDao
+
+    @Autowired
+    private lateinit var auftragsCache: AuftragsCache
+
+    @Autowired
+    private lateinit var rechnungDao: RechnungDao
+
+    @Test
+    fun `teste Auftragsworkflow mit Rechnungen`() {
+        val order = AuftragDO().also {
+            it.addPosition(AuftragsPositionDO().also { pos -&gt;
+                pos.titel = &quot;Pos 1&quot;
+                pos.nettoSumme = 100.toBigDecimal()
+                pos.status = AuftragsStatus.GELEGT
+            })
+            it.addPosition(AuftragsPositionDO().also { pos -&gt;
+                pos.titel = &quot;Pos 2&quot;
+                pos.nettoSumme = 200.toBigDecimal()
+                pos.status = AuftragsStatus.GELEGT
+            })
+            it.addPosition(AuftragsPositionDO().also { pos -&gt;
+                pos.titel = &quot;Pos 3&quot;
+                pos.nettoSumme = 400.toBigDecimal()
+                pos.status = AuftragsStatus.GELEGT
+            })
+            it.status = AuftragsStatus.GELEGT
+            it.nummer = auftragDao.nextNumber
+        }
+        auftragDao.insert(order, checkAccess = false)
+        auftragsCache.getOrderInfo(order.id).also { orderInfo -&gt;
+            assertValues(orderInfo, akquiseSum = 700, netSum = 700)
+        }
+        order.status = AuftragsStatus.BEAUFTRAGT
+        order.positionen!!.find { it.titel == &quot;Pos 1&quot; }!!.status = AuftragsStatus.BEAUFTRAGT
+        order.positionen!!.find { it.titel == &quot;Pos 2&quot; }!!.status = AuftragsStatus.ABGELEHNT
+        order.positionen!!.find { it.titel == &quot;Pos 3&quot; }!!.status = AuftragsStatus.OPTIONAL
+        auftragDao.update(order, checkAccess = false)
+        auftragsCache.getOrderInfo(order.id).let { orderInfo -&gt;
+            assertValues(orderInfo, akquiseSum = 400, netSum = 500, orderedNetSum = 100, notYetInvoicedSum = 100)
+        }
+        order.positionen!!.find { it.titel == &quot;Pos 1&quot; }!!.status = AuftragsStatus.ABGESCHLOSSEN
+        auftragDao.update(order, checkAccess = false)
+        auftragsCache.getOrderInfo(order.id).also { orderInfo -&gt;
+            assertValues(
+                orderInfo, akquiseSum = 400, netSum = 500, orderedNetSum = 100,
+                toBeInvoicedSum = 100, notYetInvoicedSum = 100, toBeInvoiced = true
+            )
+        }
+        order.addPaymentSchedule(PaymentScheduleDO().also { schedule -&gt;
+            schedule.amount = 50.toBigDecimal()
+            schedule.reached = true
+        })
+        auftragDao.update(order, checkAccess = false)
+        auftragsCache.getOrderInfo(order.id).also { orderInfo -&gt;
+            // 100 für zu fakturierende Position und 50 durch erreichten Zahlungsplan, der keiner Position zugeordnet ist.
+            assertValues(
+                orderInfo, akquiseSum = 400, netSum = 500, orderedNetSum = 100,
+                toBeInvoicedSum = 150, notYetInvoicedSum = 100, toBeInvoiced = true
+            )
+        }
+        order.addPaymentSchedule(PaymentScheduleDO().also { schedule -&gt;
+            schedule.amount = 25.toBigDecimal()
+            schedule.reached = true
+            schedule.vollstaendigFakturiert = true
+        })
+        order.addPaymentSchedule(PaymentScheduleDO().also { schedule -&gt;
+            schedule.amount = 80.toBigDecimal()
+            schedule.reached = true
+            schedule.positionNumber = order.positionen!!.find { it.titel == &quot;Pos 1&quot; }!!.number
+        })
+        auftragDao.update(order, checkAccess = false)
+        auftragsCache.getOrderInfo(order.id).also { orderInfo -&gt;
+            // (25) wird ignoriert (bereits vollständig fakturiert).
+            // 80 für zu fakturierende Position wird durch 80 des Zahlungsplans &quot;überschrieben&quot;.
+            // 50 durch erreichten Zahlungsplan, der keiner Position zugeordnet ist.
+            assertValues(
+                orderInfo, akquiseSum = 400, netSum = 500, orderedNetSum = 100,
+                toBeInvoicedSum = 130, notYetInvoicedSum = 100, toBeInvoiced = true
+            )
+        }
+    }
+
+        @Test
+    fun `teste Auftrag in Akquisition mit Rechnungen`() {
+        val order = AuftragDO().also {
+            it.addPosition(AuftragsPositionDO().also { pos -&gt;
+                pos.titel = &quot;Pos 1&quot;
+                pos.nettoSumme = 100.toBigDecimal()
+                pos.status = AuftragsStatus.GELEGT
+            })
+            it.addPosition(AuftragsPositionDO().also { pos -&gt;
+                pos.titel = &quot;Pos 2&quot;
+                pos.nettoSumme = 200.toBigDecimal()
+                pos.status = AuftragsStatus.GELEGT
+            })
+            it.status = AuftragsStatus.GELEGT
+            it.nummer = auftragDao.nextNumber
+        }
+        auftragDao.insert(order, checkAccess = false)
+        auftragsCache.getOrderInfo(order.id).let { orderInfo -&gt;
+            assertValues(orderInfo, akquiseSum = 300, netSum = 300)
+        }
+        val invoice = RechnungDO().also {
+            it.addPosition(RechnungsPositionDO().also { pos -&gt; // 50 von 100
+                pos.auftragsPosition = order.positionen!!.get(0)
+                pos.menge = 5.toBigDecimal()
+                pos.einzelNetto = 10.toBigDecimal()
+// ... (gekürzt, insgesamt 157 Zeilen)</pre>
+
+<h2>Git-Verlauf</h2><div class="hist"><pre>868d6abb7 2025 -&gt; 2026
+63081666f Quelldatei-Header: 2024 -&gt; 2025.
+42dc9fa16 Aufträge: ordered -&gt; beauftragt.
+176cb32d7 WIP: Gradle
+ae2c04ee0 Migration stuff in progress... (alle Tests aller Pakete: OK).</pre></div>
+</body>
+</html>

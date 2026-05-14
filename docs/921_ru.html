@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>#921: EmployeeDO.kt [RU]</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:2em;color:#444}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}</style>
+</head>
+<body>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Индекс</a> · <a href="file-index.html">← Индекс файлов</a> · <a href="920.html">← Назад</a> · <a href="922.html">Вперёд →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/kotlin/org/projectforge/business/fibu/EmployeeDO.kt" target="_blank" title="Просмотреть исходник на GitHub">📄 исходник</a></div>
+<h1>#921: <code>EmployeeDO.kt</code></h1>
+<div class="meta"><code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/EmployeeDO.kt</code> Тип: JPA-сущность (объект данных) · Назначение: Представляет сотрудника — связь между пользователем ProjectForge и финансовыми/HR-данными · Путь: <code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/EmployeeDO.kt</code> <span style="color:#888">230 строк · 156 кода · 52 комментария · 22 пустых</span></div>
+<div class="c">Центральная сущность, связывающая <code>PFUserDO</code> (учётная запись пользователя) с финансовыми, HR-данными и данными учёта времени. Отображается на таблицу <code>t_fibu_employee</code>. Реализует <code>Comparable</code> (по фамилии/имени пользователя) и <code>DisplayNameCapable</code> (делегирует полному имени пользователя). Объявлена как <code>open</code> для поддержки Hibernate-прокси и тестового мокинга (VacationServiceTest).</div>
+
+<h2>Архитектура и дизайн</h2>
+
+<h3>JPA-маппинг</h3>
+<table>
+<tr><th>Поле</th><th>Колонка БД</th><th>Тип</th><th>Примечания</th></tr>
+<tr><td><code>user</code></td><td><code>user_id</code></td><td><code>PFUserDO (ManyToOne, LAZY)</code></td><td>Уникальное ограничение — один пользователь на сотрудника. Hibernate Search индексирует встроенно (глубина 1). Сериализуется только как ID.</td></tr>
+<tr><td><code>kost1</code></td><td><code>kost1_id</code></td><td><code>Kost1DO (ManyToOne, LAZY)</code></td><td>Центр затрат для ежемесячной отчётности. Может быть null.</td></tr>
+<tr><td><code>status</code></td><td>—</td><td><code>EmployeeStatus? (@Transient)</code></td><td>НЕ сохраняется — устанавливается <code>EmployeeDao</code>/<code>EmployeeCache</code> из <code>ValidSinceAttr</code>. Внутренний сеттер.</td></tr>
+<tr><td><code>annualLeave</code></td><td>—</td><td><code>BigDecimal? (@Transient)</code></td><td>НЕ сохраняется — ежегодные отпускные дни из <code>ValidSinceAttr</code>. Внутренний сеттер.</td></tr>
+<tr><td><code>weeklyWorkingHours</code></td><td>—</td><td><code>BigDecimal? (@Transient)</code></td><td>НЕ сохраняется — недельные часы из <code>ValidSinceAttr</code>. Внутренний сеттер.</td></tr>
+<tr><td><code>position</code></td><td><code>position_text</code></td><td><code>String (макс. 244)</code></td><td>Должность / текст позиции. Полнотекстовый индекс.</td></tr>
+<tr><td><code>eintrittsDatum</code></td><td><code>eintritt</code></td><td><code>LocalDate?</code></td><td>Дата поступления/начала. Индексируется как общее поле.</td></tr>
+<tr><td><code>austrittsDatum</code></td><td><code>austritt</code></td><td><code>LocalDate?</code></td><td>Дата увольнения/ухода. Индексируется как общее поле.</td></tr>
+<tr><td><code>abteilung</code></td><td><code>abteilung</code></td><td><code>String (макс. 255)</code></td><td>Отдел/департамент. Полнотекстовый индекс.</td></tr>
+<tr><td><code>staffNumber</code></td><td><code>staff_number</code></td><td><code>String (макс. 255)</code></td><td>Табельный/личный номер. Алфавитно-цифровая сортировка.</td></tr>
+<tr><td><code>comment</code></td><td><code>comment</code></td><td><code>String</code></td><td>Длина определяется <code>Constants.COMMENT_LENGTH</code>.</td></tr>
+</table>
+
+<h3>Именованные запросы</h3>
+<ul>
+<li><code>EmployeeDO_FindByUserId</code> — <code>from EmployeeDO where user.id=:userId</code></li>
+<li><code>EmployeeDO_GetEmployeeIdByUserId</code> — <code>select id from EmployeeDO where user.id=:userId</code></li>
+<li><code>EmployeeDO_FindByLastnameAndFirstname</code> — <code>from EmployeeDO where user.lastname=:lastname and user.firstname=:firstname</code></li>
+</ul>
+
+<h3>Вычисляемые свойства</h3>
+<ul>
+<li><strong><code>displayName</code></strong> — Делегирует <code>user.getFullname()</code>. Реализует <code>DisplayNameCapable</code>.</li>
+<li><strong><code>active</code></strong> — Возвращает true, если: не удалён, дата поступления не в будущем и дата увольнения не в прошлом. Основано на <code>LocalDate.now()</code>.</li>
+</ul>
+
+<h3>Сравнение и равенство</h3>
+<ul>
+<li><strong><code>equals()</code></strong> — Основано на равенстве ID. Другие типы возвращают false.</li>
+<li><strong><code>hashCode()</code></strong> — <code>31 * id.hashCode()</code>, если id не null; иначе делегирует super.</li>
+<li><strong><code>compareTo()</code></strong> — Сравнивает по <code>user.lastname</code>, затем <code>user.firstname</code> с использованием <code>StringUtils.compare()</code>. Пользователи с null сортируются первыми.</li>
+</ul>
+
+<h3>Копирование значений</h3>
+<p>Переопределение <code>copyValuesFrom()</code> исключает <code>timeableAttributes</code> из копирования. Логирует предупреждение, что копирование атрибутов времени ещё не реализовано.</p>
+
+<h2>История Git</h2>
+<div class="hist"><pre>868d6abb7 2025 -> 2026
+28efde264 Employee: weeklyWorkingHours теперь как зависимый от времени атрибут.
+63081666f Заголовки исходных файлов: 2024 -> 2025.
+0237d5eba Рефакторинг JSON-сериализации: введены IdOnlySerializer и IdsOnlySerializer.
+c8f8ed935 Все сущности объявлены как FetchType.LAZY (было EAGER).
+4c04cfd65 КРУПНОЕ ИЗМЕНЕНИЕ! Миграция целочисленных id на Long id.
+8bd740775 Employee: удалены банковский счёт, день рождения, пол и адрес.
+a5a0e2b40 EmployeeDO.status будет устанавливаться атрибутом времени "status".
+a0affa511 EmployeeDO.active
+6712fba40 Employee.urlaubstage -> атрибут времени для ежегодных отпускных дней.
+f070a11e8 Employee.birthday/eintrittsdatum/austrittsdatum: Date -> LocalDate
+8675a1dbe Все Kotlin JPA-сущности и их свойства объявлены как open.
+...</pre></div>
+</body>
+</html>

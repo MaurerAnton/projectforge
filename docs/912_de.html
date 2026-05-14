@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>#912: CurrencyConversionServiceSupport.kt [DE]</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:2em;color:#444}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}</style>
+</head>
+<body>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← Dateiindex</a> · <a href="911.html">← Zurück</a> · <a href="913.html">Weiter →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/kotlin/org/projectforge/business/fibu/CurrencyConversionServiceSupport.kt" target="_blank" title="Quelle auf GitHub anzeigen">📄 Quelle</a></div>
+
+<h1>#912: <code>CurrencyConversionServiceSupport.kt</code></h1>
+
+<div class="meta"><code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/CurrencyConversionServiceSupport.kt</code> 
+  <strong>Typ:</strong> Interner Spring Service<br>
+  <strong>Paket:</strong> <code>org.projectforge.business.fibu</code><br>
+  <strong>Pfad:</strong> <code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/CurrencyConversionServiceSupport.kt</code><br>
+  <strong>Autor:</strong> Kai Reinhard (k.reinhard@micromata.de)
+ <span style="color:#888">304 Zeilen · 183 Code · 103 Kommentare · 18 leer</span></div>
+
+<div class="c">
+  <p><strong>Interne Support-Klasse</strong> für Währungsumrechnungsoperationen. Behandelt Datenbank-Persistenz, Validierung und Zugriffskontrolle. Als <code>internal</code> markiert – nicht Teil der öffentlichen API. <code>CurrencyConversionService</code> ist die öffentliche Fassade; diese Klasse führt die eigentlichen Datenoperationen und die Cache-Invalidierung durch.</p>
+</div>
+
+<h2>Architektur</h2>
+
+<h3>Abhängigkeiten</h3>
+<table>
+  <tr><th>Abhängigkeit</th><th>Rolle</th></tr>
+  <tr><td><code>BaseDOPersistenceService</code></td><td>Generische Insert-/Update-/markAsDeleted-/Undelete-Operationen</td></tr>
+  <tr><td><code>PfPersistenceService</code></td><td>Direkte JPA-Abfragen (benannte Abfragen, Suche nach ID)</td></tr>
+  <tr><td><code>CurrencyPairDao</code></td><td>Zugriffskontrollprüfungen</td></tr>
+  <tr><td><code>CurrencyConversionCache</code></td><td>Invalidierung nach Schreiboperationen</td></tr>
+</table>
+
+<h2>Wichtige Methoden</h2>
+
+<h3>Abfragemethoden</h3>
+<table>
+  <tr><th>Methode</th><th>Beschreibung</th></tr>
+  <tr><td><code>findRate(id)</code></td><td>Wählt einen Kurs anhand der ID aus; prüft optional den Benutzer-Lese-Zugriff</td></tr>
+  <tr><td><code>selectAllRates(pair, gelöscht?)</code></td><td>Verwendet die benannte Abfrage <code>FIND_ALL_BY_PAIR</code>; filtert optional nach dem Gelöscht-Flag</td></tr>
+  <tr><td><code>getActiveRate(rates, datum)</code></td><td>Findet den aktiven Kurs aus einer Liste anhand des spätesten <code>validFrom</code>, das nicht nach dem angegebenen Datum liegt</td></tr>
+</table>
+
+<h3>Validierung</h3>
+<p><code>validate(rate)</code> prüft die Eindeutigkeit über benannte Abfragen:</p>
+<ul>
+  <li>Neue Einträge: <code>FIND_BY_PAIR_AND_DATE</code> – prüft, ob bereits ein Kurs für dieses Paar+Datum existiert</li>
+  <li>Vorhandene Einträge: <code>FIND_OTHER_BY_PAIR_AND_DATE</code> – schließt den aktuellen Kurs aus</li>
+</ul>
+<p>Wenn ein passender <strong>gelöschter</strong> Kurs gefunden wird, wird dieser an den Aufrufer zur <strong>Wiederverwendung</strong> zurückgegeben (Undelete + Copy-From-Muster). Dies ermöglicht es Benutzern, Kurse für Daten wiederherzustellen, die zuvor aktiv waren, aber soft-gelöscht wurden.</p>
+
+<h3>CRUD mit Wiederverwendung gelöschter Einträge</h3>
+<p>Sowohl <code>insert()</code> als auch <code>updateRate()</code> implementieren einen speziellen Algorithmus zur Behandlung soft-gelöschter Einträge:</p>
+<ol>
+  <li><code>validate(rate)</code> gibt einen vorhandenen gelöschten Eintrag zurück, falls einer passt</li>
+  <li>Wenn ein gelöschter Treffer existiert: Die Felder des gelöschten Eintrags werden vom neuen Kurs übernommen, dann wird er wiederhergestellt (undeleted), und der neue Eintrag wird verworfen</li>
+  <li>Bei Aktualisierungen: Der vorhandene Datensatz wird als gelöscht markiert, und der zuvor gelöschte, passende Datensatz wird wiederhergestellt und aktualisiert</li>
+  <li>Der Cache wird in einem <code>finally</code>-Block ungültig gemacht</li>
+</ol>
+
+<h3>Speichern/Aktualisieren und Löschen-Hilfsmethoden</h3>
+<table>
+  <tr><th>Methode</th><th>Beschreibung</th></tr>
+  <tr><td><code>saveOrUpdate(rate)</code></td><td>Generisches Einfügen oder Aktualisieren, ungültig machen des Caches</td></tr>
+  <tr><td><code>delete(rate)</code></td><td>Soft-Löschen eines Kurses, ungültig machen des Caches</td></tr>
+  <tr><td><code>markRateAsDeleted(pair, rate)</code></td><td>Vollständiger Markieren-als-gelöscht-Ablauf: Validieren + markDeleted + Cache-Invalidierung</td></tr>
+  <tr><td><code>markRateAsDeleted(pairId, rateId)</code></td><td>Bequeme Überladung, die das Paar anhand der ID auflöst</td></tr>
+  <tr><td><code>insert(pairId, rate)</code></td><td>Einfügen mit verzögertem Aufrufmuster: Paar auflösen, dann delegieren</td></tr>
+  <tr><td><code>insert(pair, rate)</code></td><td>Tatsächliche Einfügelogik mit Validierung und Wiederverwendung gelöschter Einträge</td></tr>
+  <tr><td><code>updateRate(pair, rate)</code></td><td>Aktualisierung mit Validierung, Zugriffsprüfung und Wiederverwendung gelöschter Einträge bei Datumsänderungen</td></tr>
+</table>
+
+<h3>Zugriffskontrolle</h3>
+<p>Alle ändernden Methoden (Einfügen, Aktualisieren, Löschen) prüfen, ob der angemeldete Benutzer das entsprechende Zugriffsrecht über <code>currencyPairDao.checkLoggedInUser*Access()</code> besitzt. Der Parameter <code>checkAccess</code> (Standardwert <code>true</code>) ermöglicht die Umgehung dieser Prüfungen für Import-/Massenoperationen.</p>
+
+<h2>Git-Verlauf</h2>
+<div class="hist"><pre>
+868d6abb7 2025 -> 2026
+b78da69bc BaseDao.baseDOChangedRegistry ist jetzt private.
+75ea9dc1a WIP: Währungsumrechnung mit Claude Code.
+07edc85de WIP: Währungsumrechnung mit Claude Code.
+bd69407de Erste Revision mit Claude Code.
+</pre></div>
+
+</body>
+</html>

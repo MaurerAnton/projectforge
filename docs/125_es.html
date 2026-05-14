@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>#125 [ES]</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333}a{color:#0366d6}.meta{font-size:.9em;margin:1em 0}.nav{font-size:.9em;color:#888;margin-bottom:1em}.commentary{border-left:3px solid #ddd;padding:1em;margin:1em 0;background:#fff}code{background:#f0f0f0;padding:0 .2em;border-radius:2px}</style>
+</head>
+<body>
+
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Índice</a> · <a href="file-index.html">← Índice de archivos</a> · <a href="124.html">← Anterior</a> · <a href="126.html">Siguiente →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/plugins/org.projectforge.plugins.ihk/src/main/java/org/projectforge/plugins/ihk/IHKExporter.java" target="_blank" title="Ver fuente en GitHub">📄 fuente</a></div>
+
+<h1>#125: <code>IHKExporter.java</code></h1>
+<div class="meta"><code>plugins/org.projectforge.plugins.ihk/src/main/java/org/projectforge/plugins/ihk/IHKExporter.java</code> <strong>Ruta:</strong> <code>plugins/...ihk/src/main/java/.../IHKExporter.java</code> · <strong>Líneas:</strong> 292 · <strong>Tipo:</strong> Motor de exportación Excel Java <span style="color:#888">292 líneas · 201 código · 39 comentarios · 52 en blanco</span></div>
+
+<div class="commentary">
+<p><strong>Generador de informes Excel para informes semanales de aprendizaje IHK.</strong> La lógica central del plugin: toma las hojas de horas de una semana, la configuración del aprendiz (<a href="123.html">IHKCommentObject</a>) y una plantilla Excel <a href="https://github.com/micromata/merlin">Merlin</a>, y produce un archivo <code>.xlsx</code> formateado y compatible con IHK. 292 líneas de Java.</p>
+
+<h3>Arquitectura</h3>
+<p>Utiliza <strong>Merlin</strong> (motor de plantillas Excel de Micromata, ver <a href="221.html">#221+</a>) — carga una plantilla <code>.xlsx</code> desde el classpath (<code>ClassPathResource("merlin/ihk/ihk.xlsx")</code>), completa los datos programáticamente y devuelve un <code>ByteArrayOutputStream</code> para descarga.</p>
+
+<h3>Flujos de datos clave</h3>
+<ol>
+<li><strong>Cálculo del año de formación:</strong> <code>Period.between(ausbildungsbeginn, now).getYears()</code> → calcula automáticamente el año de formación a menos que <code>ausbildungsjahr</code> esté configurado manualmente</li>
+<li><strong>Filtrado de hojas de horas:</strong> consulta <code>TimesheetDO</code> para las entradas del aprendiz en la semana seleccionada, agrupadas por día</li>
+<li><strong>Agregación de horas:</strong> suma las horas trabajadas por día, formatea con <code>DecimalFormat("0.00")</code></li>
+<li><strong>Población de Excel vía Merlin:</strong>
+  <ul>
+    <li>Lee el libro de plantillas desde <code>merlin/ihk/ihk.xlsx</code></li>
+    <li>Completa el encabezado: nombre del aprendiz, departamento (<code>teamname</code>), año de formación, semana calendario, rango de fechas</li>
+    <li>Completa las filas diarias: día de la semana, fecha, descripción de tema/actividad desde la hoja de horas, horas trabajadas, marcadores de firma</li>
+    <li>Aplica formato de celdas: bordes, tamaños de fuente, celdas combinadas para el bloque de encabezado</li>
+  </ul></li>
+<li><strong>Salida:</strong> escribe el libro poblado en un <code>ByteArrayOutputStream</code>, devuelve el arreglo de bytes para descarga HTTP con nombre de archivo <code>Berichtsheft_KW{semana}_{nombre}.xlsx</code></li>
+</ol>
+
+<h3>Estructura de la plantilla Excel</h3>
+<p>La IHK requiere un formato de informe específico que contiene:</p>
+<ul>
+<li>Encabezado: nombre de la empresa, nombre del aprendiz, año de formación, semana calendario, rango de fechas</li>
+<li>Sección de departamento/supervisor</li>
+<li>Filas diarias: temas/actividades realizadas, horas de trabajo, campos de firma</li>
+<li>Fila de resumen semanal con horas totales</li>
+<li>Secciones de firma para aprendiz y supervisor</li>
+</ul>
+<p>La plantilla Merlin (<code>ihk.xlsx</code>) contiene estos elementos estructurales; el exportador completa los datos dinámicos.</p>
+
+<h3>Dependencias</h3>
+<ul>
+<li><code>de.micromata.merlin.excel.*</code> — API de Merlin Excel para generación de Excel basada en plantillas</li>
+<li><code>TimesheetDO</code> — entradas de hoja de horas con descripción, hora de inicio/fin, fecha</li>
+<li><code>PFDateTime</code>, <code>PFDay</code>, <code>LocalDate</code> — manejo de fecha/hora para límites semanales</li>
+<li><code>JsonUtils</code> — deserializa <a href="123.html">IHKCommentObject</a> desde el comentario de dirección</li>
+<li><code>AddressDO</code> / <code>ThreadLocalUserContext.getLoggedInUser()</code> — obtiene el contacto del aprendiz para la configuración</li>
+</ul>
+</div>
+
+</body>
+</html>

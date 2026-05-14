@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>#752 : Statut [FR]</title>
+<style>
+  body { font-family: system-ui, sans-serif; max-width: 960px; margin: 2em auto; padding: 0 1em; background: #fafafa; color: #222; line-height: 1.6; }
+  h1 { border-bottom: 2px solid #333; padding-bottom: 0.3em; }
+  h2 { margin-top: 2.5em; border-bottom: 1px solid #ddd; padding-bottom: 0.2em; color: #333; }
+  h3 { margin-top: 2em; color: #444; }
+  a { color: #0366d6; }
+  .c { border-left: 3px solid #ddd; padding: .5em 1em; margin: 1em 0; background: #fff; }
+  .nav { font-size: .9em; color: #888; margin-bottom: 1em; }
+  .lang { font-size: .85em; color: #888; float: right; }
+  .lang a { color: #888; text-decoration: none; padding: 0 .3em; }
+  .lang a.active { color: #0366d6; font-weight: 600; text-decoration: underline; }
+  .meta { font-size: .9em; margin: 1em 0; color: #555; }
+  code { background: #f0f0f0; padding: 0 .2em; font-size: .93em; }
+  pre { background: #f5f5f5; padding: .8em 1em; border: 1px solid #ddd; border-radius: 4px; overflow-x: auto; font-size: .88em; line-height: 1.4; }
+  table { border-collapse: collapse; width: 100%; margin: 1em 0; }
+  th, td { border: 1px solid #ddd; padding: .5em .8em; text-align: left; font-size: .9em; }
+  th { background: #f5f5f5; font-weight: 600; }
+  .hist { font-size: .85em; color: #555; }
+</style>
+</head>
+<body>
+<div class="lang"><a href="760.html">EN</a> · <a href="760_de.html">DE</a> · <a href="760_ru.html">RU</a> · <a href="760_fr.html" class="active">FR</a> · <a href="760_es.html">ES</a></div>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← Index des fichiers</a> · <a href="751.html">← Précédent</a> · <a href="753.html">Suivant →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/java/org/projectforge/framework/xmlstream/Status.java" target="_blank" title="Voir la source sur GitHub">📄 source</a></div>
+
+<h1>#752 : <code>Status.java</code></h1>
+<div class="meta"><code>projectforge-business/src/main/java/org/projectforge/framework/xmlstream/Status.java</code> <strong>Enum Java</strong> — sentinelle à valeur unique pour le contrôle de la désérialisation XML. 32 lignes. Source : <code>projectforge-business/src/main/java/org/projectforge/framework/xmlstream/Status.java</code> <span style="color:#888">32 lignes · 5 de code · 25 commentaires · 2 vides</span></div>
+
+<div class="c">
+<strong>Objectif :</strong> Une énumération avec une <strong>valeur unique</strong> : <code>IGNORE</code>. 32 lignes, dont 21 sont l'en-tête de licence GPLv3. L'un des fichiers les plus courts et les plus inhabituels du projet. Le Javadoc sur <code>IGNORE</code> explique : <em>"Utilisé par XmlObjectReader.newInstance(Class, org.dom4j.Element, String)"</em> — il est utilisé par la méthode <code>newInstance()</code> de <code>XmlObjectReader</code> lors de la lecture XML.
+</div>
+
+<h2>Pourquoi une énumération à valeur unique ?</h2>
+
+<div class="c">
+<p>C'est le <strong>Modèle Sentinelle</strong> — une valeur spéciale qui signale la nécessité de sauter un élément lors de la lecture. Lorsque <code>XmlObjectReader.newInstance()</code> rencontre un élément XML pour lequel il n'existe pas de classe enregistrée (par exemple, une balise d'un ancien format de version qui a été supprimée dans une version plus récente), il retourne <code>Status.IGNORE</code> plutôt que de planter avec une erreur.</p>
+
+<p><strong>Pourquoi ne pas simplement retourner <code>null</code> ?</strong> Parce que <code>null</code> est ambigu : il pourrait signifier "ignorer" OU "une erreur s'est produite" OU "l'élément est vide". <code>Status.IGNORE</code> est un signal explicite et nommé : "Je reconnais cet élément comme pouvant être ignoré, je le saute consciemment, je continue le traitement."</p>
+</div>
+
+<h2>Résolution à trois états</h2>
+
+<div class="c">
+<p>L'énumération permet une sémantique de valeur de retour à trois états propre :</p>
+<pre>
+Object result = newInstance(clazz, element, version);
+if (result == Status.IGNORE) {
+    // Élément inconnu, on le saute
+} else if (result == null) {
+    // Reconnu mais a une valeur nulle (champ vide)
+} else {
+    // Objet désérialisé normal
+}
+</pre>
+<p>C'est nettement plus propre que de retourner <code>null</code> avec une sémantique ambiguë. Ce modèle est courant dans les analyseurs et désérialiseurs — par exemple, Rust utilise <code>Option&lt;T&gt;</code>, Haskell utilise <code>Maybe</code>, et ici — une énumération à un seul élément.</p>
+</div>
+
+<h2>Où est-il utilisé</h2>
+
+<div class="c">
+<p>Méthode <code>XmlObjectReader.newInstance(Class&lt;?&gt; clazz, Element rootElement, String version)</code> — une méthode fabrique protégée que les sous-classes peuvent redéfinir. À chaque niveau, elle vérifie <code>AliasMap</code> : si la balise est enregistrée, crée un objet ; si elle n'est pas enregistrée — retourne <code>Status.IGNORE</code>, et le code appelant saute cet élément. Cela permet aux fichiers XML de contenir des balises "supplémentaires" (par exemple, d'une version de format plus récente lue par une version plus ancienne) sans erreurs — un mécanisme de rétrocompatibilité.</p>
+</div>
+
+<h2>Pourquoi une énumération, pas une constante ?</h2>
+
+<div class="c">
+<p>Une énumération avec une valeur est à la fois un <strong>type</strong> et une <strong>valeur</strong>. Si <code>newInstance()</code> retournait simplement <code>Object</code> (où <code>null</code> = ignorer), le code appelant aurait besoin de <code>if (result == null)</code>. Mais <code>null</code> pourrait aussi être un résultat légitime (un champ vraiment vide). Utiliser un type séparé <code>Status</code> permet au code appelant de distinguer précisément entre "ignorer ceci" (IGNORE) et "valeur absente" (null).</p>
+</div>
+
+<h2>Contraste : Status.IGNORE vs. @XmlOmitField vs. Saut par défaut</h2>
+
+<table>
+<tr><th>Mécanisme</th><th>Portée</th><th>Quand activé</th></tr>
+<tr><td><code>Status.IGNORE</code></td><td>Runtime — par élément, pendant la lecture</td><td>La balise XML n'a pas de classe Java correspondante enregistrée</td></tr>
+<tr><td><code>@XmlOmitField</code> (<a href="757.html">#757</a>)</td><td>Compilation — sur la déclaration du champ</td><td>Toujours — le champ n'est jamais sérialisé/désérialisé</td></tr>
+<tr><td>Saut de valeur par défaut</td><td>Compilation — dans <code>@XmlField</code></td><td>Le champ est égal à la valeur par défaut déclarée</td></tr>
+</table>
+
+<h2>Historique Git</h2>
+<div class="hist">
+<pre>868d6abb7 2025 → 2026 (mise à jour de l'année de copyright)
+63081666f En-têtes des fichiers source : 2024→2025
+b6092df09 Copyright 2023 → 2024
+ab45d51fa Copyright 2001-2022 → 2001-2023
+5f7ef41b8 Copyright 2021 → 2022
+cd27dd997 package xstream → xmlstream
+ceb63e8a1 En-tête du code source : (C) 2001-2021
+7c79f1922 Copyright de l'en-tête source → 2020
+dd5ca38ac CopyRight de tous les en-têtes de fichiers java mis à jour ou créés
+9ebb88522 Commit initial</pre>
+</div>
+
+<div class="c">
+L'énumération a une valeur (<code>IGNORE</code>) et n'a jamais changé depuis le commit initial au-delà des en-têtes de copyright et du renommage du package. Une énumération à valeur unique avec un objectif de sentinelle clair est une conception "terminée" — il n'y a rien à ajouter ou à modifier. C'est l'un des fichiers les plus stables de l'ensemble du code source de ProjectForge.
+</div>
+
+</body>
+</html>

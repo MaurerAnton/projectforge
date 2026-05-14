@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>#897: AuftragsCache.kt [DE]</title>
+<style>
+body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}
+h1{border-bottom:2px solid #333;padding-bottom:.3em}
+h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}
+h3{margin-top:2em;color:#444}
+a{color:#0366d6}
+.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}
+.nav{font-size:.9em;color:#888;margin-bottom:1em}
+.meta{font-size:.9em;margin:1em 0;color:#555}
+code{background:#f0f0f0;padding:0 .2em;font-size:.93em}
+pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}
+table{border-collapse:collapse;width:100%;margin:1em 0}
+th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}
+th{background:#f5f5f5;font-weight:600}
+.hist{font-size:.85em;color:#555}
+</style>
+</head>
+<body>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← Dateiindex</a> · <a href="896.html">← Vorherige</a> · <a href="898.html">Nächste →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/kotlin/org/projectforge/business/fibu/AuftragsCache.kt" target="_blank" title="Quellcode auf GitHub anzeigen">📄 Quelle</a></div>
+
+<h1>#897: <code>AuftragsCache.kt</code></h1>
+
+<div class="meta"><code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/AuftragsCache.kt</code> 
+<p><strong>Typ:</strong> Spring <code>@Service</code> — zeitgesteuerter Cache (<code>AbstractCache</code>)</p>
+<p><strong>Paket:</strong> <code>org.projectforge.business.fibu</code></p>
+<p><strong>Vollständiger Pfad:</strong> <code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/AuftragsCache.kt</code></p>
+ <span style="color:#888">252 Zeilen · 174 Code · 48 Kommentare · 30 leer</span></div>
+
+<div class="c">
+<p>Leistungskritischer, zeitgesteuerter Cache, der alle Auftragsinformationen für das Auftragsbuch vorlädt und verwaltet. Erweitert <code>AbstractCache</code> mit einem 8-Stunden-Aktualisierungszyklus. Lädt alle nicht gelöschten Aufträge, deren Positionen und Zahlungspläne in speicherinterne Maps, um wiederholte Datenbankabfragen zu vermeiden. Berechnet fakturierte Summen, den Status „vollständig fakturiert“, Kennzeichen „zu fakturieren“ und verfolgt die Anzahl der Aufträge, die eine Fakturierung benötigen. Hört auf Änderungen über <code>BaseDOModifiedListener</code>-Hooks sowohl für <code>AuftragDO</code> als auch <code>RechnungDO</code>, um zwischengespeicherte Daten zu invalidieren. Behandelt eine zyklische Abhängigkeit mit <code>AuftragDao</code> über eine Verkabelung nach der Konstruktion.</p>
+</div>
+
+<h2>Klassendefinition</h2>
+<pre>@Service
+class AuftragsCache : AbstractCache(8 * TICKS_PER_HOUR)</pre>
+
+<h2>Abhängigkeiten</h2>
+<table>
+<tr><th>Abhängigkeit</th><th>Typ</th><th>Anmerkungen</th></tr>
+<tr><td><code>auftragsCacheService</code></td><td><code>@Autowired AuftragsCacheService</code></td><td>Stellt Bulk-SELECT-Abfragen für Aufträge, Positionen und Zahlungspläne bereit</td></tr>
+<tr><td><code>rechnungDao</code></td><td><code>@Autowired RechnungDao</code></td><td>Wird auf Rechnungsänderungen überwacht, die Auftragsdaten invalidieren</td></tr>
+<tr><td><code>auftragDao</code></td><td><code>@Autowired AuftragDao</code></td><td>Zurück zu <code>AuftragDao.auftragsCache</code> über <code>init()</code> verdrahtet; wird auf Auftragsänderungen überwacht</td></tr>
+</table>
+
+<h2>Interne Datenstrukturen</h2>
+<table>
+<tr><th>Map</th><th>Schlüssel</th><th>Wert</th><th>Beschreibung</th></tr>
+<tr><td><code>orderInfoMap</code></td><td><code>Long</code> (Auftrags-ID)</td><td><code>OrderInfo</code></td><td>Alle zwischengespeicherten Auftragsinformationen nach Auftrags-ID</td></tr>
+<tr><td><code>orderPositionMapByPosId</code></td><td><code>Long</code> (Positions-ID)</td><td><code>OrderPositionInfo</code></td><td>Alle zwischengespeicherten Positionsinformationen nach Positions-ID</td></tr>
+<tr><td><code>toBeInvoicedCounter</code></td><td>—</td><td><code>Int?</code></td><td>Zwischengespeicherte Anzahl der Aufträge mit <code>toBeInvoiced == true</code> (träge berechnet)</td></tr>
+</table>
+
+<h2>Initialisierung (<code>@PostConstruct init()</code>)</h2>
+<p>Setzt die Singleton-<code>instance</code>, verdrahtet <code>this</code> in <code>auftragDao.auftragsCache</code> und registriert zwei Änderungs-Listener:</p>
+<ul>
+<li><strong>Rechnungs-Listener:</strong> Jedes Einfügen/Ändern an <code>RechnungDO</code> ruft <code>setExpired()</code> auf, um den gesamten Cache zu invalidieren (da Rechnungen die fakturierten Summen der Auftragspositionen beeinflussen)</li>
+<li><strong>Auftrags-Listener:</strong> Jedes Einfügen/Ändern an <code>AuftragDO</code> ruft <code>setExpired()</code> auf</li>
+</ul>
+
+<h2>Öffentliche Nachschlage-Methoden</h2>
+<table>
+<tr><th>Methode</th><th>Rückgabe</th><th>Beschreibung</th></tr>
+<tr><td><code>getOrderInfo(orderId)</code></td><td><code>OrderInfo?</code></td><td>Zwischengespeicherte Informationen nach Auftrags-ID abrufen</td></tr>
+<tr><td><code>getOrderInfo(order)</code></td><td><code>OrderInfo</code></td><td>Zwischengespeicherte Informationen für ein Auftragsobjekt abrufen (fällt auf leeres <code>OrderInfo</code> zurück, wenn nicht gefunden)</td></tr>
+<tr><td><code>findOrderInfoByNumber(orderNumber)</code></td><td><code>OrderInfo?</code></td><td>Suche nach <code>AuftragDO.nummer</code></td></tr>
+<tr><td><code>getOrderInfoByPositionId(positionInfoId)</code></td><td><code>OrderInfo?</code></td><td>Die übergeordneten Auftragsinformationen für eine bestimmte Positions-ID abrufen</td></tr>
+<tr><td><code>getOrderPositionInfo(positionId)</code></td><td><code>OrderPositionInfo?</code></td><td>Zwischengespeicherte Positionsinformationen nach Positions-ID abrufen</td></tr>
+<tr><td><code>getOrderPositionInfosByAuftragId(auftragId)</code></td><td><code>Collection&lt;OrderPositionInfo&gt;?</code></td><td>Alle Positionsinformationen für einen Auftrag abrufen</td></tr>
+<tr><td><code>setOrderInfo(order)</code></td><td><code>Unit</code></td><td>Füllt <code>order.info</code> mit zwischengespeicherten berechneten Daten</td></tr>
+<tr><td><code>getFakturiertSum(order)</code></td><td><code>BigDecimal</code></td><td>Komfortmethode für <code>getOrderInfo(order).invoicedSum</code></td></tr>
+<tr><td><code>isVollstaendigFakturiert(order)</code></td><td><code>Boolean</code></td><td>Komfortmethode für <code>getOrderInfo(order).isVollstaendigFakturiert</code></td></tr>
+<tr><td><code>isPositionAbgeschlossenUndNichtVollstaendigFakturiert(order)</code></td><td><code>Boolean</code></td><td>Komfort-Nachschlagefunktion</td></tr>
+<tr><td><code>isPaymentSchedulesReached(order)</code></td><td><code>Boolean</code></td><td>Komfort-Nachschlagefunktion</td></tr>
+<tr><td><code>getToBeInvoicedCounter()</code></td><td><code>Int</code></td><td>Zählt träge Aufträge mit <code>toBeInvoiced == true</code></td></tr>
+</table>
+
+<h2>Cache-Invalidierung</h2>
+<ul>
+<li><code>setExpired()</code> — Überschreibt <code>AbstractCache.setExpired()</code>, um auch <code>toBeInvoicedCounter</code> auf null zurückzusetzen und so eine Neuberechnung beim nächsten Zugriff zu erzwingen</li>
+<li><code>setExpired(order)</code> — Gleiches wie oben (aktualisierte früher einzelne Einträge; läuft jetzt den gesamten Cache ab)</li>
+<li>Beide Listener-Implementierungen (<code>auftragListener</code>, <code>rechnungListener</code>) rufen bei jeder Änderung <code>setExpired()</code> auf</li>
+</ul>
+
+<h2>Aktualisierungslogik (<code>refresh()</code>)</h2>
+<p>Wird aufgerufen, wenn die Cache-TTL abläuft (alle 8 Stunden) oder wenn manuell abgelaufen:</p>
+<ol>
+<li>Protokolliert den Aktualisierungsstart mit <code>LogDuration</code>-Timer</li>
+<li>Lädt alle nicht gelöschten Auftragspositionen über <code>auftragsCacheService.selectNonDeletedAuftragsPositions()</code>, gruppiert nach <code>auftrag.id</code></li>
+<li>Lädt alle Aufträge über <code>auftragsCacheService.selectAuftragsList()</code></li>
+<li>Lädt alle nicht gelöschten Zahlungspläne über <code>auftragsCacheService.selectNonDeletedPaymentSchedules()</code>, gruppiert nach <code>auftrag.id</code></li>
+<li>Initialisiert <code>OrderInfo</code>-Objekte für jeden Auftrag (ruft <code>updateFields(order)</code> auf, um Basisdaten zu kopieren)</li>
+<li>Erstellt <code>OrderPositionInfo</code>-Objekte für jede Position (Hinweis: Der Konstruktor verwendet <code>AuftragsRechnungCache</code>, der wiederum <code>AuftragsCache</code> verwendet – die zyklische Abhängigkeit wird durch zweimaliges Ausführen der Caches bei der Initialisierung aufgelöst)</li>
+<li>Weist jedem Auftrag Positionen und Zahlungspläne zu und ruft <code>order.info.calculateAll(order, positions, paymentSchedules)</code> auf</li>
+<li>Ersetzt die unveränderlichen Maps atomar</li>
+<li>Setzt <code>toBeInvoicedCounter</code> auf null zurück</li>
+<li>Protokolliert die Abschlusszeit</li>
+</ol>
+
+<h2>Thread-Sicherheit</h2>
+<p>Maps (<code>orderInfoMap</code>, <code>orderPositionMapByPosId</code>) werden während der Aktualisierung atomar durch neue unveränderliche Maps ersetzt. Der Kommentar „No sync, immutable map“ bei allen Lesezugriffen deutet auf ein schreibgeschütztes Snapshot-Muster hin: Bei jedem <code>checkRefresh()</code>-Aufruf kann der Cache eine neue Map erstellen und die Referenz austauschen.</p>
+
+<h2>Entwurfshinweise</h2>
+<ul>
+<li>Der Parameter <code>checkRefresh</code> bei <code>getOrderInfo(order, checkRefresh)</code> dient dazu, Deadlocks während der Cache-Initialisierung zu vermeiden – wenn der Cache bereits aktualisiert wird, überspringen rekursive Aufrufe die Aktualisierung</li>
+<li>Die zyklische Abhängigkeit zwischen <code>AuftragsCache</code>, <code>AuftragsRechnungCache</code> und <code>OrderPositionInfo</code> ist im Commit <code>51d352133</code> dokumentiert – gelöst durch zweimaliges Ausführen der Caches bei der Initialisierung</li>
+<li>Der <code>toBeInvoicedCounter</code> verwendet ein träges Berechnungsmuster mit Debug-Protokollierung, welche Auftragsnummern gezählt werden</li>
+<li>Alle Komfort-Getter-Methoden rufen vor dem Zugriff <code>checkRefresh()</code> auf, um aktuelle Daten sicherzustellen</li>
+</ul>
+
+<h2>Git-Verlauf</h2>
+<div class="hist"><pre>868d6abb7 2025 -> 2026
+51d352133 AuftragsCache / AuftragsRechnungsCache Behandlung umgestaltet (zyklische Nutzung durch zweimaliges Ausführen der Caches bei Initialisierung aufgelöst)
+0043cbdb5 WIP Forecast
+63081666f Quelldatei-Header: 2024 -> 2025.
+ae2c04ee0 Migration stuff in progress... (alle Tests aller Pakete: OK).
+9aff90908 Migration stuff in progress... (alle Tests aller Pakete: OK).
+89ea9a532 Migration stuff in progress... (alle Tests aller Pakete: OK).
+d02c8a770 Migration stuff in progress...
+3159cfa6c Migration stuff in progress... (alle Tests aller Pakete: OK).
+ff2cc4cfa Migration stuff in progress... (alle Tests aller Pakete: OK).
+714452019 Migration stuff in progress... (alle Tests aller Pakete: OK).
+567ca70cd Migration in progress... spring.datasource.hikari.auto-commit=false
+(40+ Commits mit Migration, Refactoring, java.time-Konvertierung, Jakarta-Migration usw.)</pre></div>
+</body>
+</html>

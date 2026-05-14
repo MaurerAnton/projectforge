@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>#837 : FavoritesResultFilter.kt [FR]</title>
+<style>
+  body { font-family: system-ui, sans-serif; max-width: 960px; margin: 2em auto; padding: 0 1em; background: #fafafa; color: #222; line-height: 1.6; }
+  h1 { border-bottom: 2px solid #333; padding-bottom: 0.3em; }
+  h2 { margin-top: 2.5em; border-bottom: 1px solid #ddd; padding-bottom: 0.2em; color: #333; }
+  a { color: #0366d6; }
+  .c { border-left: 3px solid #ddd; padding: .5em 1em; margin: 1em 0; background: #fff; }
+  .nav { font-size: .9em; color: #888; margin-bottom: 1em; }
+  .meta { font-size: .9em; margin: 1em 0; color: #555; }
+  code { background: #f0f0f0; padding: 0 .2em; font-size: .93em; }
+  .hist { font-size: .85em; color: #555; }
+  table { border-collapse: collapse; width: 100%; margin: 1em 0; }
+  th, td { border: 1px solid #ddd; padding: .5em .8em; text-align: left; font-size: .9em; }
+  th { background: #f5f5f5; font-weight: 600; }
+</style>
+</head>
+<body>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← Index des fichiers</a> · <a href="836.html">← Précédent</a> · <a href="838.html">Suivant →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/kotlin/org/projectforge/business/address/FavoritesResultFilter.kt" target="_blank" title="Voir la source sur GitHub">📄 source</a></div>
+
+<h1>#837 : <code>FavoritesResultFilter.kt</code></h1>
+<div class="meta"><code>projectforge-business/src/main/kotlin/org/projectforge/business/address/FavoritesResultFilter.kt</code> <strong>Filtre de résultats Kotlin</strong> — filtre de favoris spécifique à l'utilisateur pour la liste d'adresses. Implémente <code>CustomResultFilter&lt;AddressDO&gt;</code> pour afficher uniquement les contacts marqués comme favoris par l'utilisateur courant. Emplacement : <code>projectforge-business/src/main/kotlin/org/projectforge/business/address/FavoritesResultFilter.kt</code> <span style="color:#888">34 lignes · 8 lignes de code · 22 commentaires · 4 lignes vides</span></div>
+
+<div class="c">
+<strong>Objectif :</strong> Chaque utilisateur peut marquer des contacts comme « favoris » — ceux-ci sont stockés dans la table <code>PersonalAddressDO</code> (une extension par utilisateur de AddressDO). Le filtre de favoris permet à l'interface de la liste d'adresses de basculer entre « tous les contacts » et « favoris uniquement » en un seul clic, produisant un ensemble de résultats contenant uniquement les contacts étoilés de l'utilisateur.
+</div>
+
+<h2>Architecture</h2>
+
+<div class="c">
+Le filtre est <strong>sans état</strong> après sa construction — il capture un instantané de la liste des identifiants d'adresses favorites de l'utilisateur au moment de la construction et l'utilise pour tous les appels à <code>match()</code>. Cet instantané est une <code>List&lt;Long?&gt;</code> obtenue depuis <code>PersonalAddressDao.favoriteAddressIdList</code>, qui est une liste pré-validée des identifiants d'adresses que l'utilisateur courant a mis en favoris.<br><br>
+L'implémentation de <code>match()</code> est triviale : <code>favoriteAddressIds.contains(element.id)</code> — O(n) par élément où n est le nombre de favoris. Pour un utilisateur typique avec 10 à 100 favoris et un ensemble de résultats de 1000+ adresses, cela reste acceptablement rapide car <code>List.contains()</code> est linéaire mais la taille de la liste est petite.
+</div>
+
+<table>
+<tr><th>Aspect</th><th>FavoritesResultFilter</th><th>WHERE IN au niveau base de données</th></tr>
+<tr><td>Implémentation</td><td>En mémoire sur l'ensemble de résultats récupéré</td><td>SQL WHERE address.id IN (SELECT favorites...)</td></tr>
+<tr><td>Flexibilité</td><td>Composable avec d'autres filtres de résultats (logique ET)</td><td>Mixé avec d'autres clauses de requête</td></tr>
+<tr><td>Risque N+1</td><td>Aucun — une requête DB pour les adresses, une pour les favoris</td><td>Aucun — requête unique</td></tr>
+<tr><td>Performance</td><td>O(|résultat| × |favoris|) en mémoire</td><td>Optimisé par index DB</td></tr>
+</table>
+
+<div class="c">
+L'approche par filtre de résultats a été choisie car la page de liste d'adresses utilise un pipeline de filtres : filtre de recherche → filtre de favoris → filtre de doublons → filtre d'images. Composer des post-filtres est plus simple que de construire du SQL dynamique avec plusieurs clauses WHERE optionnelles. Pour le cas spécifique des favoris, la différence de performance est négligeable car la liste des favoris est petite.
+</div>
+
+<h2>Historique Git</h2>
+<div class="hist">
+<pre>868d6abb7 2025 → 2026
+63081666f En-têtes source : 2024→2025
+4c04cfd65 MAJEUR : migration int→Long ID
+067a4cbb1 Suite migration
+0d183e5df Suite migration
+b7b459e73 Suite migration
+923f5c64b Suite migration
+b6092df09 Copyright 2023 → 2024
+f99817436 Les images des adresses sont désormais dans une entité séparée (amélioration des performances via chargement paresseux)
+bbed76a3b Les adresses peuvent désormais être recherchées avec des images
+bc0a52bc7 Trucs de vacances
+b2657ec3a Liste de vacances, MagicFilterProcessor supporte les valeurs I18nEnum
+7c79f1922 Copyright 2020
+2d86a8cd6 PROJECTFORGE-2306 Refactorisations pour la vérification d'accès au moment de la mise à jour
+9ebb88522 Commit initial
+</pre>
+Le filtre existe depuis le commit initial du projet, antérieur à la migration vers les identifiants Long et Kotlin. Il s'agissait à l'origine d'une classe Java qui a été convertie en Kotlin lors de la migration Kotlin du module d'adresses.
+</div>
+
+<h2>Comparaison : Filtres Favoris vs Doublons vs Images</h2>
+<table>
+<tr><th>Filtre</th><th>Classe</th><th>État</th><th>Complexité</th></tr>
+<tr><td>Favoris (<a href="830.html">#830</a>)</td><td><code>FavoritesResultFilter</code></td><td>Sans état (capturé à la construction)</td><td>O(1) par élément — simple vérification de présence</td></tr>
+<tr><td>Doublons (<a href="829.html">#829</a>)</td><td><code>DoubletsResultFilter</code></td><td>Accumulation (les ensembles grandissent avec chaque élément)</td><td>O(n²) vidage rétroactif — le plus complexe</td></tr>
+<tr><td>Images (<a href="838.html">#838</a>)</td><td><code>ImagesResultFilter</code></td><td>Sans état</td><td>Vérification booléenne simple par élément</td></tr>
+</table>
+<div class="c">
+Les trois implémentent la même interface <code>CustomResultFilter</code> mais servent des objectifs UX différents : Favoris montre les choix personnels d'un utilisateur, Doublons aide les administrateurs à nettoyer les doublons, et Images met en évidence les contacts avec photos. Ils forment un pipeline de filtres qui peut être activé ou désactivé indépendamment depuis la barre d'outils de la liste d'adresses.
+</div>
+
+</body>
+</html>

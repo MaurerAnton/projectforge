@@ -1,229 +1,29 @@
-<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>#2877</title>
-<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}.hist{font-size:.85em;color:#555}</style></head>
-<body><div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="2876.html">← Prev</a> · <a href="2878.html">Next →</a></div>
-<h1>#2877: <code>SearchAreaPanel.java</code></h1>
-<div class="meta">Java class, <code>projectforge-wicket/src/main/java/org/projectforge/web/core/SearchAreaPanel.java</code></div>
-<div class="c">Java Wicket panel web core.</div>
-<h2>Git History</h2><div class="hist"><pre>868d6abb7 2025 -&gt; 2026
-63081666f Source file headers: 2024-&gt; 2025.
-a73905c14 Fix typos in projectforge*/ directories Found via codespell See c3b0602a893
-4efcbd0fb Migration stuff in progress...
-b6092df09 Copyright 2023 -&gt; 2024
-ab45d51fa Copyright 2001-2022 -&gt; 2001-2023.
-5f7ef41b8 Copyright 2021 -&gt; 2022
-ceb63e8a1 Source code header: (C) 2001-2021.
-a6a7aece4 Optimize Imports
-7c79f1922 Copyright of source header -&gt; 2020.
-9ebb88522 Initial commit</pre></div>
-<h2>Source</h2><pre>/////////////////////////////////////////////////////////////////////////////
-//
-// Project ProjectForge Community Edition
-//         www.projectforge.org
-//
-// Copyright (C) 2001-2026 Micromata GmbH, Germany (www.micromata.com)
-//
-// ProjectForge is dual-licensed.
-//
-// This community edition is free software; you can redistribute it and/or
-// modify it under the terms of the GNU General Public License as published
-// by the Free Software Foundation; version 3 of the License.
-//
-// This community edition is distributed in the hope that it will be useful,
-// but WITHOUT ANY WARRANTY; without even the implied warranty of
-// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General
-// Public License for more details.
-//
-// You should have received a copy of the GNU General Public License along
-// with this program; if not, see http://www.gnu.org/licenses/.
-//
-/////////////////////////////////////////////////////////////////////////////
-
-package org.projectforge.web.core;
-
-import org.apache.wicket.Component;
-import org.apache.wicket.extensions.markup.html.repeater.data.sort.SortOrder;
-import org.apache.wicket.extensions.markup.html.repeater.data.table.DataTable;
-import org.apache.wicket.extensions.markup.html.repeater.data.table.DefaultDataTable;
-import org.apache.wicket.markup.html.WebPage;
-import org.apache.wicket.markup.html.basic.Label;
-import org.apache.wicket.markup.html.link.Link;
-import org.apache.wicket.markup.html.panel.Panel;
-import org.apache.wicket.model.IModel;
-import org.apache.wicket.model.Model;
-import org.apache.wicket.request.mapper.parameter.PageParameters;
-import org.apache.wicket.spring.injection.annot.SpringBean;
-import org.projectforge.business.task.TaskDependentFilter;
-import org.projectforge.common.BeanHelper;
-import org.projectforge.framework.persistence.api.BaseSearchFilter;
-import org.projectforge.framework.persistence.api.ExtendedBaseDO;
-import org.projectforge.framework.persistence.api.SearchDao;
-import org.projectforge.framework.persistence.api.SearchResultData;
-import org.projectforge.framework.persistence.database.StatisticsCache;
-import org.projectforge.framework.utils.NumberFormatter;
-import org.projectforge.web.WicketSupport;
-import org.projectforge.web.registry.WebRegistryEntry;
-import org.projectforge.web.wicket.*;
-
-import java.io.Serializable;
-import java.util.ArrayList;
-import java.util.List;
-
-public class SearchAreaPanel extends Panel
-{
-  private static final long serialVersionUID = -4258095807245346743L;
-
-  private static final int MAXIMUM_ENTRIES_WITHOUT_FILTER_SETTINGS = 10000;
-
-  /**
-   * @param page Needed, because in constructor this panel is not yet added to a page.
-   * @param id
-   * @param filter
-   * @param registryEntry the area to show.
-   */
-  @SuppressWarnings(&quot;serial&quot;)
-  public SearchAreaPanel(final WebPage page, final String id, final SearchPageFilter filter,
-      final WebRegistryEntry webRegistryEntry)
-  {
-    super(id);
-    final long millis = System.currentTimeMillis();
-    final Class&lt;? extends IListPageColumnsCreator&lt;?&gt;&gt; listPageColumnsCreatorClass = webRegistryEntry
-        .getListPageColumnsCreatorClass();
-    final IListPageColumnsCreator&lt;?&gt; listPageColumnsCreator = listPageColumnsCreatorClass == null ? null
-        : (IListPageColumnsCreator&lt;?&gt;) BeanHelper.newInstance(listPageColumnsCreatorClass, PageParameters.class,
-            new PageParameters());
-    if (listPageColumnsCreator == null) {
-      setVisible(false);
-      return;
-    }
-    if (listPageColumnsCreator instanceof AbstractListPage) {
-      ((AbstractListPage&lt;?, ?, ?&gt;) listPageColumnsCreator).setCalledBySearchPage(true);
-    }
-    final Integer number = WicketSupport.get(StatisticsCache.class).getNumberOfEntities(webRegistryEntry.getDOClass());
-    final Class&lt;? extends BaseSearchFilter&gt; registeredFilterClass = webRegistryEntry.getSearchFilterClass();
-    final boolean isTaskDependentFilter = registeredFilterClass != null
-        &amp;&amp; TaskDependentFilter.class.isAssignableFrom(registeredFilterClass);
-    if (number &gt; MAXIMUM_ENTRIES_WITHOUT_FILTER_SETTINGS
-        &amp;&amp; (filter.getSearchString() == null || filter.getSearchString().length() &lt; 3)
-        &amp;&amp; (isTaskDependentFilter == false || filter.getTask() == null)
-        &amp;&amp; filter.getStartTimeOfModification() == null
-        &amp;&amp; filter.getStopTimeOfModification() == null) {
-      // Don't search to large tables if to less filter settings are given.
-      setVisible(false);
-      return;
-    }
-    filter.updateUseModificationFilterFlag();
-    final BaseSearchFilter baseSearchFilter;
-    if (isTaskDependentFilter == true) {
-      baseSearchFilter = (BaseSearchFilter) BeanHelper.newInstance(registeredFilterClass,
-          new Class&lt;?&gt;[] { BaseSearchFilter.class },
-          filter);
-      ((TaskDependentFilter) baseSearchFilter).setTaskId(filter.getTaskId());
-      baseSearchFilter.copyBaseSearchFieldsFrom(filter);
-    } else {
-      baseSearchFilter = filter;
-    }
-    final List&lt;SearchResultData&gt; searchResult = WicketSupport.get(SearchDao.class).getEntries(baseSearchFilter, webRegistryEntry.getDOClass(),
-        webRegistryEntry.getDao());
-    boolean hasError = false;
-    if (searchResult == null) {
-      // An error occurred!
-      hasError = true;
-    } else if (searchResult.size() == 0) {
-      // No hits.
-      setVisible(false);
-      return;
-    }
-    boolean hasMore = false;
-    if (hasError == true) {
-      add(WicketUtils.getInvisibleComponent(&quot;dataTable&quot;));
-    } else {
-      final List&lt;ExtendedBaseDO&lt;Integer&gt;&gt; list = new ArrayList&lt;ExtendedBaseDO&lt;Integer&gt;&gt;();
-      for (final SearchResultData data : searchResult) {
-        if (data.getDataObject() != null) {
-          list.add(data.getDataObject());
-        } else {
-          // Empty entry means: more entries found.
-          hasMore = true;
-          break;
-        }
-      }
-      final List&lt;?&gt; columns = listPageColumnsCreator.createColumns(page, false);
-      @SuppressWarnings({ &quot;rawtypes&quot;, &quot;unchecked&quot; })
-      final DataTable&lt;?, String&gt; dataTable = new DefaultDataTable(&quot;dataTable&quot;, columns,
-          new MySortableDataProvider(&quot;NOSORT&quot;,
-              SortOrder.DESCENDING)
-          {
-            @Override
-            public List&lt;?&gt; getList()
-            {
-              return list;
-            }
-
-            @Override
-            protected IModel&lt;?&gt; getModel(final Object object)
-            {
-              return new Model((Serializable) object);
-            }
-          }, filter.getMaxRows());
-      add(dataTable);
-    }
-    final Label hasMoreEntries;
-    if (hasError == true) {
-      hasMoreEntries = new Label(&quot;hasMoreEntries&quot;, page.getString(&quot;search.error&quot;) + &quot; | &quot;);
-    } else {
-      hasMoreEntries = new Label(&quot;hasMoreEntries&quot;, page.getString(&quot;moreEntriesAvailable&quot;) + &quot; | &quot;);
-      hasMoreEntries.setVisible(false);
-    }
-    add(hasMoreEntries);
-    Component showMoreEntrieslink = null;
-    if (hasMore == true) {
-      final int maxRows = filter.getMaxRows();
-      if (maxRows &lt; SearchForm.MAX_PAGE_SIZE) {
-        showMoreEntrieslink = new Link&lt;Void&gt;(&quot;showMoreEntrieslink&quot;)
-        {
-          /**
-           * @see org.apache.wicket.markup.html.link.Link#onClick()
-           */
-          @Override
-          public void onClick()
-          {
-            for (final int number : AbstractListForm.PAGE_SIZES) {
-              if (number &gt; maxRows) {
-                filter.setMaxRows(number);
-                break;
-              }
-            }
-            filter.setArea(webRegistryEntry.getId());
-          }
-        };
-        add(showMoreEntrieslink);
-      } else {
-        hasMoreEntries.setVisible(true);
-      }
-    }
-    if (showMoreEntrieslink == null) {
-      add(new Label(&quot;showMoreEntrieslink&quot;, &quot;[invisible]&quot;).setVisible(false));
-    }
-    if (listPageColumnsCreator instanceof AbstractListPage&lt;?, ?, ?&gt;) {
-      add(new Link&lt;Void&gt;(&quot;listPageLink&quot;)
-      {
-        /**
-         * @see org.apache.wicket.markup.html.link.Link#onClick()
-         */
-        @Override
-        public void onClick()
-        {
-          final AbstractListPage&lt;?, ?, ?&gt; listPage = (AbstractListPage&lt;?, ?, ?&gt;) listPageColumnsCreator;
-          listPage.copySearchFieldsFrom(filter);
-          setResponsePage(listPage);
-        }
-      });
-    } else {
-      add(new Label(&quot;listPageLink&quot;, &quot;[invisible]&quot;).setVisible(false));
-    }
-    final long duration = System.currentTimeMillis() - millis;
-    add(new Label(&quot;areaTitle&quot;, page.getString(webRegistryEntry.getI18nTitleHeading())));
-    add(new Label(&quot;timeOfSearch&quot;, NumberFormatter.format(duration)));
-  }
-}</pre>
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="utf-8"><title>#2877: CalendarPageSupport.java</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333}a{color:#0366d6}.meta{background:#f0f0f0;border-radius:6px;padding:1em;margin:1em 0;font-size:.9em}.commentary{margin:.8em 0;background:#fff;padding:.5em 1em;border-radius:6px;border-left:4px solid #ddd;line-height:1.7}table{border-collapse:collapse;width:100%;margin:.8em 0;font-size:.9em}th,td{border:1px solid #ddd;padding:.4em .6em}th{background:#f0f0f0}code{background:#e8e8e8;border-radius:3px;padding:.1em .3em;font-size:.9em}.nav{font-size:.9em;color:#888;margin-bottom:1em}.history{background:#fffbe6;border-radius:6px;padding:1em;margin:1em 0;font-size:.9em;border-left:4px solid #ffc107}</style></head>
+<body><div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="2876.html">← Prev</a> · <a href="2878.html">Next →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-wicket/src/main/java/org/projectforge/web/calendar/CalendarPageSupport.java" target="_blank" title="View source on GitHub">📄 source</a></div>
+<h1>#2877: <code>CalendarPageSupport.java</code></h1>
+<div class="meta"><code>projectforge-wicket/src/main/java/org/projectforge/web/calendar/CalendarPageSupport.java</code> <p><strong>Path:</strong> <code>projectforge-wicket/src/main/java/org/projectforge/web/calendar/CalendarPageSupport.java</code> · <strong>Type:</strong> Java file</p><p><strong>Purpose:</strong> Part of the ProjectForge calendar module.</p><p><strong>Source:</strong> <a href="https://github.com/micromata/projectforge/blob/develop/projectforge-wicket/src/main/java/org/projectforge/web/calendar/CalendarPageSupport.java">GitHub</a></p> <span style="color:#888">153 lines total</span></div>
+<div class="history"><table><tr><th>Commit</th><th>Date</th><th>Message</th></tr><tr><td><code>868d6abb</code></td><td></td><td>2025 -&amp;gt; 2026</td></tr>
+<tr><td><code>63081666</code></td><td></td><td>Source file headers: 2024-&amp;gt; 2025.</td></tr>
+<tr><td><code>67805f2f</code></td><td></td><td>ThreadLocalUserContext.user -&amp;gt; ThreadLocalUserContext.loggedInUser (renamed for avoiding mis-unde</td></tr>
+<tr><td><code>d6d3d176</code></td><td></td><td>Migration stuff in progress...</td></tr>
+<tr><td><code>b6092df0</code></td><td></td><td>Copyright 2023 -&amp;gt; 2024</td></tr>
+<tr><td><code>ab45d51f</code></td><td></td><td>Copyright 2001-2022 -&amp;gt; 2001-2023.</td></tr>
+<tr><td><code>4a6390e1</code></td><td></td><td>Merge branch 'develop' into feature/wicket8</td></tr>
+<tr><td><code>5f7ef41b</code></td><td></td><td>Copyright 2021 -&amp;gt; 2022</td></tr>
+<tr><td><code>ceb63e8a</code></td><td></td><td>Source code header: (C) 2001-2021.</td></tr>
+<tr><td><code>a6a7aece</code></td><td></td><td>Optimize Imports</td></tr>
+<tr><td><code>267f0ad5</code></td><td></td><td>Typo in i18n: sheeets -&amp;gt; sheets.</td></tr>
+<tr><td><code>7c79f192</code></td><td></td><td>Copyright of source header -&amp;gt; 2020.</td></tr>
+<tr><td><code>7c896e3a</code></td><td></td><td>PROJECTFORGE-3161 Remove task address configuration</td></tr>
+<tr><td><code>6aa6a9cc</code></td><td></td><td>Changed wicket and wicketstuff version to 8.0.0-M6</td></tr>
+<tr><td><code>9ebb8852</code></td><td></td><td>Initial commit</td></tr>
+</table></div>
+<h2>What it does</h2>
+<div class="commentary"><p>Java class extending <code>Serializable</code>. Key methods: <code>addUserSelectPanel()</code>, <code>addOptions()</code>, <code>addCheckBox()</code>, <code>onUpdate()</code>, <code>isOtherTimesheetsUsersAllowed()</code>. Package: <code>org.projectforge.web.calendar</code>. Patterns: overrides super.</p></div>
+<h2>Key takeaways</h2>
+<div class="commentary"><ul><li><strong>15 commits</strong> (sample): <code>868d6abb</code>: 2025 -&amp;gt; 2026; <code>63081666</code>: Source file headers: 2024-&amp;gt; 2025.; <code>67805f2f</code>: ThreadLocalUserContext.user -&amp;gt; ThreadLocalUserC.</li></ul></div>
+<div class="nav" style="margin-top:2em"><a href="2876.html">← Prev</a> · <a href="2878.html">Next →</a></div>
 </body></html>

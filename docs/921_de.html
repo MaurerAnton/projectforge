@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>#921: EmployeeDO.kt [DE]</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:2em;color:#444}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}</style>
+</head>
+<body>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← Dateiindex</a> · <a href="920.html">← Vorherige</a> · <a href="922.html">Nächste →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/kotlin/org/projectforge/business/fibu/EmployeeDO.kt" target="_blank" title="Quelltext auf GitHub anzeigen">📄 Quelle</a></div>
+<h1>#921: <code>EmployeeDO.kt</code></h1>
+<div class="meta"><code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/EmployeeDO.kt</code> Typ: JPA-Entität (Datenobjekt) · Zweck: Repräsentiert einen Mitarbeiter – die Verbindung zwischen einem ProjectForge-Benutzer und Finanz-/Personal-Daten · Pfad: <code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/EmployeeDO.kt</code> <span style="color:#888">230 Zeilen · 156 Code · 52 Kommentare · 22 leer</span></div>
+<div class="c">Zentrale Entität, die einen <code>PFUserDO</code> (Benutzerkonto) mit Finanz-, Personal- und Zeiterfassungsdaten verbindet. Abgebildet auf Tabelle <code>t_fibu_employee</code>. Implementiert <code>Comparable</code> (nach Benutzernachname/-vorname) und <code>DisplayNameCapable</code> (delegiert an den vollständigen Namen des Benutzers). Als <code>open</code> deklariert für Hibernate-Proxy-Unterstützung und Test-Mocking (VacationServiceTest).</div>
+
+<h2>Architektur &amp; Design</h2>
+
+<h3>JPA-Abbildung</h3>
+<table>
+<tr><th>Feld</th><th>DB-Spalte</th><th>Typ</th><th>Anmerkungen</th></tr>
+<tr><td><code>user</code></td><td><code>user_id</code></td><td><code>PFUserDO (ManyToOne, LAZY)</code></td><td>Eindeutigkeitsbeschränkung – ein Benutzer pro Mitarbeiter. Hibernate Search indiziert eingebettet (Tiefe 1). Serialisiert als nur-ID.</td></tr>
+<tr><td><code>kost1</code></td><td><code>kost1_id</code></td><td><code>Kost1DO (ManyToOne, LAZY)</code></td><td>Kostenstelle für monatliche Berichte. Nullfähig.</td></tr>
+<tr><td><code>status</code></td><td>—</td><td><code>EmployeeStatus? (@Transient)</code></td><td>NICHT persistiert – wird von <code>EmployeeDao</code>/<code>EmployeeCache</code> aus <code>ValidSinceAttr</code> gesetzt. Interner Setter.</td></tr>
+<tr><td><code>annualLeave</code></td><td>—</td><td><code>BigDecimal? (@Transient)</code></td><td>NICHT persistiert – Jahresurlaubstage aus <code>ValidSinceAttr</code>. Interner Setter.</td></tr>
+<tr><td><code>weeklyWorkingHours</code></td><td>—</td><td><code>BigDecimal? (@Transient)</code></td><td>NICHT persistiert – Wochenstunden aus <code>ValidSinceAttr</code>. Interner Setter.</td></tr>
+<tr><td><code>position</code></td><td><code>position_text</code></td><td><code>String (max 244)</code></td><td>Berufsbezeichnung / Positionsbezeichnung. Volltextindiziert.</td></tr>
+<tr><td><code>eintrittsDatum</code></td><td><code>eintritt</code></td><td><code>LocalDate?</code></td><td>Eintritts-/Startdatum. Generisches Feld indiziert.</td></tr>
+<tr><td><code>austrittsDatum</code></td><td><code>austritt</code></td><td><code>LocalDate?</code></td><td>Austritts-/Enddatum. Generisches Feld indiziert.</td></tr>
+<tr><td><code>abteilung</code></td><td><code>abteilung</code></td><td><code>String (max 255)</code></td><td>Abteilung/Bereich. Volltextindiziert.</td></tr>
+<tr><td><code>staffNumber</code></td><td><code>staff_number</code></td><td><code>String (max 255)</code></td><td>Personalnummer. Alphanumerische Sortierung.</td></tr>
+<tr><td><code>comment</code></td><td><code>comment</code></td><td><code>String</code></td><td>Länge definiert durch <code>Constants.COMMENT_LENGTH</code>.</td></tr>
+</table>
+
+<h3>Benannte Abfragen</h3>
+<ul>
+<li><code>EmployeeDO_FindByUserId</code> — <code>from EmployeeDO where user.id=:userId</code></li>
+<li><code>EmployeeDO_GetEmployeeIdByUserId</code> — <code>select id from EmployeeDO where user.id=:userId</code></li>
+<li><code>EmployeeDO_FindByLastnameAndFirstname</code> — <code>from EmployeeDO where user.lastname=:lastname and user.firstname=:firstname</code></li>
+</ul>
+
+<h3>Berechnete Eigenschaften</h3>
+<ul>
+<li><strong><code>displayName</code></strong> — Delegiert an <code>user.getFullname()</code>. Implementiert <code>DisplayNameCapable</code>.</li>
+<li><strong><code>active</code></strong> — Gibt true zurück, wenn: nicht gelöscht, Eintrittsdatum nicht in der Zukunft und Austrittsdatum nicht in der Vergangenheit. Basiert auf <code>LocalDate.now()</code>.</li>
+</ul>
+
+<h3>Vergleich &amp; Gleichheit</h3>
+<ul>
+<li><strong><code>equals()</code></strong> — Basiert auf ID-Gleichheit. Andere Typen geben false zurück.</li>
+<li><strong><code>hashCode()</code></strong> — <code>31 * id.hashCode()</code> wenn id nicht null ist; andernfalls Delegation an super.</li>
+<li><strong><code>compareTo()</code></strong> — Vergleicht nach <code>user.lastname</code> dann <code>user.firstname</code> mittels <code>StringUtils.compare()</code>. Null-Benutzer werden zuerst sortiert.</li>
+</ul>
+
+<h3>Werte kopieren</h3>
+<p><code>copyValuesFrom()</code>-Überschreibung schließt <code>timeableAttributes</code> vom Kopieren aus. Protokolliert eine Warnung, dass das Kopieren zeitabhängiger Attribute noch nicht implementiert ist.</p>
+
+<h2>Git-Verlauf</h2>
+<div class="hist"><pre>868d6abb7 2025 -> 2026
+28efde264 Employee: weeklyWorkingHours jetzt als zeitabhängiges Attribut.
+63081666f Quelltext-Dateiköpfe: 2024 -> 2025.
+0237d5eba JSON-Serialisierung umgestaltet: IdOnlySerializer und IdsOnlySerializer eingeführt.
+c8f8ed935 Alle Entitäten als FetchType.LAZY deklariert (war EAGER).
+4c04cfd65 MAJOR-CHANGE! Migration von Integer-IDs zu Long-IDs
+8bd740775 Employee: Bankkonto, Geburtstag, Geschlecht und Adresse entfernt.
+a5a0e2b40 EmployeeDO.status wird durch zeitabhängiges Attribut "status" gesetzt
+a0affa511 EmployeeDO.active
+6712fba40 Employee.urlaubstage -> zeitabhängiges Attribut für Jahresurlaubstage.
+f070a11e8 Employee.birthday/eintrittsdatum/austrittsdatum: Date -> LocalDate
+8675a1dbe Alle Kotlin-JPA-Entitäten und ihre Eigenschaften als open deklariert.
+...</pre></div>
+</body>
+</html>

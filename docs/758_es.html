@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>#758: XmlObjectWriter [ES]</title>
+<style>
+  body { font-family: system-ui, sans-serif; max-width: 960px; margin: 2em auto; padding: 0 1em; background: #fafafa; color: #222; line-height: 1.6; }
+  h1 { border-bottom: 2px solid #333; padding-bottom: 0.3em; }
+  h2 { margin-top: 2.5em; border-bottom: 1px solid #ddd; padding-bottom: 0.2em; color: #333; }
+  h3 { margin-top: 2em; color: #444; }
+  a { color: #0366d6; }
+  .c { border-left: 3px solid #ddd; padding: .5em 1em; margin: 1em 0; background: #fff; }
+  .nav { font-size: .9em; color: #888; margin-bottom: 1em; }
+  .lang { font-size: .85em; color: #888; float: right; }
+  .lang a { color: #888; text-decoration: none; padding: 0 .3em; }
+  .lang a.active { color: #0366d6; font-weight: 600; text-decoration: underline; }
+  .meta { font-size: .9em; margin: 1em 0; color: #555; }
+  code { background: #f0f0f0; padding: 0 .2em; font-size: .93em; }
+  pre { background: #f5f5f5; padding: .8em 1em; border: 1px solid #ddd; border-radius: 4px; overflow-x: auto; font-size: .88em; line-height: 1.4; }
+  table { border-collapse: collapse; width: 100%; margin: 1em 0; }
+  th, td { border: 1px solid #ddd; padding: .5em .8em; text-align: left; font-size: .9em; }
+  th { background: #f5f5f5; font-weight: 600; }
+  .hist { font-size: .85em; color: #555; }
+</style>
+</head>
+<body>
+<div class="lang"><a href="756.html">EN</a> · <a href="756_de.html">DE</a> · <a href="756_ru.html">RU</a> · <a href="756_fr.html">FR</a> · <a href="756_es.html" class="active">ES</a></div>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Índice</a> · <a href="file-index.html">← Índice de archivos</a> · <a href="757.html">← Anterior</a> · <a href="759.html">Siguiente →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/java/org/projectforge/framework/xmlstream/XmlObjectWriter.java" target="_blank" title="Ver fuente en GitHub">📄 fuente</a></div>
+
+<h1>#758: <code>XmlObjectWriter.java</code></h1>
+<div class="meta"><code>projectforge-business/src/main/java/org/projectforge/framework/xmlstream/XmlObjectWriter.java</code> <strong>Motor de serialización Java</strong> — convierte objetos Java a XML. 387 líneas. Utiliza dom4j. Fuente: <code>projectforge-business/src/main/java/org/projectforge/framework/xmlstream/XmlObjectWriter.java</code> <span style="color:#888">387 líneas · 271 código · 80 comentarios · 36 en blanco</span></div>
+
+<div class="c">
+<strong>Propósito:</strong> El <strong>motor de serialización</strong> del framework XmlStream — convierte objetos Java a XML (dom4j <code>Document</code>). 387 líneas. El Javadoc explica la motivación: <em>"Una solución simple para transmitir objetos xml y evitar valores predeterminados en la salida xml (porque esta característica aún no está disponible en XStream)."</em> — en el momento de escribir esto, XStream no podía omitir campos con valores predeterminados, y para la exportación de datos esto es crítico (para evitar la hinchazón del XML con miles de etiquetas <code>&lt;deleted&gt;false&lt;/deleted&gt;</code>).
+
+Se combina con <a href="755.html">XmlObjectReader</a>: Writer serializa Java → XML, Reader deserializa XML → Java. Ambos utilizan dom4j como biblioteca XML y las anotaciones <a href="754.html">@XmlObject</a>/<a href="752.html">@XmlField</a> para el control de formato.
+</div>
+
+<h2>Desduplicación mediante atributos XML — <code>ATTR_ID</code> y <code>ATTR_REF_ID</code></h2>
+
+<div class="c">
+<ul>
+<li><code>ATTR_ID = "o-id"</code> — identificador único de objeto en XML. Writer asigna a cada objeto nuevo un <code>refIdCounter</code> incremental y lo escribe como atributo <code>o-id="0"</code>, <code>o-id="1"</code>, etc.</li>
+<li><code>ATTR_REF_ID = "ref-id"</code> — referencia a un objeto ya escrito. Si un objeto ya fue serializado (encontrado en la caché <code>writtenObjects</code>), Writer NO vuelve a escribir su contenido, sino que solo establece <code>ref-id="0"</code> — una referencia al elemento con <code>o-id="0"</code></li>
+</ul>
+<p>Este mecanismo resuelve referencias circulares y desduplicación. Ejemplo: el objeto A contiene una referencia al objeto B, y B contiene una referencia inversa a A. Sin desduplicación, Writer entraría en recursión infinita. Con desduplicación: A se escribe con o-id=0, B con o-id=1, la referencia inversa a A se escribe como ref-id=0.</p>
+</div>
+
+<h2>Caché de objetos escritos — <code>writtenObjects</code></h2>
+
+<div class="c">
+<p><code>Map&lt;String, Element&gt;</code> donde la clave es <code>className:hashCode</code> (ej., <code>"org.projectforge.business.user.PFUserDO:987345678854"</code>). Esta es una caché <strong>basada en identidad</strong> (por hashCode), no basada en equals — dos objetos diferentes con campos idénticos se escribirán ambos, pero un objeto encontrado dos veces se escribirá solo una vez. Usar <code>hashCode()</code> para la identidad es teóricamente poco fiable (posibles colisiones), pero en la práctica para tamaños XML típicos (cientos a miles de objetos), la probabilidad de colisión es extremadamente baja.</p>
+</div>
+
+<h2>Método principal — <code>write(Branch parent, Object obj, String name, boolean asAttribute, boolean asCDATA)</code></h2>
+
+<div class="c">
+<p>Método de serialización recursivo. La lógica refleja la cadena de verificación de tipos del Reader pero en orden inverso:</p>
+<ol>
+<li><strong>Determinar nombre de etiqueta:</strong> primero AliasMap, luego @XmlObject.alias, luego XmlRegistry, luego nombre completamente calificado (FQCN) como respaldo</li>
+<li><strong>Verificación de desduplicación:</strong> si el objeto ya está en <code>writtenObjects</code> — escribe <code>ref-id</code> en lugar del contenido completo</li>
+<li><strong>Convertidor:</strong> si el tipo tiene un IConverter registrado — llama a <code>converter.toString()</code> y escribe el resultado como texto del elemento o atributo</li>
+<li><strong>Enum:</strong> escribe <code>enum.name()</code> (ej., "ACTIVE", "PAID")</li>
+<li><strong>Colección:</strong> crea un elemento contenedor y escribe recursivamente cada elemento de la colección</li>
+<li><strong>Objeto complejo:</strong> crea elemento, registra el objeto en <code>writtenObjects</code>, itera todos los campos mediante reflexión, llama a <code>writeField()</code> para cada campo no predeterminado</li>
+</ol>
+</div>
+
+<h2>Omisión de valores predeterminados — La característica estrella</h2>
+
+<div class="c">
+<p>El método <code>isDefaultType(ann, value)</code> verifica si el valor del campo es igual al valor predeterminado de <code>@XmlField.default*</code>. Si es así, el campo <strong>NO se escribe</strong>. Esta es la razón por la que se creó XmlStream:</p>
+<ul>
+<li><strong>Booleano:</strong> si la anotación no está especificada, el valor predeterminado es <code>false</code> — todos los campos false se omiten</li>
+<li><strong>Double:</strong> se compara con <code>defaultDoubleValue()</code> mediante <code>compareTo()</code></li>
+<li><strong>Integer:</strong> se compara con <code>defaultIntValue()</code>. El número mágico <code>MAGIC_INT_NUMBER</code> de <a href="751.html">XmlConstants</a> sirve como centinela de "no establecido"</li>
+<li><strong>String/Enum:</strong> se compara con <code>defaultStringValue()</code>. La cadena mágica <code>MAGIC_STRING</code> es el centinela</li>
+</ul>
+<p><strong>hasDefaultType()</strong> verifica si se <em>declaró</em> un valor predeterminado (distingue entre "predeterminado no establecido" y "predeterminado == false/0/null"). Para Boolean — siempre es verdadero (false es un valor predeterminado válido). Para otros tipos — compara con los centinelas MAGIC.</p>
+</div>
+
+<h2>Atributo vs. Elemento predeterminado — <code>asAttributeAsDefault()</code></h2>
+
+<div class="c">
+<p>Algunos tipos se serializan como <strong>atributos</strong> de forma predeterminada (compacto):</p>
+<ul>
+<li><code>xmlRegistry.asAttributeAsDefault(type)</code> — configuración global (ej., todos los tipos primitivos → atributos)</li>
+<li><code>Enum.class.isAssignableFrom(type)</code> — todos los enums siempre como atributos (nombres cortos como "ACTIVE" encajan bien en atributos)</li>
+<li><code>@XmlField.asAttribute=true</code> — anulación por campo</li>
+<li><code>@XmlField.asElement=true</code> — forzar como elemento (incluso si el tipo predetermina atributo)</li>
+</ul>
+</div>
+
+<h2>Ignorar campos — <code>ignoreField(Field)</code></h2>
+
+<div class="c">
+<p>Método estático utilizado tanto por Writer como por Reader. Omite campos con modificadores: <code>static</code> (constantes de clase), <code>final</code> (inmutables después de la creación), <code>transient</code> (explícitamente no serializables). Además, el método protegido <code>ignoreField(Object, Field)</code> puede ser anulado por subclases para filtrado adicional. Más la anotación <code>@XmlOmitField</code> — un marcador de omisión explícito independientemente de los modificadores.</p>
+</div>
+
+<h2>Historial de Git</h2>
+<div class="hist">
+<pre>868d6abb7 2025 → 2026 (actualización de año de copyright)
+63081666f Encabezados de archivos fuente: 2024→2025
+9f874e26c CAMBIO-IMPORTANTE! Migración de identificadores Integer a Long
+b6092df09 Copyright 2023 → 2024
+ab45d51fa Copyright 2001-2022 → 2001-2023
+5f7ef41b8 Copyright 2021 → 2022
+cd27dd997 paquete xstream → xmlstream
+ceb63e8a1 Encabezado de código fuente: (C) 2001-2021
+7c79f1922 Copyright del encabezado fuente → 2020
+24019a0f5 Eliminar ocurrencias de DateHolder
+af35917ac Más limpieza de código
+73a9755df Limpieza de código (StringBuffer→StringBuilder, diamante, clases obsoletas)
+32f634b88 Optimizar importaciones
+000ca723d Eliminar expresiones booleanas sin sentido
+dd5ca38ac CopyRight de todos los encabezados de archivos java actualizados o creados
+a5bbdca6a Cambiar logger a slf4j
+f979e8a42 MGC-UPDATE: Actualización a versión 3.0.0-SNAPSHOT
+9ebb88522 Commit inicial</pre>
+</div>
+
+<div class="c">
+Cambios clave: <code>9f874e26c</code> — migración masiva de todos los identificadores de Integer a Long (incluyendo <code>refIdCounter</code>). Anteriormente los IDs de objeto en XML eran Integer (máx. ~2 mil millones), después — Long (máx. ~9 quintillones). Crítico para instalaciones grandes donde el contador podría desbordarse. <code>24019a0f5</code> — eliminó DateHolder (clase pre-Java-8) de Writer, reemplazado con <code>java.util.Date</code> y tipos <code>java.time</code> mediante convertidores. <code>cd27dd997</code> — paquete renombrado de <code>xstream</code> a <code>xmlstream</code>; el mensaje del commit "(debería ser reemplazado por xstream más tarde)" revela que el autor planeaba reemplazar eventualmente el framework personalizado con XStream — un plan que nunca se ejecutó.
+</div>
+
+</body>
+</html>

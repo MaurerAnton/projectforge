@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>#3271: FavoritesChoicePanel.java [FR]</title>
+<style>
+body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}
+h1{border-bottom:2px solid #333;padding-bottom:.3em}
+h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}
+h3{margin-top:2em;color:#444}
+a{color:#0366d6}
+.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}
+.nav{font-size:.9em;color:#888;margin-bottom:1em}
+.lang{font-size:.85em;color:#888;float:right}
+.lang a{color:#888;text-decoration:none;padding:0 .3em}
+.lang a.active{color:#0366d6;font-weight:600;text-decoration:underline}
+.meta{font-size:.9em;margin:1em 0;color:#555}
+code{background:#f0f0f0;padding:0 .2em;font-size:.93em}
+pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}
+table{border-collapse:collapse;width:100%;margin:1em 0}
+th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}
+th{background:#f5f5f5;font-weight:600}
+.hist{font-size:.85em;color:#555}
+</style>
+</head>
+<body>
+<div class="lang"><a href="3271.html">EN</a> · <a href="3271_de.html">DE</a> · <a href="3271_ru.html">RU</a> · <a href="3271_fr.html" class="active">FR</a> · <a href="3271_es.html">ES</a></div>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← Index des fichiers</a> · <a href="3034.html">← Précédent</a> · <a href="256.html">Suivant →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-wicket/src/main/java/org/projectforge/web/wicket/components/FavoritesChoicePanel.java" target="_blank" title="Voir la source sur GitHub">📄 source</a></div>
+<h1>#3271: <code>FavoritesChoicePanel.java</code></h1>
+<div class="meta"><code>projectforge-wicket/src/main/java/org/projectforge/web/wicket/components/FavoritesChoicePanel.java</code> Type : Java · Rôle : Panneau · Source : projectforge-wicket/src/main/java/org/projectforge/web/wicket/components/FavoritesChoicePanel.java <span style="color:#888">218 lignes · 147 code · 44 commentaires · 27 vides</span></div>
+<div class="c">Composant de panneau Wicket pour FavoritesChoice. Fragment d'interface utilisateur réutilisable composé dans des pages ou des dialogues.</div>
+<h2>Structure du code</h2>
+<p>Paquetage : <code>org.projectforge.web.wicket.components</code></p>
+<p>Classes : <code>FavoritesChoicePanel</code></p>
+Étend : <code>FormComponentPanel</code></p>
+<p>Méthodes (7) : <code>init</code>, <code>getNullKey</code>, <code>onUpdate</code>, <code>createRenderer</code>, <code>onBeforeRender</code>, <code>getSelected</code>, <code>setSelected</code></p>
+<p>Champs (11) : <code>serialVersionUID</code>, <code>ADD_NEW_ENTRY</code>, <code>selected</code>, <code>refresh</code>, <code>choice</code>, <code>tabIndex</code>, <code>cssClass</code>, <code>userPrefArea</code>, <code>clearSelectionAfterSelection</code>, <code>nullKey</code>, <code>dummy</code></p>
+<p>Importations : 12 paquetages</p>
+<h2>Code source (abrégé)</h2>
+<pre>
+package org.projectforge.web.wicket.components;
+
+import org.apache.commons.lang3.StringUtils;
+import org.apache.wicket.AttributeModifier;
+import org.apache.wicket.markup.html.form.DropDownChoice;
+import org.apache.wicket.markup.html.form.FormComponentPanel;
+import org.apache.wicket.markup.html.form.FormComponentUpdatingBehavior;
+import org.apache.wicket.model.PropertyModel;
+import org.projectforge.business.user.UserPrefDao;
+import org.projectforge.framework.persistence.user.api.UserPrefArea;
+import org.projectforge.framework.persistence.user.entities.UserPrefDO;
+import org.projectforge.web.WicketSupport;
+import org.projectforge.web.user.UserPrefEditPage;
+import org.projectforge.web.wicket.AbstractSecuredPage;
+
+/**
+ * Boîte combinée pour afficher et sélectionner rapidement les favoris.
+ *
+ * @author Kai Reinhard (k.reinhard@micromata.de)
+ */
+public abstract class FavoritesChoicePanel&lt;T, F&gt; extends FormComponentPanel&lt;String&gt;
+{
+  private static final long serialVersionUID = 4605128072052146129L;
+
+  protected static final String ADD_NEW_ENTRY = &quot;ADD_NEW_ENTRY&quot;;
+
+  protected String selected;
+
+  private boolean refresh = false;
+
+  private DropDownChoice&lt;String&gt; choice;
+
+  private Integer tabIndex;
+
+  private String cssClass;
+
+  private UserPrefArea userPrefArea;
+
+  private boolean clearSelectionAfterSelection = true;
+
+  private String nullKey;
+
+  @SuppressWarnings(&quot;unused&quot;)
+  private String dummy;
+
+  public FavoritesChoicePanel(final String componentId, final UserPrefArea userPrefArea)
+  {
+    this(componentId, userPrefArea, null, null);
+  }
+
+  public FavoritesChoicePanel(final String componentId, final UserPrefArea userPrefArea, final Integer tabIndex, final String cssClass)
+  {
+    super(componentId);
+    this.userPrefArea = userPrefArea;
+    this.tabIndex = tabIndex;
+    this.cssClass = cssClass;
+    setModel(new PropertyModel&lt;String&gt;(this, &quot;dummy&quot;));
+  }
+
+  @SuppressWarnings(&quot;serial&quot;)
+  public DropDownChoice&lt;String&gt; init()
+  {
+    final LabelValueChoiceRenderer&lt;String&gt; renderer = createRenderer();
+    choice = new DropDownChoice&lt;String&gt;(&quot;dropDownChoice&quot;, new PropertyModel&lt;String&gt;(this, &quot;selected&quot;), renderer.getValues(), renderer)
+    {
+      @Override
+      protected String getNullKey()
+      {
+        if (nullKey != null) {
+          return nullKey;
+        }
+        return super.getNullKey();
+      }
+    };
+    choice.add(new FormComponentUpdatingBehavior()
+    {
+      @Override
+      public void onUpdate()
+      {
+        String newSelection = (String) this.getFormComponent().getModelObject();
+        if (StringUtils.isNotEmpty(newSelection) == true) {
+          if (ADD_NEW_ENTRY.equals(newSelection) == true) {
+            final Object favorite = newFavoriteInstance(getCurrentObject());
+            final UserPrefEditPage page = new UserPrefEditPage(userPrefArea, favorite);
+            page.setReturnToPage((AbstractSecuredPage) FavoritesChoicePanel.this.getPage());
+            refresh = true;
+            setResponsePage(page);
+            selected = &quot;&quot;;
+            return;
+          }
+          // Remplir les champs avec les valeurs du modèle sélectionné :
+          final F favorite = getCurrentFavorite();
+          if (favorite != null) {
+            select(favorite);
+          }
+          if (FavoritesChoicePanel.this.clearSelectionAfterSelection == true) {
+            selected = &quot;&quot;;
+          }
+        }
+      }
+    });
+    choice.setNullValid(true);
+    if (tabIndex != null) {
+      choice.add(AttributeModifier.replace(&quot;tabindex&quot;, String.valueOf(tabIndex)));
+    }
+
+    if (cssClass != null) {
+      choice.add(AttributeModifier.append(&quot;class&quot;, cssClass));
+    }
+    add(choice);
+    return choice;
+  }
+
+  private LabelValueChoiceRenderer&lt;String&gt; createRenderer()
+  {
+    final String[] entries = WicketSupport.get(UserPrefDao.class).getPrefNames(userPrefArea);
+    final LabelValueChoiceRenderer&lt;String&gt; renderer = new LabelValueChoiceRenderer&lt;String&gt;();
+    for (final String entry : entries) {
+      renderer.addValue(entry, entry);
+// ... (tronqué, total 196 lignes)</pre>
+
+<h2>Historique Git</h2><div class="hist"><pre>868d6abb7 2025 -> 2026
+63081666f En-têtes des fichiers source : 2024 -> 2025.
+011000f03 Travaux de migration en cours... (tous les tests de tous les paquetages : OK).
+b095e6f7d !!!!! Changement majeur de la gestion des transactions : Réutilisation maximale de PfPersistenceContext (pas encore terminé). Les tests ne s'exécutent pas encore.
+4efcbd0fb Travaux de migration en cours...</pre></div>
+</body>
+</html>

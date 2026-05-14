@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>#1313 [RU]</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:2em;color:#444}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}</style>
+</head>
+<body>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Индекс</a> · <a href="file-index.html">← Индекс файлов</a> · <a href="1312.html">← Назад</a> · <a href="1314.html">Вперёд →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/kotlin/org/projectforge/framework/persistence/history/HistoryService.kt" target="_blank" title="Просмотреть исходный код на GitHub">📄 исходник</a></div>
+<h1>#1313: <code>HistoryService.kt</code></h1>
+<div class="meta"><code>projectforge-business/src/main/kotlin/org/projectforge/framework/persistence/history/HistoryService.kt</code> Основной сервис, projectforge-business/.../persistence/history/HistoryService.kt <span style="color:#888">426 строк · 315 кода · 87 комментариев · 24 пустых</span></div>
+<div class="c">Основной фасад для загрузки, слияния, сохранения и удаления записей истории, включая отслеживание изменений на уровне атрибутов. Также обрабатывает разрешение сущностей с проверкой доступа и добавление комментариев пользователя.</div>
+
+<h2>Архитектура и роль</h2>
+<p><code>HistoryService</code> — это синглтон <code>@Service</code>, который связывает низкоуровневый доступ к данным (<code>HistoryEntryDO</code>/<code>HistoryEntryAttrDO</code>) с конвертерами уровня представления. Он управляет полным жизненным циклом: создание записей истории через адаптеры <code>BaseDao</code>, загрузка с рекурсией встроенных объектов, добавление комментариев пользователя и принудительное удаление.</p>
+
+<h3>Ключевые методы</h3>
+<table>
+<tr><th>Метод</th><th>Описание</th></tr>
+<tr><td><code>mergeHistoryEntries(loadContext, entries)</code></td><td>Объединяет записи в контекст загрузки, удаляя дубликаты по ID.</td></tr>
+<tr><td><code>findEntryAndEntityById(id, checkAccess?)</code></td><td>Загружает запись истории + целевую сущность, проверяя доступ на выборку и обновление. Возвращает <code>EntryInfo</code> с классом сущности, DAO и флагами доступа.</td></tr>
+<tr><td><code>appendUserComment(id, comment, checkAccess?)</code></td><td>Добавляет комментарий пользователя с временной меткой к записи истории. Добавляет префикс с ISO-датой и именем пользователя, если комментатор отличается от исходного модификатора.</td></tr>
+<tr><td><code>loadHistory(baseDO, baseDao?)</code></td><td>Точка входа для загрузки всей истории для заданной сущности. Создаёт новый <code>HistoryLoadContext</code> и вызывает рекурсивный загрузчик.</td></tr>
+<tr><td><code>loadAndMergeHistory(entityClass, entityIds, loadContext)</code></td><td>Рекурсивно загружает историю для набора ID сущностей, следуя связям <code>@OneToMany</code> для загрузки истории встроенных/дочерних сущностей. Использует рефлексию для чтения актуальных коллекций дочерних элементов из загруженных сущностей.</td></tr>
+<tr><td><code>insertUpdateHistoryEntry(entity, property, class, oldVal, newVal)</code></td><td>Создаёт запись изменения одного атрибута через <code>HistoryBaseDaoAdapter</code>. Проверяет демо/ограниченного пользователя перед записью.</td></tr>
+<tr><td><code>forceDeletion(historyEntry)</code></td><td>Жёстко удаляет запись истории и все её атрибуты (для очистки сущностей в стиле GDPR).</td></tr>
+<tr><td><code>save(em/historyEntry, attrs?)</code></td><td>Сохраняет новую запись истории с опциональными атрибутами, устанавливая <code>modifiedBy</code> и <code>modifiedAt</code>.</td></tr>
+</table>
+
+<h3>Разрешение встроенных объектов</h3>
+<p>Приватный метод <code>processAndMergeHistory()</code> сканирует атрибуты записи истории на наличие имён свойств <code>@OneToMany</code>, извлекает ID сущностей из полей <code>value</code> (добавлено) и <code>oldValue</code> (удалено) и рекурсивно загружает историю для этих встроенных сущностей. Он также использует рефлексию на фактически загруженных родительских сущностях для поиска текущих назначенных дочерних элементов, которые могут не отображаться в diff-ах истории.</p>
+
+<h3>Внутренний класс: EntryInfo</h3>
+<p>Тип возвращаемого значения для <code>findEntryAndEntityById()</code>. Содержит сырой <code>HistoryEntryDO</code>, разрешённый класс сущности, её <code>BaseDao</code>, загруженный экземпляр сущности и логические флаги чтения/записи.</p>
+
+<h2>История Git</h2><div class="hist"><pre>868d6abb7 2025 -> 2026
+3808112aa t_pf_history.user_comment varchar(2000) -> varchar(10000), appendUserComment добавляет временную метку.
+749bdd1cd HistoryEntry: пользователь может добавлять комментарии к записям истории.
+398ac8947 Комментарии истории: подготовлено редактирование.
+b7861b2ff Адреса: исправлено принудительное удаление (после миграции mgc).
+63081666f Заголовки исходных файлов: 2024-> 2025.
+d9d0cc1bf WIP: хранение ордеров.
+bbc198d03 Миграция в процессе... (все тесты OK).
+9e3c523c7 Миграция в процессе... (все тесты OK).
+55972f36a Миграция в процессе...
+f189d3418 Миграция в процессе... (все тесты OK).
+d18c899b5 Рефакторинг записей истории.
+b79a1edca Миграция в процессе... (все тесты OK).
+e3fe7c42b Миграция в процессе... (все тесты OK).
+5989b32fd BaseDao: рефакторинг механизма onChangeListener.
+87aaf6a5a BaseDao рефакторинг, переименованы методы internal*.
+e4f9ca1be Миграция в процессе...
+67805f2fc ThreadLocalUserContext.user -> loggedInUser (переименовано).
+cb03dc74f Миграция в процессе... (все тесты OK).
+68be78d38 Миграция в процессе... (все тесты OK).
+85b4e1175 PfPersistenceService: query переименован в executeQuery.
+b095e6f7d Большое изменение обработки транзакций: PfPersistenceContext.
+95afd297d Миграция в процессе...
+eaa4d9d3a HistoryService -> HistoryFormatService
+57f08f175 HistoryService поддерживает зарегистрированные адаптеры (адаптер User).
+f3ed38265 HistoryService (отображение записей) улучшен.
+5f7ef41b8 Авторские права 2021 -> 2022
+c0f2b9de0 Функциональность тенантов удалена везде.
+ceb63e8a1 Заголовок исходного кода: (C) 2001-2021.
+8b60b4c0a wip: вложения
+365059990 HistoryService и I18nEnum: исправление для неизвестных значений enum.
+7c79f1922 Авторские права заголовка исходного кода -> 2020.
+8d164f4ad AbstractRest, AbstractDORest, AbstractDTORest рефакторинг.
+f1e8cca68 HistoryService поддерживает операции вставки.
+05244ff19 Созданы заголовки авторских прав.
+bd3a3e824 Модуль projectforge-jax-rs переименован в projectforge-rest.
+0475167da PFUserDO: ревью кода.
+b4f102fe5 Время назад (человекочитаемое) для записей истории.
+2b7abdf0e Опечатка: modfied -> modified.
+8116fa842 Json сериализация: camel case.
+b0fd52b9f меню перемещено из jax-rs в business.
+895414c05 Kotlin: рефакторинг lateinit.
+be8f793fc Авто-макет: рефакторинг.
+91accbd15 Авто-макет: рефакторинг.
+298e24d04 Перевод типа операции.
+7b4263462 Исправление ошибки в автоматическом переводе имён свойств.
+57009fbe8 Автоматический перевод значений I18nEnum в записях истории.
+cc2c470f9 HistoryEntry: diffEntries как список historyEntry.
+03d2d150d Новый rest сервис rs/&lt;entity&gt;/history/id</pre></div>
+</body>
+</html>

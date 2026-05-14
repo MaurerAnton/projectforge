@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>#918: EingangsrechnungsPositionDO.kt [DE]</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:2em;color:#444}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}</style>
+</head>
+<body>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← Dateiindex</a> · <a href="917.html">← Vorherige</a> · <a href="919.html">Nächste →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/kotlin/org/projectforge/business/fibu/EingangsrechnungsPositionDO.kt" target="_blank" title="Quelle auf GitHub anzeigen">📄 Quelle</a></div>
+<h1>#918: <code>EingangsrechnungsPositionDO.kt</code></h1>
+<div class="meta"><code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/EingangsrechnungsPositionDO.kt</code> Typ: JPA-Entität (Datenobjekt) · Zweck: Repräsentiert eine Position innerhalb einer Eingangsrechnung · Pfad: <code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/EingangsrechnungsPositionDO.kt</code> <span style="color:#888">96 Zeilen · 56 Code · 31 Kommentare · 9 leer</span></div>
+<div class="c">Zentrale Domänenentität, die eine einzelne Position in einer Eingangsrechnung repräsentiert. Erweitert <code>AbstractRechnungsPositionDO</code> und stellt die Verbindung zur übergeordneten <code>EingangsrechnungDO</code> sowie den Kostenverteilungen (<code>KostZuweisungDO</code>) her. Hibernate-Search-indiziert für Volltextsuche.</div>
+
+<h2>Architektur / Design</h2>
+<h3>Vererbung &amp; JPA-Mapping</h3>
+<p>Erweitert <code>AbstractRechnungsPositionDO</code> (die gemeinsame Basisklasse für sowohl Eingangs- als auch Ausgangsrechnungspositionen). Deklariert als <code>open</code> (erforderlich für Kotlin + Hibernate für Lazy-Loading-Proxies). Die <code>@Table</code>-Annotation bildet auf <code>t_fibu_eingangsrechnung_position</code> ab, mit einer <strong>zusammengesetzten Unique-Constraint</strong> auf <code>(eingangsrechnung_fk, number)</code> – stellt sicher, dass Positionsnummern innerhalb einer einzelnen Rechnung eindeutig sind.</p>
+
+<table>
+<tr><th>Feld</th><th>Typ</th><th>JPA / Anmerkungen</th></tr>
+<tr><td><code>eingangsrechnung</code></td><td><code>EingangsrechnungDO?</code></td><td><code>@ManyToOne(LAZY)</code> — Referenz auf die übergeordnete Rechnung. Verwendet <code>@JsonBackReference</code>, um Serialisierungszyklen zu vermeiden. Wird nur als ID serialisiert über <code>@JsonSerialize(IdOnlySerializer)</code>.</td></tr>
+<tr><td><code>rechnungId</code></td><td><code>Long?</code></td><td><code>@Transient</code> — praktischer Getter, der an <code>eingangsrechnung?.id</code> delegiert. Überschreibt die abstrakte Eigenschaft aus <code>AbstractRechnungsPositionDO</code>.</td></tr>
+<tr><td><code>kostZuweisungen</code></td><td><code>MutableList&lt;KostZuweisungDO&gt;?</code></td><td><code>@OneToMany(mappedBy="eingangsrechnungsPosition")</code> mit <code>@OrderColumn(name="index")</code>. <code>@JsonManagedReference</code> (die "besitzende" Seite des JSON-Paares). Annotiert mit <code>@PersistenceBehavior(autoUpdateCollectionEntries=true)</code>.</td></tr>
+</table>
+
+<h3>Wichtige Methoden</h3>
+<ul>
+<li><strong><code>checkKostZuweisungId()</code></strong> — Validiert, dass eine Kostenverteilung zu dieser Position gehört, indem die FK-Referenz der Position verglichen wird.</li>
+<li><strong><code>newClone()</code></strong> — Erstellt eine tiefe Kopie (ohne IDs) einschließlich aller Kostenverteilungen. Verwendet <code>copyValuesFrom()</code> unter Ausschluss von <code>"id"</code> und <code>"kostZuweisungen"</code>, klont dann jede <code>KostZuweisungDO</code> einzeln.</li>
+<li><strong><code>newInstance()</code></strong> — Factory-Methode, die eine neue leere <code>EingangsrechnungsPositionDO</code> zurückgibt.</li>
+</ul>
+
+<h3>JSON-Serialisierungsstrategie</h3>
+<p>Verwendet <code>@JsonBackReference</code> auf <code>eingangsrechnung</code> und <code>@JsonManagedReference</code> auf <code>kostZuweisungen</code>, um bidirektionale Beziehungen ohne Endlosschleifen zu handhaben. Die übergeordnete Rechnung wird nur als ID serialisiert, um JSON-Antworten kompakt zu halten.</p>
+
+<h2>Git-Verlauf</h2>
+<div class="hist"><pre>868d6abb7 2025 -> 2026
+aa20b7708 NewGroupSelectPanel behoben (wird im Assistenten verwendet). (Eingangs)RechnungsPositionDO: @get:JoinColumn -> mappedBy.
+63081666f Quellcode-Dateiköpfe: 2024 -> 2025.
+0237d5eba JSON-Serialisierung umgestaltet: IdOnlySerializer und IdsOnlySerializer eingeführt.
+db2599ab8 Verlauf im Orderbuch, Eingangs-/Ausgangsrechnungen und Projekte.
+4bc37b3a1 Migrationskram in Arbeit...
+fa194d7f8 Migrationskram in Arbeit...
+4c04cfd65 GROSSE-ÄNDERUNG! Migration von Integer-IDs zu Long-IDs (einschließlich FK usw.)
+c04fb0d51 Migrationskram in Arbeit...
+06828f490 Migrationskram in Arbeit...
+b6092df09 Copyright 2023 -> 2024
+ab45d51fa Copyright 2001-2022 -> 2001-2023.
+f984352a0 (Eingangs)Rechnung(sposition): @JsonBackReference/@JsonManagedReference: KostZuweisungDO
+a9cf30719 (Eingangs)Rechnung(sposition): @JsonBackReference/@JsonManagedReference.
+5f7ef41b8 Copyright 2021 -> 2022
+c0f2b9de0 Mandanten-Funktionalität überall entfernt (ungtestet).
+ceb63e8a1 Quellcode-Kopfzeile: (C) 2001-2021.
+b79632fa2 Annotation zu EingangsrechnungsPositionDO hinzugefügt
+7c79f1922 Copyright der Quellkopfzeile -> 2020.
+1cf12f943 Rechnungsposition->Kostzuweisung: Endlosschleife in JSON-Serialisierung behoben.
+55d9ef9ce Nichts, Code-Formatierung
+e3a1188d6 EingangsrechnungPositionDO: Performance-Problem: Lazy Loading der übergeordneten Eingangsrechnung.
+bc7b1761c Eingangsrechnungen: Kostzuweisungen behoben.
+e92b3afd0 Jackson: JsonBackReference/JsonManagedReference -> JsonIdentityInfo
+8675a1dbe Großes Performance-Problem gefunden: Alle Kotlin-JPA-Entitäten und ihre Eigenschaften als open deklariert. Lazy Loading wurde von Hibernate nicht unterstützt und führte zu tausenden JPA-Abfragen...
+a55ef0c14 Umfangreiche WIP: Refactoring von (Eingangs)Rechnung*. Großes Performance-Problem gefunden!!!!!
+812b5b751 Umfangreiche WIP: Refactoring von (Eingangs)Rechnung*. Großes Performance-Problem gefunden!!!!!
+2c92507bc {Eingangs}RechnungsPositionDO.rechnungId ist jetzt val (nicht als var benötigt) und sollte JPA-transient sein.
+f2b55f6aa RechnungsPositionDO.java - RechnungsPositionDO.kt EingangsrechnungsPositionDO.java -> EingangsrechnungsPositionDO.kt AbstractRechnungsPositionDO.java -> AbstractRechnungsPositionDO.kt</pre></div>
+</body>
+</html>

@@ -1,0 +1,247 @@
+<!DOCTYPE html><html lang="de"><head><meta charset="utf-8"><title>1086: HibernateSearchUsersGroupsBridge.kt [DE]</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:1.5em;color:#444;font-size:1em}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.lang{font-size:.85em;color:#888;float:right}.lang a{color:#888;text-decoration:none;padding:0 .3em}.lang a.active{color:#0366d6;font-weight:600;text-decoration:underline}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}pre.diff{background:#fff;font-size:.82em;max-height:300px;overflow-y:auto}</style></head>
+<body><div class="lang"><a href="1086.html">EN</a> · <a href="1086_de.html" class="active">DE</a> · <a href="1086_ru.html">RU</a> · <a href="1086_fr.html">FR</a> · <a href="1086_es.html">ES</a></div>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← Dateiindex</a> · <a href="806.html">← Vorherige</a> · <a href="3270.html">Nächste →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/kotlin/org/projectforge/business/teamcal/admin/model/HibernateSearchUsersGroupsBridge.kt" target="_blank" title="Quellcode auf GitHub anzeigen">📄 Quelle</a></div>
+<h1>#1086: <code>HibernateSearchUsersGroupsBridge.kt</code></h1>
+<div class="meta"><code>projectforge-business/src/main/kotlin/org/projectforge/business/teamcal/admin/model/HibernateSearchUsersGroupsBridge.kt</code> Kotlin-Klasse, <code>projectforge-business/src/main/kotlin/org/projectforge/business/teamcal/admin/model/HibernateSearchUsersGroupsBridge.kt</code> <span style="color:#888">118 Zeilen · 84 Code · 22 Kommentare · 12 leer</span></div>
+<div class="c"><strong>Zweck:</strong> Quelldatei: teamcal/admin/model/HibernateSearchUsersGroupsBridge.kt. HibernateSearchUsersGroupsBridge.kt ist Teil der Open-Source-Projektmanagement-Anwendung ProjectForge.</div>
+<h2>Quellcode (erste 100 Zeilen)</h2>
+<pre>/////////////////////////////////////////////////////////////////////////////
+//
+// Project ProjectForge Community Edition
+//         www.projectforge.org
+//
+// Copyright (C) 2001-2026 Micromata GmbH, Deutschland (www.micromata.com)
+//
+// ProjectForge ist dual-lizenziert.
+//
+// Diese Community-Edition ist freie Software; Sie können sie weiterverbreiten und/oder
+// modifizieren unter den Bedingungen der GNU General Public License, wie veröffentlicht
+// von der Free Software Foundation; Version 3 der Lizenz.
+//
+// Diese Community-Edition wird in der Hoffnung verteilt, dass sie nützlich sein wird,
+// aber OHNE JEDE GEWÄHRLEISTUNG; ohne sogar die stillschweigende Garantie der
+// MARKTGÄNGIGKEIT oder EIGNUNG FÜR EINEN BESTIMMTEN ZWECK. Siehe die GNU General
+// Public License für weitere Details.
+//
+// Sie sollten eine Kopie der GNU General Public License zusammen mit diesem
+// Programm erhalten haben; wenn nicht, siehe http://www.gnu.org/licenses/.
+//
+/////////////////////////////////////////////////////////////////////////////
+
+package org.projectforge.business.teamcal.admin.model
+
+import mu.KotlinLogging
+import org.hibernate.search.engine.backend.document.DocumentElement
+import org.hibernate.search.mapper.pojo.bridge.TypeBridge
+import org.hibernate.search.mapper.pojo.bridge.runtime.TypeBridgeWriteContext
+import org.projectforge.business.common.BaseUserGroupRightsDO
+import org.projectforge.business.user.GroupsComparator
+import org.projectforge.business.user.UserGroupCache
+import org.projectforge.business.user.UsersComparator
+import org.projectforge.common.DatabaseDialect
+import org.projectforge.common.StringHelper
+import org.projectforge.database.DatabaseSupport
+import org.projectforge.framework.persistence.user.entities.GroupDO
+import org.projectforge.framework.persistence.user.entities.PFUserDO
+import java.util.*
+
+private val log = KotlinLogging.logger {}
+
+class HibernateSearchUsersGroupsBridge : TypeBridge&lt;BaseUserGroupRightsDO&gt; {
+
+    private val groupsComparator = GroupsComparator()
+    private val usersComparator = UsersComparator()
+
+    override fun write(
+        target: DocumentElement,
+        bridgedElement: BaseUserGroupRightsDO,
+        context: TypeBridgeWriteContext
+    ) {
+        val userGroupCache = UserGroupCache.getInstance()
+        val sb = StringBuilder()
+
+        if (DatabaseSupport.getInstance().getDialect() != DatabaseDialect.HSQL) {
+            appendGroups(getSortedGroups(userGroupCache, bridgedElement.fullAccessGroupIds), sb)
+            appendGroups(getSortedGroups(userGroupCache, bridgedElement.readonlyAccessGroupIds), sb)
+            appendGroups(getSortedGroups(userGroupCache, bridgedElement.minimalAccessGroupIds), sb)
+            appendUsers(getSortedUsers(userGroupCache, bridgedElement.fullAccessUserIds), sb)
+            appendUsers(getSortedUsers(userGroupCache, bridgedElement.readonlyAccessUserIds), sb)
+            appendUsers(getSortedUsers(userGroupCache, bridgedElement.minimalAccessUserIds), sb)
+        }
+
+        if (log.isDebugEnabled) {
+            log.debug(sb.toString())
+        }
+        target.addValue("usersgroups", sb.toString())
+    }
+
+    private fun getSortedGroups(
+        userGroupCache: UserGroupCache,
+        groupIds: String?
+    ): Collection&lt;GroupDO&gt;? {
+        if (groupIds.isNullOrEmpty()) {
+            return null
+        }
+        val sortedGroups: MutableCollection&lt;GroupDO&gt; = TreeSet(groupsComparator)
+        val ids = StringHelper.splitToLongs(groupIds, ",", false)
+        for (id in ids) {
+            val group = userGroupCache.getGroup(id)
+            if (group != null) {
+                sortedGroups.add(group)
+            } else {
+                log.warn("Gruppe mit ID '$id' nicht im UserGroupCache gefunden. groupIds-String war: $groupIds")
+            }
+        }
+        return sortedGroups
+    }
+
+    private fun getSortedUsers(
+        userGroupCache: UserGroupCache,
+        userIds: String?
+    ): Collection&lt;PFUserDO&gt;? {
+        if (userIds.isNullOrEmpty()) {
+            return null
+        }
+        val sortedUsers: MutableCollection&lt;PFUserDO&gt; = TreeSet(usersComparator)
+        val ids = StringHelper.splitToLongs(userIds, ",", false)
+        for (id in ids) {</pre>
+<h2>Git-Verlauf</h2>
+<div class="hist">
+<pre>868d6abb7 2025 -> 2026
+63081666f Quellcode-Dateiköpfe: 2024 -> 2025.
+8c0b82f21 Nicht verwendete Importe entfernt.
+4c04cfd65 GROSSE ÄNDERUNG! Migration von Integer-IDs zu Long-IDs (einschließlich Fremdschlüsseln usw.)
+c04fb0d51 Migration in Arbeit...</pre>
+<h3>868d6abb7</h3><div class="c"><strong>2025 -> 2026</strong><pre class="diff">868d6abb75cd191a892911ac8e45058932cf9074
+diff --git a/projectforge-business/src/main/kotlin/org/projectforge/business/teamcal/admin/model/HibernateSearchUsersGroupsBridge.kt b/projectforge-business/src/main/kotlin/org/projectforge/business/teamcal/admin/model/HibernateSearchUsersGroupsBridge.kt
+index 7678f8448..375d6969e 100644
+--- a/projectforge-business/src/main/kotlin/org/projectforge/business/teamcal/admin/model/HibernateSearchUsersGroupsBridge.kt
++++ b/projectforge-business/src/main/kotlin/org/projectforge/business/teamcal/admin/model/HibernateSearchUsersGroupsBridge.kt
+@@ -3,7 +3,7 @@
+ // Project ProjectForge Community Edition
+ //         www.projectforge.org
+ //
+-// Copyright (C) 2001-2025 Micromata GmbH, Germany (www.micromata.com)
++// Copyright (C) 2001-2026 Micromata GmbH, Germany (www.micromata.com)
+ //
+ // ProjectForge is dual-licensed.
+ //</pre></div><h3>63081666f</h3><div class="c"><strong>Quellcode-Dateiköpfe: 2024 -> 2025.</strong><pre class="diff">63081666f620fb87315f01b817e560e0b2f6a33a
+diff --git a/projectforge-business/src/main/kotlin/org/projectforge/business/teamcal/admin/model/HibernateSearchUsersGroupsBridge.kt b/projectforge-business/src/main/kotlin/org/projectforge/business/teamcal/admin/model/HibernateSearchUsersGroupsBridge.kt
+index 47c6e2d70..7678f8448 100644
+--- a/projectforge-business/src/main/kotlin/org/projectforge/business/teamcal/admin/model/HibernateSearchUsersGroupsBridge.kt
++++ b/projectforge-business/src/main/kotlin/org/projectforge/business/teamcal/admin/model/HibernateSearchUsersGroupsBridge.kt
+@@ -3,7 +3,7 @@
+ // Project ProjectForge Community Edition
+ //         www.projectforge.org
+ //
+-// Copyright (C) 2001-2024 Micromata GmbH, Germany (www.micromata.com)
++// Copyright (C) 2001-2025 Micromata GmbH, Germany (www.micromata.com)
+ //
+ // ProjectForge is dual-licensed.
+ //</pre></div><h3>8c0b82f21</h3><div class="c"><strong>Nicht verwendete Importe entfernt.</strong><pre class="diff">8c0b82f212543f1da4a56ab523e8e599850e8338
+diff --git a/projectforge-business/src/main/kotlin/org/projectforge/business/teamcal/admin/model/HibernateSearchUsersGroupsBridge.kt b/projectforge-business/src/main/kotlin/org/projectforge/business/teamcal/admin/model/HibernateSearchUsersGroupsBridge.kt
+index c48290704..47c6e2d70 100644
+--- a/projectforge-business/src/main/kotlin/org/projectforge/business/teamcal/admin/model/HibernateSearchUsersGroupsBridge.kt
++++ b/projectforge-business/src/main/kotlin/org/projectforge/business/teamcal/admin/model/HibernateSearchUsersGroupsBridge.kt
+@@ -25,9 +25,7 @@ package org.projectforge.business.teamcal.admin.model
+ 
+ import mu.KotlinLogging
+ import org.hibernate.search.engine.backend.document.DocumentElement
+-import org.hibernate.search.engine.backend.document.IndexFieldReference
+ import org.hibernate.search.mapper.pojo.bridge.TypeBridge
+-import org.hibernate.search.mapper.pojo.bridge.binding.TypeBindingContext
+ import org.hibernate.search.mapper.pojo.bridge.runtime.TypeBridgeWriteContext
+ import org.projectforge.business.common.BaseUserGroupRightsDO
+ import org.projectforge.business.user.GroupsComparator
+@@ -38,7 +36,6 @@ import org.projectforge.common.StringHelper
+ import org.projectforge.database.DatabaseSupport
+ import org.projectforge.framework.persistence.user.entities.GroupDO
+ import org.projectforge.framework.persistence.user.entities.PFUserDO
+-import org.slf4j.LoggerFactory
+ import java.util.*
+ 
+ private val log = KotlinLogging.logger {}</pre></div><h3>4c04cfd65</h3><div class="c"><strong>GROSSE ÄNDERUNG! Migration von Integer-IDs zu Long-IDs (einschließlich Fremdschlüsseln usw.)</strong><pre class="diff">4c04cfd652210afe373d55f53a5300c85997b109
+diff --git a/projectforge-business/src/main/kotlin/org/projectforge/business/teamcal/admin/model/HibernateSearchUsersGroupsBridge.kt b/projectforge-business/src/main/kotlin/org/projectforge/business/teamcal/admin/model/HibernateSearchUsersGroupsBridge.kt
+index a1884451f..c48290704 100644
+--- a/projectforge-business/src/main/kotlin/org/projectforge/business/teamcal/admin/model/HibernateSearchUsersGroupsBridge.kt
++++ b/projectforge-business/src/main/kotlin/org/projectforge/business/teamcal/admin/model/HibernateSearchUsersGroupsBridge.kt
+@@ -79,7 +79,7 @@ class HibernateSearchUsersGroupsBridge : TypeBridge&lt;BaseUserGroupRightsDO&gt; {
+             return null
+         }
+         val sortedGroups: MutableCollection&lt;GroupDO&gt; = TreeSet(groupsComparator)
+-        val ids = StringHelper.splitToInts(groupIds, ",", false)
++        val ids = StringHelper.splitToLongs(groupIds, ",", false)
+         for (id in ids) {
+             val group = userGroupCache.getGroup(id)
+             if (group != null) {
+@@ -99,7 +99,7 @@ class HibernateSearchUsersGroupsBridge : TypeBridge&lt;BaseUserGroupRightsDO&gt; {
+             return null
+         }
+         val sortedUsers: MutableCollection&lt;PFUserDO&gt; = TreeSet(usersComparator)
+-        val ids = StringHelper.splitToInts(userIds, ",", false)
++        val ids = StringHelper.splitToLongs(userIds, ",", false)
+         for (id in ids) {
+             val user = userGroupCache.getUser(id)
+             if (user != null) {</pre></div><h3>c04fb0d51</h3><div class="c"><strong>Migration in Arbeit...</strong><pre class="diff">c04fb0d51cdba72e1bf43720ea1982dc166bb145
+diff --git a/projectforge-business/src/main/kotlin/org/projectforge/business/teamcal/admin/model/HibernateSearchUsersGroupsBridge.kt b/projectforge-business/src/main/kotlin/org/projectforge/business/teamcal/admin/model/HibernateSearchUsersGroupsBridge.kt
+index 89a315f55..a1884451f 100644
+--- a/projectforge-business/src/main/kotlin/org/projectforge/business/teamcal/admin/model/HibernateSearchUsersGroupsBridge.kt
++++ b/projectforge-business/src/main/kotlin/org/projectforge/business/teamcal/admin/model/HibernateSearchUsersGroupsBridge.kt
+@@ -20,63 +20,68 @@
+ // with this program; if not, see http://www.gnu.org/licenses/.
+ //
+ /////////////////////////////////////////////////////////////////////////////
++
+ package org.projectforge.business.teamcal.admin.model
+ 
+-import org.apache.commons.lang3.StringUtils
+-import org.hibernate.search.bridge.TwoWayStringBridge
++import mu.KotlinLogging
++import org.hibernate.search.engine.backend.document.DocumentElement
++import org.hibernate.search.engine.backend.document.IndexFieldReference
++import org.hibernate.search.mapper.pojo.bridge.TypeBridge
++import org.hibernate.search.mapper.pojo.bridge.binding.TypeBindingContext
++import org.hibernate.search.mapper.pojo.bridge.runtime.TypeBridgeWriteContext
++import org.projectforge.business.common.BaseUserGroupRightsDO
++import org.projectforge.business.user.GroupsComparator
++import org.projectforge.business.user.UserGroupCache
++import org.projectforge.business.user.UsersComparator
++import org.projectforge.common.DatabaseDialect
+ import org.projectforge.common.StringHelper
+ import org.projectforge.database.DatabaseSupport
+-import org.slf4j.Logger
++import org.projectforge.framework.persistence.user.entities.GroupDO
++import org.projectforge.framework.persistence.user.entities.PFUserDO
+ import org.slf4j.LoggerFactory
+ import java.util.*
+ 
+-/**
+- * Users and groups bridge for hibernate search.
+- *
+- * @author Kai Reinhard (k.reinhard@micromata.de)
+- */
+-class HibernateSearchUsersGroupsBridge : TwoWayStringBridge {
+-    private val groupsComparator: GroupsComparator = GroupsComparator()
++private val log = KotlinLogging.logger {}
++
++class HibernateSearchUsersGroupsBridge : TypeBridge&lt;BaseUserGroupRightsDO&gt; {
+ 
+-    private val usersComparator: UsersComparator = UsersComparator()
++    private val groupsComparator = GroupsComparator()
++    private val usersComparator = UsersComparator()
+ 
+-    /**
+-     * Get all names of groups and users and creates an index containing all user and group names separated by '|'. &lt;br&gt;&lt;/br&gt;
+-     */
+-    override fun objectToString(`object`: Any): String {
+-        if (`object` is String) return `object`
+-        val userGroupCache: UserGroupCache = UserGroupCache.getInstance()
+-        val doObject: BaseUserGroupRightsDO = `object` as BaseUserGroupRightsDO
++    override fun write(
++        target: DocumentElement,
++        bridgedElement: BaseUserGroupRightsDO,
++        context: TypeBridgeWriteContext
++    ) {</pre></div>
+</div>
+</body></html>

@@ -1,8 +1,143 @@
-<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>#657</title><style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333}a{color:#0366d6}.meta{font-size:.9em;margin:1em 0}.nav{font-size:.9em;color:#888;margin-bottom:1em}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}code{background:#f0f0f0;padding:0 .2em}</style></head>
-<body><div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="656.html">← Prev</a> · <a href="658.html">Next →</a></div>
-<h1>#657: <code>AccessType.java</code></h1>
-<div class="meta"><strong>Lines:</strong> 73 · <strong>Type:</strong> Java enum — implements <code>I18nEnum</code></div>
-<div class="c"><p><strong>Enum defining the categories of protected resources.</strong> 73 lines. 5 values. Contains a notable <code>TODO Designbug: Domains has to be explicit listed.</code> comment — the author acknowledges that the enum hardcodes domain types rather than using a registration mechanism, meaning adding new access-controlled domains requires changing this enum.</p>
-<p><strong>Values:</strong> <code>GROUP</code> (general group membership check — used as constructor arg for <code>AccessException</code>), <code>TASKS</code> (select/insert/update/delete of WBS tasks — the most commonly checked type), <code>TASK_ACCESS_MANAGEMENT</code> (who can configure task-level access rights themselves — administrative, separate from TASKS access), <code>TIMESHEETS</code> (access to other users' timesheet data — for managers/supervisors), <code>OWN_TIMESHEETS</code> (access to own timesheets only — for regular employees).</p>
-<p><strong>I18n:</strong> Keys under <code>access.type.group</code>, <code>access.type.tasks</code>, etc. The Javadoc for <code>getI18nKey()</code> erroneously says <code>"fibu.auftrag.status."</code> but the code returns <code>"access.type." + key</code> — the comment is a copy-paste error from another enum.</p></div>
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>#657: AccessException.java</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:2em;color:#444}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.lang{font-size:.85em;color:#888;float:right}.lang a{color:#888;text-decoration:none;padding:0 .3em}.lang a.active{color:#0366d6;font-weight:600;text-decoration:underline}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}</style></head>
+<body><div class="lang"><a href="657.html" class="active">EN</a> · <a href="657_de.html">DE</a> · <a href="657_ru.html">RU</a> · <a href="657_fr.html">FR</a> · <a href="657_es.html">ES</a></div>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="200.html">← Prev</a> · <a href="331.html">Next →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/java/org/projectforge/framework/access/AccessException.java" target="_blank" title="View source on GitHub">📄 source</a></div>
+<h1>#657: <code>AccessException.java</code></h1>
+<div class="meta"><code>projectforge-business/src/main/java/org/projectforge/framework/access/AccessException.java</code> Type: Java · Role: Component · Source: projectforge-business/src/main/java/org/projectforge/framework/access/AccessException.java <span style="color:#888">246 lines · 160 code · 52 comments · 34 blank</span></div>
+<div class="c">Source code file at <code>projectforge-business/src/main/java/org/projectforge/framework/access/AccessException.java</code> containing Java code for the Component layer.</div>
+<h2>Code Structure</h2>
+<p>Package: <code>org.projectforge.framework.access</code></p>
+<p>Classes: <code>AccessException</code></p>
+<p>Extends: <code>UserException</code></p>
+<p>Methods (11): <code>getUser</code>, <code>getTaskId</code>, <code>getAccessType</code>, <code>setAccessType</code>, <code>getTaskNode</code>, <code>setClazz</code>, <code>getOperationType</code>, <code>setOperationType</code>, <code>setMessage</code>, <code>setUser</code>, <code>toString</code></p>
+<p>Fields (7): <code>serialVersionUID</code>, <code>taskTree</code>, <code>user</code>, <code>taskId</code>, <code>accessType</code>, <code>message</code>, <code>operationType</code></p>
+<p>Imports: 10 packages</p>
+<h2>Source Code (abridged)</h2>
+<pre>
+package org.projectforge.framework.access;
+
+import org.apache.commons.lang3.builder.ToStringBuilder;
+import org.projectforge.business.task.TaskDO;
+import org.projectforge.business.task.TaskNode;
+import org.projectforge.business.task.TaskTree;
+import org.projectforge.common.i18n.MessageParam;
+import org.projectforge.common.i18n.MessageParamType;
+import org.projectforge.common.i18n.UserException;
+import org.projectforge.framework.persistence.user.api.ThreadLocalUserContext;
+import org.projectforge.framework.persistence.user.entities.PFUserDO;
+
+import java.util.ResourceBundle;
+
+/**
+ * This class will be thrown by AccessChecker, if no access is given for the demanded action by an user.
+ *
+ * @author Kai Reinhard (k.reinhard@micromata.de)
+ */
+public class AccessException extends UserException {
+  private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(AccessException.class);
+
+  private static final long serialVersionUID = 147795804616526958L;
+
+  public final static String I18N_KEY_STANDARD = &quot;access.exception.standard&quot;;
+
+  public final static String I18N_KEY_STANDARD_WITH_TASK = &quot;access.exception.standardWithTask&quot;;
+
+  private TaskTree taskTree;
+
+  protected PFUserDO user = null;
+
+  protected Long taskId = null;
+
+  protected AccessType accessType = null;
+
+  protected String message = null;
+
+  protected OperationType operationType = null;
+
+  protected Class&lt;?&gt; clazz = null;
+
+  public AccessException(final String i18nKey, final Object... params) {
+    this(ThreadLocalUserContext.getLoggedInUser(), i18nKey, params);
+  }
+
+  public AccessException(final PFUserDO user, final String i18nKey, final Object... params) {
+    super(i18nKey, params);
+    this.user = user;
+    log.info(&quot;AccessException: &quot; + this);
+  }
+
+  public AccessException(final AccessType accessType, final OperationType operationType) {
+    this(ThreadLocalUserContext.getLoggedInUser(), accessType, operationType);
+  }
+
+  public AccessException(final PFUserDO user, final AccessType accessType,
+                         final OperationType operationType) {
+    super(I18N_KEY_STANDARD, new MessageParam[]{new MessageParam(accessType), new MessageParam(operationType)});
+    this.user = user;
+    this.accessType = accessType;
+    this.operationType = operationType;
+    log.info(&quot;AccessException: &quot; + this);
+  }
+
+  public AccessException(final Long taskId, final AccessType accessType,
+                         final OperationType operationType) {
+    this(ThreadLocalUserContext.getLoggedInUser(), taskId, accessType, operationType);
+  }
+
+  public AccessException(final PFUserDO user, final Long taskId, final AccessType accessType,
+                         final OperationType operationType) {
+    super(I18N_KEY_STANDARD_WITH_TASK,
+        new MessageParam[]{new MessageParam(taskId), new MessageParam(accessType),
+            new MessageParam(operationType)});
+    this.user = user;
+    this.taskId = taskId;
+    this.accessType = accessType;
+    this.operationType = operationType;
+    log.info(&quot;AccessException: &quot; + this);
+  }
+
+  /**
+   * The order of the args is task id, accessType and operationType.
+   *
+   * @return the arguments for the message formatter from type Object[3].
+   */
+  public Object[] getMessageArgs(final ResourceBundle bundle) {
+    final Object[] result = new Object[3];
+    if (taskTree != null &amp;&amp; this.taskId != null) {
+      final TaskDO task = TaskTree.getInstance().getTaskById(taskId);
+      if (task != null) {
+        result[0] = task.getTitle();
+      } else {
+        result[0] = taskId;
+      }
+    } else {
+      result[0] = taskId;
+    }
+    if (accessType != null) {
+      result[1] = bundle.getString(accessType.getI18nKey());
+    }
+    if (operationType != null) {
+      result[2] = bundle.getString(operationType.getI18nKey());
+    }
+    return result;
+  }
+
+  public MessageParam[] getMessageArgs() {
+    final MessageParam[] result = new MessageParam[3];
+    if (taskTree != null &amp;&amp; this.taskId != null) {
+      final TaskDO task = TaskTree.getInstance().getTaskById(taskId);
+      if (task != null) {
+        result[0] = new MessageParam(task.getTitle());
+      } else {
+        result[0] = new MessageParam(taskId);
+      }
+    } else {
+      result[0] = new MessageParam(taskId);
+// ... (truncated, total 224 lines)</pre>
+
+<h2>Git History</h2><div class="hist"><pre>868d6abb7 2025 -&gt; 2026
+63081666f Source file headers: 2024-&gt; 2025.
+67805f2fc ThreadLocalUserContext.user -&gt; ThreadLocalUserContext.loggedInUser (renamed for avoiding mis-understandings in code).
+4c04cfd65 MAJOR-CHANGE! Migration of integer id&#x27;s to Long id&#x27;s (including fk&#x27;s etc.)
+b6092df09 Copyright 2023 -&gt; 2024</pre></div>
 </body></html>

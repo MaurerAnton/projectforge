@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>#882 [FR]</title>
+<style>
+body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}
+h1{border-bottom:2px solid #333;padding-bottom:.3em}
+h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}
+h3{margin-top:2em;color:#444}
+a{color:#0366d6}
+.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}
+.nav{font-size:.9em;color:#888;margin-bottom:1em}
+.meta{font-size:.9em;margin:1em 0;color:#555}
+code{background:#f0f0f0;padding:0 .2em;font-size:.93em}
+pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}
+table{border-collapse:collapse;width:100%;margin:1em 0}
+th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}
+th{background:#f5f5f5;font-weight:600}
+.hist{font-size:.85em;color:#555}
+</style>
+</head>
+<body>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← Index des fichiers</a> · <a href="881.html">← Précédent</a> · <a href="883.html">Suivant →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/kotlin/org/projectforge/business/dvelop/ExtractPFTradingPartners.kt" target="_blank" title="Voir la source sur GitHub">📄 source</a></div>
+
+<h1>#882 : <code>ExtractPFTradingPartners.kt</code></h1>
+
+<div class="meta"><code>projectforge-business/src/main/kotlin/org/projectforge/business/dvelop/ExtractPFTradingPartners.kt</code> 
+<p><strong>Type :</strong> Spring <code>@Service</code> — Moteur d'extraction de données</p>
+<p><strong>Objectif :</strong> Extrait les partenaires commerciaux (fournisseurs, clients) des tables financières de ProjectForge et les convertit en objets <code>TradingPartner</code> adaptés à l'import initial D-velop.</p>
+<p><strong>Chemin source :</strong> <code>projectforge-business/src/main/kotlin/org/projectforge/business/dvelop/ExtractPFTradingPartners.kt</code></p>
+ <span style="color:#888">385 lignes · 319 code · 38 commentaires · 28 lignes vides</span></div>
+
+<div class="c">
+<p>Agit comme la <strong>passerelle</strong> entre les données financières historiques de ProjectForge (factures entrantes, factures sortantes et données maîtres clients) et le modèle de partenaire commercial de D-velop. Il analyse 5 années de données de facturation, déduplique les entités entre comptes, gère le modèle de compte « divers », analyse les adresses de facturation en texte libre en champs structurés et classe les entités en FOURNISSEUR, CLIENT ou PARTENAIRE. Fournit également une fonctionnalité d'export Excel pour le rapprochement.</p>
+</div>
+
+<h2>Architecture</h2>
+
+<h3>Classe interne : <code>Context</code></h3>
+<p>Un accumulateur mutable qui collecte les partenaires commerciaux extraits durant le processus d'extraction en plusieurs phases :</p>
+<table>
+<tr><th>Membre</th><th>Description</th></tr>
+<tr><td><code>vendors</code></td><td><code>MutableList&lt;TradingPartner&gt;</code> — Partenaires créanciers/fournisseurs extraits des factures entrantes</td></tr>
+<tr><td><code>customers</code></td><td><code>MutableList&lt;TradingPartner&gt;</code> — Partenaires clients extraits des factures sortantes + données maîtres clients</td></tr>
+<tr><td><code>sequence</code></td><td>Compteur auto-incrémenté démarrant à 7 000 000 pour générer des numéros de partenaire uniques</td></tr>
+<tr><td><code>allPartners</code></td><td>Liste combinée, dédupliquée et triée de tous les partenaires (fournisseurs + clients)</td></tr>
+<tr><td><code>nextVal</code></td><td>Retourne et incrémente le compteur de séquence</td></tr>
+<tr><td><code>getVendorByDatevKonto(konto)</code></td><td>Recherche un fournisseur en faisant correspondre le numéro de compte avec <code>importCode</code></td></tr>
+<tr><td><code>cleanUp()</code></td><td>Efface le champ temporaire <code>importCode</code> s'il correspond au numéro de partenaire (plus nécessaire après la migration)</td></tr>
+</table>
+
+<h3>Phases d'extraction</h3>
+
+<h4>Phase 1 : <code>extractTradingVendors(invoices)</code></h4>
+<p>Traite les <code>EingangsrechnungDO</code> (factures entrantes/créanciers) :</p>
+<ul>
+<li>Ignore les factures sans nom de <code>kreditor</code> ou sans affectation de <code>konto</code></li>
+<li><strong>Comptes « divers » :</strong> Si la description du compte contient « divers », chaque nom de créancier unique reçoit un nouveau numéro de partenaire synthétique (depuis <code>nextVal</code>) car plusieurs créanciers partagent le même compte</li>
+<li><strong>Comptes normaux :</strong> Un partenaire par numéro de compte ; le champ <code>importCode</code> est défini sur le numéro de compte pour référence croisée lors des phases ultérieures</li>
+<li>Tous les fournisseurs voient leur champ <code>datevKonto</code> défini sur le numéro de compte et les remarques sont préfixées par les informations du compte</li>
+</ul>
+
+<h4>Phase 2 : <code>extractTradingCustomersInvoices(invoices, context)</code></h4>
+<p>Traite les <code>RechnungDO</code> (factures sortantes/clients) :</p>
+<ul>
+<li>Si la facture a un <code>kunde</code> (client) lié, délègue à <code>handleKunde()</code></li>
+<li>Si pas de client mais un compte existe, tente de faire correspondre les fournisseurs existants (en les promouvant en PARTENAIRE) ou crée de nouvelles entrées client</li>
+<li>Ignore les comptes « divers » (aucun partenaire commercial nécessaire)</li>
+</ul>
+
+<h4>Phase 3 : <code>extractTradingCustomers(customers, context)</code></h4>
+<p>Traite les <code>KundeDO</code> (données maîtres clients) pour les clients non encore capturés via les factures. Appelle <code>context.cleanUp()</code> à la fin.</p>
+
+<h3>Logique centrale de déduplication : <code>handleKunde()</code></h3>
+<p>La méthode la plus complexe de ce service. Pour chaque <code>KundeDO</code> :</p>
+<ol>
+<li>Vérifie si un client avec le même numéro existe déjà → ignore la création, remplit éventuellement <code>datevKonto</code></li>
+<li>Vérifie si le compte correspond à un fournisseur existant → promeut le fournisseur en PARTENAIRE, réaffecte le numéro client comme numéro principal</li>
+<li>Sinon, crée un nouveau client ; les clients actifs sont ceux avec le statut <code>ACQUISITION</code> ou <code>ACTIVE</code> (ou null)</li>
+</ol>
+
+<h3>Analyse d'adresse : <code>checkBillAddress()</code></h3>
+<p>Analyse les adresses de facturation en texte libre des chaînes <code>customerAddress</code> des factures en utilisant une heuristique ascendante :</p>
+<ol>
+<li>Divise l'adresse en lignes non vides</li>
+<li>Filtre les lignes de début correspondant à des mots de remplissage connus (« Herr », « Frau », « Firma », « An », « Portal », « Klinikdienst »)</li>
+<li>Dernière ligne : pays ou code postal+ville (tente <code>extractZipCodeCity()</code>)</li>
+<li>Avant-dernière : ligne de rue</li>
+<li>Toutes les lignes restantes sont ajoutées en préfixe à <code>billToAddressAdditional</code></li>
+</ol>
+
+<h3><code>extractZipCodeCity(line)</code></h3>
+<p>Utilise une expression régulière <code>^[0-9 ]{5,10}</code> pour extraire un code postal allemand de 5 chiffres ou plus. Supprime les préfixes de pays « D- » et « D ». Retourne <code>Pair&lt;String, String&gt;</code> de (codePostal, ville) ou null si aucune correspondance.</p>
+
+<h3>Méthodes auxiliaires</h3>
+<table>
+<tr><th>Méthode</th><th>Description</th></tr>
+<tr><td><code>appendRemarks(partner, remarks)</code></td><td>Ajoute du texte à <code>partner.remarks</code> avec un séparateur de nouvelle ligne</td></tr>
+<tr><td><code>prependRemarks(partner, konto)</code></td><td>Ajoute en préfixe les informations DATEV-Konto (numéro + description) aux remarques</td></tr>
+<tr><td><code>checkIfGiven(vararg str)</code></td><td>Retourne <code>true</code> si une chaîne est non vide</td></tr>
+<tr><td><code>lineEquals(line, vararg strs)</code></td><td>Comparaison insensible à la casse et sans espaces</td></tr>
+<tr><td><code>createVendor(number, kreditor, konto)</code></td><td>Fabrique pour les TradingPartners fournisseurs</td></tr>
+<tr><td><code>createCustomer(...)</code></td><td>Fabrique pour les TradingPartners clients</td></tr>
+</table>
+
+<h3>Export Excel : <code>extractTradingPartnersAsExcel()</code></h3>
+<p>Crée un classeur Excel à deux feuilles en utilisant <code>ExcelWorkbook</code> :</p>
+<ul>
+<li><strong>Feuille 1 :</strong> « D.velop TradingPartners » — la liste passée en paramètre</li>
+<li><strong>Feuille 2 :</strong> « ProjectForge TradingPartners » — liste fraîchement extraite de la base de données</li>
+</ul>
+<p>Les colonnes incluent le numéro, datevKonto, importCode, type, société, nom court, remarques, actif et tous les champs d'adresse de facturation. Les valeurs d'énumération (<code>contactType</code>, <code>type</code>, <code>active</code>) sont résolues en leur représentation sous forme de chaîne <code>value</code>.</p>
+
+<h3>Dépendances injectées</h3>
+<table>
+<tr><th>Dao</th><th>Objectif</th></tr>
+<tr><td><code>EingangsrechnungDao</code></td><td>Interroger les factures entrantes/créanciers</td></tr>
+<tr><td><code>KundeDao</code></td><td>Interroger les données maîtres clients</td></tr>
+<tr><td><code>RechnungDao</code></td><td>Interroger les factures sortantes/clients</td></tr>
+</table>
+
+<h2>Historique Git</h2>
+<div class="hist"><pre>868d6abb7 2025 -> 2026
+78a38ca8f ExcelUtils.createFont et utilisé par toutes les routines Excel de création de polices.
+63081666f En-têtes de fichiers source : 2024 -> 2025.
+1b50060c3 BaseDao : renommé : get -> find, save -> insert, getList -> select, load -> select
+87aaf6a5a Travail de migration en cours... BaseDao refactoré (pas encore terminé) méthodes internes* renommées.
+e33c8b9c2 Travail de migration en cours...
+b6092df09 Copyright 2023 -> 2024
+b710c3267 WIP D.velop
+3ef41086d WIP D.velop
+be750e77e WIP D.velop
+5145a8199 WIP D.velop
+9ebb99c88 WIP D.velop
+cb2915283 WIP D.velop
+b46787d5f WIP D-velop
+2fe7d6f33 WIP D-velop
+975af1cd6 WIP D-velop
+1dee5f23f WIP D-velop
+3ec5c7354 WIP D-velop
+cb6d633f9 WIP D-velop
+eb005b878 WIP D-velop
+</pre></div>
+</body>
+</html>

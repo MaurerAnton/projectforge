@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>#1876: CSVParser.java [RU]</title>
+<style>
+body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}
+h1{border-bottom:2px solid #333;padding-bottom:.3em}
+h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}
+h3{margin-top:2em;color:#444}
+a{color:#0366d6}
+.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}
+.nav{font-size:.9em;color:#888;margin-bottom:1em}
+.lang{font-size:.85em;color:#888;float:right}
+.lang a{color:#888;text-decoration:none;padding:0 .3em}
+.lang a.active{color:#0366d6;font-weight:600;text-decoration:underline}
+.meta{font-size:.9em;margin:1em 0;color:#555}
+code{background:#f0f0f0;padding:0 .2em;font-size:.93em}
+pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}
+table{border-collapse:collapse;width:100%;margin:1em 0}
+th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}
+th{background:#f5f5f5;font-weight:600}
+.hist{font-size:.85em;color:#555}
+.warn{background:#fff3cd;border-left:3px solid #ffc107;padding:.5em 1em;margin:1em 0}
+.tip{background:#d4edda;border-left:3px solid #28a745;padding:.5em 1em;margin:1em 0}
+</style>
+</head>
+<body>
+<div class="lang"><a href="1876.html">EN</a> · <a href="1876_de.html">DE</a> · <a href="1876_ru.html" class="active">RU</a> · <a href="1876_fr.html">FR</a> · <a href="1876_es.html">ES</a></div>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Индекс</a> · <a href="file-index.html">← Индекс файлов</a> · <a href="1875.html">← Пред.</a> · <a href="1877.html">След. →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-common/src/main/java/org/projectforge/common/CSVParser.java" target="_blank" title="Просмотр исходного кода на GitHub">📄 исходник</a></div>
+<h1>#1876: <code>CSVParser.java</code></h1>
+<div class="meta"><code>projectforge-common/src/main/java/org/projectforge/common/CSVParser.java</code> Вспомогательный класс — пакет org.projectforge.common, projectforge-common/src/main/java/org/projectforge/common/CSVParser.java <span style="color:#888">342 строки · 248 кода · 57 комментариев · 37 пустых</span></div>
+<div class="c">Пользовательский парсер CSV (значения, разделённые запятыми) с архитектурой лексера/парсера, написанной вручную. Читает данные из <code>java.io.Reader</code> и токенизирует CSV-данные посимвольно, поддерживая поля в кавычках, встроенные символы новой строки внутри ячеек в кавычках, экранированные двойные кавычки (соглашение <code>""</code>), настраиваемые разделители полей, сопоставление имён столбцов заголовка и обнаружение UTF-8 BOM. Написан Каем Райнхардом и Х. Шпивоком (2005), этот код предшествует внешним библиотекам CSV и избегает их использования.</div>
+<h2>Архитектура</h2>
+<div class="c">
+<h3>Импорты</h3>
+<ul>
+<li><code>java.io.IOException</code> / <code>java.io.Reader</code> — Ввод символьного потока</li>
+<li><code>java.util.ArrayList</code>, <code>HashMap</code>, <code>List</code>, <code>Map</code> — Хранение результатов и индексация столбцов заголовка</li>
+<li><code>org.apache.commons.lang3.StringUtils</code> — Проверка строк на пустоту в сообщениях об ошибках</li>
+<li><code>org.slf4j.Logger</code> — Логирование ошибок</li>
+</ul>
+
+<h3>Архитектура парсера — лексер, написанный вручную</h3>
+<p>Вместо использования регулярных выражений или генератора парсеров, CSVParser реализует <strong>посимвольный лексер</strong> с буфером возврата. Такая конструкция отдаёт приоритет контролю над обработкой ошибок и производительности для конкретного подмножества форматирования CSV, используемого в ProjectForge.</p>
+
+<h3>Основные компоненты</h3>
+
+<h4>Перечисление Type</h4>
+<pre>enum Type { EOF, EOL, CHAR }</pre>
+<p>Типы токенов: конец файла, конец строки или символьные данные. Это управляет конечным автоматом парсера.</p>
+
+<h4>Управление символьным потоком</h4>
+<ul>
+<li><strong>Буфер возврата</strong>: Массив <code>int[]</code> из 5 элементов (<code>pushbackBuffer</code>) с отслеживанием индекса — обеспечивает опережающий просмотр и возврат без поддержки Reader'ом методов <code>mark()</code>/<code>reset()</code></li>
+<li><strong>read()</strong>: Возвращает следующий символ из буфера возврата (если есть) или из базового Reader. Отслеживает номера строк по символу <code>\n</code></li>
+<li><strong>unread(int)</strong>: Помещает символ обратно в буфер, корректируя счётчики строк/столбцов</li>
+<li><strong>nextToken()</strong>: Основной токенизатор — возвращает следующий тип (EOF, EOL, CHAR) и устанавливает <code>cval</code> для символьных токенов. Обрабатывает <code>\r\n</code> (Windows CRLF) как один токен EOL</li>
+</ul>
+
+<h4>Обработка UTF-8 BOM</h4>
+<p><code>skipBOM()</code> вызывается во время конструирования для обнаружения и пропуска метки порядка байтов UTF-8 (<code>\uFEFF</code>) в начале файла. Если BOM отсутствует, первый символ помещается обратно (unread). Это обеспечивает корректный разбор CSV-файлов, экспортированных из Microsoft Excel, который добавляет BOM для файлов UTF-8.</p>
+
+<h4>Разбор ячеек (parseCell)</h4>
+<p>Основная логика разбора CSV обрабатывает следующие случаи:</p>
+<table>
+<tr><th>Случай</th><th>Поведение</th></tr>
+<tr><td>Ячейка без кавычек</td><td>Символы накапливаются до разделителя или конца строки</td></tr>
+<tr><td>Ячейка в кавычках (<code>"..."</code>)</td><td>Символы внутри кавычек накапливаются; кавычки должны быть правильно закрыты</td></tr>
+<tr><td>Экранированная кавычка (<code>""</code>)</td><td>Две последовательные двойные кавычки внутри ячейки в кавычках представляют один литеральный символ кавычки</td></tr>
+<tr><td>Встроенный символ новой строки</td><td>Символы новой строки внутри ячеек в кавычках сохраняются (многострочные значения ячеек)</td></tr>
+<tr><td>Замыкающие пробелы</td><td>Пробелы после закрывающей кавычки пропускаются; ожидается разделитель или конец строки</td></tr>
+<tr><td>Незакрытая кавычка</td><td>Выбрасывает RuntimeException с информативным сообщением об ошибке, включающим номер строки/столбца</td></tr>
+</table>
+
+<h4>Разбор строк (parseLine)</h4>
+<p>Читает ячейки до конца строки или конца файла, собирая их в <code>List&lt;String&gt;</code>. Возвращает null в конце файла (не пустой список — вызывающие могут отличить конец файла от пустых строк).</p>
+
+<h4>Поддержка столбцов заголовка (parseHeadCols / getCell)</h4>
+<p>Для CSV-файлов со строкой заголовка <code>parseHeadCols()</code> читает первую строку и строит <code>colMap: Map&lt;String, Integer&gt;</code>, сопоставляя имена столбцов с их позиционными индексами. Последующие вызовы <code>getCell(List&lt;String&gt;, colname)</code> получают значения по имени столбца, а не по позиции. Это обеспечивает доступ к именованным столбцам, как в Excel.</p>
+
+<h3>Сообщения об ошибках</h3>
+<p>Три различных константы ошибок обеспечивают конкретную диагностику:</p>
+<pre>
+ERROR_UNEXPECTED_QUOTATIONMARK = "Неожиданный символ кавычки \" (допускается только в ячейках в кавычках)."
+ERROR_QUOTATIONMARK_MISSED_AT_END_OF_CELL = "Пропущена кавычка \" в конце ячейки."
+ERROR_DELIMITER_OR_NEW_LINE_EXPECTED_AFTER_QUOTATION_MARK = "После кавычки ожидается разделитель или новая строка."
+ERROR_UNEXPECTED_CHARACTER_AFTER_QUOTATION_MARK = "Неожиданный символ после кавычки."
+</pre>
+<p>Каждое сообщение дополняется номером строки и столбца через <code>createMessage()</code>.</p>
+
+<h3>Интеграция с CSVWriter</h3>
+<p>CSVParser использует <code>CSVWriter.DEFAULT_CSV_SEPARATOR_CHAR</code> (<code>';'</code> — точка с запятой) в качестве разделителя по умолчанию. Это европейское соглашение для CSV (Microsoft Excel в немецкой локали использует CSV с разделителем-точкой с запятой). Разделитель можно настроить через <code>setCsvSeparatorChar()</code>.</p>
+
+<h3>Ограничения дизайна</h3>
+<ul>
+<li><strong>Нет потоковой обработки</strong>: Каждый вызов <code>parseLine()</code> читает одну строку и возвращает все ячейки — подходит для файлов умеренного размера, но не для очень больших (много гигабайт) CSV</li>
+<li><strong>Фиксированный буфер возврата</strong>: Буфер возврата на 5 символов ограничивает опережающий просмотр; достаточно для шаблонов экранирования CSV, но не для общего разбора</li>
+<li><strong>Нет преобразования типов</strong>: Все значения возвращаются как строки; вызывающие должны сами разбирать числа, даты и т.д.</li>
+<li><strong>Разделитель по умолчанию — точка с запятой</strong>: Используется европейское соглашение CSV; необходимо явно изменить для файлов, разделённых запятыми</li>
+<li><strong>Обработка ошибок</strong>: Используются RuntimeExceptions вместо проверяемых исключений или восстановления после ошибок — некорректный ввод останавливает разбор</li>
+</ul>
+
+<div class="tip">Эта пользовательская реализация была написана в 2005 году, задолго до того, как Apache Commons CSV (выпущен в 2014) или OpenCSV стали широко доступны. В то время в JDK не было встроенной поддержки CSV. Код поддерживался с постепенными улучшениями: обработка BOM (коммит 2024 года), поддержка многострочных полей в кавычках и исправление опечаток с помощью codespell.</div>
+</div>
+<h2>История Git</h2><div class="hist"><pre>868d6abb7 2025 -> 2026
+161d71602 WIP: CSVParser: символы BOM.
+dfb2378df WIP: CSVParser: многострочные поля и т.д.
+63081666f Заголовки исходных файлов: 2024 -> 2025.
+a73905c14 Исправление опечаток в каталогах projectforge*/ Найдено с помощью codespell
+a72903e36 *.java, *.kt: StringBuffer -> StringBuilder.
+b6092df09 Авторские права 2023 -> 2024
+ab45d51fa Авторские права 2001-2022 -> 2001-2023.</pre></div>
+</body>
+</html>

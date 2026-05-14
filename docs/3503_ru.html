@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>3503: history.js [RU]</title>
+<style>
+body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}
+h1{border-bottom:2px solid #333;padding-bottom:.3em}
+h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}
+h3{margin-top:1.5em;color:#444;font-size:1em}
+a{color:#0366d6}
+.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}
+.nav{font-size:.9em;color:#888;margin-bottom:1em}
+.lang{font-size:.85em;color:#888;float:right}
+.lang a{color:#888;text-decoration:none;padding:0 .3em}
+.lang a.active{color:#0366d6;font-weight:600;text-decoration:underline}
+.meta{font-size:.9em;margin:1em 0;color:#555}
+code{background:#f0f0f0;padding:0 .2em;font-size:.93em}
+pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}
+table{border-collapse:collapse;width:100%;margin:1em 0}
+th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}
+th{background:#f5f5f5;font-weight:600}
+.hist{font-size:.85em;color:#555}
+pre.diff{background:#fff;font-size:.82em;max-height:300px;overflow-y:auto}
+</style>
+</head>
+<body>
+<div class="lang"><a href="3503.html">EN</a> · <a href="3503_de.html">DE</a> · <a href="3503_ru.html" class="active">RU</a> · <a href="3503_fr.html">FR</a> · <a href="3503_es.html">ES</a></div>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Индекс</a> · <a href="file-index.html">← Индекс файлов</a> · <a href="2721.html">← Предыдущий</a> · <a href="248.html">Следующий →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-wicket/src/main/webapp/imagecropper/history/history.js" target="_blank" title="Просмотреть исходный код на GitHub">📄 исходник</a></div>
+<h1>#3503: <code>history.js</code></h1>
+<div class="meta"><code>projectforge-wicket/src/main/webapp/imagecropper/history/history.js</code> JavaScript-модуль, <code>projectforge-wicket/src/main/webapp/imagecropper/history/history.js</code> <span style="color:#888">662 строки · 498 кода · 86 комментариев · 78 пустых</span></div>
+<div class="c"><strong>Назначение:</strong> Ресурс веб-приложения Wicket: history.js. history.js является частью приложения для управления проектами с открытым исходным кодом ProjectForge.</div>
+<h2>Исходный код (первые 100 строк)</h2>
+<pre>BrowserHistoryUtils = {
+    addEvent: function(elm, evType, fn, useCapture) {
+        useCapture = useCapture || false;
+        if (elm.addEventListener) {
+            elm.addEventListener(evType, fn, useCapture);
+            return true;
+        }
+        else if (elm.attachEvent) {
+            var r = elm.attachEvent('on' + evType, fn);
+            return r;
+        }
+        else {
+            elm['on' + evType] = fn;
+        }
+    }
+}
+
+BrowserHistory = (function() {
+    // тип браузера
+    var browser = {
+        ie: false, 
+        firefox: false, 
+        safari: false, 
+        opera: false, 
+        version: -1
+    };
+
+    // если setDefaultURL был вызван, это первая подсказка,
+    // что SWF готов и слушает
+    //var swfReady = false;
+
+    // URL, который мы отправим SWF, когда он будет готов
+    //var pendingURL = '';
+
+    // URL состояния приложения по умолчанию, используемый при отсутствии идентификатора фрагмента
+    var defaultHash = '';
+
+    // Последний известный URL состояния приложения
+    var currentHref = document.location.href;
+
+    // Начальный URL (используется только в IE)
+    var initialHref = document.location.href;
+
+    // Начальный URL (используется только в IE)
+    var initialHash = document.location.hash;
+
+    // Префикс источника фрейма истории (используется только в IE)
+    var historyFrameSourcePrefix = 'history/historyFrame.html?';
+
+    // Обслуживание истории (используется только в Safari)
+    var currentHistoryLength = -1;
+
+    var historyHash = [];
+
+    var initialState = createState(initialHref, initialHref + '#' + initialHash, initialHash);
+
+    var backStack = [];
+    var forwardStack = [];
+
+    var currentObjectId = null;
+
+    //Определение пользовательского агента
+    var useragent = navigator.userAgent.toLowerCase();
+
+    if (useragent.indexOf("opera") != -1) {
+        browser.opera = true;
+    } else if (useragent.indexOf("msie") != -1) {
+        browser.ie = true;
+        browser.version = parseFloat(useragent.substring(useragent.indexOf('msie') + 4));
+    } else if (useragent.indexOf("safari") != -1) {
+        browser.safari = true;
+        browser.version = parseFloat(useragent.substring(useragent.indexOf('safari') + 7));
+    } else if (useragent.indexOf("gecko") != -1) {
+        browser.firefox = true;
+    }
+
+    if (browser.ie == true &amp;&amp; browser.version == 7) {
+        window["_ie_firstload"] = false;
+    }
+
+    // Функции доступа для получения конкретных элементов страницы.
+    function getHistoryFrame()
+    {
+        return document.getElementById('ie_historyFrame');
+    }
+
+    function getAnchorElement()
+    {
+        return document.getElementById('firefox_anchorDiv');
+    }
+
+    function getFormElement()
+    {
+        return document.getElementById('safari_formDiv');
+    }
+
+    function getRememberElement()
+    {
+        return document.getElementById("safari_remember_field");
+    }
+</pre>
+<h2>История Git</h2>
+<div class="hist">
+<pre>a73905c14 Исправление опечаток в каталогах projectforge*/ Найдено с помощью codespell См. c3b0602a893
+9ebb88522 Начальный коммит</pre>
+<h3>a73905c14</h3><div class="c"><strong>Исправление опечаток в каталогах projectforge*/ Найдено с помощью codespell См. c3b0602a893</strong><pre class="diff">a73905c1490c145f5212a29b752628e259cd2d58
+diff --git a/projectforge-wicket/src/main/webapp/imagecropper/history/history.js b/projectforge-wicket/src/main/webapp/imagecropper/history/history.js
+index 8ba2d519e..c85cede7b 100644
+--- a/projectforge-wicket/src/main/webapp/imagecropper/history/history.js
++++ b/projectforge-wicket/src/main/webapp/imagecropper/history/history.js
+@@ -287,7 +287,7 @@ BrowserHistory = (function() {
+                 //Это происходит, когда пользователь перешёл по определённому URL
+                 //внутри приложения и не использовал кнопки "назад"/"вперёд" браузера
+                 //Похоже, в IE есть ошибка, из-за которой он перестаёт обновлять URL,
+-                //показываемый конечному пользователю, но программно он
++                //показываемый конечному пользователю, но программно он
+                 //кажется правильным. Выполните полную перезагрузку приложения, чтобы обойти
+                 //эту проблему.
+                 if (browser.version &lt; 7) {
+</pre></div><h3>9ebb88522</h3><div class="c"><strong>Начальный коммит</strong><pre class="diff"></pre></div>
+</div>
+</body>
+</html>

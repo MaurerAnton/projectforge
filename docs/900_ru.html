@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<title>#900: AuftragsPositionDO.kt [RU]</title>
+<style>
+body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}
+h1{border-bottom:2px solid #333;padding-bottom:.3em}
+h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}
+h3{margin-top:2em;color:#444}
+a{color:#0366d6}
+.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}
+.nav{font-size:.9em;color:#888;margin-bottom:1em}
+.meta{font-size:.9em;margin:1em 0;color:#555}
+code{background:#f0f0f0;padding:0 .2em;font-size:.93em}
+pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}
+table{border-collapse:collapse;width:100%;margin:1em 0}
+th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}
+th{background:#f5f5f5;font-weight:600}
+.hist{font-size:.85em;color:#555}
+</style>
+</head>
+<body>
+
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Индекс</a> · <a href="file-index.html">← Индекс файлов</a> · <a href="899.html">← Предыдущий</a> · <a href="901.html">Следующий →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/kotlin/org/projectforge/business/fibu/AuftragsPositionDO.kt" target="_blank" title="Просмотреть исходник на GitHub">📄 исходник</a></div>
+
+<h1>#900: <code>AuftragsPositionDO.kt</code></h1>
+
+<div class="meta"><code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/AuftragsPositionDO.kt</code> 
+  <strong>Тип:</strong> JPA-сущность (индексировано Hibernate Search) &middot;
+  <strong>Назначение:</strong> Представляет отдельную позицию (строку) в заказе или предложении &middot;
+  <strong>Пакет:</strong> <code>org.projectforge.business.fibu</code><br>
+  <strong>Путь к исходнику:</strong> <code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/AuftragsPositionDO.kt</code>
+ <span style="color:#888">216 строк · 139 кода · 50 комментариев · 27 пустых</span></div>
+
+<div class="c">
+  Основная доменная сущность, представляющая строку в <code>AuftragDO</code> (заказ/предложение). Каждый заказ может содержать несколько позиций, однозначно идентифицируемых по <code>(auftrag_fk, number)</code>. Отслеживает финансовые данные (нетто-сумма, человеко-дни), статус, тип оплаты, классификацию (<code>art</code>) и флаги выставления счетов. Реализует <code>DisplayNameCapable</code> и полностью индексируется Hibernate Search для полнотекстового поиска.
+</div>
+
+<h2>Архитектура и дизайн</h2>
+
+<h3>Метаданные сущности</h3>
+<table>
+  <tr><th>Аннотация</th><th>Значение/Детали</th></tr>
+  <tr><td><code>@Entity</code></td><td>JPA-сущность</td></tr>
+  <tr><td><code>@Indexed</code></td><td>Полнотекстовый индекс Hibernate Search</td></tr>
+  <tr><td><code>@TypeBinding</code></td><td><code>HibernateSearchAuftragsPositionTypeBinder</code> — пользовательский связыватель для поиска по позициям</td></tr>
+  <tr><td><code>@ClassBridge(name = "position")</code></td><td>Пользовательский мост класса для составного поля поиска</td></tr>
+  <tr><td><code>@Table</code></td><td><code>t_fibu_auftrag_position</code> с уникальным ограничением <code>(auftrag_fk, number)</code></td></tr>
+</table>
+
+<h3>Индексы базы данных</h3>
+<table>
+  <tr><th>Имя индекса</th><th>Колонка</th></tr>
+  <tr><td><code>idx_fk_t_fibu_auftrag_position_auftrag_fk</code></td><td><code>auftrag_fk</code></td></tr>
+  <tr><td><code>idx_fk_t_fibu_auftrag_position_task_fk</code></td><td><code>task_fk</code></td></tr>
+</table>
+
+<h3>Именованные запросы</h3>
+<p><code>FIND_BY_ID = "AuftragPositionDO_FindById"</code> — простой поиск по первичному ключу.</p>
+
+<h3>Поля</h3>
+
+<table>
+  <tr><th>Поле</th><th>Колонка БД</th><th>Тип</th><th>Описание</th></tr>
+  <tr><td><code>number</code></td><td><code>number</code> (not null)</td><td><code>Short</code></td><td>Номер позиции в заказе (например, 1, 2, 3…)</td></tr>
+  <tr><td><code>auftrag</code></td><td><code>auftrag_fk</code> (FK, not null)</td><td><code>AuftragDO</code></td><td>Родительский заказ — <code>@JsonIgnore</code> для предотвращения циклической сериализации; <code>@JsonSerialize(IdOnlySerializer)</code> на веб-уровне</td></tr>
+  <tr><td><code>task</code></td><td><code>task_fk</code> (FK, nullable)</td><td><code>TaskDO</code></td><td>Связанная задача проекта, сериализуется только как ID</td></tr>
+  <tr><td><code>art</code></td><td><code>art</code> (VARCHAR 30)</td><td><code>AuftragsPositionsArt</code> enum</td><td>Классификация: <code>CHANGE_REQUEST</code>, <code>DAUERNDE_LEISTUNG</code>, <code>WARTUNG</code>, <code>NEUENTWICKLUNG</code></td></tr>
+  <tr><td><code>paymentType</code></td><td><code>paymentType</code> (VARCHAR 30)</td><td><code>AuftragsPositionsPaymentType</code> enum</td><td>Модель оплаты: <code>FESTPREISPAKET</code>, <code>TIME_AND_MATERIALS</code>, <code>PAUSCHALE</code></td></tr>
+  <tr><td><code>forecastType</code></td><td><code>forecast_type</code> (VARCHAR 20)</td><td><code>AuftragForecastType</code> enum</td><td>Переопределение типа прогноза родительского заказа (текущий/следующий месяц)</td></tr>
+  <tr><td><code>status</code></td><td><code>status</code> (VARCHAR 30)</td><td><code>AuftragsStatus</code> enum</td><td>Текущий статус (например, <code>ABGESCHLOSSEN</code>, <code>IN_ERSTELLUNG</code>)</td></tr>
+  <tr><td><code>titel</code></td><td><code>titel</code> (VARCHAR 255)</td><td><code>String</code></td><td>Название позиции — <code>@FullTextField</code> для Hibernate Search</td></tr>
+  <tr><td><code>bemerkung</code></td><td><code>bemerkung</code> (4000)</td><td><code>String</code></td><td>Комментарий в свободной форме — <code>@FullTextField</code></td></tr>
+  <tr><td><code>nettoSumme</code></td><td><code>netto_summe</code> (12,2)</td><td><code>BigDecimal</code></td><td>Нетто-сумма для этой позиции — <code>@GenericField</code></td></tr>
+  <tr><td><code>personDays</code></td><td><code>person_days</code> (12,2)</td><td><code>BigDecimal</code></td><td>Назначенные человеко-дни; может отличаться от рассчитанной нетто-суммы</td></tr>
+  <tr><td><code>vollstaendigFakturiert</code></td><td><code>vollstaendig_fakturiert</code> (not null)</td><td><code>Boolean</code></td><td>Устанавливается вручную финансовым отделом — только для завершённых позиций</td></tr>
+  <tr><td><code>periodOfPerformanceType</code></td><td><code>period_of_performance_type</code> (VARCHAR 10)</td><td><code>PeriodOfPerformanceType</code> enum</td><td>По умолчанию <code>SEEABOVE</code>; <code>OWN</code>, если позиция имеет собственный период выполнения</td></tr>
+  <tr><td><code>periodOfPerformanceBegin</code></td><td><code>period_of_performance_begin</code></td><td><code>LocalDate</code></td><td>Начало периода выполнения</td></tr>
+  <tr><td><code>periodOfPerformanceEnd</code></td><td><code>period_of_performance_end</code></td><td><code>LocalDate</code></td><td>Окончание периода выполнения</td></tr>
+  <tr><td><code>modeOfPaymentType</code></td><td><code>mode_of_payment_type</code> (VARCHAR 13)</td><td><code>ModeOfPaymentType</code> enum</td><td>Способ оплаты</td></tr>
+</table>
+
+<h3>Вычисляемые свойства</h3>
+<ul>
+  <li><code>displayName</code> — формат <code>"{order.nummer}.{number}"</code>, например "12345.2"</li>
+  <li><code>formattedNumber</code> — то же, что <code>displayName</code>: <code>"{auftrag?.nummer}.{number}"</code></li>
+  <li><code>isEmpty</code> — возвращает <code>true</code>, если название пустое И нетто-сумма равна нулю/null И комментарий пустой</li>
+  <li><code>hasOwnPeriodOfPerformance()</code> — возвращает <code>true</code>, если <code>periodOfPerformanceType == PeriodOfPerformanceType.OWN</code></li>
+</ul>
+
+<h3>Валидация</h3>
+<p><code>checkVollstaendigFakturiert()</code> — выбрасывает <code>UserException</code>, если <code>vollstaendigFakturiert</code> установлено в <code>true</code>, но статус не <code>ABGESCHLOSSEN</code> (только завершённые позиции могут быть помечены как полностью выставленные).</p>
+
+<h3>Равенство и хеширование</h3>
+<p>Равенство (и хеш) основано на <code>number</code> и <code>auftrag.id</code> — две позиции считаются равными, если у них одинаковый номер позиции в одном родительском заказе.</p>
+
+<h3>Конфигурация Hibernate Search</h3>
+<p>Сущность использует <code>@TypeBinding</code> с <code>HibernateSearchAuftragsPositionTypeBinder</code> и пользовательский <code>@ClassBridge(name = "position")</code>. Несколько полей имеют <code>@FullTextField</code> (<code>art</code>, <code>forecastType</code>, <code>status</code>, <code>titel</code>, <code>bemerkung</code>) и <code>@GenericField</code> (<code>nettoSumme</code>) для индексации Hibernate Search. Мост класса обеспечивает составной поиск по полям, связанным с позицией.</p>
+
+<h2>Связанные классы</h2>
+<ul>
+  <li><strong>Родитель:</strong> <code>AuftragDO</code> — заказ, содержащий эту позицию</li>
+  <li><strong>Перечисления:</strong> <code>AuftragsPositionsArt</code>, <code>AuftragsPositionsPaymentType</code>, <code>AuftragsStatus</code>, <code>AuftragForecastType</code>, <code>PeriodOfPerformanceType</code>, <code>ModeOfPaymentType</code></li>
+  <li><strong>Кэш:</strong> <code>AuftragsCacheService</code> — загружает позиции через кортежные запросы для производительности</li>
+  <li><strong>Поиск:</strong> <code>HibernateSearchAuftragsPositionTypeBinder</code> — пользовательская привязка поиска</li>
+  <li><strong>JSON:</strong> <code>IdOnlySerializer</code> — сериализует FK-ссылки только как ID</li>
+</ul>
+
+<h2>История Git</h2>
+<div class="hist"><pre>
+868d6abb7 2025 -> 2026
+49b1d6b8d Прогноз и книга заказов: forecast-Type для заказов/позиций добавлен (текущий месяц или следующий месяц)
+63081666f Заголовки исходных файлов: 2024 -> 2025.
+0237d5eba Рефакторинг JSON-сериализации: введены IdOnlySerializer и IdsOnlySerializer.
+a35971f85 Решены проблемы из последнего pull request. Большое спасибо luzpaz.
+56e9a4c44 WIP: хранение книги заказов.
+c193e8288 Ical4j: миграционные материалы... (все тесты OK)
+ae2c04ee0 Миграционные материалы в процессе... (все тесты всех пакетов: OK).
+3f25c773a Миграционные материалы в процессе...
+184f154a5 Миграционные материалы в процессе...
+f31e8064e Миграционные материалы в процессе...
+87dd5b87c Рефакторинг AuftragsCache, миграционные материалы... (все тесты OK)
+6f7e0fbc7 Миграционные материалы в процессе...
+4c04cfd65 MAJOR-CHANGE! Миграция целочисленных id на Long id (включая fk и т.д.)
+c4950ae12 Миграционные материалы в процессе...
+f5c09f87f Миграционные материалы в процессе...
+c04fb0d51 Миграционные материалы в процессе...
+06828f490 Миграционные материалы в процессе...
+b6092df09 Авторские права 2023 -> 2024
+ab45d51fa Авторские права 2001-2022 -> 2001-2023.
+9a65e1bc0 AuftragDO: рефакторинг статистики (ещё не выставлено, к выставлению, выставлено и т.д.)
+ed17a2353 ForecastExport теперь показывает больше счетов (также счета без заказов)
+5f7ef41b8 Авторские права 2021 -> 2022
+c0f2b9de0 Функциональность тенантов удалена везде (не тестировалось).
+db3b02da7 UserException перемещён из пакета business в common (затронут AccesssException). UserException теперь будет возвращаться как Toast для Rest клиентов по умолчанию. FileSizeChecker WIP.
+ceb63e8a1 Заголовок исходного кода: (C) 2001-2021.
+d89920003 Добавлен фильтр книги заказов "к выставлению".
+ca0d5470e Удалены DateBridge из DO.
+a6a7aece4 Оптимизация импортов
+78b436d9e Замена экземпляров java.util.date и java.sql.Date на java.time.LocalDate
+b78b870bd ShortDisplayNameCapable -> DisplayNameCapable.
+7c79f1922 Авторские права в заголовке исходника -> 2020.
+2fa37a281 AuftragsPositionDO.formattedNumber упрощён.
+8241700f0 ShortDisplayNameCapable преобразован в Kotlin. Классы DO, реализующие ShortDisplayNameCapable, рефакторизованы.
+e7e42d821 AuftragsPositionDO.titel как индекс hibernate search.
+ff4c3dcf3 исправление макета позиции заказа
+19b97fcc3 DateBridge: encoding = EncodingType.STRING для всех DateBridge во всех DO.
+8675a1dbe Обнаружена серьёзная проблема производительности: объявлены все Kotlin JPA сущности и их свойства как open. Ленивая загрузка не поддерживалась Hibernate и приводила к тысячам JPA запросов...
+d36fe6ad9 Большой WIP: рефакторинг
+39cdd224c Hibernate search: DateBridge...
+985286296 hibernate 5.4.3 -> 5.4.4, повторное введение ehcache.
+12c7143a5 AuftragRest: Добавлены элементы EditPage
+97d00031d Auftrag*DO, AddressDO, *Rechnung*DO: улучшена производительность (теперь используется LAZY вместо EAGER загрузки).
+2ed09316e AuftragsPositionDO.kt: устранение предупреждений
+ca013f56b AuftragsPositionDO.kt: все поля должны быть nullable (для целей десериализации): vollstaendigFakturiert и periodOfPerformanceType.
+05244ff19 Обновлены или созданы авторские права всех Kotlin файлов-заголовков.
+6dc8997a3 AuftragsPositionDO.java -> AuftragsPositionDO.kt
+</pre></div>
+
+</body>
+</html>

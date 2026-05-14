@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>#1877: CSVWriter.java [RU]</title>
+<style>
+body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}
+h1{border-bottom:2px solid #333;padding-bottom:.3em}
+h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}
+h3{margin-top:2em;color:#444}
+a{color:#0366d6}
+.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}
+.nav{font-size:.9em;color:#888;margin-bottom:1em}
+.lang{font-size:.85em;color:#888;float:right}
+.lang a{color:#888;text-decoration:none;padding:0 .3em}
+.lang a.active{color:#0366d6;font-weight:600;text-decoration:underline}
+.meta{font-size:.9em;margin:1em 0;color:#555}
+code{background:#f0f0f0;padding:0 .2em;font-size:.93em}
+pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}
+table{border-collapse:collapse;width:100%;margin:1em 0}
+th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}
+th{background:#f5f5f5;font-weight:600}
+.hist{font-size:.85em;color:#555}
+.warn{background:#fff3cd;border-left:3px solid #ffc107;padding:.5em 1em;margin:1em 0}
+.tip{background:#d4edda;border-left:3px solid #28a745;padding:.5em 1em;margin:1em 0}
+</style>
+</head>
+<body>
+<div class="lang"><a href="1877.html">EN</a> · <a href="1877_de.html">DE</a> · <a href="1877_ru.html" class="active">RU</a> · <a href="1877_fr.html">FR</a> · <a href="1877_es.html">ES</a></div>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Индекс</a> · <a href="file-index.html">← Индекс файлов</a> · <a href="1876.html">← Назад</a> · <a href="1878.html">Вперёд →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-common/src/main/java/org/projectforge/common/CSVWriter.java" target="_blank" title="Просмотреть исходник на GitHub">📄 исходник</a></div>
+<h1>#1877: <code>CSVWriter.java</code></h1>
+<div class="meta"><code>projectforge-common/src/main/java/org/projectforge/common/CSVWriter.java</code> Вспомогательный класс — пакет org.projectforge.common, projectforge-common/src/main/java/org/projectforge/common/CSVWriter.java <span style="color:#888">176 строк · 100 кода · 54 комментария · 22 пустых</span></div>
+<div class="c">Писатель CSV-вывода, который форматирует данные в текстовые файлы с разделителем-точкой с запятой. Компаньон для CSVParser — предоставляет плавный (fluent) API построителя для записи строк CSV с правильным экранированием. Поддерживает типизированные перегрузки <code>write()</code> для строк (с экранированием двойных кавычек), целых чисел long, дат (формат ISO 8601) и общих объектов. Настраиваемый символ-разделитель, окончание строки и формат даты. Используется для экспорта данных ProjectForge (списки адресов, экспорт табелей, финансовые отчёты).</div>
+<h2>Архитектура</h2>
+<div class="c">
+<h3>Импорты</h3>
+<ul>
+<li><code>java.io.PrintWriter</code> / <code>java.io.Writer</code> — Текстовый вывод</li>
+<li><code>java.text.DateFormat</code> / <code>SimpleDateFormat</code> — Форматирование дат для CSV-колонок с датами</li>
+<li><code>java.util.Date</code> — Тип значения даты</li>
+<li><code>java.util.TimeZone</code> — Часовой пояс UTC для форматирования дат</li>
+</ul>
+
+<h3>Конфигурация</h3>
+<table>
+<tr><th>Настройка</th><th>По умолчанию</th><th>Сеттер</th></tr>
+<tr><td>Разделитель CSV</td><td><code>';'</code> (точка с запятой — европейская конвенция)</td><td><code>setCsvSeparator(char)</code></td></tr>
+<tr><td>Окончание строки</td><td><code>"\n"</code> (перевод строки Unix)</td><td><code>setCr(String)</code></td></tr>
+<tr><td>Формат даты</td><td><code>"yyyy-MM-dd HH:mm:ss.SSS"</code></td><td><code>setDateFormat(DateFormat)</code></td></tr>
+<tr><td>Часовой пояс даты</td><td>UTC</td><td>Жёстко задан в конструкторе</td></tr>
+</table>
+
+<h3>Плавный (Fluent) API построителя</h3>
+<p>Все методы <code>write()</code> возвращают <code>this</code> (экземпляр CSVWriter), что позволяет выстраивать цепочки вызовов:</p>
+<pre>csvWriter.write("Имя").write("Возраст").write(42L).writeEndOfLine();</pre>
+
+<h3>Типизированные перегрузки Write</h3>
+
+<table>
+<tr><th>Метод</th><th>Форматирование</th><th>Экранирование</th></tr>
+<tr><td><code>write(String s)</code></td><td>Исходная строка с экранированием <code>"</code> в <code>""</code> (удвоение)</td><td>Всегда обёрнуто в <code>"..."</code> — следует правилам экранирования RFC 4180</td></tr>
+<tr><td><code>write(long value)</code></td><td>Прямой числовой вывод через <code>PrintWriter.print()</code></td><td>Нет — числа без кавычек</td></tr>
+<tr><td><code>write(Date value)</code></td><td>Форматируется через <code>dateFormat.format()</code> в UTC</td><td>Обёрнуто в кавычки — даты могут содержать пробелы или спецсимволы</td></tr>
+<tr><td><code>write(Object value)</code></td><td>Запасной вариант: <code>String.valueOf(value)</code></td><td>Нет — общие объекты без кавычек (рискованно для объектов с запятыми/кавычками)</td></tr>
+</table>
+
+<h3>Алгоритм экранирования (запись строк)</h3>
+<p>Метод <code>write(String)</code> реализует правильное экранирование CSV согласно RFC 4180:</p>
+<ol>
+<li>Выводит разделитель, если это не первая запись в строке (управляется <code>writeSeparator()</code> с флагом <code>firstEntry</code>)</li>
+<li>Выводит открывающую двойную кавычку (<code>"</code>)</li>
+<li>Перебирает каждый символ строки</li>
+<li>Если символ — двойная кавычка (<code>"</code>), выводит её дважды (<code>""</code>) — стандартная escape-последовательность CSV</li>
+<li>Выводит все остальные символы как есть</li>
+<li>Выводит закрывающую двойную кавычку (<code>"</code>)</li>
+</ol>
+
+<h3>Запись строк</h3>
+<ul>
+<li><code>writeLine(Object[] values)</code> — Записывает все значения из массива, затем вызывает <code>writeEndOfLine()</code></li>
+<li><code>writeEndOfLine()</code> — Выводит настроенное окончание строки (по умолчанию <code>\n</code>) и сбрасывает <code>firstEntry = true</code></li>
+</ul>
+
+<h3>Логика разделителя (writeSeparator)</h3>
+<p>Булев флаг <code>firstEntry</code> отслеживает, находимся ли мы в начале строки:
+<ul>
+<li>Если <code>firstEntry == true</code>: устанавливается в false (первая ячейка — разделитель не нужен)</li>
+<li>Если <code>firstEntry == false</code>: перед значением ячейки выводится символ-разделитель</li>
+</ul>
+Это классический паттерн отслеживания состояния для вывода с разделителями.</p>
+
+<h3>Интеграция с CSVParser</h3>
+<p>CSVWriter определяет <code>DEFAULT_CSV_SEPARATOR_CHAR = ';'</code> как публичную константу, на которую ссылается CSVParser для обеспечения согласованного разделителя по умолчанию между читателем и писателем.</p>
+
+<h3>Сравнение с современными CSV-библиотеками</h3>
+<p>Эта реализация намеренно минималистична по сравнению с Apache Commons CSV или OpenCSV:
+<ul>
+<li>Нет маппинга заголовков (это обрабатывается <code>CSVParser.parseHeadCols()</code>)</li>
+<li>Нет автоматического преобразования типов (вызывающие форматируют значения перед записью)</li>
+<li>Нет оптимизаций для потоковой передачи/больших файлов (запись напрямую в Writer)</li>
+<li>Нет поддержки различных стратегий экранирования (все строки экранируются; числа — никогда)</li>
+</ul>
+Простота отражает его происхождение как специализированного инструмента для экспорта данных ProjectForge, а не универсальной CSV-библиотеки.</p>
+
+<div class="warn">Метод <code>write(Object)</code> НЕ экранирует вывод — он вызывает <code>String.valueOf(value)</code> и записывает напрямую. Если <code>toString()</code> объекта возвращает строку, содержащую запятые, точки с запятой или переводы строк, результирующий CSV будет повреждён. Это приемлемо, поскольку ожидается, что вызывающие будут использовать типизированные перегрузки.</div>
+
+<div class="tip">Вывод дат использует <strong>часовой пояс UTC</strong> — даты нормализуются к UTC перед форматированием. Это осознанный выбор для обмена данными: он устраняет неоднозначность часовых поясов при экспорте. Формат <code>"yyyy-MM-dd HH:mm:ss.SSS"</code> похож на ISO 8601, но использует пробел в качестве разделителя вместо 'T'.</div>
+</div>
+<h2>История Git</h2><div class="hist"><pre>868d6abb7 2025 -> 2026
+63081666f Заголовки исходных файлов: 2024 -> 2025.
+a73905c14 Исправление опечаток в директориях projectforge*/ Найдено через codespell
+b6092df09 Авторские права 2023 -> 2024
+ab45d51fa Авторские права 2001-2022 -> 2001-2023.
+5f7ef41b8 Авторские права 2021 -> 2022
+ceb63e8a1 Заголовок исходного кода: (C) 2001-2021.
+7c79f1922 Авторские права в заголовке исходника -> 2020.</pre></div>
+</body>
+</html>

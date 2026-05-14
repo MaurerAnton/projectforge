@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>#986: DatevImportService.kt [RU]</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:2em;color:#444}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}</style>
+</head>
+<body>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Индекс</a> · <a href="file-index.html">← Индекс файлов</a> · <a href="985.html">← Назад</a> · <a href="987.html">Вперёд →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/kotlin/org/projectforge/business/fibu/datev/DatevImportService.kt" target="_blank" title="Просмотреть исходник на GitHub">📄 исходник</a></div>
+
+<h1>#986: <code>DatevImportService.kt</code></h1>
+
+<div class="meta"><code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/datev/DatevImportService.kt</code> 
+  <strong>Тип:</strong> Spring Service<br>
+  <strong>Пакет:</strong> <code>org.projectforge.business.fibu.datev</code><br>
+  <strong>Фактический путь:</strong> <code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/datev/DatevImportService.kt</code><br>
+  <strong>Примечание:</strong> Файл <strong>не</strong> существует по запрошенному пути (<code>.../excelimport/...</code>). Он находится в подпакете <code>datev</code>. Документация ниже отражает фактический исходный код.
+ <span style="color:#888">273 строки · 180 кода · 69 комментариев · 24 пустых</span></div>
+
+<div class="c">
+  <p><strong>Сервис оркестрации</strong> для импорта Excel-файлов в формате DATEV. Координирует конвейер импорта как для <strong>Kontenplan</strong> (плана счетов), так и для <strong>Buchungssätze</strong> (бухгалтерских записей). Управляет жизненным циклом импорта: разбор (импорт), проверка (согласование) и сохранение (фиксация). Все операции требуют права пользователя <code>FIBU_DATEV_IMPORT</code>.</p>
+</div>
+
+<h2>Архитектура</h2>
+
+<h3>Зависимости</h3>
+<table>
+  <tr><th>Зависимость</th><th>Роль</th></tr>
+  <tr><td><code>PfPersistenceService</code></td><td>Управление контекстом персистентности</td></tr>
+  <tr><td><code>AccessChecker</code></td><td>Проверка прав пользователя</td></tr>
+  <tr><td><code>KontoDao</code></td><td>Фиксация записей плана счетов; разрешение номеров счетов</td></tr>
+  <tr><td><code>Kost1Dao</code></td><td>Передаётся в <code>BuchungssatzExcelImporter</code></td></tr>
+  <tr><td><code>Kost2Dao</code></td><td>Передаётся в <code>BuchungssatzExcelImporter</code></td></tr>
+  <tr><td><code>BuchungssatzDao</code></td><td>Фиксация записей бухгалтерских проводок; поиск существующих записей</td></tr>
+</table>
+
+<h2>Жизненный цикл импорта</h2>
+
+<h3>Фаза 1: Импорт (разбор Excel)</h3>
+<table>
+  <tr><th>Метод</th><th>Входные данные</th><th>Результат</th></tr>
+  <tr><td><code>importKontenplan(inputStream, filename)</code></td><td>Excel InputStream</td><td><code>ImportStorage&lt;KontoDO&gt;</code></td></tr>
+  <tr><td><code>importBuchungsdaten(inputStream, filename)</code></td><td>Excel InputStream</td><td><code>ImportStorage&lt;BuchungssatzDO&gt;</code></td></tr>
+</table>
+<p>Оба метода открывают <code>ExcelWorkbook</code> из входного потока, создают <code>ImportStorage</code> с конфигурацией логирования, делегируют выполнение соответствующему классу импортёра (<code>KontenplanExcelImporter</code> / <code>BuchungssatzExcelImporter</code>) и возвращают заполненное хранилище.</p>
+
+<h3>Фаза 2: Согласование (проверка и сравнение)</h3>
+<table>
+  <tr><th>Метод</th><th>Описание</th></tr>
+  <tr><td><code>reconcile(storage, sheetName)</code></td><td>Направляет в <code>reconcileKontenplan()</code> или <code>reconcileBuchungsdaten()</code> в зависимости от типа хранилища. Устанавливает <code>numberOfCommittedElements</code> в -1.</td></tr>
+</table>
+<p>Согласование сопоставляет импортированные элементы с существующими записями в базе данных:</p>
+<ul>
+  <li><strong>Kontenplan:</strong> ищет каждый импортированный <code>KontoDO</code> по номеру счета. Найденные записи сохраняются как <code>oldValue</code> для элемента импорта, и их временная метка <code>created</code> копируется в импорт (необходимо для BaseDao для определения вставки или обновления).</li>
+  <li><strong>Buchungssätze:</strong> ищет по (<code>year</code>, <code>month</code>, <code>satznr</code>) с помощью <code>buchungssatzDao.getBuchungssatz()</code>.</li>
+</ul>
+
+<h3>Фаза 3: Фиксация (сохранение)</h3>
+<table>
+  <tr><th>Метод</th><th>Описание</th></tr>
+  <tr><td><code>commit(storage, sheetName)</code></td><td>Требует статуса <code>RECONCILED</code>. Направляет в <code>commitKontenplan()</code> или <code>commitBuchungsdaten()</code>. Устанавливает статус <code>IMPORTED</code>.</td></tr>
+</table>
+<p>Фиксация собирает выбранные элементы, устанавливает идентификатор базы данных из <code>oldValue</code>, если запись уже существует, и выполняет массовую вставку через DAO блоками по 50.</p>
+
+<h2>Перечисление типов импорта</h2>
+<p><code>DatevImportService.Type</code>: <code>KONTENPLAN</code>, <code>BUCHUNGSSAETZE</code>. Используется как дискриминатор в <code>ImportStorage</code>.</p>
+
+<h2>Свойства для сравнения</h2>
+<table>
+  <tr><th>Константа</th><th>Свойства</th></tr>
+  <tr><td><code>KONTO_DIFF_PROPERTIES</code></td><td><code>nummer</code>, <code>bezeichnung</code></td></tr>
+  <tr><td><code>BUCHUNGSSATZ_DIFF_PROPERTIES</code></td><td><code>satznr</code>, <code>betrag</code>, <code>sh</code>, <code>konto</code>, <code>kost2</code>, <code>menge</code>, <code>beleg</code>, <code>datum</code>, <code>gegenKonto</code>, <code>text</code>, <code>kost1</code>, <code>comment</code></td></tr>
+</table>
+
+<h2>Контроль доступа</h2>
+<p>Все публичные методы вызывают <code>checkLoggedinUserRight()</code>, который проверяет <code>UserRightId.FIBU_DATEV_IMPORT</code> со значением <code>TRUE</code>. Объект-компаньон предоставляет статические вспомогательные методы для использования на страницах Wicket (до разделения сервисов).</p>
+
+<h2>История Git</h2>
+<div class="hist"><pre>
+868d6abb7 2025 -> 2026
+312d5e61c Очистка
+63081666f Заголовки исходных файлов: 2024-> 2025.
+1012e347a Работа над миграцией в процессе... (все тесты всех пакетов: OK).
+bbc198d03 Работа над миграцией в процессе... (все тесты всех пакетов: OK).
+4bc37b3a1 Работа над миграцией в процессе...
+d67bce18b Работа над миграцией в процессе...
+1b50060c3 BaseDao: переименовано: get -> find, save -> insert, getList -> select, load -> select
+87aaf6a5a Работа над миграцией в процессе... BaseDao рефакторинг (ещё не завершён)
+3aeda5ef5 Большое изменение: все save|update|...InTrans переименованы (InTrans удалён).
+</pre></div>
+
+</body>
+</html>

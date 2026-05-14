@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>820: PfCaches.kt [FR]</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:1.5em;color:#444;font-size:1em}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.lang{font-size:.85em;color:#888;float:right}.lang a{color:#888;text-decoration:none;padding:0 .3em}.lang a.active{color:#0366d6;font-weight:600;text-decoration:underline}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}pre.diff{background:#fff;font-size:.82em;max-height:300px;overflow-y:auto}</style>
+</head>
+<body>
+<div class="lang"><a href="820.html">EN</a> · <a href="820_de.html">DE</a> · <a href="820_ru.html">RU</a> · <a href="820_fr.html" class="active">FR</a> · <a href="820_es.html">ES</a></div>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← Index des fichiers</a> · <a href="3020.html">← Précédent</a> · <a href="3258.html">Suivant →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/kotlin/org/projectforge/business/PfCaches.kt" target="_blank" title="Voir la source sur GitHub">📄 source</a></div>
+<h1>#820 : <code>PfCaches.kt</code></h1>
+<div class="meta"><code>projectforge-business/src/main/kotlin/org/projectforge/business/PfCaches.kt</code> Classe Kotlin, <code>projectforge-business/src/main/kotlin/org/projectforge/business/PfCaches.kt</code> <span style="color:#888">428 lignes · 271 code · 98 commentaires · 59 vides</span></div>
+<div class="c"><strong>Objectif :</strong> Fichier source : org/projectforge/business/PfCaches.kt. PfCaches.kt fait partie de l'application open-source de gestion de projet ProjectForge.</div>
+<h2>Source (100 premières lignes)</h2>
+<pre>/////////////////////////////////////////////////////////////////////////////
+//
+// Projet ProjectForge Community Edition
+//         www.projectforge.org
+//
+// Copyright (C) 2001-2026 Micromata GmbH, Allemagne (www.micromata.com)
+//
+// ProjectForge est sous double licence.
+//
+// Cette édition communautaire est un logiciel libre ; vous pouvez le redistribuer et/ou
+// le modifier selon les termes de la GNU General Public License telle que publiée
+// par la Free Software Foundation ; version 3 de la Licence.
+//
+// Cette édition communautaire est distribuée dans l'espoir qu'elle sera utile,
+// mais SANS AUCUNE GARANTIE ; sans même la garantie implicite de
+// COMMERCIALISATION ou D'ADÉQUATION À UN USAGE PARTICULIER. Voir la GNU General
+// Public License pour plus de détails.
+//
+// Vous devriez avoir reçu une copie de la GNU General Public License avec
+// ce programme ; sinon, consultez http://www.gnu.org/licenses/.
+//
+/////////////////////////////////////////////////////////////////////////////
+
+package org.projectforge.business
+
+import jakarta.annotation.PostConstruct
+import org.projectforge.business.address.AddressbookCache
+import org.projectforge.business.address.AddressbookDO
+import org.projectforge.business.fibu.*
+import org.projectforge.business.fibu.kost.*
+import org.projectforge.business.orga.VisitorbookDO
+import org.projectforge.business.task.TaskDO
+import org.projectforge.business.task.TaskTree
+import org.projectforge.business.teamcal.admin.TeamCalCache
+import org.projectforge.business.teamcal.admin.model.TeamCalDO
+import org.projectforge.business.timesheet.TimesheetDO
+import org.projectforge.business.user.UserGroupCache
+import org.projectforge.business.vacation.model.VacationDO
+import org.projectforge.framework.persistence.api.BaseDO
+import org.projectforge.framework.persistence.user.entities.GroupDO
+import org.projectforge.framework.persistence.user.entities.PFUserDO
+import org.springframework.beans.factory.annotation.Autowired
+import org.springframework.stereotype.Service
+
+/**
+ * Cache auxiliaire pour éviter le chargement paresseux des entités. Pour un accès pratique à la plupart des caches.
+ * Idéal pour une utilisation par des scripts.
+ */
+@Service
+class PfCaches {
+    @Autowired
+    private lateinit var kontoCache: KontoCache
+
+    @Autowired
+    private lateinit var addressbookCache: AddressbookCache
+
+    @Autowired
+    private lateinit var employeeCache: EmployeeCache
+
+    @Autowired
+    private lateinit var kostCache: KostCache
+
+    @Autowired
+    private lateinit var kundeCache: KundeCache
+
+    @Autowired
+    private lateinit var projektCache: ProjektCache
+
+    @Autowired
+    private lateinit var rechnungCache: RechnungCache
+
+    @Autowired
+    private lateinit var taskTree: TaskTree
+
+    @Autowired
+    private lateinit var teamCalCache: TeamCalCache
+
+    @Autowired
+    private lateinit var userGroupCache: UserGroupCache
+
+    @PostConstruct
+    private fun init() {
+        instance = this
+    }
+
+    /**
+     * Remplit le kunde, le projet et les utilisateurs de la commande donnée.
+     * @param order La commande à remplir.
+     * @return La commande remplie pour le chaînage.
+     */
+    fun initialize(order: AuftragDO): AuftragDO {
+        order.kunde = getKundeIfNotInitialized(order.kunde)
+        order.projekt = getProjektIfNotInitialized(order.projekt)
+        order.contactPerson = getUserIfNotInitialized(order.contactPerson)
+        order.headOfBusinessManager = getUserIfNotInitialized(order.headOfBusinessManager)
+        order.projectManager = getUserIfNotInitialized(order.projectManager)
+        order.salesManager = getUserIfNotInitialized(order.salesManager)
+        // order.paymentSchedules
+        // order.positionen
+        return order</pre>
+<h2>Historique Git</h2>
+<div class="hist">
+<pre>868d6abb7 2025 -> 2026
+63081666f En-têtes des fichiers source : 2024 -> 2025.
+27a5e6cad Visitorbook : correction de bug sur les contactPersons. Également concerné : vacation, AbstractPagesrest, PagesResolver
+22ccc4877 WIP : Scripting
+caea043eb Migration en cours... (tous les tests de tous les packages : OK).</pre>
+<h3>868d6abb7</h3><div class="c"><strong>2025 -> 2026</strong><pre class="diff">868d6abb75cd191a892911ac8e45058932cf9074
+diff --git a/projectforge-business/src/main/kotlin/org/projectforge/business/PfCaches.kt b/projectforge-business/src/main/kotlin/org/projectforge/business/PfCaches.kt
+index 159dec1fb..bcc543053 100644
+--- a/projectforge-business/src/main/kotlin/org/projectforge/business/PfCaches.kt
++++ b/projectforge-business/src/main/kotlin/org/projectforge/business/PfCaches.kt
+@@ -3,7 +3,7 @@
+ // Projet ProjectForge Community Edition
+ //         www.projectforge.org
+ //
+-// Copyright (C) 2001-2025 Micromata GmbH, Allemagne (www.micromata.com)
++// Copyright (C) 2001-2026 Micromata GmbH, Allemagne (www.micromata.com)
+ //
+ // ProjectForge est sous double licence.
+ //</pre></div><h3>63081666f</h3><div class="c"><strong>En-têtes des fichiers source : 2024 -> 2025.</strong><pre class="diff">63081666f620fb87315f01b817e560e0b2f6a33a
+diff --git a/projectforge-business/src/main/kotlin/org/projectforge/business/PfCaches.kt b/projectforge-business/src/main/kotlin/org/projectforge/business/PfCaches.kt
+index 3fcd09f45..159dec1fb 100644
+--- a/projectforge-business/src/main/kotlin/org/projectforge/business/PfCaches.kt
++++ b/projectforge-business/src/main/kotlin/org/projectforge/business/PfCaches.kt
+@@ -3,7 +3,7 @@
+ // Projet ProjectForge Community Edition
+ //         www.projectforge.org
+ //
+-// Copyright (C) 2001-2024 Micromata GmbH, Allemagne (www.micromata.com)
++// Copyright (C) 2001-2025 Micromata GmbH, Allemagne (www.micromata.com)
+ //
+ // ProjectForge est sous double licence.
+ //</pre></div><h3>27a5e6cad</h3><div class="c"><strong>Visitorbook : correction de bug sur les contactPersons. Également concerné : vacation, AbstractPagesrest, PagesResolver</strong><pre class="diff">27a5e6cad8d0bc0ee0578fb9fb812e3caff1ab0f
+diff --git a/projectforge-business/src/main/kotlin/org/projectforge/business/PfCaches.kt b/projectforge-business/src/main/kotlin/org/projectforge/business/PfCaches.kt
+index d8f6c502b..3fcd09f45 100644
+--- a/projectforge-business/src/main/kotlin/org/projectforge/business/PfCaches.kt
++++ b/projectforge-business/src/main/kotlin/org/projectforge/business/PfCaches.kt
+@@ -28,6 +28,7 @@ import org.projectforge.business.address.AddressbookCache
+ import org.projectforge.business.address.AddressbookDO
+ import org.projectforge.business.fibu.*
+ import org.projectforge.business.fibu.kost.*
++import org.projectforge.business.orga.VisitorbookDO
+ import org.projectforge.business.task.TaskDO
+ import org.projectforge.business.task.TaskTree
+ import org.projectforge.business.teamcal.admin.TeamCalCache
+@@ -165,6 +166,17 @@ class PfCaches {
+         return vacation
+     }
+ 
++    /**
++     * Remplit les personnes de contact (employés).
++     * @param visitorbook Le visitorbook à remplir.
++     * @return Le visitorbook rempli pour le chaînage.
++     */
++    fun initialize(visitorbook: VisitorbookDO): VisitorbookDO {
++        visitorbook.contactPersons =
++            visitorbook.contactPersons?.mapNotNull { getEmployeeIfNotInitialized(it) }?.toMutableSet()
++        return visitorbook
++    }
++
+     fun initialize(satz: BuchungssatzDO): BuchungssatzDO {
+         satz.konto = getKontoIfNotInitialized(satz.konto)
+         satz.gegenKonto = getKontoIfNotInitialized(satz.gegenKonto)</pre></div><h3>22ccc4877</h3><div class="c"><strong>WIP : Scripting</strong><pre class="diff">22ccc487728cb7ca4fa66ae3fcaae5a98d6c59bd
+diff --git a/projectforge-business/src/main/kotlin/org/projectforge/business/PfCaches.kt b/projectforge-business/src/main/kotlin/org/projectforge/business/PfCaches.kt
+index fadf41fe1..d8f6c502b 100644
+--- a/projectforge-business/src/main/kotlin/org/projectforge/business/PfCaches.kt
++++ b/projectforge-business/src/main/kotlin/org/projectforge/business/PfCaches.kt
+@@ -35,6 +35,7 @@ import org.projectforge.business.teamcal.admin.model.TeamCalDO
+ import org.projectforge.business.timesheet.TimesheetDO
+ import org.projectforge.business.user.UserGroupCache
+ import org.projectforge.business.vacation.model.VacationDO
++import org.projectforge.framework.persistence.api.BaseDO
+ import org.projectforge.framework.persistence.user.entities.GroupDO
+ import org.projectforge.framework.persistence.user.entities.PFUserDO
+ import org.springframework.beans.factory.annotation.Autowired
+@@ -64,6 +65,9 @@ class PfCaches {
+     @Autowired
+     private lateinit var projektCache: ProjektCache
+ 
++    @Autowired
++    private lateinit var rechnungCache: RechnungCache
++
+     @Autowired
+     private lateinit var taskTree: TaskTree
+ 
+@@ -78,6 +82,23 @@ class PfCaches {
+         instance = this
+     }
+ 
++    /**
++     * Remplit le kunde, le projet et les utilisateurs de la commande donnée.
++     * @param order La commande à remplir.
++     * @return La commande remplie pour le chaînage.
++     */
++    fun initialize(order: AuftragDO): AuftragDO {
++        order.kunde = getKundeIfNotInitialized(order.kunde)
++        order.projekt = getProjektIfNotInitialized(order.projekt)
++        order.contactPerson = getUserIfNotInitialized(order.contactPerson)
++        order.headOfBusinessManager = getUserIfNotInitialized(order.headOfBusinessManager)
++        order.projectManager = getUserIfNotInitialized(order.projectManager)
++        order.salesManager = getUserIfNotInitialized(order.salesManager)
++        // order.paymentSchedules
++        // order.positionen
++        return order
++    }
++
+     /**
+      * Remplit l'utilisateur et le kost1 de l'employé donné.
+      * @param employee L'employé à remplir.
+@@ -144,6 +165,43 @@ class PfCaches {
+         return vacation
+     }
+ 
++    fun initialize(satz: BuchungssatzDO): BuchungssatzDO {
++        satz.konto = getKontoIfNotInitialized(satz.konto)
++        satz.gegenKonto = getKontoIfNotInitialized(satz.gegenKonto)
++        satz.kost1 = getKost1IfNotInitialized(satz.kost1)
++        satz.kost2 = getKost2IfNotInitialized(satz.kost2)
++        return satz
++    }
++
++    fun initialize(invoice: RechnungDO): RechnungDO {</pre></div><h3>caea043eb</h3><div class="c"><strong>Migration en cours... (tous les tests de tous les packages : OK).</strong><pre class="diff">caea043eb1c6d1752322fcbe2de762f9b5e6946d
+diff --git a/projectforge-business/src/main/kotlin/org/projectforge/business/PfCaches.kt b/projectforge-business/src/main/kotlin/org/projectforge/business/PfCaches.kt
+index 536145855..fadf41fe1 100644
+--- a/projectforge-business/src/main/kotlin/org/projectforge/business/PfCaches.kt
++++ b/projectforge-business/src/main/kotlin/org/projectforge/business/PfCaches.kt
+@@ -83,7 +83,7 @@ class PfCaches {
+      * @param employee L'employé à remplir.
+      * @return L'employé rempli pour le chaînage.
+      */
+-    fun populate(employee: EmployeeDO): EmployeeDO {
++    fun initialize(employee: EmployeeDO): EmployeeDO {
+         employee.user = getUserIfNotInitialized(employee.user)
+         employee.kost1 = getKost1IfNotInitialized(employee.kost1)
+         return employee
+@@ -94,7 +94,7 @@ class PfCaches {
+      * @param kost2 Le kost2 à remplir.
+      * @return Le kost2 rempli pour le chaînage.
+      */
+-    fun populate(kost2: Kost2DO): Kost2DO {
++    fun initialize(kost2: Kost2DO): Kost2DO {
+         val projekt = getProjektByKost2(kost2.id)
+         val kunde = getKunde(projekt?.kunde?.nummer)
+         projekt?.let { it.kunde = kunde }
+@@ -107,7 +107,7 @@ class PfCaches {
+      * @param project Le projet à remplir.
+      * @return Le projet rempli pour le chaînage.
+      */
+-    fun populate(project: ProjektDO): ProjektDO {
++    fun initialize(project: ProjektDO): ProjektDO {
+         project.headOfBusinessManager = getUserIfNotInitialized(project.headOfBusinessManager)
+         project.konto = getKontoIfNotInitialized(project.konto)
+         project.kunde = getKundeIfNotInitialized(project.kunde)
+@@ -123,10 +123,10 @@ class PfCaches {
+      * @param timesheet La feuille de temps à remplir.
+      * @return La feuille de temps remplie pour le chaînage.
+      */
+-    fun populate(timesheet: TimesheetDO): TimesheetDO {
++    fun initialize(timesheet: TimesheetDO): TimesheetDO {
+         timesheet.user = getUser(timesheet.userId)
+         timesheet.task = getTask(timesheet.taskId)
+-        timesheet.kost2 = getKost2(timesheet.kost2Id)?.also { populate(it) }
++        timesheet.kost2 = getKost2(timesheet.kost2Id)?.also { initialize(it) }
+         return timesheet
+     }
+ 
+@@ -135,7 +135,7 @@ class PfCaches {
+      * @param vacation Le congé à remplir.
+      * @return Le kost2 rempli pour le chaînage.
+      */
+-    fun populate(vacation: VacationDO): VacationDO {
++    fun initialize(vacation: VacationDO): VacationDO {
+         vacation.employee = getEmployeeIfNotInitialized(vacation.employee)
+         vacation.manager = getEmployeeIfNotInitialized(vacation.manager)
+         vacation.replacement = getEmployeeIfNotInitialized(vacation.replacement)
+@@ -149,7 +149,7 @@ class PfCaches {
+      * @param kost2Id L'ID kost2 à remplir.
+      */
+     fun getAndPopulateKost2(kost2Id: Long?): Kost2DO? {
+-        return getKost2(kost2Id)?.also { populate(it) }
++        return getKost2(kost2Id)?.also { initialize(it) }</pre></div>
+</div>
+</body>
+</html>

@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>#1019: SystemSanityCheckJob.kt [FR]</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:2em;color:#444}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.lang{font-size:.85em;color:#888;float:right}.lang a{color:#888;text-decoration:none;padding:0 .3em}.lang a.active{color:#0366d6;font-weight:600;text-decoration:underline}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}</style>
+</head>
+<body>
+<div class="lang"><a href="1019.html">EN</a> · <a href="1019_de.html">DE</a> · <a href="1019_ru.html">RU</a> · <a href="1019_fr.html" class="active">FR</a> · <a href="1019_es.html">ES</a></div>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← Index des fichiers</a> · <a href="771.html">← Précédent</a> · <a href="1011.html">Suivant →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/kotlin/org/projectforge/business/jobs/SystemSanityCheckJob.kt" target="_blank" title="Voir la source sur GitHub">📄 source</a></div>
+<h1>#1019: <code>SystemSanityCheckJob.kt</code></h1>
+<div class="meta"><code>projectforge-business/src/main/kotlin/org/projectforge/business/jobs/SystemSanityCheckJob.kt</code> Type : Kotlin · Rôle : Composant · Source : projectforge-business/src/main/kotlin/org/projectforge/business/jobs/SystemSanityCheckJob.kt <span style="color:#888">82 lignes · 55 code · 23 commentaires · 4 vides</span></div>
+<div class="c">Tâche planifiée/système pour SystemSanityCheck. Implémente la logique de maintenance périodique ou de vérification de cohérence exécutée par le planificateur de tâches PF.</div>
+<h2>Structure du code</h2>
+<p>Classes : <code>SystemSanityCheckJob</code></p>
+<p>Supertype(s) : <code>AbstractJob</code></p>
+<p>Fonctions (2) : <code>executeJob</code>, <code>asString</code></p>
+<p>Propriétés (7) : <code>taskDao</code>, <code>tasks</code>, <code>taskMap</code>, <code>rootTask</code>, <code>abandonedTasks</code>, <code>ancestor</code>, <code>rootTaskFound</code></p>
+<p>Importations : 5 paquetages</p>
+<p>Paquetage : <code>org.projectforge.business.jobs</code></p>
+<h2>Code source (abrégé)</h2>
+<pre>
+package org.projectforge.business.jobs
+
+import org.projectforge.business.task.TaskDO
+import org.projectforge.business.task.TaskDao
+import org.projectforge.business.task.TaskNode
+import org.projectforge.jobs.AbstractJob
+import org.projectforge.jobs.JobExecutionContext
+
+class SystemSanityCheckJob(val taskDao: TaskDao) : AbstractJob(&quot;Vérification d'intégrité du système&quot;) {
+    override fun executeJob() {
+        jobExecutionContext.addMessage(&quot;Intégrité des tâches (tâches abandonnées)&quot;)
+        val tasks: List&lt;TaskDO&gt; = taskDao.selectAll(false)
+        jobExecutionContext.addMessage(&quot;${tasks.size} tâches trouvées.&quot;)
+        val taskMap: MutableMap&lt;Long?, TaskDO&gt; = HashMap()
+        for (task in tasks) {
+            taskMap[task.id] = task
+        }
+        var rootTask = false
+        var abandonedTasks = false
+        for (task in tasks) {
+            if (task.parentTask == null) {
+                if (rootTask) {
+                    jobExecutionContext.addError(&quot;Autre tâche racine trouvée : ${asString(task)}&quot;)
+                } else {
+                    jobExecutionContext.addMessage(&quot;Tâche racine trouvée : ${asString(task)}&quot;)
+                    rootTask = true
+                }
+            } else {
+                var ancestor = taskMap[task.parentTaskId]
+                var rootTaskFound = false
+                for (i in 0..49) { // Profondeur max. de 50, sinon tâche cyclique !
+                    if (ancestor == null) {
+                        break
+                    }
+                    if (ancestor.parentTaskId == null) {
+                        // Tâche racine trouvée, OK.
+                        rootTaskFound = true
+                        break
+                    }
+                    ancestor = taskMap[ancestor.parentTaskId]
+                }
+                if (!rootTaskFound) {
+                    jobExecutionContext.addError(&quot;Tâche abandonnée trouvée (tâches cycliques sans chemin vers la racine) : ${asString(task)}&quot;)
+                    abandonedTasks = true
+                }
+            }
+            taskMap[task.id] = task
+        }
+        if (!abandonedTasks) {
+            jobExecutionContext.addMessage(&quot;Test OK, aucune tâche abandonnée détectée.&quot;)
+        } else {
+            jobExecutionContext.addError(&quot;Test ÉCHOUÉ, des tâches abandonnées ont été détectées.&quot;)
+        }
+    }
+
+    private fun asString(task: TaskDO): String {
+        return &quot;TaskNode[id=[${task.id}], created=[${task.created}] title=[${task.title}]]&quot;
+    }
+}</pre>
+
+<h2>Historique Git</h2><div class="hist"><pre>868d6abb7 2025 -> 2026
+034eebd5d Gestion du HTML et gestion des tâches.
+63081666f En-têtes des fichiers source : 2024 -> 2025.
+619985f48 Version 8.1 snapshot (#247)</pre></div>
+</body>
+</html>

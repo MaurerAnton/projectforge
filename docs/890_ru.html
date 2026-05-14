@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>#890: AuftragAndRechnungDaoHelper.kt [RU]</title>
+<style>
+body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}
+h1{border-bottom:2px solid #333;padding-bottom:.3em}
+h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}
+h3{margin-top:2em;color:#444}
+a{color:#0366d6}
+.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}
+.nav{font-size:.9em;color:#888;margin-bottom:1em}
+.meta{font-size:.9em;margin:1em 0;color:#555}
+code{background:#f0f0f0;padding:0 .2em;font-size:.93em}
+pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}
+table{border-collapse:collapse;width:100%;margin:1em 0}
+th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}
+th{background:#f5f5f5;font-weight:600}
+.hist{font-size:.85em;color:#555}
+</style>
+</head>
+<body>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Индекс</a> · <a href="file-index.html">← Индекс файлов</a> · <a href="889.html">← Предыдущий</a> · <a href="891.html">Следующий →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/kotlin/org/projectforge/business/fibu/AuftragAndRechnungDaoHelper.kt" target="_blank" title="Просмотреть исходник на GitHub">📄 исходник</a></div>
+
+<h1>#890: <code>AuftragAndRechnungDaoHelper.kt</code></h1>
+
+<div class="meta"><code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/AuftragAndRechnungDaoHelper.kt</code> 
+<p><strong>Тип:</strong> Вспомогательный объект (Kotlin <code>object</code>)</p>
+<p><strong>Пакет:</strong> <code>org.projectforge.business.fibu</code></p>
+<p><strong>Полный путь:</strong> <code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/AuftragAndRechnungDaoHelper.kt</code></p>
+ <span style="color:#888">129 строк · 98 кода · 23 комментария · 8 пустых</span></div>
+
+<div class="c">
+<p>Общий вспомогательный объект, предоставляющий построители критериев фильтрации базы данных и логику проверки, используемые как <code>AuftragDao</code> (заказы), так и <code>RechnungDao</code> (счета). Централизует общие шаблоны, такие как фильтрация по периоду выполнения, построение запросов с диапазоном дат и проверка при сохранении счета (расчет срока погашения, согласованность даты/суммы платежа).</p>
+</div>
+
+<h2>Публичные методы</h2>
+
+<h3><code>createCriterionForPeriodOfPerformance(myFilter)</code></h3>
+<p><strong>Возвращает:</strong> <code>Optional&lt;DBPredicate&gt;</code></p>
+<p>Строит предикат для фильтрации по пересечению периода выполнения. Использует <code>periodOfPerformanceStartDate</code> и <code>periodOfPerformanceEndDate</code> фильтра. Логика проверяет пересечение диапазонов дат:</p>
+<ul>
+<li>Обе даты заданы → <code>popEnd >= startDate AND popBegin <= endDate</code></li>
+<li>Только startDate → <code>popEnd >= startDate</code></li>
+<li>Только endDate → <code>popBegin <= endDate</code></li>
+<li>Ни одной → пусто</li>
+</ul>
+
+<h3><code>createQueryFilterWithDateRestriction(myFilter)</code></h3>
+<p><strong>Возвращает:</strong> <code>QueryFilter</code></p>
+<p>Создает <code>QueryFilter</code> из <code>RechnungFilter</code>, добавляя ограничения по диапазону дат для поля <code>"datum"</code> (дата счета). Поддерживает фильтрацию от даты, до даты или обеих с использованием операторов <code>between</code>, <code>ge</code> и <code>le</code>.</p>
+
+<h3><code>onSaveOrModify(rechnung)</code></h3>
+<p><strong>Параметр:</strong> <code>AbstractRechnungDO</code></p>
+<p>Основной метод проверки, вызываемый перед сохранением любого счета. Делегирует выполнение трем приватным вспомогательным методам:</p>
+<ul>
+<li><code>checkAndCalculateFaelligkeit()</code> — Автоматически вычисляет <code>faelligkeit</code> (срок погашения) из <code>rechnungsDatum + zahlungsZielInTagen</code>, но только если срок погашения равен null и установлен срок оплаты</li>
+<li><code>checkAndCalculateDiscountMaturity()</code> — Автоматически вычисляет <code>discountMaturity</code> из <code>rechnungsDatum + discountZahlungsZielInTagen</code>, только когда процент скидки не равен null/нулю и срок скидки равен null</li>
+<li><code>validateBezahlDatumAndZahlBetrag()</code> — Обеспечивает взаимную согласованность: если установлен <code>bezahlDatum</code>, то <code>zahlBetrag</code> должен быть установлен (и не равен нулю), и наоборот. Выбрасывает <code>UserException</code> с конкретными ключами i18n при нарушениях</li>
+</ul>
+
+<h2>Примечания по дизайну</h2>
+<ul>
+<li>Все методы помечены <code>@JvmStatic</code> для бесшовной совместимости с Java</li>
+<li>Использует интерфейс <code>SearchFilterWithPeriodOfPerformance</code> для полиморфной обработки фильтров</li>
+<li>Даты погашения вычисляются с помощью <code>PFDateTime</code> (для срока погашения) и <code>PFDay</code> (для срока скидки)</li>
+<li>Срок скидки вычисляется только когда <code>discountPercent</code> не равен нулю; если ноль, срок скидки не устанавливается</li>
+</ul>
+
+<h2>История Git</h2>
+<div class="hist"><pre>868d6abb7 2025 -> 2026
+f4540acfa WIP: Импорт кредиторских счетов
+63081666f Заголовки исходных файлов: 2024-> 2025.
+cec9dd314 Счета: исправлен срок скидки
+b6092df09 Авторские права 2023 -> 2024
+ab45d51fa Авторские права 2001-2022 -> 2001-2023.
+5f7ef41b8 Авторские права 2021 -> 2022
+a7fceb731 Исправлены некоторые предупреждения компилятора.
+db3b02da7 UserException перемещен из бизнес-пакета в общий
+ceb63e8a1 Заголовок исходного кода: (C) 2001-2021.
+a0232cdba Предупреждения кода.
+b209e00ba PFDay.from -> from, fromOrNow, fromOrNull, PFDateTime.from -> from, fromOrNow, fromOrNull
+611b20d4e WIP: java.sql.Date -> LocalDate.
+7c1c48782 Замена дополнительных экземпляров java.sql.Date на java.time.LocalDate
+78b436d9e Замена экземпляров java.util.date и java.sql.Date на java.time.LocalDate
+7c79f1922 Авторские права в заголовке исходника -> 2020.
+a1c287b49 Номер недели теперь глобально одинаков (не зависит от локали пользователя)
+61b23c3fd Методы DateHelper удалены (заменены на PFDay/PFDateTime).</pre></div>
+</body>
+</html>

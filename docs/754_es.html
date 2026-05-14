@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>#754: XmlField [ES]</title>
+<style>
+  body { font-family: system-ui, sans-serif; max-width: 960px; margin: 2em auto; padding: 0 1em; background: #fafafa; color: #222; line-height: 1.6; }
+  h1 { border-bottom: 2px solid #333; padding-bottom: 0.3em; }
+  h2 { margin-top: 2.5em; border-bottom: 1px solid #ddd; padding-bottom: 0.2em; color: #333; }
+  h3 { margin-top: 2em; color: #444; }
+  a { color: #0366d6; }
+  .c { border-left: 3px solid #ddd; padding: .5em 1em; margin: 1em 0; background: #fff; }
+  .nav { font-size: .9em; color: #888; margin-bottom: 1em; }
+  .lang { font-size: .85em; color: #888; float: right; }
+  .lang a { color: #888; text-decoration: none; padding: 0 .3em; }
+  .lang a.active { color: #0366d6; font-weight: 600; text-decoration: underline; }
+  .meta { font-size: .9em; margin: 1em 0; color: #555; }
+  code { background: #f0f0f0; padding: 0 .2em; font-size: .93em; }
+  pre { background: #f5f5f5; padding: .8em 1em; border: 1px solid #ddd; border-radius: 4px; overflow-x: auto; font-size: .88em; line-height: 1.4; }
+  table { border-collapse: collapse; width: 100%; margin: 1em 0; }
+  th, td { border: 1px solid #ddd; padding: .5em .8em; text-align: left; font-size: .9em; }
+  th { background: #f5f5f5; font-weight: 600; }
+  .hist { font-size: .85em; color: #555; }
+</style>
+</head>
+<body>
+<div class="lang"><a href="752.html">EN</a> · <a href="752_de.html">DE</a> · <a href="752_ru.html">RU</a> · <a href="752_fr.html">FR</a> · <a href="752_es.html" class="active">ES</a></div>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Índice</a> · <a href="file-index.html">← Índice de archivos</a> · <a href="753.html">← Anterior</a> · <a href="755.html">Siguiente →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/java/org/projectforge/framework/xmlstream/XmlField.java" target="_blank" title="Ver fuente en GitHub">📄 fuente</a></div>
+
+<h1>#754: <code>XmlField.java</code></h1>
+<div class="meta"><code>projectforge-business/src/main/java/org/projectforge/framework/xmlstream/XmlField.java</code> <strong>Anotación Java</strong> — anotación central a nivel de campo del framework XmlStream. 92 líneas. @Target(FIELD), @Retention(RUNTIME). Fuente: <code>projectforge-business/src/main/java/org/projectforge/framework/xmlstream/XmlField.java</code> <span style="color:#888">92 líneas · 17 código · 63 comentarios · 12 en blanco</span></div>
+
+<div class="c">
+<strong>Propósito:</strong> La anotación central del framework XmlStream — equivalente a <code>@XmlElement</code>, <code>@XmlAttribute</code> de JAXB, <code>@XStreamAlias</code> y <code>@XStreamAsAttribute</code> de XStream, todo combinado en una sola anotación. Marca un campo Java como serializable a XML y controla exactamente <em>cómo</em> se escribe. Se aplica a nivel de campo (<code>@Target(FIELD)</code>) y está disponible en tiempo de ejecución mediante reflexión (<code>@Retention(RUNTIME)</code>) — así es como <code>XmlObjectWriter</code> y <code>XmlObjectReader</code> descubren los campos serializables.
+</div>
+
+<h2>8 Atributos de la anotación</h2>
+
+<div class="c">
+<h3><code>alias()</code> — Nombre del elemento/atributo XML</h3>
+<p>Anula el nombre del campo durante la serialización. Sin alias: <code>private String firstName</code> → etiqueta <code>&lt;firstName&gt;</code>. Con alias: <code>@XmlField(alias="first-name")</code> → etiqueta <code>&lt;first-name&gt;</code>. Útil cuando el formato XML debe ajustarse a un esquema externo o cuando un nombre de campo Java entra en conflicto con una palabra reservada de XML.</p>
+
+<h3><code>asAttribute()</code> y <code>asElement()</code> — Atributo vs. elemento</h3>
+<p>Controla si el valor se serializa como un atributo XML (compacto) o como un elemento (estructurado):</p>
+<pre>&lt;!-- Como atributo: --&gt;
+&lt;user id="42" name="John"/&gt;
+
+&lt;!-- Como elemento: --&gt;
+&lt;user&gt;&lt;id&gt;42&lt;/id&gt;&lt;name&gt;John&lt;/name&gt;&lt;/user&gt;</pre>
+<p>Matiz crítico del Javadoc: <em>"asAttribute=false no tiene efecto (use asElement=true en su lugar)"</em> y viceversa. Esto significa que <code>false</code> no es una negación — es "dejar por defecto", que puede ser anulado por configuraciones globales en <code>XmlObjectWriter.asAttributeAsDefault()</code>. Para <em>garantizar</em> la serialización como atributo, use <code>asAttribute=true</code>. Para garantizar elemento, use <code>asElement=true</code>.</p>
+
+<h3><code>defaultDoubleValue</code> / <code>defaultIntValue</code> / <code>defaultStringValue</code> / <code>defaultBooleanValue</code> — Compresión XML</h3>
+<p>Si el valor del campo es igual al valor predeterminado declarado, NO se serializa a XML. Este es un mecanismo de compresión: los valores predeterminados típicos no ocupan espacio en la salida. Durante la deserialización, las etiquetas ausentes reciben el valor predeterminado. Los números mágicos de <code>XmlConstants</code> (<a href="751.html">#751</a>) sirven como el centinela "no establecido" para los valores predeterminados int y string. Para boolean, el valor predeterminado es <code>false</code> (el valor más común). Para double, el valor predeterminado es <code>NaN</code> ("no establecido").</p>
+
+<h3><code>asCDATA()</code> — Protección de caracteres especiales</h3>
+<p>Si es <code>true</code>, el valor de cadena se envuelve en un bloque XML <code>&lt;![CDATA[...]]&gt;</code>. Necesario para campos que pueden contener caracteres <code>&lt;</code>, <code>&gt;</code>, <code>&amp;</code> — por ejemplo, HTML en campos de descripción o SQL en registros. Sin CDATA, estos caracteres necesitarían escaparse como <code>&amp;lt;</code>, <code>&amp;gt;</code>, <code>&amp;amp;</code>, haciendo que el XML sea ilegible.</p>
+</div>
+
+<h2>Consumo en tiempo de ejecución</h2>
+
+<div class="c">
+<ol>
+<li><code>XmlObjectWriter</code> itera todos los campos de un objeto mediante reflexión durante la serialización</li>
+<li>Para cada campo, verifica la presencia de <code>@XmlField</code> (y la ausencia de <code>@XmlOmitField</code>)</li>
+<li>Si está presente, lee los parámetros: alias (nombre de etiqueta), asAttribute (formato), default* (lógica de omisión), asCDATA (formato)</li>
+<li>Llama al <code>Converter</code> apropiado para transformar el valor del campo a una cadena</li>
+<li><code>XmlObjectReader</code> hace lo inverso: lee la etiqueta/atributo del XML, encuentra el campo correspondiente por nombre o alias, llama al Converter para la transformación inversa</li>
+</ol>
+</div>
+
+<h2>Comparación con XStream y JAXB</h2>
+
+<table>
+<tr><th>Capacidad</th><th>XmlField</th><th>XStream</th><th>JAXB</th></tr>
+<tr><td>Alias de campo</td><td><code>alias="nombre"</code></td><td><code>@XStreamAlias("nombre")</code></td><td><code>@XmlElement(name="nombre")</code></td></tr>
+<tr><td>Atributo vs elemento</td><td><code>asAttribute=true</code></td><td><code>@XStreamAsAttribute</code></td><td><code>@XmlAttribute</code></td></tr>
+<tr><td>Exclusión de campo</td><td><code>@XmlOmitField</code></td><td><code>@XStreamOmitField</code></td><td><code>@XmlTransient</code></td></tr>
+<tr><td>Valor predeterminado</td><td><code>defaultIntValue=0</code></td><td>❌ ninguno</td><td>❌ ninguno</td></tr>
+<tr><td>CDATA</td><td><code>asCDATA=true</code></td><td>❌ ninguno</td><td>❌ ninguno</td></tr>
+<tr><td>Versionado de formato</td><td>✅ vía XmlObject</td><td>❌ ninguno</td><td>❌ ninguno</td></tr>
+</table>
+
+<div class="c">
+XmlField + XmlStream proporcionan más control sobre el formato XML que XStream, pero requieren anotación manual. XStream "simplemente funciona" sin anotaciones pero genera XML menos controlado. La elección de XmlStream para la exportación de datos fue impulsada específicamente por la necesidad de control de formato y versionado.
+</div>
+
+<h2>Historial de Git</h2>
+<div class="hist">
+<pre>868d6abb7 2025 → 2026 (actualización de año de copyright)
+63081666f Encabezados de archivos fuente: 2024→2025
+b6092df09 Copyright 2023 → 2024
+ab45d51fa Copyright 2001-2022 → 2001-2023
+5f7ef41b8 Copyright 2021 → 2022
+cd27dd997 paquete xstream → xmlstream (renombrado para evitar confusión con la librería XStream)
+ceb63e8a1 Encabezado de código fuente: (C) 2001-2021
+7c79f1922 Copyright del encabezado fuente → 2020
+32f634b88 Optimizar importaciones
+dd5ca38ac Copyright de todos los encabezados de archivos java actualizado o creado
+9ebb88522 Commit inicial</pre>
+</div>
+
+<div class="c">
+Los atributos de la anotación se han mantenido estables desde el commit inicial. Solo los encabezados de copyright, la optimización de importaciones (<code>32f634b88</code>) y el cambio de nombre del paquete afectaron a este archivo. El atributo <code>implementationClass()</code> comentado sugiere que el autor consideró el mapeo de interfaz a implementación a nivel de campo, pero optó por manejarlo en <code>XmlObjectReader.addImplementationMapping()</code> en su lugar.
+</div>
+
+</body>
+</html>

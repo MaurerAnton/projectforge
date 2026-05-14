@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>#826 : AddressImageDO [FR]</title>
+<style>
+body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}
+h1{border-bottom:2px solid #333;padding-bottom:.3em}
+h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}
+h3{margin-top:2em;color:#444}
+a{color:#0366d6}
+.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}
+.nav{font-size:.9em;color:#888;margin-bottom:1em}
+.lang{font-size:.85em;color:#888;float:right}
+.lang a{color:#888;text-decoration:none;padding:0 .3em}
+.lang a.active{color:#0366d6;font-weight:600;text-decoration:underline}
+.meta{font-size:.9em;margin:1em 0;color:#555}
+code{background:#f0f0f0;padding:0 .2em;font-size:.93em}
+pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}
+table{border-collapse:collapse;width:100%;margin:1em 0}
+th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}
+th{background:#f5f5f5;font-weight:600}
+.hist{font-size:.85em;color:#555}
+</style>
+</head>
+<body>
+
+<div class="lang">
+  <a href="826.html">EN</a> · 
+  <a href="826_de.html">DE</a> · 
+  <a href="826_ru.html">RU</a> · 
+  <a href="826_fr.html" class="active">FR</a> · 
+  <a href="826_es.html">ES</a>
+</div>
+
+<div class="nav">
+  <a href="https://maureranton.github.io/projectforge/">← Index</a> · 
+  <a href="file-index.html">← Index des fichiers</a> · 
+  <a href="825.html">← Précédent</a>
+</div>
+
+<h1>#826 : <code>AddressImageDO.kt</code></h1>
+
+<div class="meta">
+  <code>projectforge-business/src/main/kotlin/org/projectforge/business/address/AddressImageDO.kt</code> 
+  Entité JPA — images d'adresse, 
+  <code>projectforge-business/src/main/kotlin/org/projectforge/business/address/AddressImageDO.kt</code> 
+  <span style="color:#888">87 lignes · 53 code · 25 commentaires · 9 vides</span>
+</div>
+
+<div class="c">
+  Entité JPA pour stocker les images d'adresse (photos, logos) avec des BLOBs chargés paresseusement et des miniatures d'aperçu. 
+  Séparée de <code>AddressDO</code> pour des raisons de performance — les images sont chargées uniquement à la demande via des requêtes nommées.
+</div>
+
+<h2>Architecture</h2>
+
+<p>
+  Cette entité Kotlin a été extraite de <code>AddressDO</code> (commit <code>f99817436</code>) pour améliorer les performances grâce au 
+  <strong>chargement paresseux</strong>. Aspects clés de la conception :
+</p>
+
+<ul>
+  <li><strong>Table :</strong> <code>T_ADDRESS_IMAGE</code>, mappée au parent <code>AddressDO</code> via un <code>@OneToOne</code> avec <code>FetchType.LAZY</code>.</li>
+  <li><strong>Colonnes BLOB :</strong> <code>image</code> (pleine taille) et <code>imagePreview</code> (miniature) sont toutes deux annotées avec <code>@Basic(fetch = FetchType.LAZY)</code>, empêchant le chargement des données BLOB lourdes dans les vues en liste. Les requêtes nommées <code>SELECT_WITHOUT_IMAGES</code> et <code>SELECT_IMAGE_ONLY</code> permettent une récupération sélective.</li>
+  <li><strong>Type d'image :</strong> Énuméré via <code>ImageType</code> (JPG, GIF, PNG) stocké sous forme de chaîne de 5 caractères.</li>
+  <li><strong>Sérialisation JSON :</strong> La référence arrière <code>address</code> utilise <code>@JsonSerialize(using = IdOnlySerializer::class)</code> — lors de la sérialisation en JSON (API REST), seul <code>address.id</code> est émis, évitant la sérialisation circulaire et les graphes d'objets profonds.</li>
+  <li><strong>Hibernate Search :</strong> L'annotation <code>@Indexed</code> n'est pas présente sur cette entité, ce qui implique que les images d'adresse sont indexées implicitement via leur parent <code>AddressDO</code> (qui est enregistré dans l'index de recherche en texte intégral).</li>
+</ul>
+
+<h3>Requêtes nommées</h3>
+
+<table>
+  <tr>
+    <th>Requête</th>
+    <th>Objectif</th>
+  </tr>
+  <tr>
+    <td><code>SELECT_WITHOUT_IMAGES</code></td>
+    <td>Récupérer les métadonnées de l'image (ID, type, dernière mise à jour) sans les données BLOB — utilisé dans les vues en liste</td>
+  </tr>
+  <tr>
+    <td><code>SELECT_IMAGE_ONLY</code></td>
+    <td>Récupérer le BLOB de l'image complète — utilisé pour le téléchargement d'image</td>
+  </tr>
+  <tr>
+    <td><code>SELECT_IMAGE_PREVIEW_ONLY</code></td>
+    <td>Récupérer le BLOB de l'aperçu/miniature — utilisé pour les vues galerie</td>
+  </tr>
+  <tr>
+    <td><code>DELETE_ALL_IMAGES_BY_ADDRESS_ID</code></td>
+    <td>Supprimer en masse toutes les images d'une adresse — utilisé lors de la suppression d'une adresse</td>
+  </tr>
+</table>
+
+<p>
+  L'entité prend en charge la gestion des images CardDAV (commit <code>c5b4b738b</code>), rendant les photos d'adresse disponibles via le protocole CardDAV avec les données vCard.
+</p>
+
+<h2>Historique Git</h2>
+
+<div class="hist">
+<pre>
+868d6abb7 2025 -> 2026
+63081666f En-têtes des fichiers source : 2024 -> 2025.
+0237d5eba Sérialisation JSON refactorisée : introduction de IdOnlySerializer et IdsOnlySerializer.
+2bcdfbbc6 WIP : stockage du carnet d'ordres.
+943947aaa Adresses : support du gif et du jpeg (également pour le serveur carddav).
+c5b4b738b WIP : Serveur CardDav, gestion des images.
+d6ad9ea38 Travail de migration en cours...
+66ec668f6 Travail de migration en cours...
+e33c8b9c2 Travail de migration en cours...
+06828f490 Travail de migration en cours...
+b6092df09 Copyright 2023 -> 2024
+ab45d51fa Copyright 2001-2022 -> 2001-2023.
+5f7ef41b8 Copyright 2021 -> 2022
+f54103172 AddressDao.forceDelete fonctionne désormais aussi si des images étaient fournies.
+ceb63e8a1 En-tête du code source : (C) 2001-2021.
+ae182f8a1 Problème Github #135, optimisation des performances avec JProfiler.
+f99817436 Images des adresses désormais dans une entité séparée. Améliore les performances grâce au chargement paresseux.
+7c79f1922 Copyright de l'en-tête source -> 2020.
+af35917ac Plus de nettoyage de code
+ca5a7c00f Optimiser les imports
+05244ff19 Copyright de tous les en-têtes de fichiers Kotlin mis à jour ou créés.
+da6eec0f6 AddressAttrDataDO.java -> AddressAttrDataDO.kt
+9ebb88522 Commit initial
+</pre>
+</div>
+
+</body>
+</html>

@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>#1154 [ES]</title>
+<style>
+body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}
+h1{border-bottom:2px solid #333;padding-bottom:.3em}
+h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}
+h3{margin-top:2em;color:#444}
+a{color:#0366d6}
+.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}
+.nav{font-size:.9em;color:#888;margin-bottom:1em}
+.meta{font-size:.9em;margin:1em 0;color:#555}
+code{background:#f0f0f0;padding:0 .2em;font-size:.93em}
+pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}
+table{border-collapse:collapse;width:100%;margin:1em 0}
+th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}
+th{background:#f5f5f5;font-weight:600}
+.hist{font-size:.85em;color:#555}
+</style>
+</head>
+<body>
+
+<div class="nav">
+<a href="https://maureranton.github.io/projectforge/">← Índice</a> ·
+<a href="file-index.html">← Índice de archivos</a> ·
+<a href="1153.html">← Anterior</a> ·
+<a href="1155.html">Siguiente →</a> ·
+<a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/kotlin/org/projectforge/business/vacation/service/VacationSendMailService.kt" target="_blank" title="Ver fuente en GitHub">📄 fuente</a>
+</div>
+
+<h1>#1154: <code>VacationSendMailService.kt</code></h1>
+
+<div class="meta">
+<code>projectforge-business/src/main/kotlin/org/projectforge/business/vacation/service/VacationSendMailService.kt</code> Servicio, projectforge-business/src/main/kotlin/org/projectforge/business/vacation/service/VacationSendMailService.kt
+<span style="color:#888">310 líneas · 234 código · 50 comentarios · 26 en blanco</span>
+</div>
+
+<div class="c">
+Envía notificaciones por correo electrónico a vacacionistas, gerentes, reemplazos y personal de RR.HH. cuando se crean, modifican o eliminan registros de vacaciones.
+</div>
+
+<h2>Arquitectura</h2>
+<p>
+<code>VacationSendMailService</code> es un <code>@Service</code> que integra <code>ConfigurationService</code> (configuración del servidor de correo, dirección de correo de RR.HH.), <code>EmployeeDao</code> (búsquedas de empleados/usuarios) y <code>SendMail</code> (infraestructura de correo). Se invoca exclusivamente desde los hooks de ciclo de vida <code>after*</code> de <code>VacationDao</code>.
+</p>
+
+<h3>Flujo de notificación</h3>
+<ol>
+<li><code>checkAndSendMail(obj, operationType, dbObj)</code> — Punto de entrada. Verifica que el servidor de correo esté configurado y construye un contenedor <code>VacationInfo</code>.</li>
+<li>Para registros de vacaciones especiales con estado IN_PROGRESS o APPROVED, envía a la dirección de correo de RR.HH. (configurada en administración).</li>
+<li>Envía al vacacionista (si no fue él mismo quien realizó el cambio — verificado mediante <code>ThreadLocalUserContext.loggedInUserId</code>).</li>
+<li>Envía al gerente (si no es el actor).</li>
+<li>Envía al reemplazo principal y a todos los demás reemplazos (deduplicados mediante un conjunto).</li>
+</ol>
+
+<h3>Composición del correo</h3>
+<p>
+El método <code>prepareMail()</code> crea un objeto <code>Mail</code> con contenido HTML renderizado a partir de la plantilla Groovy <code>mail/vacationMail.html</code>. La plantilla recibe un mapa que contiene:
+</p>
+<ul>
+<li><code>vacationInfo</code> — clase interna <code>VacationInfo</code> con todos los nombres de usuario resueltos, correos electrónicos, fechas formateadas y días laborables</li>
+<li><code>vacation</code> — el objeto <code>VacationDO</code> sin procesar</li>
+<li><code>mailInfo</code> — asunto, tipo de operación (insertar/actualizar/eliminar/recuperar) y modo (propio/gerente/reemplazo/RR.HH.)</li>
+</ul>
+
+<h3>Clase interna VacationInfo</h3>
+<p>
+Este contenedor de datos resuelve todas las referencias de empleados (vacacionista, gerente, reemplazo, otrosReemplazos) a objetos <code>PFUserDO</code> y formatea fechas, días laborables, indicadores de medio día y estado especial. El método <code>updateI18n(recipient)</code> vuelve a resolver las cadenas visibles para el usuario según la configuración regional del destinatario, lo que permite la entrega de correos localizados a destinatarios con diferentes configuraciones de idioma.
+</p>
+
+<h3>Generación de URL</h3>
+<p>
+El objeto complementario construye de forma perezosa un enlace a la página de edición de vacaciones mediante <code>SendMail.buildUrl()</code> combinado con <code>MenuItemDefId.VACATION.url</code>, generando enlaces profundos como <code>/vacation/edit/123?returnToCaller=account</code>.
+</p>
+
+<h2>Justificación del diseño</h2>
+<p>
+El envío de correos está separado del DAO para mantener aisladas las preocupaciones de persistencia. El servicio utiliza <code>VacationInfo</code> como una clase de datos intermedia en lugar de pasar la entidad directamente a las plantillas; esto garantiza que las plantillas nunca accedan a proxies JPA de carga diferida (que fallarían fuera de una transacción). El método <code>updateI18n</code> soporta el requisito multiidioma de una empresa alemana con empleados internacionales. La ruta de notificación a RR.HH. para vacaciones especiales garantiza el monitoreo de cumplimiento incluso cuando empleados y gerentes son la misma persona.
+</p>
+
+<h2>Historial de Git</h2>
+<div class="hist">
+<pre>868d6abb7 2025 -> 2026
+600951ee0 2025 -> 2026
+b131193e7 Variables miembro refactorizadas usando by lazy {}...
+d5cc73eb6 Variables miembro refactorizadas usando by lazy {}...
+63081666f Encabezados de archivos fuente: 2024 -> 2025.
+199c26801 Encabezados de archivos fuente: 2024 -> 2025.
+e1db80611 Hotfix: com.sun.mail agregado.
+0a78bc22c Hotfix: com.sun.mail agregado.
+1b50060c3 BaseDao: renombrado get->find, save->insert, getList->select, load->select
+514533e99 BaseDao: renombrado get->find, save->insert, getList->select, load->select
+87aaf6a5a Cosas de migración: BaseDao refactorizado...
+41217b065 Cosas de migración: BaseDao refactorizado...
+67805f2fc ThreadLocalUserContext.user -> loggedInUser
+58ffda82b ThreadLocalUserContext.user -> loggedInUser
+4c04cfd65 CAMBIO IMPORTANTE: Migración de IDs enteros a IDs Long.
+fd13c259a CAMBIO IMPORTANTE: Migración de IDs enteros a IDs Long.
+06828f490 Cosas de migración en progreso...
+4b3872a1b Cosas de migración en progreso...
+b6092df09 Copyright 2023 -> 2024
+9a0609dd1 Copyright 2023 -> 2024
+</pre>
+</div>
+
+</body>
+</html>

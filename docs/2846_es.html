@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="es">
+<head><meta charset="utf-8"><title>#2846: AccessListPage.java [ES]</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333}h2{margin-top:2em;border-bottom:1px solid #ddd}h3{margin-top:1.5em;color:#333}a{color:#0366d6}.meta{background:#f0f0f0;border-radius:6px;padding:1em;margin:1em 0;font-size:.9em}.code-block{background:#1e1e1e;color:#d4d4d4;border-radius:4px;padding:.8em 1em;margin:.5em 0;overflow-x:auto;font-family:Consolas,monospace;font-size:.82em;line-height:1.5;white-space:pre-wrap}.commentary{margin:.8em 0;background:#fff;padding:.5em 1em;border-radius:6px;border-left:4px solid #ddd;line-height:1.7}table{border-collapse:collapse;width:100%;margin:.8em 0;font-size:.9em}th,td{border:1px solid #ddd;padding:.4em .6em}th{background:#f0f0f0}code{background:#e8e8e8;border-radius:3px;padding:.1em .3em;font-size:.9em}.nav{font-size:.9em;color:#888;margin-bottom:1em}.history{background:#fffbe6;border-radius:6px;padding:1em;margin:1em 0;font-size:.9em;border-left:4px solid #ffc107}.arch{background:#e8f4fd;border-radius:6px;padding:1em;margin:1em 0;font-size:.9em;border-left:4px solid #2196f3}</style></head>
+<body><div class="nav"><a href="https://maureranton.github.io/projectforge/">← Índice</a> · <a href="file-index.html">← Índice de archivos</a> · <a href="2845.html">← Anterior</a> · <a href="2847.html">Siguiente →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-wicket/src/main/java/org/projectforge/web/access/AccessListPage.java" target="_blank" title="Ver fuente en GitHub">📄 fuente</a></div>
+<h1>#2846: <code>AccessListPage.java</code></h1>
+<div class="meta"><code>projectforge-wicket/src/main/java/org/projectforge/web/access/AccessListPage.java</code> <p><strong>Ruta:</strong> <code>projectforge-wicket/src/main/java/org/projectforge/web/access/AccessListPage.java</code> · <strong>Líneas:</strong> 228 · <strong>Extiende:</strong> <code>AbstractListPage&lt;AccessListForm, AccessDao, GroupTaskAccessDO&gt;</code></p><p><strong>Propósito:</strong> LA página de gestión de derechos de acceso — la interfaz central para configurar quién (grupo) puede hacer qué (tipo de acceso) sobre qué tarea (elemento de estructura). Muestra las entradas GroupTaskAccess en un DataTable de Wicket con 4 columnas personalizadas: árbol jerárquico de tareas, nombre del grupo, tipos de acceso (subtabla) y bandera recursiva (marca de verificación). Botón de asistente solo para administradores para configuración masiva de accesos.</p><p><strong>Fuente:</strong> <a href="https://github.com/micromata/projectforge/blob/develop/projectforge-wicket/src/main/java/org/projectforge/web/access/AccessListPage.java">GitHub</a></p> <span style="color:#888">228 líneas · 180 código · 35 comentarios · 13 en blanco</span></div>
+<div class="history"><table><tr><th>Commit</th><th>Mensaje</th></tr><tr><td><code>9ebb88522</code></td><td>2016-07-18 Commit inicial</td></tr></table></div>
+
+<h2>Arquitectura de tipo genérico — el contrato de 3 tipos</h2>
+<div class="code-block"><pre>public class AccessListPage extends AbstractListPage&lt;
+    AccessListForm,          // F — el formulario Wicket con campos de filtro/búsqueda
+    AccessDao,               // D — el Objeto de Acceso a Datos para CRUD
+    GroupTaskAccessDO        // E — la entidad/objeto de dominio que se lista
+&gt; implements IListPageColumnsCreator&lt;GroupTaskAccessDO&gt;</pre></div>
+<div class="commentary"><p>La arquitectura Wicket de ProjectForge utiliza un <strong>patrón genérico de 3 tipos</strong> para cada página de lista. Este es el enfoque RAD (Desarrollo Rápido de Aplicaciones) de la guía de desarrollo (#site/_docs/development.adoc): "Derive clases de interfaz de usuario a partir de las clases base." Al extender <code>AbstractListPage</code> con estos tres tipos, la página hereda:</p><ul><li><strong>Interfaz de filtro/búsqueda</strong> — de <code>AccessListForm</code> (el tipo F). El formulario proporciona campos de filtro (selector de tarea, selector de grupo, selector de usuario, texto de búsqueda).</li><li><strong>Operaciones CRUD</strong> — de <code>AccessDao</code> (el tipo D). El DAO maneja consultas a la base de datos con filtrado automático de derechos de acceso — los usuarios solo ven las entradas que están autorizados a ver.</li><li><strong>Enlace de datos</strong> — de <code>GroupTaskAccessDO</code> (el tipo E). La entidad proporciona datos de columna, ordenamiento e identificación de fila.</li></ul><p>La anotación <code>@ListPage(editPage = AccessEditPage.class)</code> en la línea 53 enlaza esta página de lista con su contraparte de edición. Cuando un usuario hace clic en una fila, Wicket navega a <code>AccessEditPage</code> con el ID de la entidad. Esta es una anotación propia de ProjectForge — no es Wicket estándar.</p></div>
+
+<h2>El DataTable de 4 columnas — cada columna es un mini-renderizador</h2>
+<div class="code-block"><pre>// COLUMNA 1: Tarea — ruta de árbol jerárquico
+new PropertyColumn("task.title") {
+  @Override public void populateItem(...) {
+    TaskDO task = access.getTask();
+    WicketTaskFormatter.appendFormattedTask(cycle, buf, task, true, false);
+    item.add(new ListSelectActionPanel(..., AccessEditPage.class, access.getId(), ...));
+    addRowClick(item);  // Toda la fila hace clic para ir a la página de edición
+  }
+}
+
+// COLUMNA 2: Grupo — texto simple
+new PropertyColumn("group.name")
+
+// COLUMNA 3: Recursivo — icono de marca de verificación o vacío
+new PropertyColumn("recursive") {
+  @Override public void populateItem(...) {
+    if (access.getRecursive()) item.add(new IconPanel(..., IconType.ACCEPT));
+    else item.add(createInvisibleDummyComponent(...));  // Mantener estructura DOM
+  }
+}
+
+// COLUMNA 4: Entradas de acceso — SUBTABLA EMBEBIDA
+new PropertyColumn("accessEntries") {
+  @Override public void populateItem(...) {
+    AccessTablePanel accessTablePanel = new AccessTablePanel(..., accessEntries);
+    if (rowIndex == 0) accessTablePanel.setDrawHeader(true);  // Encabezado en la primera fila
+    item.add(accessTablePanel);
+  }
+}</pre></div>
+<div class="commentary"><p><strong>Columna 1 — Árbol de tareas (líneas 83-105):</strong> La columna más compleja. <code>WicketTaskFormatter.appendFormattedTask()</code> renderiza la ruta jerárquica completa de la tarea (ej., "ACME Inc. → Portal Web → Sprint 3") como una sola cadena formateada. El <code>ListSelectActionPanel</code> envuelve esto en un enlace cliqueable a <code>AccessEditPage</code>. <code>addRowClick(item)</code> hace que TODA la fila sea cliqueable, no solo el nombre de la tarea.</p><p><strong>Columna 3 — Bandera recursiva (líneas 110-125):</strong> Muestra una marca de verificación verde (<code>IconType.ACCEPT</code>) si el acceso es recursivo (se aplica a todas las tareas hijas). De lo contrario, muestra un <strong>componente dummy invisible</strong> — no solo vacío. Este es un patrón de Wicket: eliminar un componente de la jerarquía rompe el mapeo de índices del repetidor. El dummy preserva la estructura del árbol de componentes mientras renderiza nada visible.</p><p><strong>Columna 4 — AccessTablePanel embebido (líneas 126-143):</strong> Cada fila contiene una subtabla ANIDADA que muestra entradas de acceso individuales (lectura, escritura, eliminación, etc.) para esa combinación de grupo/tarea. El encabezado se dibuja solo en la PRIMERA fila (<code>rowIndex == 0</code>) para evitar repetir encabezados de columna en cada fila. Este es un patrón de lista-dentro-de-lista — la lista externa muestra pares grupo/tarea, cada uno contiene una lista interna de tipos de acceso.</p></div>
+
+<h2>Asistente de administración — configuración masiva de accesos (líneas 160-174)</h2>
+<div class="code-block"><pre>@Override protected void init() {
+  if (getAccessChecker().isLoggedInUserMemberOfAdminGroup()) {
+    ContentMenuEntryPanel menuEntry = new ContentMenuEntryPanel(..., new Link() {
+      public void onClick() {
+        TaskWizardPage wizardPage = new TaskWizardPage(params);
+        wizardPage.setReturnToPage(AccessListPage.this);
+        setResponsePage(wizardPage);
+      }
+    }, getString("wizard"));
+    addContentMenuEntry(menuEntry);
+  }
+}</pre></div>
+<div class="commentary"><p>El botón de asistente aparece en el menú contextual de la página SOLO para usuarios administradores. Navega a <code>TaskWizardPage</code> — un asistente de varios pasos que crea entradas de acceso de forma masiva para una jerarquía de tareas. Esta es la función "Inicio Rápido" documentada en la guía de usuario: en lugar de crear manualmente docenas de entradas de acceso por tarea, el asistente las genera automáticamente con plantillas (ej., la plantilla "empleado" da acceso de lectura a todas las tareas hijas). El <code>setReturnToPage(AccessListPage.this)</code> asegura que el asistente regrese aquí después de completarse.</p></div>
+
+<h2>Seleccionar/deseleccionar — filtrar por tarea, grupo o usuario (líneas 179-217)</h2>
+<div class="code-block"><pre>public void select(String property, Object selectedValue) {
+  if ("taskId".equals(property)) {
+    form.getSearchFilter().setTaskId((Long) selectedValue); refresh();
+  } else if ("groupId".equals(property)) {
+    form.getSearchFilter().setGroupId((Long) selectedValue); refresh();
+  } else if ("userId".equals(property)) {
+    form.getSearchFilter().setUserId((Long) selectedValue); refresh();
+  } else {
+    super.select(property, selectedValue);
+  }
+}</pre></div>
+<div class="commentary"><p>Los métodos <code>select/unselect</code> implementan un <strong>patrón de callback</strong> para los popups de selector de ProjectForge. Cuando el usuario hace clic en "Seleccionar tarea" en la barra de filtros, se abre un selector emergente. Cuando el usuario elige una tarea, el popup llama a <code>select("taskId", taskId)</code> en esta página. El método establece el filtro y llama a <code>refresh()</code> para recargar la tabla. <code>unselect</code> limpia el filtro. La rama <code>groupId</code> tiene <code>form.groupSelectPanel.getTextField().modelChanged()</code> — notifica a Wicket que el modelo del campo de texto fue cambiado externamente, provocando un re-renderizado.</p></div>
+
+<h2>Conclusiones clave</h2><div class="commentary"><ul><li><strong>Genérico de 3 tipos:</strong> Cada página de lista sigue el patrón <code>&lt;F, D, E&gt;</code>. Entender esto desbloquea toda la arquitectura de la interfaz de usuario de Wicket.</li><li><strong>Componentes dummy:</strong> El <code>createInvisibleDummyComponent</code> de la línea 121 es un patrón crítico de Wicket — nunca devuelva null ni omita componentes en un repetidor.</li><li><strong>Subtablas embebidas:</strong> La columna 4 renderiza un <code>AccessTablePanel</code> completo dentro de una celda de tabla. Este es un patrón potente pero costoso — cada fila crea un nuevo árbol de componentes de Wicket.</li><li><strong>Retorno de asistente:</strong> <code>setReturnToPage(this)</code> crea una miga de pan de navegación de vuelta a la página de lista.</li><li><strong>Funciones solo para administradores:</strong> El botón de asistente está controlado por <code>isLoggedInUserMemberOfAdminGroup()</code>. Los usuarios no administradores nunca lo ven — la seguridad se aplica a nivel de interfaz de usuario (además de las comprobaciones de acceso del lado del servidor en el DAO).</li></ul></div>
+<div class="nav" style="margin-top:2em"><a href="2799.html">← #2799</a> · <a href="2801.html">#2801 →</a></div>
+</body></html>

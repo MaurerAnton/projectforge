@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>#1013 [FR]</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:2em;color:#444}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}</style>
+</head>
+<body>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← Index des fichiers</a> · <a href="1012.html">← Précédent</a> · <a href="1014.html">Suivant →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/kotlin/org/projectforge/business/humanresources/HRPlanningDO.kt" target="_blank" title="Voir la source sur GitHub">📄 source</a></div>
+<h1>#1013 : <code>HRPlanningDO.kt</code></h1>
+<div class="meta"><code>projectforge-business/src/main/kotlin/org/projectforge/business/humanresources/HRPlanningDO.kt</code> Entité JPA (Planification RH), projectforge-business/src/main/kotlin/org/projectforge/business/humanresources/HRPlanningDO.kt <span style="color:#888">394 lignes · 269 code · 95 commentaires · 30 vides</span></div>
+<div class="c">Entité centrale pour la planification hebdomadaire des ressources RH. Mappe la table <code>T_HR_PLANNING</code>, contrainte unique par utilisateur+semaine. Contient une liste d'entités enfants <code>HRPlanningEntryDO</code> et calcule des totaux d'heures agrégés (quotidiens, non attribués, week-end).</div>
+
+<h2>Conception de l'entité</h2>
+<p>Étend <code>DefaultBaseDO</code>. Relations clés :</p>
+<ul>
+<li><code>user</code> (PFUserDO, ManyToOne) : L'employé à qui appartient cette semaine de planification. Sérialisé uniquement par ID via <code>@IdOnlySerializer</code>.</li>
+<li><code>week</code> (LocalDate) : Premier jour de la semaine (lundi selon Locale.GERMAN). Utilisé dans la contrainte unique avec l'utilisateur.</li>
+<li><code>entries</code> (List<HRPlanningEntryDO>, OneToMany) : Entités enfants pour chaque affectation projet/statut dans cette semaine. Marquées <code>@PersistenceBehavior(autoUpdateCollectionEntries=true)</code> pour une gestion automatique en cascade.</li>
+</ul>
+
+<h3>Propriétés calculées</h3>
+<p>Toutes les propriétés <code>@Transient</code> calculent des agrégats à partir des entrées : <code>totalHours</code>, <code>totalUnassignedHours</code>, <code>totalMondayHours</code> jusqu'à <code>totalWeekendHours</code>. Chacune ignore les entrées supprimées via la vérification <code>entry.deleted</code>. La propriété <code>formattedWeekOfYear</code> délègue à <code>DateTimeFormatter</code>.</p>
+
+<h3>Décisions clés</h3>
+<ul>
+<li><strong>Début de semaine = lundi :</strong> Utilise <code>PFDay.beginOfWeek</code> avec Locale.GERMAN, faisant du lundi le premier jour ouvrable.</li>
+<li><strong>Suppression logicielle des entrées :</strong> <code>deleteEntry()</code> marque les entrées comme supprimées plutôt que de les retirer, permettant une annulation via le ré-ajout du même statut/projet.</li>
+<li><strong>Chargement paresseux :</strong> Toutes les relations utilisent <code>FetchType.LAZY</code> pour éviter les problèmes de requêtes N+1.</li>
+</ul>
+
+<h2>Historique Git</h2><div class="hist"><pre>
+868d6abb7 2025 -> 2026
+63081666f En-têtes des fichiers source : 2024 -> 2025.
+0237d5eba Réorganisation de la sérialisation JSON : introduction de IdOnlySerializer et IdsOnlySerializer.
+4bc37b3a1 Travail de migration en cours...
+c8f8ed935 Toutes les entités déclarées en FetchType.LAZY (était EAGER).
+fa194d7f8 Travail de migration en cours...
+4c04cfd65 CHANGEMENT-MAJEUR ! Migration des identifiants entiers vers des identifiants Long (incluant les clés étrangères, etc.)
+3cde2b1f6 Travail de migration en cours...
+f5c09f87f Travail de migration en cours...
+c04fb0d51 Travail de migration en cours...
+06828f490 Travail de migration en cours...
+b6092df09 Copyright 2023 -> 2024
+ab45d51fa Copyright 2001-2022 -> 2001-2023.
+5f7ef41b8 Copyright 2021 -> 2022
+c0f2b9de0 Fonctionnalités de locataires supprimées partout (non testé).
+ceb63e8a1 En-tête du code source : (C) 2001-2021.
+daa67db68 HRPlanning(Entry) : Ajout des DTOs et correction des identifiants de colonnes sur leurs pages de liste respectives.
+878cb7169 Beaucoup d'avertissements du compilateur corrigés.
+ca0d5470e Suppression des DateBridges des DOs.
+00d898341 Ajout du point d'accès REST HRPlanningList
+7c1c48782 Remplacement de plusieurs instances de java.sql.Date par java.time.LocalDate
+7c79f1922 Copyright de l'en-tête source -> 2020.
+a1c287b49 La semaine de l'année est désormais globalement la même.
+19b97fcc3 DateBridge : encoding = EncodingType.STRING pour tous les DateBridges.
+e92b3afd0 Jackson : JsonBackReference/JsonManagedReference -> JsonIdentityInfo
+8675a1dbe Problème de performance majeur trouvé : toutes les entités JPA Kotlin et leurs propriétés déclarées comme open.
+39cdd224c Recherche Hibernate : DateBridge...
+fe5a7c982 Gros WIP : NamedQueries partout...
+29e3c0399 GanttChartDO, HRPlanningDO : PropertyInfos ajoutées
+3223972db HRPlanningDO.java -> HRPlanningDO.kt
+</pre></div>
+</body>
+</html>

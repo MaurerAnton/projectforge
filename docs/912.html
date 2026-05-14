@@ -3,68 +3,85 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>#912: KontenplanExcelImporter.kt</title>
+<title>#912: CurrencyConversionServiceSupport.kt</title>
 <style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:2em;color:#444}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}</style>
 </head>
 <body>
-<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="911.html">← Prev</a> · <a href="913.html">Next →</a></div>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="911.html">← Prev</a> · <a href="913.html">Next →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/kotlin/org/projectforge/business/fibu/CurrencyConversionServiceSupport.kt" target="_blank" title="View source on GitHub">📄 source</a></div>
 
-<h1>#912: <code>KontenplanExcelImporter.kt</code></h1>
+<h1>#912: <code>CurrencyConversionServiceSupport.kt</code></h1>
 
-<div class="meta">
-  <strong>Type:</strong> Excel Import Class<br>
-  <strong>Package:</strong> <code>org.projectforge.business.fibu.datev</code><br>
-  <strong>Actual Path:</strong> <code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/datev/KontenplanExcelImporter.kt</code><br>
-  <strong>Note:</strong> The file does <strong>not</strong> exist at the requested path (<code>.../excelimport/...</code>). It resides in the <code>datev</code> sub-package. The documentation below reflects the actual source.
-</div>
+<div class="meta"><code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/CurrencyConversionServiceSupport.kt</code> 
+  <strong>Type:</strong> Internal Spring Service<br>
+  <strong>Package:</strong> <code>org.projectforge.business.fibu</code><br>
+  <strong>Path:</strong> <code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/CurrencyConversionServiceSupport.kt</code><br>
+  <strong>Author:</strong> Kai Reinhard (k.reinhard@micromata.de)
+ <span style="color:#888">304 lines · 183 code · 103 comments · 18 blank</span></div>
 
 <div class="c">
-  <p>Imports a <strong>Kontenplan</strong> (chart of accounts) from an Excel workbook. The import expects a sheet named <code>"Kontenplan"</code> with account numbers and descriptions. Uses the Merlin Excel framework for parsing and validation.</p>
+  <p><strong>Internal support class</strong> for currency conversion operations. Handles database persistence, validation, and access control. Marked <code>internal</code> — not part of the public API. <code>CurrencyConversionService</code> is the public-facing facade; this class performs the actual data operations and cache invalidation.</p>
 </div>
 
 <h2>Architecture</h2>
-<p>A simple, stateless import class (not a Spring bean). Takes <code>ImportStorage</code> and <code>ExcelWorkbook</code> as parameters.</p>
 
-<h2>Column Mapping (Enum: <code>Cols</code>)</h2>
+<h3>Dependencies</h3>
 <table>
-  <tr><th>Enum</th><th>Header</th><th>Aliases</th><th>Validator</th><th>Target Property</th></tr>
-  <tr><td><code>KONTO</code></td><td>Konto</td><td>Konto von</td><td>NumberValidator (>=1, required, unique)</td><td><code>nummer</code> (set manually)</td></tr>
-  <tr><td><code>BEZEICHNUNG</code></td><td>Bezeichnung</td><td>Beschriftung</td><td>Validator (required)</td><td><code>bezeichnung</code></td></tr>
+  <tr><th>Dependency</th><th>Role</th></tr>
+  <tr><td><code>BaseDOPersistenceService</code></td><td>Generic insert/update/markAsDeleted/undelete operations</td></tr>
+  <tr><td><code>PfPersistenceService</code></td><td>Direct JPA queries (named queries, find by id)</td></tr>
+  <tr><td><code>CurrencyPairDao</code></td><td>Access control checks</td></tr>
+  <tr><td><code>CurrencyConversionCache</code></td><td>Invalidation after write operations</td></tr>
 </table>
 
-<h2>Import Flow</h2>
+<h2>Key Methods</h2>
+
+<h3>Query Methods</h3>
+<table>
+  <tr><th>Method</th><th>Description</th></tr>
+  <tr><td><code>findRate(id)</code></td><td>Selects a rate by id; optionally checks user select access</td></tr>
+  <tr><td><code>selectAllRates(pair, deleted?)</code></td><td>Uses named query <code>FIND_ALL_BY_PAIR</code>; optionally filters by deleted flag</td></tr>
+  <tr><td><code>getActiveRate(rates, date)</code></td><td>Finds the active rate from a list by latest <code>validFrom</code> not after the given date</td></tr>
+</table>
+
+<h3>Validation</h3>
+<p><code>validate(rate)</code> checks uniqueness via named queries:</p>
+<ul>
+  <li>New entries: <code>FIND_BY_PAIR_AND_DATE</code> — checks if any rate already exists for this pair+date</li>
+  <li>Existing entries: <code>FIND_OTHER_BY_PAIR_AND_DATE</code> — excludes the current rate</li>
+</ul>
+<p>If a matching <strong>deleted</strong> rate is found, it is returned to the caller for <strong>re-use</strong> (undelete + copy-from pattern). This allows users to re-create rates on dates that were previously active but soft-deleted.</p>
+
+<h3>CRUD with Deleted-Entry Reuse</h3>
+<p>Both <code>insert()</code> and <code>updateRate()</code> implement a special algorithm for handling soft-deleted entries:</p>
 <ol>
-  <li><code>doImport(storage, workbook)</code> — retrieves the sheet named <code>"Kontenplan"</code>. Throws <code>UserException</code> if not found.</li>
-  <li><code>importKontenplan(storage, sheet)</code>:
-    <ul>
-      <li>Enables auto-trim for cell values.</li>
-      <li>Registers two columns with validators.</li>
-      <li>Analyzes the sheet; skips if no valid head row is found.</li>
-      <li>Creates <code>ImportedSheet</code> with warning-level logging.</li>
-      <li>Iterates data rows, creating <code>MyImportedElement</code> and <code>KontoDO</code> per row.</li>
-      <li>Sets <code>nummer</code> explicitly from the cell integer value (rather than via <code>ImportHelper.fillBean</code> target property mapping).</li>
-    </ul>
-  </li>
+  <li><code>validate(rate)</code> returns an existing deleted entry if one matches</li>
+  <li>If a deleted match exists: the deleted entry's fields are copied from the new rate, then it's undeleted, and the new entry is discarded</li>
+  <li>For updates: the existing record is marked deleted, and the previously-deleted matching record is undeleted and updated</li>
+  <li>Cache is invalidated in a <code>finally</code> block</li>
 </ol>
 
-<h2>Companion Object</h2>
-<ul>
-  <li><code>NAME_OF_EXCEL_SHEET</code> — the required sheet name: <code>"Kontenplan"</code></li>
-  <li><code>log</code> — SLF4J logger</li>
-</ul>
+<h3>Save/Update and Delete Helpers</h3>
+<table>
+  <tr><th>Method</th><th>Description</th></tr>
+  <tr><td><code>saveOrUpdate(rate)</code></td><td>Generic insert or update, invalidates cache</td></tr>
+  <tr><td><code>delete(rate)</code></td><td>Soft-deletes a rate, invalidates cache</td></tr>
+  <tr><td><code>markRateAsDeleted(pair, rate)</code></td><td>Full mark-delete flow: validate + markDeleted + cache invalidate</td></tr>
+  <tr><td><code>markRateAsDeleted(pairId, rateId)</code></td><td>Convenience overload that resolves the pair by id</td></tr>
+  <tr><td><code>insert(pairId, rate)</code></td><td>Insert with deferred-call pattern: resolve pair, then delegate</td></tr>
+  <tr><td><code>insert(pair, rate)</code></td><td>Actual insert logic with validation and deleted-entry reuse</td></tr>
+  <tr><td><code>updateRate(pair, rate)</code></td><td>Update with validation, access check, and deleted-entry reuse for date changes</td></tr>
+</table>
+
+<h3>Access Control</h3>
+<p>All mutating methods (insert, update, delete) check the logged-in user has the appropriate access right via <code>currencyPairDao.checkLoggedInUser*Access()</code>. The <code>checkAccess</code> parameter (defaulting to <code>true</code>) allows bypassing these checks for import/bulk operations.</p>
 
 <h2>Git History</h2>
 <div class="hist"><pre>
 868d6abb7 2025 -> 2026
-63081666f Source file headers: 2024-> 2025.
-1012e347a Migration stuff in progress... (all tests of all packages: OK).
-b6092df09 Copyright 2023 -> 2024
-ab45d51fa Copyright 2001-2022 -> 2001-2023.
-5f7ef41b8 Copyright 2021 -> 2022
-db3b02da7 UserException moved from business to common package.
-ceb63e8a1 Source code header: (C) 2001-2021.
-878cb7169 Lots of compiler warnings fixed.
-6d8db7350 WIP: Merlin importer...
+b78da69bc BaseDao.baseDOChangedRegistry ist now private.
+75ea9dc1a WIP: currency conversion with Claude Code.
+07edc85de WIP: currency conversion with Claude Code.
+bd69407de Initial revision with Claude Code.
 </pre></div>
 
 </body>

@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>509: LdapUserDao.java [DE]</title>
+<style>
+body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}
+h1{border-bottom:2px solid #333;padding-bottom:.3em}
+h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}
+h3{margin-top:1.5em;color:#444;font-size:1em}
+a{color:#0366d6}
+.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}
+.nav{font-size:.9em;color:#888;margin-bottom:1em}
+.lang{font-size:.85em;color:#888;float:right}
+.lang a{color:#888;text-decoration:none;padding:0 .3em}
+.lang a.active{color:#0366d6;font-weight:600;text-decoration:underline}
+.meta{font-size:.9em;margin:1em 0;color:#555}
+code{background:#f0f0f0;padding:0 .2em;font-size:.93em}
+pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}
+table{border-collapse:collapse;width:100%;margin:1em 0}
+th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}
+th{background:#f5f5f5;font-weight:600}
+.hist{font-size:.85em;color:#555}
+pre.diff{background:#fff;font-size:.82em;max-height:300px;overflow-y:auto}
+</style>
+</head>
+<body>
+<div class="lang"><a href="509.html">EN</a> · <a href="509_de.html" class="active">DE</a> · <a href="509_ru.html">RU</a> · <a href="509_fr.html">FR</a> · <a href="509_es.html">ES</a></div>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← Dateiindex</a> · <a href="1364.html">← Vorherige</a> · <a href="260.html">Nächste →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/java/org/projectforge/business/ldap/LdapUserDao.java" target="_blank" title="Quellcode auf GitHub ansehen">📄 Quelle</a></div>
+<h1>#509: <code>LdapUserDao.java</code></h1>
+<div class="meta"><code>projectforge-business/src/main/java/org/projectforge/business/ldap/LdapUserDao.java</code> Java-Klasse, <code>projectforge-business/src/main/java/org/projectforge/business/ldap/LdapUserDao.java</code> <span style="color:#888">609 Zeilen · 460 Code · 94 Kommentare · 55 Leerzeichen</span></div>
+<div class="c"><strong>Zweck:</strong> Quelldatei: projectforge/business/ldap/LdapUserDao.java. LdapUserDao.java ist Teil der Open-Source-Projektmanagement-Anwendung ProjectForge.</div>
+<h2>Quellcode (erste 100 Zeilen)</h2>
+<pre>/////////////////////////////////////////////////////////////////////////////
+//
+// Project ProjectForge Community Edition
+//         www.projectforge.org
+//
+// Copyright (C) 2001-2026 Micromata GmbH, Germany (www.micromata.com)
+//
+// ProjectForge ist dual-lizenziert.
+//
+// Diese Community-Edition ist freie Software; Sie können es weiterverteilen und/oder
+// modifizieren unter den Bedingungen der GNU General Public License, wie veröffentlicht
+// von der Free Software Foundation; Version 3 der Lizenz.
+//
+// Diese Community-Edition wird in der Hoffnung verteilt, dass sie nützlich sein wird,
+// aber OHNE JEDE GEWÄHRLEISTUNG; ohne die stillschweigende Garantie der
+// MARKTGÄNGIGKEIT oder EIGNUNG FÜR EINEN BESTIMMTEN ZWECK. Siehe die GNU General
+// Public License für weitere Details.
+//
+// Sie sollten eine Kopie der GNU General Public License zusammen mit
+// diesem Programm erhalten haben; falls nicht, siehe http://www.gnu.org/licenses/.
+//
+/////////////////////////////////////////////////////////////////////////////
+
+package org.projectforge.business.ldap;
+
+import arlut.csd.crypto.SmbEncrypt;
+import org.apache.commons.collections4.CollectionUtils;
+import org.apache.commons.lang3.StringUtils;
+import org.projectforge.business.login.LoginHandler;
+import org.projectforge.framework.utils.NumberHelper;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
+
+import jakarta.annotation.PostConstruct;
+import javax.naming.NameNotFoundException;
+import javax.naming.NamingEnumeration;
+import javax.naming.NamingException;
+import javax.naming.directory.*;
+import java.util.*;
+
+/**
+ * @author Kai Reinhard (k.reinhard@micromata.de)
+ */
+@Service
+public class LdapUserDao extends LdapDao&lt;String, LdapUser&gt; {
+  private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(LdapUserDao.class);
+
+  public static final String DEACTIVATED_SUB_CONTEXT = "deaktiviert";
+
+  private static final String DEACTIVATED_SUB_CONTEXT2 = "ou=" + DEACTIVATED_SUB_CONTEXT;
+
+  private static final String DEACTIVATED_SUB_CONTEXT3 = DEACTIVATED_SUB_CONTEXT2 + ",";
+
+  static final String DEACTIVATED_MAIL = "deaktiviert@localhost";
+
+  public static final String RESTRICTED_USER_SUB_CONTEXT = "eingeschränkt";
+
+  private static final String RESTRICTED_USER_SUB_CONTEXT2 = "ou=" + RESTRICTED_USER_SUB_CONTEXT;
+
+  private static final String RESTRICTED_USER_SUB_CONTEXT3 = RESTRICTED_USER_SUB_CONTEXT2 + ",";
+
+  private boolean useUidInDn = false;
+
+  @Autowired
+  private LdapPersonDao ldapPersonDao;
+
+  static String[] ALLE_OBJEKTKLASSEN;
+
+  static String[] ALLE_OBJEKTKLASSEN_MIT_POSIX_KONTO;
+
+  static String[] ALLE_OBJEKTKLASSEN_MIT_SAMBA_KONTO;
+
+  static String[] ALLE_OBJEKTKLASSEN_MIT_SAMBA_UND_POSIX_KONTO;
+
+  private static String POSIX_OBJEKTKLASSE = "posixAccount";
+
+  private static String SAMBA_OBJEKTKLASSE = "sambaSamAccount";
+
+  @Autowired
+  LdapService ldapService;
+
+  @PostConstruct
+  public void init() {
+    useUidInDn = true;
+  }
+
+  public boolean isDeactivated(final LdapUser user) {
+    return user.isDeactivated()
+        || user.getOrganizationalUnit() != null
+        &amp;&amp; LdapUtils.getOu(user.getOrganizationalUnit()).contains(DEACTIVATED_SUB_CONTEXT);
+  }
+
+  public boolean isRestrictedUser(final LdapUser user) {
+    return user.isRestrictedUser()
+        || user.getOrganizationalUnit() != null
+        &amp;&amp; LdapUtils.getOu(user.getOrganizationalUnit()).contains(RESTRICTED_USER_SUB_CONTEXT);
+  }
+
+  public boolean isPosixAccountsConfigured() {
+    final LdapConfig ldapConfig = ldapService.getLdapConfig();</pre>
+<h2>Git-Verlauf</h2>
+<div class="hist">
+<pre>868d6abb7 2025 -> 2026
+63081666f Quellcode-Dateiköpfe: 2024 -> 2025.
+77bade6df javax.* -> jakarta.*
+b6092df09 Copyright 2023 -> 2024
+ab45d51fa Copyright 2001-2022 -> 2001-2023.</pre>
+<h3>868d6abb7</h3><div class="c"><strong>2025 -> 2026</strong><pre class="diff">868d6abb75cd191a892911ac8e45058932cf9074
+diff --git a/projectforge-business/src/main/java/org/projectforge/business/ldap/LdapUserDao.java b/projectforge-business/src/main/java/org/projectforge/business/ldap/LdapUserDao.java
+index e76a05bd7..21a3e14e7 100644
+--- a/projectforge-business/src/main/java/org/projectforge/business/ldap/LdapUserDao.java
++++ b/projectforge-business/src/main/java/org/projectforge/business/ldap/LdapUserDao.java
+@@ -3,7 +3,7 @@
+ // Project ProjectForge Community Edition
+ //         www.projectforge.org
+ //
+-// Copyright (C) 2001-2025 Micromata GmbH, Germany (www.micromata.com)
++// Copyright (C) 2001-2026 Micromata GmbH, Germany (www.micromata.com)
+ //
+ // ProjectForge ist dual-lizenziert.
+ //</pre></div><h3>63081666f</h3><div class="c"><strong>Quellcode-Dateiköpfe: 2024 -> 2025.</strong><pre class="diff">63081666f620fb87315f01b817e560e0b2f6a33a
+diff --git a/projectforge-business/src/main/java/org/projectforge/business/ldap/LdapUserDao.java b/projectforge-business/src/main/java/org/projectforge/business/ldap/LdapUserDao.java
+index a6c8ddd1b..e76a05bd7 100644
+--- a/projectforge-business/src/main/java/org/projectforge/business/ldap/LdapUserDao.java
++++ b/projectforge-business/src/main/java/org/projectforge/business/ldap/LdapUserDao.java
+@@ -3,7 +3,7 @@
+ // Project ProjectForge Community Edition
+ //         www.projectforge.org
+ //
+-// Copyright (C) 2001-2024 Micromata GmbH, Germany (www.micromata.com)
++// Copyright (C) 2001-2025 Micromata GmbH, Germany (www.micromata.com)
+ //
+ // ProjectForge ist dual-lizenziert.
+ //</pre></div><h3>77bade6df</h3><div class="c"><strong>javax.* -> jakarta.*</strong><pre class="diff">77bade6dfb148c87638c71951accb03942157fcf
+diff --git a/projectforge-business/src/main/java/org/projectforge/business/ldap/LdapUserDao.java b/projectforge-business/src/main/java/org/projectforge/business/ldap/LdapUserDao.java
+index 5a69f98ba..a6c8ddd1b 100644
+--- a/projectforge-business/src/main/java/org/projectforge/business/ldap/LdapUserDao.java
++++ b/projectforge-business/src/main/java/org/projectforge/business/ldap/LdapUserDao.java
+@@ -31,7 +31,7 @@ import org.projectforge.framework.utils.NumberHelper;
+ import org.springframework.beans.factory.annotation.Autowired;
+ import org.springframework.stereotype.Service;
+ 
+-import javax.annotation.PostConstruct;
++import jakarta.annotation.PostConstruct;
+ import javax.naming.NameNotFoundException;
+ import javax.naming.NamingEnumeration;
+ import javax.naming.NamingException;</pre></div><h3>b6092df09</h3><div class="c"><strong>Copyright 2023 -> 2024</strong><pre class="diff">b6092df0927c4a3b161e888445f31dcab57493f2
+diff --git a/projectforge-business/src/main/java/org/projectforge/business/ldap/LdapUserDao.java b/projectforge-business/src/main/java/org/projectforge/business/ldap/LdapUserDao.java
+index 97837df06..5a69f98ba 100644
+--- a/projectforge-business/src/main/java/org/projectforge/business/ldap/LdapUserDao.java
++++ b/projectforge-business/src/main/java/org/projectforge/business/ldap/LdapUserDao.java
+@@ -3,7 +3,7 @@
+ // Project ProjectForge Community Edition
+ //         www.projectforge.org
+ //
+-// Copyright (C) 2001-2023 Micromata GmbH, Germany (www.micromata.com)
++// Copyright (C) 2001-2024 Micromata GmbH, Germany (www.micromata.com)
+ //
+ // ProjectForge ist dual-lizenziert.
+ //</pre></div><h3>ab45d51fa</h3><div class="c"><strong>Copyright 2001-2022 -> 2001-2023.</strong><pre class="diff">ab45d51fa419ede6174b31d69987f96d4b841ff9
+diff --git a/projectforge-business/src/main/java/org/projectforge/business/ldap/LdapUserDao.java b/projectforge-business/src/main/java/org/projectforge/business/ldap/LdapUserDao.java
+index 2884ccd90..97837df06 100644
+--- a/projectforge-business/src/main/java/org/projectforge/business/ldap/LdapUserDao.java
++++ b/projectforge-business/src/main/java/org/projectforge/business/ldap/LdapUserDao.java
+@@ -3,7 +3,7 @@
+ // Project ProjectForge Community Edition
+ //         www.projectforge.org
+ //
+-// Copyright (C) 2001-2022 Micromata GmbH, Germany (www.micromata.com)
++// Copyright (C) 2001-2023 Micromata GmbH, Germany (www.micromata.com)
+ //
+ // ProjectForge ist dual-lizenziert.
+ //</pre></div>
+</div>
+</body></html>

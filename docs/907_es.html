@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>#907: AuftragsStatistik.kt [ES]</title>
+<style>
+body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}
+h1{border-bottom:2px solid #333;padding-bottom:.3em}
+h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}
+h3{margin-top:2em;color:#444}
+a{color:#0366d6}
+.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}
+.nav{font-size:.9em;color:#888;margin-bottom:1em}
+.meta{font-size:.9em;margin:1em 0;color:#555}
+code{background:#f0f0f0;padding:0 .2em;font-size:.93em}
+pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}
+table{border-collapse:collapse;width:100%;margin:1em 0}
+th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}
+th{background:#f5f5f5;font-weight:600}
+.hist{font-size:.85em;color:#555}
+</style>
+</head>
+<body>
+
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Índice</a> · <a href="file-index.html">← Índice de archivos</a> · <a href="906.html">← Anterior</a> · <a href="908.html">Siguiente →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/kotlin/org/projectforge/business/fibu/AuftragsStatistik.kt" target="_blank" title="Ver fuente en GitHub">📄 fuente</a></div>
+
+<h1>#907: <code>AuftragsStatistik.kt</code></h1>
+
+<div class="meta"><code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/AuftragsStatistik.kt</code> 
+  <strong>Tipo:</strong> Clase de datos (Serializable) &middot;
+  <strong>Propósito:</strong> Agrega estadísticas financieras en un conjunto de pedidos &middot;
+  <strong>Paquete:</strong> <code>org.projectforge.business.fibu</code><br>
+  <strong>Ruta de fuente:</strong> <code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/AuftragsStatistik.kt</code>
+ <span style="color:#888">129 líneas · 72 código · 44 comentarios · 13 en blanco</span></div>
+
+<div class="c">
+  Una clase acumuladora <code>Serializable</code> que resume valores monetarios y recuentos en múltiples instancias de <code>AuftragDO</code>. Se utiliza en el libro de pedidos y las vistas de pronóstico para mostrar cifras agregadas del pipeline. Delega el cálculo por pedido a <code>AuftragsCache.getOrderInfo()</code> que devuelve un objeto <code>OrderInfo</code> con sumas precalculadas. Proporciona desgloses separados para adquisición (potencial), comisionado, facturado, no facturado aún y por facturar, junto con los contadores correspondientes.
+</div>
+
+<h2>Arquitectura y Diseño</h2>
+
+<h3>Campos</h3>
+
+<table>
+  <tr><th>Campo</th><th>Tipo</th><th>Descripción</th></tr>
+  <tr><td><code>nettoSum</code></td><td><code>BigDecimal</code> (set privado)</td><td>Suma neta total en todos los pedidos</td></tr>
+  <tr><td><code>akquiseSum</code></td><td><code>BigDecimal</code> (set privado)</td><td>Suma solo para pedidos en estado de adquisición/potencial</td></tr>
+  <tr><td><code>beauftragtSum</code></td><td><code>BigDecimal</code> (set privado)</td><td>Suma solo para posiciones comisionadas/ordenadas (LOI, BEAUFTRAGT, ESKALATION)</td></tr>
+  <tr><td><code>invoicedSum</code></td><td><code>BigDecimal</code> (set privado)</td><td>Suma de montos ya facturados en todos los pedidos</td></tr>
+  <tr><td><code>notYetInvoicedSum</code></td><td><code>BigDecimal</code> (set privado)</td><td>Diferencia entre la suma neta y la suma facturada (saldo pendiente)</td></tr>
+  <tr><td><code>toBeInvoiced</code></td><td><code>BigDecimal</code> (set privado)</td><td>Suma de montos de pedidos completados no facturados por completo o con hitos de pago no alcanzados</td></tr>
+  <tr><td><code>counter</code></td><td><code>Int</code> (set privado)</td><td>Número total de pedidos contados</td></tr>
+  <tr><td><code>counterAkquise</code></td><td><code>Int</code> (set privado)</td><td>Número de pedidos con suma de adquisición > 0</td></tr>
+  <tr><td><code>counterBeauftragt</code></td><td><code>Int</code> (set privado)</td><td>Número de pedidos con suma comisionada > 0</td></tr>
+  <tr><td><code>counterNotYetInvoiced</code></td><td><code>Int</code> (set privado)</td><td>Número de pedidos con monto no facturado aún > 0</td></tr>
+  <tr><td><code>counterToBeInvoiced</code></td><td><code>Int</code> (set privado)</td><td>Número de pedidos con monto por facturar > 0</td></tr>
+  <tr><td><code>counterInvoiced</code></td><td><code>Int</code> (set privado)</td><td>Número de pedidos con monto facturado > 0</td></tr>
+</table>
+
+<h3>Inicialización</h3>
+<p>Todas las sumas se inicializan a <code>BigDecimal.ZERO</code> y todos los contadores a <code>0</code> en el bloque <code>init</code>.</p>
+
+<h3>Método principal: <code>add(auftrag: AuftragDO)</code></h3>
+<p>Para cada pedido, recupera el <code>OrderInfo</code> a través de <code>WicketSupport.get(AuftragsCache::class.java).getOrderInfo(auftrag)</code>. El <code>OrderInfo</code> contiene desgloses precalculados (<code>akquiseSum</code>, <code>commissionedNetSum</code>, <code>notYetInvoicedSum</code>, <code>toBeInvoicedSum</code>, <code>invoicedSum</code>, <code>netSum</code>). Para cada suma > <code>BigDecimal.ZERO</code>, el acumulador de estadísticas incrementa el contador correspondiente y agrega el monto usando <code>NumberHelper.add()</code> (suma segura de BigDecimal que maneja valores nulos).</p>
+
+<h3>Semántica calculada</h3>
+<ul>
+  <li><strong>notYetInvoicedSum</strong> — representa montos abiertos: suma neta total menos lo que ya se ha facturado. Este es el monto aún por facturar.</li>
+  <li><strong>toBeInvoiced</strong> — subconjunto más reducido: solo de pedidos que están <code>ABGESCHLOSSEN</code> (completados) pero aún no <code>vollstaendigFakturiert</code> (totalmente facturados) o tienen calendarios de pago no alcanzados. Representa candidatos inmediatos para facturación.</li>
+  <li><strong>akquiseSum</strong> — de pedidos en estados del pipeline (POTENZIAL, IN_ERSTELLUNG, GELEGT)</li>
+  <li><strong>beauftragtSum</strong> — de pedidos que están realmente comisionados (LOI, BEAUFTRAGT, ESKALATION)</li>
+</ul>
+
+<h3>Serialización</h3>
+<p>Implementa <code>Serializable</code> con <code>serialVersionUID = -5486964211679100585L</code> para la serialización de páginas Wicket. El <code>set privado</code> en todos los campos permite acceso de lectura desde el exterior mientras se evita la mutación directa (solo <code>add()</code> modifica el estado).</p>
+
+<h2>Clases relacionadas</h2>
+<ul>
+  <li><strong>Producido por:</strong> <code>AuftragDao</code> — crea y completa esta estadística a partir de listas de pedidos</li>
+  <li><strong>Agrega:</strong> <code>AuftragDO</code> — pedidos individuales que se suman</li>
+  <li><strong>Delega a:</strong> <code>AuftragsCache</code> — proporciona <code>OrderInfo</code> por pedido con desgloses precalculados</li>
+  <li><strong>Usa:</strong> <code>NumberHelper.add()</code> — suma segura de BigDecimal</li>
+  <li><strong>Usa:</strong> <code>WicketSupport</code> — búsqueda de bean Spring para <code>AuftragsCache</code></li>
+</ul>
+
+<h2>Historial de Git</h2>
+<div class="hist"><pre>
+868d6abb7 2025 -> 2026
+63081666f Encabezados de archivos fuente: 2024-> 2025.
+42dc9fa16 Pedidos: ordenado -> comisionado.
+87dd5b87c AuftragsCache refactorizado, cosas de migración... (todas las pruebas OK)
+f88994f41 Cosas de migración en progreso...
+b6092df09 Derechos de autor 2023 -> 2024
+ab45d51fa Derechos de autor 2001-2022 -> 2001-2023.
+9a65e1bc0 AuftragDO: estadísticas refactorizadas (no facturado aún, por facturar, facturado, etc.)
+f80509d49 OrderBook: estadísticas y valores por facturar mejorados.
+013c514bd AuftragsCache para un rendimiento mucho mejor de la vista de lista del libro de pedidos.
+</pre></div>
+
+</body>
+</html>

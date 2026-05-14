@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>#930: EmployeeServiceSupport.kt [RU]</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:2em;color:#444}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}</style>
+</head>
+<body>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Индекс</a> · <a href="file-index.html">← Индекс файлов</a> · <a href="929.html">← Предыдущий</a> · <a href="931.html">Следующий →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/kotlin/org/projectforge/business/fibu/EmployeeServiceSupport.kt" target="_blank" title="Просмотреть исходный код на GitHub">📄 исходный код</a></div>
+<h1>#930: <code>EmployeeServiceSupport.kt</code></h1>
+<div class="meta"><code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/EmployeeServiceSupport.kt</code> Тип: Spring-сервис (внутренний) · Назначение: Внутренняя реализация EmployeeService — валидация, сохранение и логика поиска для атрибутов, зависящих от времени · Путь: <code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/EmployeeServiceSupport.kt</code> <span style="color:#888">418 строк · 304 кода · 88 комментариев · 26 пустых</span></div>
+<div class="c">Движок реализации, лежащий в основе <code>EmployeeService</code>. Помечен как <code>internal</code> — недоступен за пределами пакета <code>fibu</code>. Содержит всю фактическую логику для запросов, валидации, вставки, обновления, мягкого удаления и восстановления записей <code>EmployeeValidSinceAttrDO</code>. Также разрешает текущие значения атрибутов (ежегодный отпуск, еженедельные часы, статус) на основе записей периода действия.</div>
+
+<h2>Архитектура и дизайн</h2>
+
+<h3>Зависимости</h3>
+<table>
+<tr><th>Зависимость</th><th>Роль</th></tr>
+<tr><td><code>BaseDOPersistenceService</code></td><td>Общие CRUD-операции (<code>insert</code>, <code>update</code>, <code>markAsDeleted</code>, <code>undelete</code>) с поддержкой проверки доступа.</td></tr>
+<tr><td><code>EmployeeCache</code></td><td>Сбрасывается после каждой мутации (<code>setExpired()</code>) для принудительного обновления кэша.</td></tr>
+<tr><td><code>EmployeeDao</code></td><td>Поиск сущностей и делегирование проверки доступа (<code>checkLoggedInUserSelectAccess</code>, <code>checkLoggedInUserInsertAccess</code>, <code>checkLoggedInUserUpdateAccess</code>).</td></tr>
+<tr><td><code>PfPersistenceService</code></td><td>Непосредственное выполнение запросов для поиска и валидации <code>ValidSinceAttr</code>.</td></tr>
+</table>
+
+<h3>Методы запросов</h3>
+<ul>
+<li><strong><code>findValidSinceAttr(id, expectedType, checkAccess)</code></strong> — Простой поиск сущности по ID с опциональной проверкой типа (выбрасывает <code>IllegalArgumentException</code> при несоответствии типа).</li>
+<li><strong><code>selectAllValidSinceAttrs(employee, type, deleted, checkAccess)</code></strong> — Основной запрос: извлекает все <code>ValidSinceAttr</code> для сотрудника, опционально отфильтрованные по типу и статусу удаления. Упорядочены по <code>validSince DESC</code>.</li>
+<li><strong><code>selectAnnualLeaveDayEntries()</code></strong> / <strong><code>selectWeeklyWorkingHoursEntries()</code></strong> — Удобные обёртки, фильтрующие по типу <code>ANNUAL_LEAVE</code> или <code>WEEKLY_HOURS</code>. Доступны с параметрами <code>employeeId</code> или <code>EmployeeDO</code>.</li>
+</ul>
+
+<h3>Разрешение активной записи (<code>getActiveEntry</code>)</h3>
+<p>Метод <code>getActiveEntry(entries, validAtDate)</code> решает ключевую бизнес-задачу: имея список записей <code>ValidSinceAttr</code> с датами <code>validSince</code>, найти ту, которая актуальна на заданный момент времени. Алгоритм:</p>
+<ol>
+<li>Перебрать все неудалённые записи.</li>
+<li>Для каждой записи, где <code>validAtDate >= entry.validSince</code>, сравнить с лучшей найденной на данный момент.</li>
+<li>Выбрать запись с <strong>самой поздней</strong> датой <code>validSince</code>, которая всё ещё находится до/на контрольной дате.</li>
+</ol>
+<p>Это поддерживает исторические запросы — например, «каким был ежегодный отпуск для сотрудника X на дату Y» — что критически важно для точной отчётности.</p>
+
+<h3>Логика валидации (<code>validate</code>)</h3>
+<p>Перед вставкой или обновлением система проверяет, существует ли другая запись <code>ValidSinceAttr</code> с той же комбинацией <code>(employee, type, validSince)</code>:</p>
+<ul>
+<li><strong>Новая запись (id==null):</strong> Использует именованный запрос <code>FIND_BY_TYPE_AND_DATE</code>.</li>
+<li><strong>Существующая запись:</strong> Использует <code>FIND_OTHER_BY_TYPE_AND_DATE</code> (исключает текущий ID).</li>
+<li><strong>Повторное использование удалённой записи:</strong> Если существует удалённая запись с тем же <code>validSince</code>, она возвращается для повторного использования вместо выбрасывания исключения. Это обрабатывает сценарий UX, когда пользователи не видят удалённые записи, но пытаются добавить новую, которая может конфликтовать — система молча восстанавливает и обновляет существующую запись.</li>
+<li>Если существует неудалённый дубликат, выбрасывается <code>IllegalArgumentException</code>.</li>
+</ul>
+
+<h3>CRUD-операции</h3>
+<ul>
+<li><strong><code>insert()</code></strong> — Выполняет валидацию, затем либо вставляет новую запись, либо восстанавливает существующую (логика повторного использования). Всегда сбрасывает кэш сотрудника.</li>
+<li><strong><code>insertValidSinceAttr()</code></strong> — Удобная фабрика: создаёт <code>EmployeeValidSinceAttrDO</code>, устанавливает все поля и вставляет.</li>
+<li><strong><code>updateValidSinceAttr()</code></strong> — Сложное обновление с семантикой копирования: выполняет валидацию, потенциально помечает существующую запись как удалённую и восстанавливает/изменяет ранее удалённую запись с целевой датой.</li>
+<li><strong><code>markValidSinceAttrAsDeleted()</code></strong> — Выполняет валидацию, затем мягко удаляет с проверкой доступа.</li>
+<li><strong><code>undeleteValidSinceAttr()</code></strong> — Выполняет валидацию, затем восстанавливает с проверкой доступа.</li>
+</ul>
+
+<h3>Конкретные геттеры значений</h3>
+<ul>
+<li><strong><code>getEmployeeStatus()</code></strong> — Выбирает записи STATUS, получает активную запись, преобразует значение в перечисление <code>EmployeeStatus</code> через <code>safeValueOf()</code>. Логирует ошибку при обнаружении неизвестного значения статуса.</li>
+<li><strong><code>getAnnualLeaveDays()</code></strong> — Выбирает записи ANNUAL_LEAVE, получает активную запись, преобразует в <code>BigDecimal</code>.</li>
+<li><strong><code>getWeeklyWorkingHours()</code></strong> — Выбирает записи WEEKLY_HOURS, получает активную запись, преобразует в <code>BigDecimal</code>.</li>
+</ul>
+<p>Все возвращают null, если сотрудник или validAtDate равны null (для совместимости с тестами CallAllPagesTest/Wicket).</p>
+
+<h2>История Git</h2>
+<div class="hist"><pre>868d6abb7 2025 -> 2026
+28efde264 Employee: weeklyWorkingHours теперь как атрибут, зависящий от времени. eintritt/austritt: timestamp -> date
+63081666f Заголовки исходных файлов: 2024 -> 2025.
+5f9bbfbd3 Исправление опечаток в директории projectforge-business
+4ae4f3ea3 Исправления ошибок при переходе в промышленную эксплуатацию...
+b5dc26e24 Миграция в процессе... (все тесты всех пакетов: OK).
+b0efaddc2 Миграция в процессе... (все тесты всех пакетов: OK).
+6aca64431 Миграция в процессе... (все тесты всех пакетов: OK).</pre></div>
+</body>
+</html>

@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>#929: EmployeeService.kt [RU]</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:2em;color:#444}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}</style>
+</head>
+<body>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Индекс</a> · <a href="file-index.html">← Индекс файлов</a> · <a href="928.html">← Назад</a> · <a href="930.html">Вперёд →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/kotlin/org/projectforge/business/fibu/EmployeeService.kt" target="_blank" title="Просмотреть исходник на GitHub">📄 исходник</a></div>
+<h1>#929: <code>EmployeeService.kt</code></h1>
+<div class="meta"><code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/EmployeeService.kt</code> Тип: Spring-сервис / Бизнес-логика · Назначение: Публичная бизнес-логика сотрудников — проверки активности, атрибуты, зависящие от времени, ежемесячные отчёты · Путь: <code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/EmployeeService.kt</code> <span style="color:#888">445 строк · 308 кода · 96 комментариев · 41 пустая</span></div>
+<div class="c">Основной публичный API для бизнес-логики сотрудников. Служит фасадом над <code>EmployeeServiceSupport</code> (внутренняя реализация), <code>EmployeeDao</code>, <code>EmployeeCache</code> и <code>TimesheetDao</code>. Предоставляется как синглтон через <code>EmployeeService.instance</code>. При инициализации регистрирует адаптер истории для <code>EmployeeValidSinceAttrDO</code>.</div>
+
+<h2>Архитектура и дизайн</h2>
+
+<h3>Зависимости и инициализация</h3>
+<table>
+<tr><th>Зависимость</th><th>Роль</th></tr>
+<tr><td><code>PfCaches</code></td><td>Доступ к <code>UserGroupCache</code> для разрешения пользователей (используется в <code>isEmployeeActive()</code>).</td></tr>
+<tr><td><code>EmployeeDao</code></td><td>Поиск сущностей и операции выборки. Циклическая зависимость разрешена: <code>EmployeeService</code> устанавливает себя в <code>EmployeeDao.employeeService</code> во время <code>@PostConstruct</code>.</td></tr>
+<tr><td><code>EmployeeServiceSupport</code></td><td>Внутренний сервис, содержащий фактическую логику реализации (валидация, вставка, обновление, поиск). Имеет видимость <code>internal</code>.</td></tr>
+<tr><td><code>HistoryFormatService</code></td><td>Регистрирует <code>EmployeeValidSinceAttrHistoryAdapter</code> для отображения истории атрибутов, зависящих от времени.</td></tr>
+<tr><td><code>TimesheetDao</code></td><td>Используется <code>getReportOfMonth()</code> для агрегации данных табеля по сотруднику/месяцу.</td></tr>
+</table>
+
+<h3>Логика активности</h3>
+<p><code>isEmployeeActive(employee, showRecentlyLeavers)</code>: Возвращает true, если:</p>
+<ul>
+<li><strong>Нет даты увольнения:</strong> Сотрудник активен, если пользователь не удалён и не деактивирован (null-пользователь = активен, для тестов).</li>
+<li><strong>Есть дата увольнения:</strong> Сотрудник активен, если дата увольнения наступила не раньше референсной даты (<code>now</code> или <code>now минус 3 месяца</code>, если <code>showRecentlyLeavers=true</code>).</li>
+</ul>
+
+<h3>Методы атрибутов, зависящих от времени</h3>
+<p>Все методы, зависящие от времени, проходят по записям <code>ValidSinceAttrDO</code>, отсортированным по <code>validSince DESC</code>, и выбирают запись, чьё <code>validSince</code> не позднее референсной даты. Методы сгруппированы по типу атрибута:</p>
+<ul>
+<li><strong>Ежегодный отпуск:</strong> <code>getAnnualLeaveDays()</code> (с датой/без даты), <code>selectAnnualLeaveDayEntries()</code> (по сотруднику или ID), <code>insertAnnualLeaveDays()</code></li>
+<li><strong>Недельные часы:</strong> <code>getWeeklyWorkingHours()</code> (с датой/без даты), <code>selectWeeklyWorkingHoursEntries()</code> (по сотруднику или ID), <code>insertWeeklyHours()</code></li>
+<li><strong>Статус:</strong> <code>getEmployeeStatus()</code>, <code>selectStatusEntries()</code>, <code>insertStatus()</code></li>
+</ul>
+
+<h3>CRUD-операции ValidSinceAttr</h3>
+<p>Сервис предоставляет полный CRUD для <code>EmployeeValidSinceAttrDO</code>:</p>
+<ul>
+<li><code>insert()</code> — Вставка с ID сотрудника или сущностью, делегирует <code>EmployeeServiceSupport</code></li>
+<li><code>updateValidSinceAttr()</code> — Обновление с семантикой копирования (обрабатывает повторное использование удалённых записей)</li>
+<li><code>markValidSinceAttrAsDeleted()</code> — Мягкое удаление</li>
+<li><code>undeleteValidSinceAttr()</code> — Восстановление</li>
+<li><code>validate()</code> — Возвращает строку с сообщением об ошибке или null, если данные валидны</li>
+</ul>
+
+<h3>Ежемесячный отчёт по сотрудникам</h3>
+<p><code>getReportOfMonth(year, month, user)</code> создаёт <code>MonthlyEmployeeReport</code>, инициализирует границы дат, запрашивает табели через <code>TimesheetFilter</code> для указанного пользователя и диапазона месяцев, добавляет каждый табель (с информацией о проверке доступа) и вычисляет агрегированные длительности по <code>Kost2</code>.</p>
+
+<h2>История Git</h2>
+<div class="hist"><pre>868d6abb7 2025 -> 2026
+7893cea1e Улучшен выбор пользователя/сотрудника. EmployeeService.selectAllActive теперь возвращает отсортированный список.
+7cdc06ad7 MonthlyEmployeeReport[Week] -> Kotlin
+feb661d79 Сотрудник: отображение истории для временных атрибутов
+28efde264 Сотрудник: weeklyWorkingHours теперь как атрибут, зависящий от времени.
+63081666f Заголовки исходных файлов: 2024 -> 2025.
+4ae4f3ea3 Исправления ошибок при запуске...
+ddf02927d Миграция в процессе...
+4942c854d Миграция в процессе...
+b71b5073d Миграция в процессе... (все тесты всех пакетов: OK).
+ffb18cf8f Миграция в процессе...
+1012e347a Миграция в процессе... (все тесты всех пакетов: OK).
+e74d3655b Миграция в процессе...
+6aca64431 Миграция в процессе... (все тесты всех пакетов: OK).
+016699665 Миграция в процессе...
+8bd78b145 Миграция в процессе... (все тесты всех пакетов: OK).
+ac2dbb269 Миграция в процессе...
+4b9ffbee2 Миграция в процессе... (все тесты всех пакетов: OK).
+e80642c81 Миграция в процессе... (все тесты всех пакетов: OK).
+1204b927b Миграция в процессе... (все тесты всех пакетов: OK).
+9e38d3c0d Миграция в процессе...
+84e863624 Миграция в процессе... (все тесты всех пакетов: OK).
+b79a1edca Миграция в процессе... (все тесты всех пакетов: OK).
+d67bce18b Миграция в процессе...
+6f7e0fbc7 Миграция в процессе...
+1b50060c3 BaseDao: переименовано: get -> find, save -> insert, getList -> select, load -> select
+87aaf6a5a Миграция в процессе... BaseDao рефакторинг.
+1faf30810 Миграция в процессе...
+3aeda5ef5 Большое изменение: все save|update|...InTrans переименованы.
+85b4e1175 PfPersistenceService и PfPersistenceContext: query переименован в executeQuery.
+b095e6f7d Большое изменение обработки транзакций.
+f59810cf0 Миграция в процессе...
+4c04cfd65 MAJOR-CHANGE! Миграция целочисленных id на Long id
+d54f93842 EmployeeServiceImpl -> EmployeeService.</pre></div>
+</body>
+</html>

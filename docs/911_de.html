@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>#911: CurrencyConversionService.kt [DE]</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:2em;color:#444}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}</style>
+</head>
+<body>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← Datei-Index</a> · <a href="910.html">← Vorherige</a> · <a href="912.html">Nächste →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/kotlin/org/projectforge/business/fibu/CurrencyConversionService.kt" target="_blank" title="Quellcode auf GitHub ansehen">📄 Quelle</a></div>
+
+<h1>#911: <code>CurrencyConversionService.kt</code></h1>
+
+<div class="meta"><code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/CurrencyConversionService.kt</code> 
+  <strong>Typ:</strong> Spring Service<br>
+  <strong>Paket:</strong> <code>org.projectforge.business.fibu</code><br>
+  <strong>Pfad:</strong> <code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/CurrencyConversionService.kt</code><br>
+  <strong>Autor:</strong> Kai Reinhard (k.reinhard@micromata.de)
+ <span style="color:#888">254 Zeilen · 129 Code · 102 Kommentare · 23 leer</span></div>
+
+<div class="c">
+  <p>Der <strong>öffentlich zugängliche Service</strong> für Währungsumrechnungsoperationen. Delegiert Datenbank-Lese-/Schreiboperationen an <code>CurrencyConversionServiceSupport</code> und das Caching an <code>CurrencyConversionCache</code>. Bietet eine übergeordnete <code>convert()</code>-Methode, die in einem einzigen Aufruf die No-Op bei gleicher Währung, die bidirektionale Paarsuche, den Kursabruf und die Multiplikation behandelt. Stellt über das Companion-Objekt ein statisches Singleton bereit.</p>
+</div>
+
+<h2>Architektur</h2>
+
+<h3>Abhängigkeiten</h3>
+<table>
+  <tr><th>Abhängigkeit</th><th>Rolle</th></tr>
+  <tr><td><code>CurrencyPairDao</code></td><td>Zugriffskontrolle und Währungspaarsuche für Kurs-CRUD</td></tr>
+  <tr><td><code>CurrencyConversionCache</code></td><td>Im-Cache-Suche von Paaren, Kursen und aktiven Kursdaten im Arbeitsspeicher</td></tr>
+  <tr><td><code>CurrencyConversionServiceSupport</code></td><td>Interne Datenbankoperationen (finden, einfügen, aktualisieren, löschen, validieren)</td></tr>
+  <tr><td><code>ConfigurationService</code></td><td>Stellt die systemweite Standardwährung bereit (z. B. "EUR")</td></tr>
+</table>
+
+<h3>Methodenkategorien</h3>
+
+<h4>Kursabfrage-Operationen</h4>
+<table>
+  <tr><th>Methode</th><th>Beschreibung</th></tr>
+  <tr><td><code>findRate(id)</code></td><td>Findet einen einzelnen Kurs anhand der ID, delegiert an die Support-Klasse</td></tr>
+  <tr><td><code>selectAllRates(pairId)</code></td><td>Listet Kurse auf; verwendet den Cache für aktive, die DB für gelöschte Kurse</td></tr>
+  <tr><td><code>getConversionRate(pair, date)</code></td><td>Ermittelt den numerischen Kursfaktor für ein Paar zu einem Datum</td></tr>
+  <tr><td><code>getConversionRateDate(pair, date)</code></td><td>Ermittelt das Gültig-von-Datum des aktiven Kurses</td></tr>
+</table>
+
+<h4>Umrechnung</h4>
+<table>
+  <tr><th>Methode</th><th>Beschreibung</th></tr>
+  <tr><td><code>convert(betrag, ziel, quelle?, datum?, skala?, rundung?)</code></td><td><strong>Kernmethode.</strong> Rechnet einen Betrag zwischen Währungen um. Bei gleicher Währung unverändert. Verwendet die systemweite Standardwährung, wenn <code>sourceCurrency</code> null ist. Unterstützt konfigurierbare Skalierung und Rundungsmodus. Fällt optional auf den ältesten Kurs zurück (mit Compliance-Hinweisen).</td></tr>
+</table>
+
+<h4>Kurs-CRUD-Operationen</h4>
+<table>
+  <tr><th>Methode</th><th>Beschreibung</th></tr>
+  <tr><td><code>validateRate(kurs)</code></td><td>Validiert die Eindeutigkeit; gibt eine Fehlermeldung als String oder null zurück</td></tr>
+  <tr><td><code>insertRate(pairId, kurs)</code></td><td>Fügt einen neuen Kurs für ein Währungspaar ein</td></tr>
+  <tr><td><code>updateRate(pairId, kurs)</code></td><td>Aktualisiert einen vorhandenen Kurs</td></tr>
+  <tr><td><code>markRateAsDeleted(pairId, kursId)</code></td><td>Löscht einen Kurs per Soft-Delete</td></tr>
+</table>
+
+<h3>Umrechnungsablauf</h3>
+<ol>
+  <li>Null-/Leer-Prüfungen für <code>betrag</code> und <code>zielWährung</code></li>
+  <li>Ermittlung der effektiven Quellwährung (Parameter oder Systemstandard)</li>
+  <li>Prüfung auf gleiche Währung: Betrag unverändert mit angewandter Skalierung zurückgeben</li>
+  <li>Bidirektionale Paarsuche via <code>cache.findCurrencyPairForConversion()</code></li>
+  <li>Kurs aus dem Cache abrufen (Inverse anwenden, wenn die Suche das umgekehrte Paar gefunden hat)</li>
+  <li><code>betrag * kurs</code> → skalieren mit Rundungsmodus</li>
+</ol>
+
+<h3>Lebenszyklus</h3>
+<p><code>@PostConstruct</code> speichert das Singleton in <code>Companion.instance</code> für den statischen Zugriff durch andere Dienste (z. B. statistische Berechnungen).</p>
+
+<h2>Git-Verlauf</h2>
+<div class="hist"><pre>
+868d6abb7 2025 -> 2026
+f4a839e3a Währungsumrechnung: Datum der aktiven Kurse in der Listenansicht anzeigen.
+472fbc977 WIP: Währungsumrechnung mit Claude Code.
+75ea9dc1a WIP: Währungsumrechnung mit Claude Code.
+abdac2e1b WIP: Währungsumrechnung mit Claude Code.
+07edc85de WIP: Währungsumrechnung mit Claude Code.
+e1323795d WIP: Währungsumrechnung mit Claude Code.
+2d79ded16 WIP: Währungsumrechnung mit Claude Code.
+357ebee61 WIP: Währungsumrechnung mit Claude Code.
+bd69407de Erste Revision mit Claude Code.
+</pre></div>
+
+</body>
+</html>

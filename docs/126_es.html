@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>#126 [ES]</title>
+<style>
+body {
+  font-family: system-ui, sans-serif;
+  max-width: 960px;
+  margin: 2em auto;
+  padding: 0 1em;
+  background: #fafafa;
+  color: #222;
+  line-height: 1.6
+}
+h1 {
+  border-bottom: 2px solid #333
+}
+a {
+  color: #0366d6
+}
+.meta {
+  font-size: .9em;
+  margin: 1em 0
+}
+.nav {
+  font-size: .9em;
+  color: #888;
+  margin-bottom: 1em
+}
+.commentary {
+  border-left: 3px solid #ddd;
+  padding: 1em;
+  margin: 1em 0;
+  background: #fff
+}
+code {
+  background: #f0f0f0;
+  padding: 0 .2em;
+  border-radius: 2px
+}
+</style>
+</head>
+<body>
+
+<div class="nav">
+  <a href="https://maureranton.github.io/projectforge/">← Índice</a> ·
+  <a href="file-index.html">← Índice de archivos</a> ·
+  <a href="125.html">← Anterior</a> ·
+  <a href="127.html">Siguiente →</a> ·
+  <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/plugins/org.projectforge.plugins.ihk/src/main/java/org/projectforge/plugins/ihk/IHKForm.java" target="_blank" title="Ver fuente en GitHub">📄 fuente</a>
+</div>
+
+<h1>#126: <code>IHKForm.java</code></h1>
+<div class="meta">
+  <code>plugins/org.projectforge.plugins.ihk/src/main/java/org/projectforge/plugins/ihk/IHKForm.java</code>
+  <strong>Ruta:</strong> <code>plugins/...ihk/src/main/java/.../IHKForm.java</code> ·
+  <strong>Líneas:</strong> 248 ·
+  <strong>Tipo:</strong> Java Wicket <code>Form</code> — extiende <code>AbstractStandardForm</code>
+  <span style="color:#888">248 líneas · 182 código · 27 comentarios · 39 en blanco</span>
+</div>
+
+<div class="commentary">
+  <p><strong>Formulario Wicket para la interfaz de usuario del plugin IHK</strong> — proporciona el selector de semana, el editor de configuración y el disparador de exportación. Extiende <code>AbstractStandardForm&lt;Object, IHKPage&gt;</code> — la clase base de formularios Wicket de ProjectForge con diseño de cuadrícula Bootstrap. 248 líneas de Java.</p>
+
+  <h3>Controles del formulario</h3>
+  <ul>
+    <li><strong>Selector de semana</strong> (<code>QuickSelectWeekPanel</code>) — widget de calendario para elegir la semana del informe. Incluye navegación de semana anterior/siguiente y botón de selección rápida "esta semana"</li>
+    <li><strong>Visualización de fecha inicio/fin</strong> (<code>LocalDatePanel</code> + <code>LocalDateModel</code>) — muestra el lunes y viernes de la semana seleccionada como campos de solo lectura</li>
+    <li><strong>Sección de configuración</strong> — campos editables para:
+      <ul>
+        <li><code>ausbildungsbeginn</code> — fecha de inicio del aprendizaje (con selector de fecha)</li>
+        <li><code>ausbildungsjahr</code> — anulación del año de formación (entrada numérica, valor predeterminado -1)</li>
+        <li><code>teamname</code> — nombre del equipo/departamento (entrada de texto)</li>
+      </ul>
+      Vinculado a <code>IHKCommentObject</code> a través de <code>PropertyModel</code> de Wicket
+    </li>
+    <li><strong>Botón de exportación</strong> (<code>SingleButtonPanel</code> con <code>SubmitLink</code>) — activa <code>IHKExporter.export()</code> y transmite el archivo Excel como descarga HTTP</li>
+    <li><strong>Botón de guardar configuración</strong> — serializa <code>IHKCommentObject</code> de vuelta a JSON y lo escribe en el campo de comentario de la libreta de direcciones (<code>AddressDO.comment</code>) a través de <code>AddressDao</code></li>
+  </ul>
+
+  <h3>Flujo de carga de datos</h3>
+  <ol>
+    <li>Al inicializar el formulario, lee <code>ThreadLocalUserContext.getLoggedInUser()</code></li>
+    <li>Consulta <code>AddressDao</code> para encontrar la entrada correspondiente en la libreta de direcciones (coincidencia por nombre/apellido)</li>
+    <li>Si se encuentra y el campo de comentario contiene JSON, deserializa <code>IHKCommentObject</code> mediante <code>JsonUtils.fromJson()</code></li>
+    <li>Detecta automáticamente si el aprendiz aún no tiene configuración — muestra un aviso de configuración</li>
+  </ol>
+
+  <h3>Diseño Wicket</h3>
+  <p>Utiliza el paquete <code>flowlayout</code> de ProjectForge para el diseño de formularios basado en cuadrícula Bootstrap:</p>
+  <ul>
+    <li><code>FieldsetPanel</code> — agrupa campos relacionados con un encabezado</li>
+    <li><code>DivPanel</code> / <code>DivTextPanel</code> — contenedores de cuadrícula Bootstrap</li>
+    <li><code>GridSize.COL50</code> / <code>COL100</code> — anchos de columna responsivos</li>
+    <li><code>WicketUtils.getImageIcon()</code> — iconos para botones (descarga, guardar)</li>
+    <li><code>CSSColor</code> — constantes de estilo para mensajes de información/advertencia</li>
+  </ul>
+
+  <h3>Validación</h3>
+  <ul>
+    <li><code>ausbildungsbeginn</code> debe ser una fecha válida — lanza <code>UserException</code> con mensaje localizado si falta o es inválida</li>
+    <li>Requiere que el nombre/apellido del aprendiz coincida con su registro <code>AddressDO</code> — si no se encuentra coincidencia, muestra una advertencia</li>
+  </ul>
+
+  <h3>Ciclo de solicitud</h3>
+  <p>Envío del formulario Wicket → <code>onSubmit()</code> → llama a <code>IHKExporter.export()</code> → devuelve <code>byte[]</code> → envuelve en <code>IResourceStream</code> → activa la descarga en el navegador de <code>Berichtsheft_KW{week}_{Name}.xlsx</code>.</p>
+</div>
+
+</body>
+</html>

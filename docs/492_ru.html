@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>492: LdapGroupDao.java [RU]</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:1.5em;color:#444;font-size:1em}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.lang{font-size:.85em;color:#888;float:right}.lang a{color:#888;text-decoration:none;padding:0 .3em}.lang a.active{color:#0366d6;font-weight:600;text-decoration:underline}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}pre.diff{background:#fff;font-size:.82em;max-height:300px;overflow-y:auto}</style>
+</head>
+<body>
+<div class="lang"><a href="492.html">EN</a> · <a href="492_de.html">DE</a> · <a href="492_ru.html" class="active">RU</a> · <a href="492_fr.html">FR</a> · <a href="492_es.html">ES</a></div>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Индекс</a> · <a href="file-index.html">← Индекс файлов</a> · <a href="290.html">← Предыдущий</a> · <a href="526.html">Следующий →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/java/org/projectforge/business/ldap/LdapGroupDao.java" target="_blank" title="Просмотреть исходный код на GitHub">📄 исходник</a></div>
+<h1>#492: <code>LdapGroupDao.java</code></h1>
+<div class="meta"><code>projectforge-business/src/main/java/org/projectforge/business/ldap/LdapGroupDao.java</code> Java-класс, <code>projectforge-business/src/main/java/org/projectforge/business/ldap/LdapGroupDao.java</code> <span style="color:#888">207 строк · 127 кода · 62 комментария · 18 пустых</span></div>
+<div class="c"><strong>Назначение:</strong> Исходный файл: projectforge/business/ldap/LdapGroupDao.java. LdapGroupDao.java является частью приложения для управления проектами с открытым исходным кодом ProjectForge.</div>
+<h2>Исходный код (первые 100 строк)</h2>
+<pre>/////////////////////////////////////////////////////////////////////////////
+//
+// Project ProjectForge Community Edition
+//         www.projectforge.org
+//
+// Copyright (C) 2001-2026 Micromata GmbH, Germany (www.micromata.com)
+//
+// ProjectForge распространяется по двойной лицензии.
+//
+// Данная версия для сообщества является бесплатным программным обеспечением;
+// вы можете распространять и/или изменять её в соответствии с условиями
+// Стандартной общественной лицензии GNU (GNU General Public License) версии 3,
+// опубликованной Фондом свободного программного обеспечения.
+//
+// Эта версия для сообщества распространяется в надежде, что она будет полезной,
+// но БЕЗ КАКИХ-ЛИБО ГАРАНТИЙ; даже без подразумеваемых гарантий
+// КОММЕРЧЕСКОЙ ЦЕННОСТИ или ПРИГОДНОСТИ ДЛЯ ОПРЕДЕЛЁННОЙ ЦЕЛИ.
+// Подробнее см. в Стандартной общественной лицензии GNU.
+//
+// Вы должны были получить копию Стандартной общественной лицензии GNU
+// вместе с этой программой; если нет, см. http://www.gnu.org/licenses/.
+//
+/////////////////////////////////////////////////////////////////////////////
+
+package org.projectforge.business.ldap;
+
+import org.apache.commons.collections4.CollectionUtils;
+import org.projectforge.framework.utils.NumberHelper;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
+
+import javax.naming.NamingException;
+import javax.naming.directory.Attributes;
+import javax.naming.directory.DirContext;
+import javax.naming.directory.ModificationItem;
+import java.util.List;
+
+/**
+ * @author Kai Reinhard (k.reinhard@micromata.de)
+ */
+@Service
+public class LdapGroupDao extends LdapDao&lt;String, LdapGroup&gt;
+{
+  private static final String[] ADDITIONAL_OBJECT_CLASSES = { "top" };
+
+  private static final String[] ADDITIONAL_OBJECT_CLASSES_WITH_POSIX_SUPPORT = { "top", "posixGroup" };
+
+  private static final String NONE_UNIQUE_MEMBER_ID = "cn=none";
+
+  @Autowired
+  GroupDOConverter groupDOConverter;
+
+  @Autowired
+  LdapUserDao ldapUserDao;
+
+  /**
+   * Поскольку участники групп не могут быть null, используется "cn=none", если у группы нет реальных участников.
+   *
+   * @param group
+   * @return
+   */
+  public static boolean hasMembers(final LdapGroup group)
+  {
+    if (group.getMembers() == null || group.getMembers().size() == 0) {
+      return false;
+    }
+    if (group.getMembers().size() &gt; 1) {
+      return true;
+    }
+    return !group.getMembers().iterator().next().startsWith(NONE_UNIQUE_MEMBER_ID);
+  }
+
+  /**
+   * @see org.projectforge.business.ldap.LdapDao#getObjectClass()
+   */
+  @Override
+  protected String getObjectClass()
+  {
+    return "groupOfUniqueNames";
+  }
+
+  /**
+   * @see org.projectforge.business.ldap.LdapDao#getAdditionalObjectClasses()
+   */
+  @Override
+  protected String[] getAdditionalObjectClasses()
+  {
+    throw new UnsupportedOperationException("Вместо этого вызовите getAdditionalObjectClasses(LdapGroup).");
+  }
+
+  /**
+   * @see org.projectforge.business.ldap.LdapDao#getAdditionalObjectClasses(org.projectforge.business.ldap.LdapObject)
+   */
+  @Override
+  protected String[] getAdditionalObjectClasses(final LdapGroup obj)
+  {
+    final boolean posixAccount = ldapUserDao.isPosixAccountsConfigured()
+        &amp;&amp; !groupDOConverter.isPosixAccountValuesEmpty(obj);
+    if (posixAccount) {
+      return ADDITIONAL_OBJECT_CLASSES_WITH_POSIX_SUPPORT;
+    }</pre>
+<h2>История Git</h2>
+<div class="hist">
+<pre>868d6abb7 2025 -> 2026
+63081666f Заголовки исходных файлов: 2024 -> 2025.
+5bafe7941 @Repository -> @Service. @Transactional-аннотации удалены.
+b6092df09 Авторские права 2023 -> 2024
+ab45d51fa Авторские права 2001-2022 -> 2001-2023.</pre>
+<h3>868d6abb7</h3><div class="c"><strong>2025 -> 2026</strong><pre class="diff">868d6abb75cd191a892911ac8e45058932cf9074
+diff --git a/projectforge-business/src/main/java/org/projectforge/business/ldap/LdapGroupDao.java b/projectforge-business/src/main/java/org/projectforge/business/ldap/LdapGroupDao.java
+index ab520a81a..bdeccbf49 100644
+--- a/projectforge-business/src/main/java/org/projectforge/business/ldap/LdapGroupDao.java
++++ b/projectforge-business/src/main/java/org/projectforge/business/ldap/LdapGroupDao.java
+@@ -3,7 +3,7 @@
+ // Project ProjectForge Community Edition
+ //         www.projectforge.org
+ //
+-// Copyright (C) 2001-2025 Micromata GmbH, Germany (www.micromata.com)
++// Copyright (C) 2001-2026 Micromata GmbH, Germany (www.micromata.com)
+ //
+ // ProjectForge is dual-licensed.
+ //</pre></div><h3>63081666f</h3><div class="c"><strong>Заголовки исходных файлов: 2024 -> 2025.</strong><pre class="diff">63081666f620fb87315f01b817e560e0b2f6a33a
+diff --git a/projectforge-business/src/main/java/org/projectforge/business/ldap/LdapGroupDao.java b/projectforge-business/src/main/java/org/projectforge/business/ldap/LdapGroupDao.java
+index 51a2f4e7d..ab520a81a 100644
+--- a/projectforge-business/src/main/java/org/projectforge/business/ldap/LdapGroupDao.java
++++ b/projectforge-business/src/main/java/org/projectforge/business/ldap/LdapGroupDao.java
+@@ -3,7 +3,7 @@
+ // Project ProjectForge Community Edition
+ //         www.projectforge.org
+ //
+-// Copyright (C) 2001-2024 Micromata GmbH, Germany (www.micromata.com)
++// Copyright (C) 2001-2025 Micromata GmbH, Germany (www.micromata.com)
+ //
+ // ProjectForge is dual-licensed.
+ //</pre></div><h3>5bafe7941</h3><div class="c"><strong>@Repository -> @Service. @Transactional-аннотации удалены.</strong><pre class="diff">5bafe7941698989d3f2bd6d3df8065708b1f8941
+diff --git a/projectforge-business/src/main/java/org/projectforge/business/ldap/LdapGroupDao.java b/projectforge-business/src/main/java/org/projectforge/business/ldap/LdapGroupDao.java
+index f5aadf19f..51a2f4e7d 100644
+--- a/projectforge-business/src/main/java/org/projectforge/business/ldap/LdapGroupDao.java
++++ b/projectforge-business/src/main/java/org/projectforge/business/ldap/LdapGroupDao.java
+@@ -26,7 +26,7 @@ package org.projectforge.business.ldap;
+ import org.apache.commons.collections4.CollectionUtils;
+ import org.projectforge.framework.utils.NumberHelper;
+ import org.springframework.beans.factory.annotation.Autowired;
+-import org.springframework.stereotype.Repository;
++import org.springframework.stereotype.Service;
+ 
+ import javax.naming.NamingException;
+ import javax.naming.directory.Attributes;
+@@ -37,7 +37,7 @@ import java.util.List;
+ /**
+  * @author Kai Reinhard (k.reinhard@micromata.de)
+  */
+-@Repository
++@Service
+ public class LdapGroupDao extends LdapDao&lt;String, LdapGroup&gt;
+ {
+   private static final String[] ADDITIONAL_OBJECT_CLASSES = { "top" };</pre></div><h3>b6092df09</h3><div class="c"><strong>Авторские права 2023 -> 2024</strong><pre class="diff">b6092df0927c4a3b161e888445f31dcab57493f2
+diff --git a/projectforge-business/src/main/java/org/projectforge/business/ldap/LdapGroupDao.java b/projectforge-business/src/main/java/org/projectforge/business/ldap/LdapGroupDao.java
+index 649494d14..f5aadf19f 100644
+--- a/projectforge-business/src/main/java/org/projectforge/business/ldap/LdapGroupDao.java
++++ b/projectforge-business/src/main/java/org/projectforge/business/ldap/LdapGroupDao.java
+@@ -3,7 +3,7 @@
+ // Project ProjectForge Community Edition
+ //         www.projectforge.org
+ //
+-// Copyright (C) 2001-2023 Micromata GmbH, Germany (www.micromata.com)
++// Copyright (C) 2001-2024 Micromata GmbH, Germany (www.micromata.com)
+ //
+ // ProjectForge is dual-licensed.
+ //</pre></div><h3>ab45d51fa</h3><div class="c"><strong>Авторские права 2001-2022 -> 2001-2023.</strong><pre class="diff">ab45d51fa419ede6174b31d69987f96d4b841ff9
+diff --git a/projectforge-business/src/main/java/org/projectforge/business/ldap/LdapGroupDao.java b/projectforge-business/src/main/java/org/projectforge/business/ldap/LdapGroupDao.java
+index 2c057c118..649494d14 100644
+--- a/projectforge-business/src/main/java/org/projectforge/business/ldap/LdapGroupDao.java
++++ b/projectforge-business/src/main/java/org/projectforge/business/ldap/LdapGroupDao.java
+@@ -3,7 +3,7 @@
+ // Project ProjectForge Community Edition
+ //         www.projectforge.org
+ //
+-// Copyright (C) 2001-2022 Micromata GmbH, Germany (www.micromata.com)
++// Copyright (C) 2001-2023 Micromata GmbH, Germany (www.micromata.com)
+ //
+ // ProjectForge is dual-licensed.
+ //</pre></div>
+</div>
+</body>
+</html>

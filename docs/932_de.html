@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>#932: EmployeeValidSinceAttrDO.kt [DE]</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:2em;color:#444}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}</style>
+</head>
+<body>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← Dateiindex</a> · <a href="931.html">← Zurück</a> · <a href="933.html">Weiter →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/kotlin/org/projectforge/business/fibu/EmployeeValidSinceAttrDO.kt" target="_blank" title="Quelle auf GitHub anzeigen">📄 Quelle</a></div>
+<h1>#932: <code>EmployeeValidSinceAttrDO.kt</code></h1>
+<div class="meta"><code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/EmployeeValidSinceAttrDO.kt</code> Typ: JPA-Entität (Datenobjekt) · Zweck: Zeitabhängige (Gültigkeitszeitraum-)Attribute für Mitarbeiter — Status, Jahresurlaub, Wochenstunden · Pfad: <code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/EmployeeValidSinceAttrDO.kt</code> <span style="color:#888">186 Zeilen · 133 Code · 33 Kommentare · 20 leer</span></div>
+<div class="c">Stellt einen einzelnen zeitabhängigen Attributwert für einen Mitarbeiter dar, der ab einem bestimmten Datum gültig wird. Unterstützt drei Typen: <code>STATUS</code>, <code>ANNUAL_LEAVE</code> und <code>WEEKLY_HOURS</code>. Mappt auf <code>t_fibu_employee_valid_since_attr</code> mit einer zusammengesetzten eindeutigen Einschränkung auf <code>(employee_fk, type, valid_since)</code>. Implementiert <code>CandHHistoryEntryICustomizer</code> für typisierte Historiendarstellung und <code>WithHistory</code> für automatische Historieverfolgung.</div>
+
+<h2>Architektur &amp; Design</h2>
+
+<h3>Typ-Polymorphie über String-Wert</h3>
+<p>Anstatt separate Tabellen oder Spalten für jeden Attributtyp zu verwenden, nutzt diese Entität eine einzelne <code>value</code>-Spalte (String) mit einem <code>type</code>-Diskriminator. Transiente Eigenschaften bieten typsicheren Zugriff:</p>
+<ul>
+<li><strong><code>annualLeave</code></strong> — Getter/Setter, der <code>type == ANNUAL_LEAVE</code> validiert und in/aus <code>BigDecimal</code> konvertiert.</li>
+<li><strong><code>weeklyWorkingHours</code></strong> — Getter/Setter, der <code>type == WEEKLY_HOURS</code> validiert und in/aus <code>BigDecimal</code> konvertiert.</li>
+<li><strong><code>status</code></strong> — Getter/Setter, der <code>type == STATUS</code> validiert und über <code>EmployeeStatus.safeValueOf()</code> konvertiert.</li>
+</ul>
+<p>Alle transienten Zugriffsmethoden sind mit <code>@CandHIgnore</code> und <code>@JsonIgnore</code> annotiert — sie sind nicht Teil des persistenten oder serialisierten Modells.</p>
+
+<h3>JPA-Mapping</h3>
+<table>
+<tr><th>Feld</th><th>DB-Spalte</th><th>Typ</th><th>Anmerkungen</th></tr>
+<tr><td><code>id</code></td><td><code>pk</code></td><td><code>Long (SEQUENCE)</code></td><td>Primärschlüssel, generiert über <code>hibernate_sequence</code>.</td></tr>
+<tr><td><code>employee</code></td><td><code>employee_fk</code></td><td><code>EmployeeDO (ManyToOne, LAZY)</code></td><td>Nicht nullable. Verwendet <code>@JsonIdentityReference(alwaysAsId=true)</code>.</td></tr>
+<tr><td><code>type</code></td><td><code>type</code></td><td><code>EmployeeValidSinceAttrType? (STRING, max 30)</code></td><td>Diskriminator: STATUS, ANNUAL_LEAVE oder WEEKLY_HOURS.</td></tr>
+<tr><td><code>validSince</code></td><td><code>valid_since</code></td><td><code>LocalDate</code></td><td>Nicht nullable. Datum, ab dem dieses Attribut wirksam wird.</td></tr>
+<tr><td><code>value</code></td><td><code>value</code></td><td><code>String (max 255)</code></td><td>Typabhängiger Wert, gespeichert als String (BigDecimal oder Enum-Name).</td></tr>
+<tr><td><code>comment</code></td><td><code>comment</code></td><td><code>String (LENGTH_TEXT)</code></td><td>Optionaler Freitext-Kommentar.</td></tr>
+</table>
+
+<h3>Benannte Abfragen</h3>
+<ul>
+<li><code>EmployeeValidSinceAttr_FindByTypeAndDate</code> — <code>from EmployeeValidSinceAttrDO where employee.id=:employeeId and type=:type and validSince=:validSince</code></li>
+<li><code>EmployeeValidSinceAttr_FindOtherByTypeAndDate</code> — Gleiche, aber mit <code>and id!=:id</code> (für Update-Validierung unter Ausschluss des aktuellen Datensatzes).</li>
+</ul>
+
+<h3>Kopiersemantik</h3>
+<p><code>copyFrom(other)</code> kopiert nur <code>validSince</code>, <code>value</code> und <code>comment</code>. Beachte: <strong>Typ, ID und Mitarbeiter werden NICHT kopiert</strong> — dies liegt daran, dass das Kopieren für das Wiederverwendungsmuster gelöschter Einträge verwendet wird, bei dem ein vorhandener Eintrag desselben Typs mit neuen Werten aktualisiert wird.</p>
+
+<h3>Historie-Integration</h3>
+<p>Implementiert <code>CandHHistoryEntryICustomizer</code>:</p>
+<ul>
+<li>Die Methode <code>customize(historyEntry)</code> findet das Attribut <code>"value"</code> in der Historie und setzt dessen <code>propertyTypeClass</code> basierend auf dem <code>type</code>-Diskriminator:
+  <ul>
+    <li><code>ANNUAL_LEAVE</code> → <code>BigDecimal::class</code></li>
+    <li><code>WEEKLY_HOURS</code> → <code>BigDecimal::class</code></li>
+    <li><code>STATUS</code> → <code>EmployeeStatus::class</code></li>
+  </ul>
+</li>
+</ul>
+<p>Dies stellt sicher, dass Historieeinträge das Feld <code>value</code> mit der korrekten Typformatierung anzeigen (z. B. "5,00" für BigDecimal, i18n-Bezeichnung für Enum) und nicht als rohe Zeichenketten.</p>
+
+<h3>Design-Grundlage</h3>
+<p>Das "Gültigkeitszeitraum"-Muster (auch "zeitlich begrenzte Attribute" genannt) ermöglicht es, dass Mitarbeiterattribute sich im Laufe der Zeit ändern, während eine vollständige Historie erhalten bleibt. Zum Beispiel:</p>
+<ul>
+<li>Der Jahresurlaub eines Mitarbeiters könnte sich ab dem 01.01.2025 von 24 auf 30 Tage ändern.</li>
+<li>Seine Wochenstunden könnten sich ab dem 01.06.2023 von 40 auf 32 ändern.</li>
+<li>Sein Status könnte sich ab dem 01.03.2024 von Aushilfe zu Festangestellter ändern.</li>
+</ul>
+<p>Alle Änderungen werden als separate Einträge mit <code>validSince</code>-Daten verfolgt. Der <code>EmployeeCache</code> und der <code>EmployeeServiceSupport</code> ermitteln den aktuellen Wert, indem sie den neuesten Eintrag finden, dessen <code>validSince</code> am oder vor dem heutigen Datum liegt.</p>
+
+<h2>Git-Historie</h2>
+<div class="hist"><pre>868d6abb7 2025 -> 2026
+feb661d79 Mitarbeiter: Historie für Zeitattribute anzeigen
+63cc65ae0 Flyway-Zeug, Employee.timed-attrs
+28efde264 Mitarbeiter: weeklyWorkingHours jetzt als zeitabhängiges Attribut.
+63081666f Quelltextdatei-Kopfzeilen: 2024 -> 2025.
+0237d5eba JSON-Serialisierung umgestaltet: IdOnlySerializer und IdsOnlySerializer eingeführt.
+6aca64431 Migrationszeug in Arbeit... (alle Tests aller Pakete: OK).
+4b9ffbee2 Migrationszeug in Arbeit... (alle Tests aller Pakete: OK).
+e80642c81 Migrationszeug in Arbeit... (alle Tests aller Pakete: OK).
+d6ad9ea38 Migrationszeug in Arbeit...
+66ec668f6 Migrationszeug in Arbeit...
+84e863624 Migrationszeug in Arbeit... (alle Tests aller Pakete: OK).
+b79a1edca Migrationszeug in Arbeit... (alle Tests aller Pakete: OK).
+d67bce18b Migrationszeug in Arbeit...
+1faf30810 Migrationszeug in Arbeit...
+c8f8ed935 Alle Entitäten als FetchType.LAZY deklariert (war EAGER).
+4c04cfd65 GROSSE-ÄNDERUNG! Migration von Integer-IDs zu Long-IDs
+1be507bde Migrationszeug in Arbeit...
+ee106100c Migration von zeitgesteuerten Attributen (Mitarbeiter und Gästebuch)
+fdb15a1c1 Migrationszeug in Arbeit...</pre></div>
+</body>
+</html>

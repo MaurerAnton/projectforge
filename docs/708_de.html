@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>#708 [DE]</title>
+<style>
+body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}
+h1{border-bottom:2px solid #333;padding-bottom:.3em}
+h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}
+h3{margin-top:2em;color:#444}
+a{color:#0366d6}
+.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}
+.nav{font-size:.9em;color:#888;margin-bottom:1em}
+.meta{font-size:.9em;margin:1em 0;color:#555}
+code{background:#f0f0f0;padding:0 .2em;font-size:.93em}
+pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}
+table{border-collapse:collapse;width:100%;margin:1em 0}
+th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}
+th{background:#f5f5f5;font-weight:600}
+.hist{font-size:.85em;color:#555}
+.warn{background:#fff3cd;border-left:3px solid #ffc107;padding:.5em 1em;margin:1em 0}
+.tip{background:#d4edda;border-left:3px solid #28a745;padding:.5em 1em;margin:1em 0}
+</style>
+</head>
+<body>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← Datei-Index</a> · <a href="707.html">← Vorherige</a> · <a href="709.html">Nächste →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/java/org/projectforge/framework/persistence/xstream/HibernateProxyHelper.java" target="_blank" title="Quellcode auf GitHub ansehen">📄 Quelle</a></div>
+<h1>#708: <code>HibernateProxyHelper.java</code></h1>
+<div class="meta"><code>projectforge-business/src/main/java/org/projectforge/framework/persistence/xstream/HibernateProxyHelper.java</code> Java-Dienstprogramm — statische Hilfsklasse, die Hibernate-Proxy-Objekte zu ihren zugrunde liegenden Entitätsinstanzen entpackt, <code>projectforge-business/src/main/java/org/projectforge/framework/persistence/xstream/HibernateProxyHelper.java</code> <span style="color:#888">49 Zeilen · 13 Code · 33 Kommentare · 3 leer</span></div>
+<div class="c">Eine kleine statische Dienstprogrammklasse, die eine einzelne generische Methode <code>get(T object)</code> bereitstellt. Diese erkennt, ob ein Objekt ein <code>HibernateProxy</code> ist, und entpackt es gegebenenfalls über <code>getHibernateLazyInitializer().getImplementation()</code> zur echten Entität. Wenn das Objekt kein Proxy ist, wird es unverändert zurückgegeben. Dies ist das einfachste und am häufigsten wiederverwendbare Proxy-Entpackungs-Dienstprogramm in der XStream+Hibernate-Brückenschicht — verwendet von <a href="708.html">ProxyIdRefMarshaller</a> für die ID-basierte Referenzverfolgung und verfügbar für jeden Code, der das reale Objekt hinter einem Proxy-Wrapper untersuchen muss.</div>
+
+<h2>Architektur</h2>
+
+<h3>Klassenentwurf</h3>
+<p><code>HibernateProxyHelper</code> ist eine reine Dienstprogrammklasse mit einer einzigen öffentlichen statischen generischen Methode. Sie hat keinen Zustand, keine Abhängigkeiten (außer <code>org.hibernate.proxy.HibernateProxy</code>) und keine Instanzmethoden. Der generische Typparameter <code>&lt;T&gt;</code> bewahrt den Kompilierzeit-Typ durch die Entpackungsoperation, sodass Aufrufer keinen Cast benötigen.</p>
+
+<h3>Methode get(T object)</h3>
+<pre>public static &lt;T&gt; T get(T object) {
+    if (object instanceof HibernateProxy) {
+        HibernateProxy proxy = (HibernateProxy) object;
+        return (T) proxy.getHibernateLazyInitializer().getImplementation();
+    }
+    return object;
+}</pre>
+
+<p>Die Logik ist unkompliziert:</p>
+<ol>
+  <li><strong>Proxy-Prüfung:</strong> Verwendet <code>instanceof HibernateProxy</code> — die Standardmethode zur Erkennung von Hibernate-Proxys, da alle von Hibernate generierten Proxys dieses Interface implementieren.</li>
+  <li><strong>Entpacken:</strong> Ruft <code>getHibernateLazyInitializer().getImplementation()</code> auf, was die Proxy-Initialisierung erzwingt (löst verzögertes Laden aus) und die echte Entität zurückgibt.</li>
+  <li><strong>Identitätsrückgabe:</strong> Wenn kein Proxy vorhanden ist, wird dieselbe Objektreferenz zurückgegeben — eine Nulloperation-Durchleitung.</li>
+</ol>
+
+<div class="warn">Der Aufruf von <code>getImplementation()</code> <strong>erzwingt die Proxy-Initialisierung</strong>. Wenn die Entität noch nicht aus der Datenbank geladen wurde, löst dies eine SQL-Abfrage aus. Aufrufer müssen sicherstellen, dass eine aktive Hibernate-Sitzung verfügbar ist, oder die potenzielle <code>LazyInitializationException</code> behandeln.</div>
+
+<h2>Integrationspunkte</h2>
+<ul>
+  <li><strong>Primärer Verbraucher:</strong> <a href="708.html">ProxyIdRefMarshaller</a> — verwendet <code>HibernateProxyHelper.get(item)</code>, um Proxys zu entpacken, bevor das ID-Referenzwörterbuch überprüft und das Marshalling durchgeführt wird.</li>
+  <li>Kann von jedem Code im Paket <code>persistence.xstream</code> oder anderswo verwendet werden, der ein sicheres Entpacken von Proxys benötigt.</li>
+  <li>Autor: Wolfgang Jung (w.jung@micromata.de), im Gegensatz zu den meisten XStream-Brückenklassen, die Costin Leau zugeschrieben werden.</li>
+</ul>
+
+<h2>Beziehung zu anderen Proxy-Behandlungen</h2>
+<table>
+<tr><th>Klasse</th><th>Ansatz</th><th>Kontext</th></tr>
+<tr><td><strong>HibernateProxyHelper</strong> (diese Klasse)</td><td>Statische Dienstprogrammmethode <code>get()</code></td><td>Allgemeines Entpacken für jeden Code</td></tr>
+<tr><td><a href="705.html">HibernateProxyConverter</a></td><td>XStream-Konverter, der vor der Reflexionsserialisierung eingreift</td><td>In die XStream-Konverterkette integriert</td></tr>
+<tr><td><a href="707.html">HibernateProxyXPathMarshaller</a></td><td>Entpackt Proxys vor der XPath-Referenzverfolgung</td><td>In die XStream-Marshalling-Strategie integriert</td></tr>
+<tr><td><a href="704.html">HibernateMapper</a></td><td>Ermittelt den tatsächlichen Klassennamen des Proxys für die XML-Elementbenennung</td><td>In die XStream-Mapper-Kette integriert</td></tr>
+</table>
+<p>Jede dieser Klassen löst das Proxy-Problem auf einer anderen Ebene der XStream-Architektur. <code>HibernateProxyHelper</code> ist der grundlegendste, am häufigsten wiederverwendbare Baustein.</p>
+
+<h2>Entwurfsentscheidungen & Fallstricke</h2>
+<ul>
+  <li><strong>Ungeprüfter Cast:</strong> Der Cast <code>(T)</code> ist ungeprüft, da <code>getImplementation()</code> <code>Object</code> zurückgibt. Dies ist in der Praxis sicher, da Hibernate-Proxys immer Unterklassen des Entitätstyps sind, sodass das zurückgegebene Objekt immer <code>T</code> zuweisbar ist.</li>
+  <li><strong>Keine Null-Prüfung:</strong> Die Methode schützt nicht vor <code>null</code>-Eingabe — <code>null instanceof HibernateProxy</code> ergibt <code>false</code>, sodass <code>null</code> unverändert zurückgegeben wird. Dies ist korrektes Verhalten.</li>
+  <li><strong>Einfachheit vs. Hibernate.isInitialized():</strong> Im Gegensatz zu <a href="701.html">ReflectionToString</a> prüft dieser Helfer nicht zuerst <code>Hibernate.isInitialized()</code>. Er versucht immer, die Implementierung zu erhalten, was die Initialisierung erzwingt. Dies ist beabsichtigt — der Helfer wird in Kontexten verwendet, in denen das reale Objekt benötigt wird (XML-Export), nicht für Anzeigezwecke.</li>
+</ul>
+
+<h2>Git-Verlauf</h2>
+<div class="hist"><pre>868d6abb7 2025 -> 2026
+63081666f Quellcode-Dateiköpfe: 2024 -> 2025.
+b6092df09 Copyright 2023 -> 2024
+ab45d51fa Copyright 2001-2022 -> 2001-2023.
+5f7ef41b8 Copyright 2021 -> 2022
+ceb63e8a1 Quellcode-Kopfzeile: (C) 2001-2021.
+7c79f1922 Copyright des Quellcode-Kopfes -> 2020.
+dd5ca38ac CopyRight aller Java-Dateiköpfe aktualisiert oder erstellt.
+9ebb88522 Erster Commit</pre></div>
+</body>
+</html>

@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>#1215 [DE]</title>
+<style>
+body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}
+h1{border-bottom:2px solid #333;padding-bottom:.3em}
+h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}
+h3{margin-top:2em;color:#444}
+a{color:#0366d6}
+.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}
+.nav{font-size:.9em;color:#888;margin-bottom:1em}
+.meta{font-size:.9em;margin:1em 0;color:#555}
+code{background:#f0f0f0;padding:0 .2em;font-size:.93em}
+pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}
+table{border-collapse:collapse;width:100%;margin:1em 0}
+th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}
+th{background:#f5f5f5;font-weight:600}
+.hist{font-size:.85em;color:#555}
+</style>
+</head>
+<body>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">&#8592; Index</a> &#183; <a href="file-index.html">&#8592; Dateiindex</a> &#183; <a href="1208.html">&#8592; Vorherige</a> &#183; <a href="1210.html">Nächste &#8594;</a></div>
+<h1>#1215: <code>JsonUtils.kt</code></h1>
+<div class="meta"><code>projectforge-business/src/main/kotlin/org/projectforge/framework/json/JsonUtils.kt</code> JSON-Utility-Objekt, projectforge-business/src/main/kotlin/org/projectforge/framework/json/JsonUtils.kt <span style="color:#888">153 Zeilen · 102 Code · 34 Kommentare · 17 leer</span></div>
+<div class="c">Zentrale JSON-Serialisierungs-/Deserialisierungs-Utility. Verwaltet drei Jackson <code>ObjectMapper</code>-Instanzen: Standard, Ignoriere-Nullable-Props und Ignoriere-Unbekannte-Props. Registriert KotlinModule, Hibernate6Module sowie benutzerdefinierte Serialisierer/Deserialisierer für <code>LocalDate</code>, <code>LocalTime</code>, <code>PFDateTime</code>, <code>PFDay</code>, <code>java.util.Date</code>, <code>Timestamp</code> und <code>java.sql.Date</code>.</div>
+
+<h2>Architektur</h2>
+<h3>ObjectMapper-Instanzen</h3>
+<table>
+  <tr><th>Instanz</th><th>Konfiguration</th><th>Anwendungsfall</th></tr>
+  <tr><td><code>objectMapper</code></td><td>KotlinModule + Hibernate6Module + benutzerdefinierte Serialisierer</td><td>Standard-JSON-Operationen</td></tr>
+  <tr><td><code>objectMapperIgnoreNullableProps</code></td><td>Gleiche + <code>Include.NON_NULL</code></td><td>Schließt Null-Eigenschaften aus der Ausgabe aus</td></tr>
+  <tr><td><code>objectMapperIgnoreUnknownProps</code></td><td>Gleiche + <code>FAIL_ON_UNKNOWN_PROPERTIES = false</code></td><td>Nachsichtige Deserialisierung</td></tr>
+</table>
+
+<h3>Registrierte Serialisierer/Deserialisierer (via <code>initializeMapper</code>)</h3>
+<table>
+  <tr><th>Typ</th><th>Serialisierer</th><th>Deserialisierer</th></tr>
+  <tr><td><code>LocalDate</code></td><td><code>LocalDateSerializer</code> (ISO yyyy-MM-dd)</td><td><code>LocalDateDeserializer</code> (flexibles Parsen via PFDayUtils)</td></tr>
+  <tr><td><code>LocalTime</code></td><td><code>LocalTimeSerializer</code></td><td><code>LocalTimeDeserializer</code></td></tr>
+  <tr><td><code>PFDateTime</code></td><td><code>PFDateTimeSerializer</code></td><td><code>PFDateTimeDeserializer</code></td></tr>
+  <tr><td><code>PFDay</code></td><td><code>PFDaySerializer</code></td><td><code>PFDayDeserializer</code></td></tr>
+  <tr><td><code>java.util.Date</code></td><td><code>UtilDateSerializer</code> (JS_TIME_DATE_MILLIS)</td><td><code>UtilDateDeserializer</code></td></tr>
+  <tr><td><code>Timestamp</code></td><td><code>TimestampSerializer</code> (JS_TIME_DATE_MILLIS)</td><td><code>TimestampDeserializer</code></td></tr>
+  <tr><td><code>java.sql.Date</code></td><td><code>SqlDateSerializer</code></td><td><code>SqlDateDeserializer</code></td></tr>
+</table>
+
+<h3>Kernmethoden</h3>
+<table>
+  <tr><th>Methode</th><th>Signatur</th><th>Beschreibung</th></tr>
+  <tr><td><code>toJson</code></td><td><code>(obj, ignoreNullableProps=false): String</code></td><td>In JSON-String serialisieren</td></tr>
+  <tr><td><code>fromJson</code></td><td><code>(json, Class&lt;T&gt;, failOnUnknownProps=true): T?</code></td><td>Zu typisiertem Objekt deserialisieren</td></tr>
+  <tr><td><code>fromJson</code></td><td><code>(json, TypeReference&lt;T&gt;, failOnUnknownProps=true): T?</code></td><td>Zu generischem Typ deserialisieren</td></tr>
+  <tr><td><code>writeField</code></td><td><code>(gen, field, value)</code></td><td>Ein Feld mit typgerechtem JSON-Typ schreiben (Long, Int, String)</td></tr>
+  <tr><td><code>add</code></td><td><code>(cls, typeAdapter)</code></td><td>Zusätzliche Typadapter in einer Map registrieren (von Standard-Mappern ungenutzt)</td></tr>
+</table>
+
+<h3>Fehlerbehandlung</h3>
+<ul>
+  <li><code>toJson</code> fängt <code>JsonProcessingException</code> ab und gibt bei Fehler einen leeren String zurück</li>
+  <li><code>fromJson</code> wirft <code>IOException</code> an den Aufrufer</li>
+</ul>
+
+<h2>Git-Verlauf</h2><div class="hist"><pre>
+868d6abb7 2025 -> 2026
+5b042ab5f UserGroupCache: Debug-Export json, registerModule(Hibernate6Module()), DatabaseTester hinzugefügt.
+7b32b554a WIP: Auftragsvorschau.... AuftragFilter umgestaltet.
+63081666f Quellkopfzeilen: 2024 -> 2025.
+0237d5eba JSON-Serialisierung umgestaltet: IdOnlySerializer und IdsOnlySerializer eingeführt.
+fbf3290bb JsonUtils: Fehlender Initialisierer für objectMapperIgnoreNullableProps hinzugefügt.
+57935eb50 Java 11, Wicket 9. Läuft mehr oder weniger.
+b6092df09 Copyright 2023 -> 2024
+cb2915283 WIP D.velop
+ab45d51fa Copyright 2001-2022 -> 2001-2023.
+c6d8f4426 JsonUtils teilt nun Moduleinstellungen mit JacksonConfiguration.
+5f7ef41b8 Copyright 2021 -> 2022
+7e5daae24 JsonUtils in das Business-Paket verschoben.
+c9d973a14 SourceFileHeader korrigiert.
+7c5080e8c WIP: Variablen nach Bearbeitung speichern.
+</pre></div>
+</body>
+</html>

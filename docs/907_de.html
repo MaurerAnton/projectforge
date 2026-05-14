@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<title>#907: AuftragsStatistik.kt [DE]</title>
+<style>
+body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}
+h1{border-bottom:2px solid #333;padding-bottom:.3em}
+h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}
+h3{margin-top:2em;color:#444}
+a{color:#0366d6}
+.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}
+.nav{font-size:.9em;color:#888;margin-bottom:1em}
+.meta{font-size:.9em;margin:1em 0;color:#555}
+code{background:#f0f0f0;padding:0 .2em;font-size:.93em}
+pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}
+table{border-collapse:collapse;width:100%;margin:1em 0}
+th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}
+th{background:#f5f5f5;font-weight:600}
+.hist{font-size:.85em;color:#555}
+</style>
+</head>
+<body>
+
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← Dateiindex</a> · <a href="906.html">← Vorherige</a> · <a href="908.html">Nächste →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/kotlin/org/projectforge/business/fibu/AuftragsStatistik.kt" target="_blank" title="Quelltext auf GitHub ansehen">📄 Quelle</a></div>
+
+<h1>#907: <code>AuftragsStatistik.kt</code></h1>
+
+<div class="meta"><code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/AuftragsStatistik.kt</code> 
+  <strong>Typ:</strong> Datenklasse (Serializable) &middot;
+  <strong>Zweck:</strong> Aggregiert finanzielle Statistiken über eine Reihe von Aufträgen &middot;
+  <strong>Paket:</strong> <code>org.projectforge.business.fibu</code><br>
+  <strong>Quellpfad:</strong> <code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/AuftragsStatistik.kt</code>
+ <span style="color:#888">129 Zeilen · 72 Code · 44 Kommentare · 13 leer</span></div>
+
+<div class="c">
+  Eine <code>Serializable</code>-Akkumulatorklasse, die Geldbeträge und Zählungen über mehrere <code>AuftragDO</code>-Instanzen zusammenfasst. Wird in der Auftragsübersicht und in Prognoseansichten verwendet, um aggregierte Pipeline-Zahlen anzuzeigen. Die Berechnung pro Auftrag wird an <code>AuftragsCache.getOrderInfo()</code> delegiert, das ein <code>OrderInfo</code>-Objekt mit vorberechneten Summen zurückgibt. Bietet separate Zusammenstellungen für Akquise (Potenzial), Beauftragt, Fakturiert, Noch-nicht-fakturiert und Zu-fakturieren-Kategorien sowie entsprechende Zähler.
+</div>
+
+<h2>Architektur &amp; Design</h2>
+
+<h3>Felder</h3>
+
+<table>
+  <tr><th>Feld</th><th>Typ</th><th>Beschreibung</th></tr>
+  <tr><td><code>nettoSum</code></td><td><code>BigDecimal</code> (private set)</td><td>Gesamtnettosumme über alle Aufträge</td></tr>
+  <tr><td><code>akquiseSum</code></td><td><code>BigDecimal</code> (private set)</td><td>Summe nur für Aufträge im Akquise-/Potenzialstatus</td></tr>
+  <tr><td><code>beauftragtSum</code></td><td><code>BigDecimal</code> (private set)</td><td>Summe nur für beauftragte/georderte Positionen (LOI, BEAUFTRAGT, ESKALATION)</td></tr>
+  <tr><td><code>invoicedSum</code></td><td><code>BigDecimal</code> (private set)</td><td>Summe der bereits fakturierten Beträge über alle Aufträge</td></tr>
+  <tr><td><code>notYetInvoicedSum</code></td><td><code>BigDecimal</code> (private set)</td><td>Differenz zwischen Nettosumme und fakturierter Summe (offener Rest)</td></tr>
+  <tr><td><code>toBeInvoiced</code></td><td><code>BigDecimal</code> (private set)</td><td>Summe der Beträge aus abgeschlossenen Aufträgen, die noch nicht vollständig fakturiert sind oder deren Zahlungsmeilensteine noch nicht erreicht wurden</td></tr>
+  <tr><td><code>counter</code></td><td><code>Int</code> (private set)</td><td>Gesamtzahl der gezählten Aufträge</td></tr>
+  <tr><td><code>counterAkquise</code></td><td><code>Int</code> (private set)</td><td>Anzahl der Aufträge mit Akquisesumme > 0</td></tr>
+  <tr><td><code>counterBeauftragt</code></td><td><code>Int</code> (private set)</td><td>Anzahl der Aufträge mit beauftragter Summe > 0</td></tr>
+  <tr><td><code>counterNotYetInvoiced</code></td><td><code>Int</code> (private set)</td><td>Anzahl der Aufträge mit noch-nicht-fakturiertem Betrag > 0</td></tr>
+  <tr><td><code>counterToBeInvoiced</code></td><td><code>Int</code> (private set)</td><td>Anzahl der Aufträge mit zu-fakturierendem Betrag > 0</td></tr>
+  <tr><td><code>counterInvoiced</code></td><td><code>Int</code> (private set)</td><td>Anzahl der Aufträge mit fakturiertem Betrag > 0</td></tr>
+</table>
+
+<h3>Initialisierung</h3>
+<p>Alle Summen werden im <code>init</code>-Block auf <code>BigDecimal.ZERO</code> und alle Zähler auf <code>0</code> initialisiert.</p>
+
+<h3>Kernmethode: <code>add(auftrag: AuftragDO)</code></h3>
+<p>Ruft für jeden Auftrag das <code>OrderInfo</code> über <code>WicketSupport.get(AuftragsCache::class.java).getOrderInfo(auftrag)</code> ab. Das <code>OrderInfo</code> enthält vorberechnete Aufschlüsselungen (<code>akquiseSum</code>, <code>commissionedNetSum</code>, <code>notYetInvoicedSum</code>, <code>toBeInvoicedSum</code>, <code>invoicedSum</code>, <code>netSum</code>). Für jede Summe > <code>BigDecimal.ZERO</code> erhöht der Statistik-Akkumulator den entsprechenden Zähler und addiert den Betrag mit <code>NumberHelper.add()</code> (sichere BigDecimal-Addition, die Nullwerte behandelt).</p>
+
+<h3>Berechnungssemantik</h3>
+<ul>
+  <li><strong>notYetInvoicedSum</strong> — stellt offene Beträge dar: Gesamtnettosumme abzüglich bereits fakturierter Beträge. Dies ist der noch zu fakturierende Betrag.</li>
+  <li><strong>toBeInvoiced</strong> — engere Teilmenge: nur von Aufträgen, die <code>ABGESCHLOSSEN</code> (abgeschlossen) sind, aber noch nicht <code>vollstaendigFakturiert</code> (vollständig fakturiert) oder deren Zahlungspläne noch nicht erreicht wurden. Stellt unmittelbare Fakturierungskandidaten dar.</li>
+  <li><strong>akquiseSum</strong> — von Aufträgen in Pipeline-Status (POTENZIAL, IN_ERSTELLUNG, GELEGT)</li>
+  <li><strong>beauftragtSum</strong> — von Aufträgen, die tatsächlich beauftragt sind (LOI, BEAUFTRAGT, ESKALATION)</li>
+</ul>
+
+<h3>Serialisierung</h3>
+<p>Implementiert <code>Serializable</code> mit <code>serialVersionUID = -5486964211679100585L</code> für die Wicket-Seitenserialisierung. Das <code>private set</code> bei allen Feldern ermöglicht Lesezugriff von außen, verhindert aber direkte Mutation (nur <code>add()</code> ändert den Zustand).</p>
+
+<h2>Verwandte Klassen</h2>
+<ul>
+  <li><strong>Erzeugt von:</strong> <code>AuftragDao</code> — erstellt und befüllt diese Statistik aus Auftragslisten</li>
+  <li><strong>Aggregiert:</strong> <code>AuftragDO</code> — einzelne Aufträge, die summiert werden</li>
+  <li><strong>Delegiert an:</strong> <code>AuftragsCache</code> — liefert pro Auftrag <code>OrderInfo</code> mit vorberechneten Aufschlüsselungen</li>
+  <li><strong>Verwendet:</strong> <code>NumberHelper.add()</code> — sichere BigDecimal-Addition</li>
+  <li><strong>Verwendet:</strong> <code>WicketSupport</code> — Spring-Bean-Lookup für <code>AuftragsCache</code></li>
+</ul>
+
+<h2>Git-Verlauf</h2>
+<div class="hist"><pre>
+868d6abb7 2025 -> 2026
+63081666f Quelltextdatei-Header: 2024-> 2025.
+42dc9fa16 Aufträge: bestellt -> beauftragt.
+87dd5b87c AuftragsCache umgestaltet, Migrationskram... (alle Tests OK)
+f88994f41 Migrationskram in Arbeit...
+b6092df09 Copyright 2023 -> 2024
+ab45d51fa Copyright 2001-2022 -> 2001-2023.
+9a65e1bc0 AuftragDO: Statistik umgestaltet (noch nicht fakturiert, zu fakturieren, fakturiert usw.)
+f80509d49 Auftragsbuch: Statistik und zu fakturierende Werte verbessert.
+013c514bd AuftragsCache für deutlich bessere Leistung der Auftragsbuch-Listenansicht.
+</pre></div>
+
+</body>
+</html>

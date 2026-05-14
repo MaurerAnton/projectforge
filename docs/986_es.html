@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>#986: DatevImportService.kt [ES]</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:2em;color:#444}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}</style>
+</head>
+<body>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Índice</a> · <a href="file-index.html">← Índice de archivos</a> · <a href="985.html">← Anterior</a> · <a href="987.html">Siguiente →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/kotlin/org/projectforge/business/fibu/datev/DatevImportService.kt" target="_blank" title="Ver fuente en GitHub">📄 fuente</a></div>
+
+<h1>#986: <code>DatevImportService.kt</code></h1>
+
+<div class="meta"><code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/datev/DatevImportService.kt</code> 
+  <strong>Tipo:</strong> Servicio Spring<br>
+  <strong>Paquete:</strong> <code>org.projectforge.business.fibu.datev</code><br>
+  <strong>Ruta real:</strong> <code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/datev/DatevImportService.kt</code><br>
+  <strong>Nota:</strong> El archivo <strong>no</strong> existe en la ruta solicitada (<code>.../excelimport/...</code>). Reside en el subpaquete <code>datev</code>. La documentación a continuación refleja la fuente real.
+ <span style="color:#888">273 líneas · 180 código · 69 comentarios · 24 en blanco</span></div>
+
+<div class="c">
+  <p>El <strong>servicio de orquestación</strong> para importaciones de Excel estilo DATEV. Coordina el pipeline de importación tanto para <strong>Kontenplan</strong> (plan de cuentas) como para <strong>Buchungssätze</strong> (registros contables). Gestiona el ciclo de vida de la importación: analizar (importar), validar (conciliar) y persistir (confirmar). Todas las operaciones requieren el permiso de usuario <code>FIBU_DATEV_IMPORT</code>.</p>
+</div>
+
+<h2>Arquitectura</h2>
+
+<h3>Dependencias</h3>
+<table>
+  <tr><th>Dependencia</th><th>Rol</th></tr>
+  <tr><td><code>PfPersistenceService</code></td><td>Gestión del contexto de persistencia</td></tr>
+  <tr><td><code>AccessChecker</code></td><td>Verificación de permisos de usuario</td></tr>
+  <tr><td><code>KontoDao</code></td><td>Confirmar entradas del plan de cuentas; resolver números de cuenta</td></tr>
+  <tr><td><code>Kost1Dao</code></td><td>Pasado a <code>BuchungssatzExcelImporter</code></td></tr>
+  <tr><td><code>Kost2Dao</code></td><td>Pasado a <code>BuchungssatzExcelImporter</code></td></tr>
+  <tr><td><code>BuchungssatzDao</code></td><td>Confirmar entradas de asientos contables; buscar registros existentes</td></tr>
+</table>
+
+<h2>Ciclo de vida de la importación</h2>
+
+<h3>Fase 1: Importar (Analizar Excel)</h3>
+<table>
+  <tr><th>Método</th><th>Entrada</th><th>Salida</th></tr>
+  <tr><td><code>importKontenplan(inputStream, filename)</code></td><td>InputStream de Excel</td><td><code>ImportStorage&lt;KontoDO&gt;</code></td></tr>
+  <tr><td><code>importBuchungsdaten(inputStream, filename)</code></td><td>InputStream de Excel</td><td><code>ImportStorage&lt;BuchungssatzDO&gt;</code></td></tr>
+</table>
+<p>Ambos métodos abren un <code>ExcelWorkbook</code> desde el flujo de entrada, crean un <code>ImportStorage</code> con configuración de registro, delegan en la clase importadora correspondiente (<code>KontenplanExcelImporter</code> / <code>BuchungssatzExcelImporter</code>) y devuelven el almacenamiento poblado.</p>
+
+<h3>Fase 2: Conciliar (Validar y Diferir)</h3>
+<table>
+  <tr><th>Método</th><th>Descripción</th></tr>
+  <tr><td><code>reconcile(storage, sheetName)</code></td><td>Envía a <code>reconcileKontenplan()</code> o <code>reconcileBuchungsdaten()</code> según el tipo de almacenamiento. Establece <code>numberOfCommittedElements</code> en -1.</td></tr>
+</table>
+<p>La conciliación compara los elementos importados con las entradas existentes en la base de datos:</p>
+<ul>
+  <li><strong>Kontenplan:</strong> busca cada <code>KontoDO</code> importado por número de cuenta. Las entradas encontradas se almacenan como <code>oldValue</code> en el elemento de importación y su marca de tiempo <code>created</code> se copia a la importación (necesaria para que BaseDao determine inserción vs actualización).</li>
+  <li><strong>Buchungssätze:</strong> busca por (<code>year</code>, <code>month</code>, <code>satznr</code>) usando <code>buchungssatzDao.getBuchungssatz()</code>.</li>
+</ul>
+
+<h3>Fase 3: Confirmar (Persistir)</h3>
+<table>
+  <tr><th>Método</th><th>Descripción</th></tr>
+  <tr><td><code>commit(storage, sheetName)</code></td><td>Requiere estado <code>RECONCILED</code>. Envía a <code>commitKontenplan()</code> o <code>commitBuchungsdaten()</code>. Establece el estado en <code>IMPORTED</code>.</td></tr>
+</table>
+<p>La confirmación recoge los elementos seleccionados, establece el id de base de datos desde <code>oldValue</code> si la entrada ya existe, e inserta en bloque a través del DAO en grupos de 50.</p>
+
+<h2>Enum de tipo de importación</h2>
+<p><code>DatevImportService.Type</code>: <code>KONTENPLAN</code>, <code>BUCHUNGSSAETZE</code>. Se utiliza como discriminador en <code>ImportStorage</code>.</p>
+
+<h2>Propiedades de diferencia</h2>
+<table>
+  <tr><th>Constante</th><th>Propiedades</th></tr>
+  <tr><td><code>KONTO_DIFF_PROPERTIES</code></td><td><code>nummer</code>, <code>bezeichnung</code></td></tr>
+  <tr><td><code>BUCHUNGSSATZ_DIFF_PROPERTIES</code></td><td><code>satznr</code>, <code>betrag</code>, <code>sh</code>, <code>konto</code>, <code>kost2</code>, <code>menge</code>, <code>beleg</code>, <code>datum</code>, <code>gegenKonto</code>, <code>text</code>, <code>kost1</code>, <code>comment</code></td></tr>
+</table>
+
+<h2>Control de acceso</h2>
+<p>Todos los métodos públicos llaman a <code>checkLoggedinUserRight()</code> que verifica <code>UserRightId.FIBU_DATEV_IMPORT</code> con valor <code>TRUE</code>. El objeto complementario proporciona métodos auxiliares estáticos para su uso en páginas Wicket (desacoplamiento previo al servicio).</p>
+
+<h2>Historial Git</h2>
+<div class="hist"><pre>
+868d6abb7 2025 -> 2026
+312d5e61c Limpieza
+63081666f Encabezados de archivos fuente: 2024 -> 2025.
+1012e347a Trabajo de migración en curso... (todas las pruebas de todos los paquetes: OK).
+bbc198d03 Trabajo de migración en curso... (todas las pruebas de todos los paquetes: OK).
+4bc37b3a1 Trabajo de migración en curso...
+d67bce18b Trabajo de migración en curso...
+1b50060c3 BaseDao: renombrado: get -> find, save -> insert, getList -> select, load -> select
+87aaf6a5a Trabajo de migración en curso... BaseDao refactorizado (aún no terminado)
+3aeda5ef5 Gran cambio: todos los save|update|...InTrans renombrados (InTrans eliminado).
+</pre></div>
+
+</body>
+</html>

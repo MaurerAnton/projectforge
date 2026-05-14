@@ -1,31 +1,26 @@
 <!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<title>File #27: docs/diff-rest-test-commentary-en.html</title>
-<style>
-  body { font-family: system-ui, sans-serif; max-width: 960px; margin: 2em auto; padding: 0 1em; background: #fafafa; color: #222; line-height: 1.6; }
-  h1 { border-bottom: 2px solid #333; }
-  a { color: #0366d6; text-decoration: none; }
-  .meta { background: #f0f0f0; border-radius: 6px; padding: 1em; margin: 1em 0; font-size: 0.9em; }
-  .commentary { margin: 1em 0; background: #fff; padding: 0.5em 1em; border-radius: 6px; border-left: 4px solid #ddd; }
-  code { background: #e8e8e8; border-radius: 3px; padding: 0.1em 0.3em; font-size: 0.9em; }
-  .nav { font-size: 0.9em; color: #888; margin-bottom: 1em; }
-</style>
-</head>
-<body>
-<div class="nav">
-  <a href="https://maureranton.github.io/projectforge/">← Documentation index</a> · <a href="file-index.html">← File index</a> · <a href="26.html">← Prev</a> · <a href="28.html">Next →</a>
-</div>
-<h1>File #27: <code>docs/diff-rest-test-commentary-en.html</code></h1>
-<div class="meta">
-  <p><strong>Path:</strong> <code>./docs/diff-rest-test-commentary-en.html</code> · <strong>Type:</strong> HTML documentation output · <strong>Source:</strong> <a href="https://github.com/MaurerAnton/projectforge/blob/draft43npm-docs/docs/diff-rest-test-commentary-en.html">GitHub</a></p>
-</div>
-<div class="commentary">
-  <p>English-language diff commentary for the <code>rest.test.js</code> 1-line fix (<code>'/rs' → ''</code>). Part of the documentation suite described in <a href="https://maureranton.github.io/projectforge/">the project overview</a>. Covers the CRA source evidence (react-scripts/test.js L10-11), environment table, import breakdown table, and the GitHub commit at <a href="https://github.com/MaurerAnton/projectforge/commit/abd4fe8">abd4fe8</a>.</p>
-</div>
-<div class="nav" style="margin-top:2em; padding-top:1em; border-top:1px solid #ddd">
-  <a href="26.html">← #26: doc/README.adoc</a> · <a href="28.html">#28: diff-rest-test-commentary-ru.html →</a>
-</div>
-</body>
-</html>
+<html lang="en"><head><meta charset="utf-8"><title>#27: stopProjectForge.sh</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333}a{color:#0366d6}.meta{background:#f0f0f0;border-radius:6px;padding:1em;margin:1em 0;font-size:.9em}.code-block{background:#1e1e1e;color:#d4d4d4;border-radius:4px;padding:.8em 1em;margin:.5em 0;overflow-x:auto;font-family:Consolas,monospace;font-size:.82em;line-height:1.5}.commentary{margin:.8em 0;background:#fff;padding:.5em 1em;border-radius:6px;border-left:4px solid #ddd;line-height:1.7}table{border-collapse:collapse;width:100%;margin:.8em 0;font-size:.9em}th,td{border:1px solid #ddd;padding:.4em .6em}th{background:#f0f0f0}.nav{font-size:.9em;color:#888;margin-bottom:1em}.history{background:#fffbe6;border-radius:6px;padding:1em;margin:1em 0;font-size:.9em;border-left:4px solid #ffc107}</style></head>
+<body><div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="26.html">← Prev</a> · <a href="28.html">Next →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/doc/misc/stopProjectForge.sh" target="_blank" title="View source on GitHub">📄 source</a></div>
+<h1>#27: <code>stopProjectForge.sh</code></h1>
+<div class="meta"><code>doc/misc/stopProjectForge.sh</code> <p><strong>Path:</strong> <code>site/uploads/stopProjectForge.sh</code> · <strong>Lines:</strong> 34 · <strong>Shebang:</strong> <code>#!/bin/bash</code></p><p><strong>Purpose:</strong> Production shutdown script — implements a two-phase termination protocol: SIGTERM (graceful, 60s wait) → SIGKILL (forceful). Companion to <code>startProjectForge.sh</code> (#4096).</p><p><strong>Source:</strong> <a href="https://github.com/micromata/projectforge/blob/develop/site/uploads/stopProjectForge.sh">GitHub</a></p> <span style="color:#888">34 lines · 24 code · 2 comments · 8 blank</span></div>
+<div class="history"><table><tr><th>Commit</th><th>Message</th></tr><tr><td><code>ac75fabf3</code></td><td>Github pages migrated to Asciidoc</td></tr></table></div>
+
+<h2>Two-phase shutdown protocol</h2>
+<div class="commentary"><p>The script identifies the ProjectForge Java process via <code>pgrep -f "java.*projectforge-application"</code> (pattern matching on the JVM command line), then executes:</p><ol><li><strong>Phase 1 — Graceful (60 seconds):</strong> <code>kill $pid</code> sends SIGTERM (signal 15). The JVM catches this and triggers Spring's <code>@PreDestroy</code> lifecycle callbacks — Hibernate flushes caches, connection pools close, Quartz jobs stop, Tomcat shuts down. The script loops 20 times × 3 seconds, checking if the process is gone.</li><li><strong>Phase 2 — Forceful:</strong> If still alive after 60s, <code>kill -9 $pid</code> sends SIGKILL (signal 9) — uncatchable, immediate termination. No cleanup: database connections orphaned, Lucene indexes potentially corrupted, log buffers lost. The script waits 2 seconds and checks again.</li></ol><p>This two-phase approach prevents the most common production issue: database connection leaks from killed Java processes. The 60-second window is generous — most Spring Boot apps shut down in 5-15 seconds.</p></div>
+
+<h2>Script analysis — key lines</h2>
+<div class="code-block"><pre>checkStopped() {
+  pid=$(pgrep -f $PROCESS_IDENTIFIER)      # Re-check if process exists
+  if [[ -z $pid ]]; then                     # If no PID found
+    echo "${APP_NAME} $1"                    # Print success message
+    exit 0                                   # Exit immediately
+  fi
+  if [[ -n $2 ]]; then                       # If second arg given (warning mode)
+    echo "${APP_NAME} $2"                    # Print warning but continue
+  fi
+}</pre></div>
+<div class="commentary"><p><strong>Dual-mode function:</strong> <code>checkStopped</code> serves two purposes depending on argument count — with 1 arg it's a "success check" (exits if stopped), with 2 args it's a "status report" (prints and continues).</p><p><strong>Variable scope bug:</strong> <code>$pid</code> is set inside the function (line 7) but used outside on line 20 — this works because <code>pid</code> isn't declared <code>local</code>, so it leaks to the caller's scope. Fragile — if a second matching process appears between checks, only the first PID gets killed.</p></div>
+<h2>Key takeaways</h2><div class="commentary"><ul><li><strong>Always prefer this script over kill -9:</strong> The graceful shutdown preserves database integrity and prevents connection leaks.</li><li><strong>Hidden in uploads/:</strong> Lives in <code>site/uploads/</code> — the Jekyll site's file attachments — an unusual location for operational tooling.</li><li><strong>No PID file:</strong> Identifies the process by command-line pattern, not a PID file. More robust across restarts but fails if two ProjectForge instances match.</li><li><strong>pgrep required:</strong> Part of <code>procps-ng</code> package — not available on minimal Docker images.</li></ul></div>
+<div class="nav" style="margin-top:2em"><a href="4096.html">← #4096</a> · <a href="4098.html">#4098 →</a></div>
+</body></html>

@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>#880: AbstractRechnungDO.kt</title>
+<title>#880: CustomFieldDef.kt</title>
 <style>
 body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}
 h1{border-bottom:2px solid #333;padding-bottom:.3em}
@@ -22,196 +22,46 @@ th{background:#f5f5f5;font-weight:600}
 </style>
 </head>
 <body>
-<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="879.html">← Prev</a> · <a href="881.html">Next →</a></div>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="879.html">← Prev</a> · <a href="881.html">Next →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/kotlin/org/projectforge/business/dvelop/CustomFieldDef.kt" target="_blank" title="View source on GitHub">📄 source</a></div>
 
-<h1>#880: <code>AbstractRechnungDO.kt</code></h1>
+<h1>#880: <code>CustomFieldDef.kt</code></h1>
 
-<div class="meta">
-<p><strong>Type:</strong> Kotlin <code>@MappedSuperclass</code> abstract JPA entity — Base class for all invoice domain objects</p>
-<p><strong>Purpose:</strong> Defines the shared database schema and business logic for both outgoing customer invoices (<code>RechnungDO</code>) and incoming creditor invoices (<code>EingangsrechnungDO</code>), providing common fields, Hibernate Search indexing, calculated properties, and position management.</p>
-<p><strong>Source path:</strong> <code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/AbstractRechnungDO.kt</code></p>
-</div>
+<div class="meta"><code>projectforge-business/src/main/kotlin/org/projectforge/business/dvelop/CustomFieldDef.kt</code> 
+<p><strong>Type:</strong> Kotlin data class — DTO</p>
+<p><strong>Purpose:</strong> Represents the definition / schema of a custom field in the D-velop system, as returned by the D-velop API's custom field metadata endpoint.</p>
+<p><strong>Source path:</strong> <code>projectforge-business/src/main/kotlin/org/projectforge/business/dvelop/CustomFieldDef.kt</code></p>
+ <span style="color:#888">33 lines · 6 code · 25 comments · 2 blank</span></div>
 
 <div class="c">
-<p>The <strong>shared data model foundation</strong> for all invoice types in ProjectForge. It extends <code>DefaultBaseDO</code> (the framework base entity with auditing fields like <code>created</code>, <code>lastUpdate</code>, <code>deleted</code>) and implements <code>IRechnung</code> (shared invoice interface) and <code>DisplayNameCapable</code> (for UI rendering). It uses JPA <code>@MappedSuperclass</code> so its fields are inherited by concrete entity tables without creating a separate table. All properties are declared <code>open</code> to support Hibernate's lazy-loading proxy mechanism.</p>
+<p>A simple serialization DTO for D-velop's <em>custom field definitions</em>. When ProjectForge synchronizes with D-velop, it fetches the list of available custom field schemas. Each definition has an <code>id</code> (the API identifier), a <code>name</code> (human-readable label), and an <code>entity</code> (the D-velop domain object type it belongs to, e.g. "trading_partner"). This class is used during the D-velop integration bootstrapping to discover which custom fields exist.</p>
 </div>
 
-<h2>Class Hierarchy</h2>
-<pre>
-DefaultBaseDO &lt;- AbstractRechnungDO &lt;- RechnungDO
-                                    &lt;- EingangsrechnungDO
-IRechnung, DisplayNameCapable (interfaces implemented by AbstractRechnungDO)
-</pre>
-
-<h2>Database Fields</h2>
-
-<h3>Core Invoice Fields</h3>
-<table>
-<tr><th>Property</th><th>DB Column</th><th>Type</th><th>Constraints / Annotations</th></tr>
-<tr><td><code>datum</code></td><td>—</td><td><code>LocalDate?</code></td><td><code>@Column(nullable = false)</code>, <code>@GenericField</code> (Hibernate Search)</td></tr>
-<tr><td><code>betreff</code></td><td>—</td><td><code>String?</code></td><td><code>@Column(length = 4000)</code>, <code>@FullTextField</code></td></tr>
-<tr><td><code>bemerkung</code></td><td>—</td><td><code>String?</code></td><td><code>@Column(length = 4000)</code>, <code>@FullTextField</code></td></tr>
-<tr><td><code>besonderheiten</code></td><td>—</td><td><code>String?</code></td><td><code>@Column(length = 4000)</code>, <code>@FullTextField</code></td></tr>
-<tr><td><code>faelligkeit</code></td><td>—</td><td><code>LocalDate?</code></td><td><code>@GenericField</code></td></tr>
-<tr><td><code>bezahlDatum</code></td><td><code>bezahl_datum</code></td><td><code>LocalDate?</code></td><td><code>@GenericField</code></td></tr>
-<tr><td><code>zahlBetrag</code></td><td><code>zahl_betrag</code></td><td><code>BigDecimal?</code></td><td><code>scale = 2, precision = 12</code>; actual gross amount paid</td></tr>
-<tr><td><code>currency</code></td><td>—</td><td><code>String?</code></td><td><code>@Column(length = 10)</code>, <code>@FullTextField</code></td></tr>
-</table>
-
-<h3>Konto (Account) Relationship</h3>
-<table>
-<tr><th>Property</th><th>Type</th><th>Annotations</th></tr>
-<tr><td><code>konto</code></td><td><code>KontoDO?</code></td><td><code>@ManyToOne(fetch = LAZY)</code>, <code>@JoinColumn(name = "konto_id")</code>, <code>@IndexedEmbedded(includeDepth = 1)</code>, <code>@JsonSerialize(using = IdOnlySerializer::class)</code>, <code>@IndexingDependency(reindexOnUpdate = SHALLOW)</code></td></tr>
-</table>
-<p>The DATEV account associated with this invoice. For outgoing invoices, this defaults to the account assigned to the customer or project. For incoming invoices, it represents the creditor's chart of accounts entry.</p>
-
-<h3>Discount / Skonto Fields</h3>
+<h2>Properties</h2>
 <table>
 <tr><th>Property</th><th>Type</th><th>Description</th></tr>
-<tr><td><code>discountPercent</code></td><td><code>BigDecimal?</code></td><td>Early payment discount percentage (e.g., 2 for 2%)</td></tr>
-<tr><td><code>discountMaturity</code></td><td><code>LocalDate?</code></td><td>Date until which the discount applies</td></tr>
+<tr><td><code>id</code></td><td><code>String?</code></td><td>Unique identifier of the custom field definition in D-velop (e.g., UUID)</td></tr>
+<tr><td><code>name</code></td><td><code>String?</code></td><td>Human-readable name of the custom field (e.g., "datevKonto")</td></tr>
+<tr><td><code>entity</code></td><td><code>String?</code></td><td>The entity type this field belongs to (e.g., "trading_partner")</td></tr>
 </table>
-
-<h2>Transient / Computed Fields</h2>
-
-<h3>Year</h3>
-<pre>open val year: Int
-    get() = datum?.year ?: 0</pre>
-<p>Derived from <code>datum</code>. Indexed via <code>@GenericField</code> + <code>@IndexingDependency(derivedFrom = ...)</code> to enable Hibernate Search queries by year without storing it in the database.</p>
-
-<h3>Payment Terms (Computed)</h3>
-<table>
-<tr><th>Property</th><th>Type</th><th>Description</th></tr>
-<tr><td><code>zahlungsZielInTagen</code></td><td><code>Int?</code></td><td>Days between invoice date and due date</td></tr>
-<tr><td><code>discountZahlungsZielInTagen</code></td><td><code>Int?</code></td><td>Days between invoice date and discount maturity</td></tr>
-</table>
-<p>Both are computed by <code>recalculate()</code> using <code>PFDateTime.daysBetween()</code>. They are <code>@Transient</code> (not persisted).</p>
-
-<h3><code>uiStatus</code> / <code>uiStatusAsXml</code></h3>
-<p>User interface state is persisted as XML in <code>uiStatusAsXml</code> (<code>@Column(length = 10000)</code>) and lazily deserialized to a <code>RechnungUIStatus</code> instance via <code>XmlObjectReader</code>. The getter caches the deserialized object. Annotated with <code>@NoHistory</code> to exclude from history tracking.</p>
-
-<h3><code>info</code> (<code>RechnungInfo</code>)</h3>
-<pre>@Transient @CandHIgnore lateinit var info: RechnungInfo</pre>
-<p>The calculated invoice summary (net/gross totals, VAT breakdown, cost assignments). Initialized by <code>RechnungCalculator</code> and cached by <code>AbstractRechnungCache</code>. Marked <code>@CandHIgnore</code> to prevent history/audit processing. The <code>isInfoInitialized</code> check prevents re-initialization.</p>
-
-<h3><code>ensuredInfo</code></h3>
-<pre>val ensuredInfo: RechnungInfo
-    get() {
-        if (!isInfoInitialized) { RechnungCalculator.calculate(this) }
-        return info
-    }</pre>
-<p>Guaranteed accessor — if <code>info</code> hasn't been calculated yet (e.g., after deserialization or when the cache didn't pre-populate it), it forces calculation on demand.</p>
-
-<h2>Hibernate Search / Indexing Strategy</h2>
-<table>
-<tr><th>Annotation</th><th>Usage</th></tr>
-<tr><td><code>@GenericField</code></td><td>Date and numeric fields — exact filtering, not analyzed full-text</td></tr>
-<tr><td><code>@FullTextField</code></td><td>Text fields (<code>betreff</code>, <code>bemerkung</code>, <code>besonderheiten</code>, <code>currency</code>) — analyzed full-text search</td></tr>
-<tr><td><code>@IndexedEmbedded(includeDepth = 1)</code></td><td><code>konto</code> — nested entity indexing with limited depth</td></tr>
-<tr><td><code>@IndexingDependency(reindexOnUpdate = SHALLOW)</code></td><td><code>konto</code> — only reindex when the konto itself changes (not its nested children)</td></tr>
-<tr><td><code>@IndexingDependency(derivedFrom = ...)</code></td><td><code>year</code> — transparently derived from <code>datum</code> field</td></tr>
-</table>
-
-<h2>Abstract Methods (Implemented by Subclasses)</h2>
-<table>
-<tr><th>Method</th><th>Description</th></tr>
-<tr><td><code>abstractPositionen: List&lt;AbstractRechnungsPositionDO&gt;?</code></td><td>Returns the collection of position/line items for this invoice</td></tr>
-<tr><td><code>isValid: Boolean</code></td><td>True if the invoice is issued, not canceled, not deleted, and not only planned</td></tr>
-<tr><td><code>addPositionWithoutCheck(position)</code></td><td>Adds a position to the internal collection without validation</td></tr>
-<tr><td><code>setAbstractRechnung(position)</code></td><td>Sets the back-reference from position to this invoice</td></tr>
-<tr><td><code>ensureAndGetPositionen()</code></td><td>Lazily initializes and returns the positions collection</td></tr>
-</table>
-
-<h2>Key Business Methods</h2>
-
-<h3><code>recalculate()</code></h3>
-<p>Computes <code>zahlungsZielInTagen</code> and <code>discountZahlungsZielInTagen</code> from <code>datum</code>, <code>faelligkeit</code>, and <code>discountMaturity</code>. If <code>datum</code> is null, sets both to null.</p>
-
-<h3><code>addPosition(position: AbstractRechnungsPositionDO)</code></h3>
-<p>Adds a new line item to the invoice with automatic number assignment:
-<ol>
-<li>Ensures the positions list exists</li>
-<li>Finds the maximum existing position number and increments by 1 (or uses 1 for the first position)</li>
-<li>Sets the back-reference via <code>setAbstractRechnung()</code></li>
-<li>Adds to the internal collection via <code>addPositionWithoutCheck()</code></li>
-</ol></p>
-
-<h3><code>hasKostZuweisungen(): Boolean</code></h3>
-<p>Returns <code>true</code> if any position on this invoice has cost assignments (<code>kostZuweisungen</code>).</p>
-
-<h3><code>getAbstractPosition(idx: Int): AbstractRechnungsPositionDO?</code></h3>
-<p>Returns the position at the given 0-based index, or null if out of bounds.</p>
 
 <h2>Architecture Notes</h2>
-<ul>
-<li><strong>All properties and methods are <code>open</code></strong> — this is critical for Hibernate's CGLIB proxy mechanism and Kotlin-JPA interop. Commit <code>8675a1dbe</code> identified this as a major performance issue where non-open Kotlin properties prevented lazy loading, causing thousands of unnecessary SQL queries</li>
-<li><strong>Id-only JSON serialization:</strong> The <code>konto</code> relationship uses <code>@JsonSerialize(using = IdOnlySerializer::class)</code> to avoid deep serialization of nested entities in REST responses</li>
-<li><strong>History exclusion:</strong> <code>uiStatusAsXml</code> is annotated with <code>@NoHistory</code> because UI state changes shouldn't be tracked in the audit log</li>
-<li><strong>CanH exclusion:</strong> <code>info</code> is <code>@CandHIgnore</code> because it's a computed cache value that may not be initialized yet</li>
-<li>The <code>@PropertyInfo</code> annotations provide i18n keys and type metadata for auto-generated UI forms</li>
-<li>Migrated from Java to Kotlin in stages — see history below</li>
-</ul>
+<p>This is a pure data transfer object with no business logic. All properties are declared as constructor parameters with default <code>null</code> values, making it compatible with Jackson deserialization from D-velop's JSON API responses and Kotlin's named-argument instantiation.</p>
 
 <h2>Git History</h2>
 <div class="hist"><pre>868d6abb7 2025 -> 2026
-5d8d7db72 WIP: currency in incoming invoices.
-8c2bf04f0 WIP: currency conversion with Claude Code.
-16b87b4ce WIP: Import of creditor invoices
-175d72c14 WIP: Import of creditor invoices
-4d4c6b449 Currency field added to invoices (incoming and outgoing)
-aa20b7708 NewGroupSelectPanel fixed (used in wizard). (Eingangs)RechnungsPositionDO: @get:JoinColumn -> mappedBy.
-1e0e7225b KostzuweisungsExport of invoices ignores now invalid invoices and 0.00 positions.
 63081666f Source file headers: 2024-> 2025.
-b3782c8a8 Migration stuff in progress...
-b810d1c78 Migration stuff in progress... (all tests of all packages: OK).
-ba2479571 Migration stuff in progress...
-b47c21af6 Refactored caching and calculations with invoices (not yet finished)
-ccb7ca64d Migration stuff in progress...
-67a66479e Migration stuff in progress...
-4c04cfd65 MAJOR-CHANGE! Migration of integer id's to Long id's (including fk's etc.)
-ad9ac6b63 Migration stuff in progress...
-f5c09f87f Migration stuff in progress...
-c04fb0d51 Migration stuff in progress...
-06828f490 Migration stuff in progress...
 b6092df09 Copyright 2023 -> 2024
+be750e77e WIP D.velop
 ab45d51fa Copyright 2001-2022 -> 2001-2023.
-6307a3dbe *RechnungPagesRest: show kost including tooltip.
-2dc192b7a AG grid: auto-format of currency, Formatter works now also with AG grid (rating, dates, timestamps). Currency rendering by client (Formatter.jsx) added.
-68402a26b Eingangsrechnungsliste: User discount date and due date.
-a286007ee Mass update of creditor invoices: handling of discount implemented.
+7c0185105 AG grid state (sort order etc.) is preserved if returned from edit page to list page.
+a492027b4 AGGrid: column states (size is now persisted in user's preferences)
+ec7f46aa1 WIP: scripting
 5f7ef41b8 Copyright 2021 -> 2022
-a7fceb731 Some compiler warnings fixed.
-cd27dd997 package xstream -> xmlstream. (should be replaced by xstream later).
+0ab100d21 Configuration refactored (GlobalConfiguration not needed anymore). SEPA export should now erease unprintable chars.
 ceb63e8a1 Source code header: (C) 2001-2021.
-07cb34acb IRechnung, IRechnungsPosition introduced. DTOs fro Eingangsrechnung{sPosition}DO added.
-552603f75 Rename setter methods in RechnungDO to avoid conflicts with Jackson
-92112cdb1 Add InvoicePositionComponent
-5064afcec LocalDate Bridge for hibernate search fixed.
-b209e00ba PFDay.from -> from, fromOrNow, fromOrNull, PFDateTime.from -> from, fromOrNow, fromOrNull
-7c1c48782 Replacing more instance of java.sql.Date with java.time.LocalDate Replacing instances of java sql.Timestamp with java.util.Date
-78b436d9e Replace instances of java.util.date and java.sql.Date with java.time.LocalDate
 7c79f1922 Copyright of source header -> 2020.
-13cfb0330 WIP: Migration to PFDate and PFDateTime.
-24019a0f5 Eliminate DateHolder occurences
-1dc951c03 Remove instances of DayHolder
-e4cdd8d4b Revert "More Holder replacements"
-f604a1afe More Holder replacements
-19b97fcc3 DateBridge: encoding = EncodingType.STRING for all DateBridges in all DO's.
-fbe4381e7 DateBridge: string encoding removed again.
-76c5c6955 WIP: MultiFieldQueryParser
-8675a1dbe Found big performance issue: Declared all Kotlin JPA entities and their properties as open. Lazy loading wasn't supported by Hibernate and results in thousands of JPA queries...
-d36fe6ad9 Heavy WIP: refactoring
-a55ef0c14 Heavy WIP: refactoring of (Eingangs)Rechnung*. Found a big performance killer!!!!!
-812b5b751 Heavy WIP: refactoring of (Eingangs)Rechnung*. Found a big performance killer!!!!!
-39cdd224c Hibernate search: DateBridge...
-339e017b4 ElementRegistry: @PropertyInfo is now also supported for getter methods of read-only vals.
-f2b55f6aa RechnungsPositionDO.java - RechnungsPositionDO.kt EingangsrechnungsPositionDO.java -> EingangsrechnungsPositionDO.kt AbstractRechnungsPositionDO.java -> AbstractRechnungsPositionDO.kt
-050a5ccd7 @NoHistory needed as field annotation: @field:NoHistory.
-05244ff19 CopyRight of all Kotlin file-header updated or created.
-f55615812 Kotlin migration of {Abstract|Eingangs}RechnungDO...
-39a2bd24f AbstractRechnungDO: More open attributes
-bd9803e81 AbstractRechnungDO: Add open to previously protected attributes.
-103e4f592 AbstractRechnungDO.java -> AbstractRechnungDO.kt
+dd5ca38ac CopyRight of all java file-header updated or created.
+9ebb88522 Initial commit
 </pre></div>
 </body>
 </html>

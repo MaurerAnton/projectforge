@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>#896: AuftragRight.kt [FR]</title>
+<style>
+body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}
+h1{border-bottom:2px solid #333;padding-bottom:.3em}
+h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}
+h3{margin-top:2em;color:#444}
+a{color:#0366d6}
+.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}
+.nav{font-size:.9em;color:#888;margin-bottom:1em}
+.meta{font-size:.9em;margin:1em 0;color:#555}
+code{background:#f0f0f0;padding:0 .2em;font-size:.93em}
+pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}
+table{border-collapse:collapse;width:100%;margin:1em 0}
+th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}
+th{background:#f5f5f5;font-weight:600}
+.hist{font-size:.85em;color:#555}
+</style>
+</head>
+<body>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← Index des fichiers</a> · <a href="895.html">← Précédent</a> · <a href="897.html">Suivant →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/kotlin/org/projectforge/business/fibu/AuftragRight.kt" target="_blank" title="Voir la source sur GitHub">📄 source</a></div>
+
+<h1>#896: <code>AuftragRight.kt</code></h1>
+
+<div class="meta"><code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/AuftragRight.kt</code> 
+<p><strong>Type :</strong> Classe de droits d'accès (<code>UserRightAccessCheck&lt;AuftragDO?&gt;</code>)</p>
+<p><strong>Paquetage :</strong> <code>org.projectforge.business.fibu</code></p>
+<p><strong>Chemin complet :</strong> <code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/AuftragRight.kt</code></p>
+ <span style="color:#888">174 lignes · 113 code · 54 commentaires · 7 vides</span></div>
+
+<div class="c">
+<p>Définit les règles de contrôle d'accès pour le livre des commandes (<em>Auftragsbuch</em>). Étend <code>UserRightAccessCheck&lt;AuftragDO?&gt;</code> et fournit un contrôle d'accès fin et multi-niveaux basé sur l'appartenance à un groupe d'utilisateurs et l'attribution de rôles utilisateur. Gère la visibilité pour les personnes de contact, les chefs de projet, les assistants de projet, le personnel de contrôle et les membres du groupe financier, avec des règles spéciales pour les commandes entièrement facturées et la protection du drapeau <code>vollstaendigFakturiert</code>.</p>
+</div>
+
+<h2>Définition de la classe</h2>
+<pre>class AuftragRight : UserRightAccessCheck&lt;AuftragDO?&gt;(
+    UserRightId.PM_ORDER_BOOK, UserRightCategory.PM,
+    *UserRightServiceImpl.FALSE_READONLY_PARTLYREADWRITE_READWRITE
+)</pre>
+
+<h2>Valeurs des droits</h2>
+<p>Valeurs disponibles : <code>FALSE</code>, <code>READONLY</code>, <code>PARTLYREADWRITE</code>, <code>READWRITE</code>.</p>
+<p><strong>Comportement spécial de PARTLYREADWRITE :</strong> Les utilisateurs membres de FIBU_ORGA_GROUPS <em>et</em> de PROJECT_MANAGER/PROJECT_ASSISTANT n'ont accès qu'à leurs propres projets (assignés par les groupes de chefs de projet). Choisir <code>READWRITE</code> accorde un accès complet à toutes les commandes.</p>
+
+<h2><code>hasSelectAccess(user): Boolean</code></h2>
+<p>Retourne <code>true</code> si l'utilisateur dispose du droit READONLY, PARTLYREADWRITE ou READWRITE sur l'ID de droit <code>PM_ORDER_BOOK</code>. Cela détermine si le livre des commandes est visible en tant que module.</p>
+
+<h2><code>hasAccess(user, obj, oldObj, operationType): Boolean</code></h2>
+<p>La méthode centrale de décision d'accès avec des vérifications en couches :</p>
+
+<h3>Couche 1 : Groupe de contrôle</h3>
+<p>Les membres de <code>CONTROLLING_GROUP</code> ont un accès SELECT inconditionnel. Les autres types d'opérations passent à la couche suivante.</p>
+
+<h3>Couche 2 : Vérification de droit de base</h3>
+<ul>
+<li>SELECT : nécessite READONLY, PARTLYREADWRITE ou READWRITE</li>
+<li>INSERT/UPDATE/DELETE : nécessite PARTLYREADWRITE ou READWRITE</li>
+</ul>
+
+<h3>Couche 3 : Protection du drapeau <code>vollstaendigFakturiert</code></h3>
+<p>Seuls les membres de <code>FINANCE_GROUP</code> peuvent modifier le drapeau <code>vollstaendigFakturiert</code> sur les positions de commande :</p>
+<ul>
+<li>Sur INSERT : toute position avec <code>vollstaendigFakturiert == true</code> déclenche une <code>AccessException</code></li>
+<li>Sur UPDATE : en comparant chaque position avec sa version en base de données (<code>oldObj</code>), toute modification de <code>vollstaendigFakturiert</code> déclenche une <code>AccessException</code></li>
+<li>Les positions supprimées sont ignorées</li>
+<li>Les positions nouvellement ajoutées (sans <code>dbPosition</code>) sont vérifiées comme dans INSERT</li>
+</ul>
+
+<h3>Couche 4 : Accès basé sur le projet</h3>
+<p>Pour les utilisateurs qui NE sont PAS dans FIBU_ORGA_GROUPS avec le droit READONLY/READWRITE (c'est-à-dire les chefs de projet, les assistants de projet ou les utilisateurs PARTLYREADWRITE) :</p>
+<ul>
+<li><strong>Attribution directe :</strong> L'utilisateur est le <code>contactPerson</code> de la commande → accès accordé</li>
+<li><strong>Appartenance au projet :</strong> L'utilisateur appartient au <code>projektManagerGroup</code> du projet, est le <code>headOfBusinessManager</code> du projet, ou est le <code>salesManager</code> du projet → accès accordé</li>
+<li><strong>Restriction de facturation complète :</strong> Si la commande est <strong>entièrement facturée</strong> (<code>isVollstaendigFakturiert</code>), l'accès est limité aux commandes dont la date de fin de période de performance (ou la date de devis comme solution de repli) est dans <code>MAX_DAYS_OF_VISIBILITY_4_PROJECT_MANGER</code> (1800 jours ≈ 5 ans)</li>
+<li><strong>Non entièrement facturée :</strong> L'accès complet est accordé</li>
+<li>Si aucune des conditions ci-dessus n'est remplie, l'accès est refusé</li>
+</ul>
+
+<h2>Initialisation des droits de groupe (bloc <code>init</code>)</h2>
+<table>
+<tr><th>Groupe</th><th>Valeurs par défaut / disponibles</th></tr>
+<tr><td>FIBU_ORGA_PM_GROUPS</td><td>FALSE, READONLY, PARTLYREADWRITE, READWRITE (par défaut pour les chefs de projet et les groupes d'organisation)</td></tr>
+<tr><td><code>PROJECT_MANAGER</code></td><td>PARTLYREADWRITE (ensemble par défaut)</td></tr>
+<tr><td><code>PROJECT_ASSISTANT</code></td><td>FALSE, PARTLYREADWRITE</td></tr>
+<tr><td>Utilisateurs du contrôle</td><td>READONLY (via <code>setReadOnlyForControlling()</code>)</td></tr>
+</table>
+
+<h2>Constantes</h2>
+<table>
+<tr><th>Constante</th><th>Valeur</th><th>Description</th></tr>
+<tr><td><code>MAX_DAYS_OF_VISIBILITY_4_PROJECT_MANGER</code></td><td><code>1800</code></td><td>Les commandes de plus de ~5 ans sont masquées aux chefs de projet lorsqu'elles sont entièrement facturées</td></tr>
+</table>
+
+<h2>Historique Git</h2>
+<div class="hist"><pre>868d6abb7 2025 -> 2026
+63081666f En-têtes des fichiers source : 2024 -> 2025.
+61f05ce90 Travaux de migration en cours...
+87dd5b87c AuftragsCache refactorisé, travaux de migration... (tous les tests OK)
+4efcbd0fb Travaux de migration en cours...
+06828f490 Travaux de migration en cours...
+b6092df09 Copyright 2023 -> 2024
+ab45d51fa Copyright 2001-2022 -> 2001-2023.
+73b0be50b org.apache.commons.collections -> org.apache.commons.collections4
+d628fc93f Livre des commandes : accès pour le chef d'unité commerciale et le directeur commercial.
+5f7ef41b8 Copyright 2021 -> 2022
+9aefe1981 AuftragRight : visibilité améliorée pour les chefs de projet concernant les commandes obsolètes.
+7429a0554 AuftragRight -> Kotlin</pre></div>
+</body>
+</html>

@@ -1,218 +1,49 @@
-<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>1101</title>
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>#1101</title>
 <style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:2em;color:#444}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}</style></head>
-<body><div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="1100.html">← Prev</a> · <a href="1102.html">Next →</a></div>
-<h1>1101: <code>TimesheetStats.kt</code></h1>
-<div class="meta">Service, projectforge-business/src/main/kotlin/org/projectforge/business/timesheet/TimesheetStats.kt</div>
-<div class="c">Accumulates and provides statistical data for timesheets, including total hours, planned vs. actual comparisons, and aggregate calculations.</div>
-<h2>Architecture</h2>
-<h3>Aggregation Engine</h3><p>Collects timesheet entries and computes aggregate statistics: total hours, planned personnel days vs. actual, cost summaries, and AI time savings. Uses Kotlin's collection operations for efficient data processing.</p>
-<h3>Data Flow</h3><p>Receives a filtered list of <code>TimesheetDO</code> entities, groups them by relevant dimensions (user, task, project), computes per-group sums, and returns a structured <code>TimesheetStats</code> result object.</p>
-<h3>Design Rationale</h3><p>Separated from the DAO and export logic to keep statistical computation independently testable and reusable across dashboards, reports, and Excel exports.</p>
-<h2>Source Code</h2>
-<pre>/////////////////////////////////////////////////////////////////////////////
-//
-// Project ProjectForge Community Edition
-//         www.projectforge.org
-//
-// Copyright (C) 2001-2026 Micromata GmbH, Germany (www.micromata.com)
-//
-// ProjectForge is dual-licensed.
-//
-// This community edition is free software; you can redistribute it and/or
-// modify it under the terms of the GNU General Public License as published
-// by the Free Software Foundation; version 3 of the License.
-//
-// This community edition is distributed in the hope that it will be useful,
-// but WITHOUT ANY WARRANTY; without even the implied warranty of
-// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General
-// Public License for more details.
-//
-// You should have received a copy of the GNU General Public License along
-// with this program; if not, see http://www.gnu.org/licenses/.
-//
-/////////////////////////////////////////////////////////////////////////////
-
-package org.projectforge.business.timesheet
-
-import org.projectforge.framework.time.TimePeriod
-import org.projectforge.framework.utils.RoundUnit
-import java.math.BigDecimal
-import java.math.RoundingMode
-import java.util.*
-
-/**
- * Stores some statistics of time sheets.
- * Doesn&#x27;t support multiple users.
- * @author Kai Reinhard (k.reinhard@micromata.de)
- */
-class TimesheetStats(fromDate: Date?, toDate: Date?) {
-    /**
-     * @return the time period of this stats.
-     */
-    val period: TimePeriod = TimePeriod(fromDate, toDate)
-
-    /**
-     * @return the earliestStartDate.
-     */
-    var earliestStartDateIgnoringPeriod: Date? = null
-        private set
-
-    /**
-     * @return the latestStopDate
-     */
-    var latestStopDateIgnoringPeriod: Date? = null
-        private set
-
-    var timesheets = TreeSet&lt;TimesheetDO&gt;()
-        private set
-
-    /**
-     * @return the earliestStartDate if not before fromDate, otherwise fromDate itself is returned. If no matching time sheet found, null is
-     * returned.
-     */
-    fun getEarliestStartDate(): Date? {
-        if (earliestStartDateIgnoringPeriod == null) {
-            return null
-        }
-        return if (earliestStartDateIgnoringPeriod!!.before(period.fromDate)) {
-            period.fromDate
-        } else earliestStartDateIgnoringPeriod
-    }
-
-    /**
-     * @param earliestStartDate the earliestStartDate to set
-     * @return this for chaining.
-     */
-    fun setEarliestStartDate(earliestStartDate: Date?): TimesheetStats {
-        earliestStartDateIgnoringPeriod = earliestStartDate
-        return this
-    }
-
-    /**
-     * @return the latestStopDate
-     */
-    fun getLatestStopDate(): Date? {
-        if (latestStopDateIgnoringPeriod == null) {
-            return null
-        }
-        return if (latestStopDateIgnoringPeriod!!.after(period.toDate)) {
-            period.toDate
-        } else latestStopDateIgnoringPeriod
-    }
-
-    /**
-     * @param latestStopDate the latestStopDate to set
-     * @return this for chaining.
-     */
-    fun setLatestStopDate(latestStopDate: Date?): TimesheetStats {
-        latestStopDateIgnoringPeriod = latestStopDate
-        return this
-    }
-
-    /**
-     * @return the totalBreakHours
-     */
-    val totalBreakMillis: Long
-        get() {
-            if (timesheets.isEmpty()) {
-                return 0L
-            }
-            var totalBreakMillis = 0L
-            var lastStopTime: Date? = null
-            timesheets.forEach { timesheet -&gt;
-                lastStopTime?.let { stopTime -&gt;
-                    if (stopTime.before(timesheet.startTime)) {
-                        totalBreakMillis += timesheet.startTime!!.time - stopTime.time
-                    }
-                }
-                lastStopTime = timesheet.stopTime
-            }
-            return totalBreakMillis
-        }
-
-    /**
-     * @return the total millis of time sheets inside given period.
-     */
-    val totalMillis: Long
-        get() {
-            if (timesheets.isEmpty()) {
-                return 0L
-            }
-            var total = 0L
-            timesheets.forEach { timesheet -&gt;
-                var startTime = timesheet.startTime!!
-                if (startTime.before(period.fromDate)) {
-                    startTime = period.fromDate!!
-                }
-                var stopTime = timesheet.stopTime!!
-                if (stopTime.after(period.toDate)) {
-                    stopTime = period.toDate!!
-                }
-                total += stopTime.time - startTime.time
-            }
-            return total
-        }
-
-    /**
-     * @return the totalHours of time sheets inside given period.
-     */
-    @JvmOverloads
-    fun getTotal(unit: RoundUnit = RoundUnit.INT, roundingMode: RoundingMode = RoundingMode.HALF_UP): BigDecimal {
-        if (timesheets.isEmpty()) {
-            return BigDecimal.ZERO
-        }
-        var total = BigDecimal.ZERO
-        timesheets.forEach { timesheet -&gt;
-            var startTime = timesheet.startTime!!
-            if (period.fromDate != null &amp;&amp; startTime.before(period.fromDate)) {
-                startTime = period.fromDate!!
-            }
-            var stopTime = timesheet.stopTime!!
-            if (period.toDate != null &amp;&amp; stopTime.after(period.toDate)) {
-                stopTime = period.toDate!!
-            }
-            total += TimePeriod.getDurationHours(startTime, stopTime, unit, roundingMode)
-        }
-        return total
-    }
-
-
-    /**
-     * Adds the given time sheet only if the time sheet fits the period (full or partly).
-     * @param timesheet the timesheet to add
-     * @return this for chaining.
-     */
-    fun add(timesheet: TimesheetDO): TimesheetStats {
-        val startTime = timesheet.startTime
-        val stopTime = timesheet.stopTime
-        if (startTime == null || stopTime == null) {
-            return this
-        }
-        period.fromDate?.let {
-            if (!it.before(stopTime)) {
-                return this
-            }
-        }
-        period.toDate?.let {
-            if (!it.after(startTime)) {
-                return this
-            }
-        }
-        if (earliestStartDateIgnoringPeriod == null || earliestStartDateIgnoringPeriod!!.after(startTime)) {
-            earliestStartDateIgnoringPeriod = startTime
-        }
-        if (latestStopDateIgnoringPeriod == null || latestStopDateIgnoringPeriod!!.before(stopTime)) {
-            latestStopDateIgnoringPeriod = stopTime
-        }
-        timesheets.add(timesheet)
-        return this
-    }
-}</pre>
+<body><div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="1100.html">← Prev</a> · <a href="1102.html">Next →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/kotlin/org/projectforge/business/timesheet/TimesheetDao.kt" target="_blank" title="View source on GitHub">📄 source</a></div>
+<h1>#1101: <code>TimesheetDao.kt</code></h1>
+<div class="meta"><code>projectforge-business/src/main/kotlin/org/projectforge/business/timesheet/TimesheetDao.kt</code> DAO / Timesheet Management, projectforge-business/src/main/kotlin/org/projectforge/business/timesheet/TimesheetDao.kt <span style="color:#888">784 lines · 596 code · 143 comments · 45 blank</span></div>
+<div class="c">Core DAO for timesheet management extending BaseDao. Implements comprehensive access control: own timesheets vs foreign timesheets (finance group has full access), project managers/HR/controlling can view but with hidden description/location (<code>HIDDEN_FIELD_MARKER</code>). <code>checkTimesheetProtection()</code> validates the protectTimesheetsUntil constraint on ancestor tasks (prevents booking before freeze date). <code>checkTaskBookable()</code> enforces 4 rules: task/ancestors not closed/deleted, no TREE_CLOSED status, no ONLY_LEAFS on parent tasks with children, no order positions in descendant tasks. <code>onInsertOrModify()</code> validates: milliseconds/seconds must be 0, minutes multiple of 5, minimum 60s duration, maximum 14h, time overlap detection (via <code>hasTimeOverlap()</code> in transaction), kost2 validation (must be in task's kost2 list). <code>validateTimeSavingsByAI()</code> ensures unit is set when savings specified, percentage capped at 99%. <code>prepareHibernateSearch()</code> re-initializes lazy user/task references for indexing. Supports configurable tags, location autocompletion, reference autocompletion, and year range queries.</div>
 <h2>Git History</h2><div class="hist"><pre>868d6abb7 2025 -> 2026
+bb1e156b1 Claude Code: DynamicButton is disabled while isFetching, TimesheetDao prevents time sheet collisions on multiple button events.
+3c439391c Timesheet: recent entries (display of kost2, project and customer) fixed. Timesheet: ai unit is preset by recent entry. Timesheet-Excel-Export: AI-savings added.
+6a32032d6 Hibernate.isInitialized(obj) -> HibernateUtils.isFullyInitialized(obj). Some lazy objects of e.g. ManyToOne columns are not fully loaded but Hibernate.isInitialized() returns true.
+9fc09ddd4 Bugfix: Autocompletion for locations in timesheet works now again.
+1449f4859 WIP: timesavings by AI in timesheets, config param for note added.
+cbffabd60 WIP: time savings by AI
 63081666f Source file headers: 2024-> 2025.
+53b501ab6 Example scripts fixed. TimesheetDO.getDuration() -> TimesheetDO.duration.
+5989b32fd BaseDao: mechanism of onChangeLister refactored.
+1b50060c3 BaseDao: renamed: get -> find, save -> insert, getList -> select, load -> select
+87aaf6a5a Migration stuff in progress... BaseDao refactored (not yet finished) internal* methods renamed.
+3aeda5ef5 Big change: all save|update|...InTrans renamed (InTrans removed). PfPesistenceContext as param not needed anymore (ThreadLocal is used instead). (all tests of all packages: OK).
+e66d5f5f7 Migration stuff in progress... TaskTree -> Kotlin and runs now in isolated entity manager
+67805f2fc ThreadLocalUserContext.user -> ThreadLocalUserContext.loggedInUser (renamed for avoiding mis-understandings in code).
+85b4e1175 PfPersistenceService and PfPersistenceContext: query renamed to executeQuery.
+b095e6f7d !!!!! Big change of Transaction handling: Re-uses PfPersistenceContext as much as possible (not yet finished). Tests doesn't yet run.
+4c04cfd65 MAJOR-CHANGE! Migration of integer id's to Long id's (including fk's etc.)
+09effe8bb BaseDao.hasUpdateAccess and hasDeleteAccess accepts now null dbObj's.
+2863b30b9 Migration stuff in progress...
+5bafe7941 @Repository -> @Service. @Transactional-Annotations removed.
+ee7b7fe15 Migration stuff in progress...
+0d183e5df Migration stuff in progress...
+9d8b94352 Migration stuff in progress...
+c25b14e78 Migration stuff in progress...
+67ce75fe9 Migration stuff in progress...
+e33c8b9c2 Migration stuff in progress...
+06828f490 Migration stuff in progress...
 b6092df09 Copyright 2023 -> 2024
 ab45d51fa Copyright 2001-2022 -> 2001-2023.
+73b0be50b org.apache.commons.collections -> org.apache.commons.collections4
+38bec971a ThreadLocal -> Kotlin
+267283973 PROJECTFORGE-3730: Show validation message for list pages if result list was truncated due to max rows in QueryFilter.
+765e7f1af TimesheetDao.massUpdate removed (not needed anymore).
+512ffa420 Configuration param: timesheetTag implemented.
+fcc633dff Timesheets mass update supports now update of reference field.
 5f7ef41b8 Copyright 2021 -> 2022
-ceb63e8a1 Source code header: (C) 2001-2021.
-0e8ed158b TimesheetStats supports now rounding modes. Migrated to Kotlin.</pre></div>
+0ab100d21 Configuration refactored (GlobalConfiguration not needed anymore). SEPA export should now erease unprintable chars.
+c0f2b9de0 Tenants functionality removed everywhere (untested).
+db3b02da7 UserException moved from business to common package (AccesssException affected). UserException will now be returned as Toast for Rest clients on default. FileSizeChecker WIP.
+8c53b07de Nothing real.
+d875be4d4 TimesheetDao: Java - Kotlin (!!!! Side effects may occur all over the project!!!!)</pre></div>
 </body></html>

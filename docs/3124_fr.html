@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>#3124: TimesheetEditSelectRecentDialogPanel.java [FR]</title>
+<style>
+body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}
+h1{border-bottom:2px solid #333;padding-bottom:.3em}
+h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}
+h3{margin-top:2em;color:#444}
+a{color:#0366d6}
+.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}
+.nav{font-size:.9em;color:#888;margin-bottom:1em}
+.lang{font-size:.85em;color:#888;float:right}
+.lang a{color:#888;text-decoration:none;padding:0 .3em}
+.lang a.active{color:#0366d6;font-weight:600;text-decoration:underline}
+.meta{font-size:.9em;margin:1em 0;color:#555}
+code{background:#f0f0f0;padding:0 .2em;font-size:.93em}
+pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}
+table{border-collapse:collapse;width:100%;margin:1em 0}
+th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}
+th{background:#f5f5f5;font-weight:600}
+.hist{font-size:.85em;color:#555}
+</style>
+</head>
+<body>
+<div class="lang"><a href="3124.html">EN</a> · <a href="3124_de.html">DE</a> · <a href="3124_ru.html">RU</a> · <a href="3124_fr.html" class="active">FR</a> · <a href="3124_es.html">ES</a></div>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← Index des fichiers</a> · <a href="2008.html">← Précédent</a> · <a href="600.html">Suivant →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-wicket/src/main/java/org/projectforge/web/timesheet/TimesheetEditSelectRecentDialogPanel.java" target="_blank" title="Voir la source sur GitHub">📄 source</a></div>
+<h1>#3124: <code>TimesheetEditSelectRecentDialogPanel.java</code></h1>
+<div class="meta"><code>projectforge-wicket/src/main/java/org/projectforge/web/timesheet/TimesheetEditSelectRecentDialogPanel.java</code> Type : Java · Rôle : Timesheet · Source : projectforge-wicket/src/main/java/org/projectforge/web/timesheet/TimesheetEditSelectRecentDialogPanel.java <span style="color:#888">255 lignes · 206 code · 36 commentaires · 13 vides</span></div>
+<div class="c">Composant Wicket Panel pour TimesheetEditSelectRecentDialog. Fragment d'interface réutilisable intégré dans des pages ou des dialogues.</div>
+<h2>Structure du code</h2>
+<p>Paquetage : <code>org.projectforge.web.timesheet</code></p>
+<p>Classes : <code>TimesheetEditSelectRecentDialogPanel</code></p>
+<p>Étend : <code>ModalDialog</code></p>
+<p>Méthodes (10) : <code>init</code>, <code>addRecentSheetsTable</code>, <code>populateItem</code>, <code>populateItem</code>, <code>getObject</code>, <code>populateItem</code>, <code>newRowItem</code>, <code>createRecentTimeSheetSelectionLink</code>, <code>onClick</code>, <code>renderHead</code></p>
+<p>Champs (4) : <code>serialVersionUID</code>, <code>showCost2Column</code>, <code>parentPage</code>, <code>form</code></p>
+<p>Importations : 32 paquetages</p>
+<h2>Code source (abrégé)</h2>
+<pre>
+package org.projectforge.web.timesheet;
+
+import org.apache.wicket.AttributeModifier;
+import org.apache.wicket.ajax.AjaxRequestTarget;
+import org.apache.wicket.ajax.markup.html.AjaxLink;
+import org.apache.wicket.extensions.markup.html.repeater.data.grid.ICellPopulator;
+import org.apache.wicket.extensions.markup.html.repeater.data.table.DataTable;
+import org.apache.wicket.extensions.markup.html.repeater.data.table.HeadersToolbar;
+import org.apache.wicket.extensions.markup.html.repeater.data.table.IColumn;
+import org.apache.wicket.markup.head.IHeaderResponse;
+import org.apache.wicket.markup.head.OnDomReadyHeaderItem;
+import org.apache.wicket.markup.html.basic.Label;
+import org.apache.wicket.markup.html.form.Form;
+import org.apache.wicket.markup.repeater.Item;
+import org.apache.wicket.markup.repeater.OddEvenItem;
+import org.apache.wicket.markup.repeater.data.IDataProvider;
+import org.apache.wicket.markup.repeater.data.ListDataProvider;
+import org.apache.wicket.model.IModel;
+import org.apache.wicket.model.Model;
+import org.projectforge.business.common.OutputType;
+import org.projectforge.business.task.TaskDO;
+import org.projectforge.business.task.formatter.WicketTaskFormatter;
+import org.projectforge.business.timesheet.TimesheetDO;
+import org.projectforge.business.timesheet.TimesheetDao;
+import org.projectforge.business.user.UserFormatter;
+import org.projectforge.framework.persistence.user.api.ThreadLocalUserContext;
+import org.projectforge.web.WicketSupport;
+import org.projectforge.web.dialog.ModalDialog;
+import org.projectforge.web.task.TaskPropertyColumn;
+import org.projectforge.web.wicket.*;
+import org.projectforge.web.wicket.flowlayout.DivPanel;
+import org.projectforge.web.wicket.flowlayout.TablePanel;
+
+import java.util.ArrayList;
+import java.util.List;
+
+public class TimesheetEditSelectRecentDialogPanel extends ModalDialog
+{
+  private static final long serialVersionUID = -9175062586210446142L;
+
+  private final boolean showCost2Column;
+
+  private final TimesheetEditPage parentPage;
+
+  private final TimesheetEditForm form;
+
+  public TimesheetEditSelectRecentDialogPanel(final String id, final String title, final TimesheetEditPage parentPage,
+      final TimesheetEditForm form, final boolean showCost2Column)
+  {
+    super(id);
+    setTitle(title);
+    this.parentPage = parentPage;
+    this.form = form;
+    this.showCost2Column = showCost2Column;
+    setBigWindow();
+  }
+
+  /**
+   * @see org.projectforge.web.dialog.ModalDialog#init()
+   */
+  @Override
+  public void init()
+  {
+    init(new Form&lt;String&gt;(getFormId()));
+    addRecentSheetsTable();
+  }
+
+  @SuppressWarnings({ &quot;serial&quot; })
+  private void addRecentSheetsTable()
+  {
+    final List&lt;IColumn&lt;TimesheetDO, String&gt;&gt; columns = new ArrayList&lt;IColumn&lt;TimesheetDO, String&gt;&gt;();
+    final CellItemListener&lt;TimesheetDO&gt; cellItemListener = new CellItemListener&lt;TimesheetDO&gt;()
+    {
+      @Override
+      public void populateItem(final Item&lt;ICellPopulator&lt;TimesheetDO&gt;&gt; item, final String componentId,
+          final IModel&lt;TimesheetDO&gt; rowModel)
+      {
+        final TimesheetDO timesheet = rowModel.getObject();
+        final int rowIndex = ((Item&lt;?&gt;) item.findParent(Item.class)).getIndex();
+        String cssClasses = null;
+        if (timesheet.getDeleted() == true) {
+          cssClasses = RowCssClass.MARKED_AS_DELETED.getCssClass();
+        } else if (rowIndex &lt; TimesheetEditPage.SIZE_OF_FIRST_RECENT_BLOCK) {
+          cssClasses = RowCssClass.IMPORTANT_ROW.getCssClass();
+        }
+        if (cssClasses != null) {
+          item.add(AttributeModifier.append(&quot;class&quot;, cssClasses));
+        }
+      }
+    };
+    if (showCost2Column == true) { // Peut être invisible mais existe toujours si des entrées cost2 existent dans le système.
+      columns
+          .add(new CellItemListenerPropertyColumn&lt;TimesheetDO&gt;(getString(&quot;fibu.kost2&quot;), null, &quot;kost2.displayName&quot;,
+              cellItemListener)
+          {
+            @Override
+            public void populateItem(final Item&lt;ICellPopulator&lt;TimesheetDO&gt;&gt; item, final String componentId,
+                final IModel&lt;TimesheetDO&gt; rowModel)
+            {
+              final TimesheetDO timesheet = rowModel.getObject();
+              final ListSelectActionPanel actionPanel = new ListSelectActionPanel(componentId,
+                  createRecentTimeSheetSelectionLink(timesheet), new Model&lt;String&gt;()
+              {
+                @Override
+                public String getObject()
+                {
+                  final StringBuilder buf = new StringBuilder();
+                  if (timesheet.getKost2() != null) {
+                    buf.append(timesheet.getKost2().getDisplayName());
+                  }
+                  if (timesheet.getUserId() != null
+                      &amp;&amp; timesheet.getUserId().equals(ThreadLocalUserContext.getLoggedInUserId()) == false) {
+                    if (timesheet.getKost2() != null) {
+                      buf.append(&quot;, &quot;);
+                    }
+                    buf.append(WicketSupport.get(UserFormatter.class).getFormattedUser(timesheet.getUserId()));
+                  }
+                  return buf.toString();
+                }
+// ... (tronqué, total 233 lignes)</pre>
+
+<h2>Historique Git</h2><div class="hist"><pre>868d6abb7 2025 -> 2026
+63081666f En-têtes des fichiers source : 2024 -> 2025.
+3785f8347 Migration en cours...
+a72903e36 *.java, *.kt : StringBuffer -> StringBuilder.
+67805f2fc ThreadLocalUserContext.user -> ThreadLocalUserContext.loggedInUser (renommé pour éviter les malentendus dans le code).</pre></div>
+</body>
+</html>

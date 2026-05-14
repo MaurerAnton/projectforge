@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>#892: AuftragDao.kt [RU]</title>
+<style>
+body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}
+h1{border-bottom:2px solid #333;padding-bottom:.3em}
+h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}
+h3{margin-top:2em;color:#444}
+a{color:#0366d6}
+.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}
+.nav{font-size:.9em;color:#888;margin-bottom:1em}
+.meta{font-size:.9em;margin:1em 0;color:#555}
+code{background:#f0f0f0;padding:0 .2em;font-size:.93em}
+pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}
+table{border-collapse:collapse;width:100%;margin:1em 0}
+th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}
+th{background:#f5f5f5;font-weight:600}
+.hist{font-size:.85em;color:#555}
+</style>
+</head>
+<body>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Индекс</a> · <a href="file-index.html">← Индекс файлов</a> · <a href="891.html">← Пред.</a> · <a href="893.html">След. →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/kotlin/org/projectforge/business/fibu/AuftragDao.kt" target="_blank" title="Просмотреть исходник на GitHub">📄 исходник</a></div>
+
+<h1>#892: <code>AuftragDao.kt</code></h1>
+
+<div class="meta"><code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/AuftragDao.kt</code> 
+<p><strong>Тип:</strong> Spring <code>@Service</code> — объект доступа к данным</p>
+<p><strong>Пакет:</strong> <code>org.projectforge.business.fibu</code></p>
+<p><strong>Полный путь:</strong> <code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/AuftragDao.kt</code></p>
+ <span style="color:#888">644 строки · 481 код · 93 комментария · 70 пустых</span></div>
+
+<div class="c">
+<p>Основной объект доступа к данным для <code>AuftragDO</code> (заказы/предложения). Расширяет <code>BaseDao&lt;AuftragDO&gt;</code> и предоставляет полные CRUD-операции, расширенную фильтрацию (по статусу, типу позиции, типу оплаты, назначению пользователя, проекту, диапазонам дат), валидацию при вставке/изменении, уведомления по электронной почте, загрузку истории и интеграцию с <code>AuftragsCache</code>. Отвечает за логику «к выставлению счета» и многоуровневую фильтрацию позиций заказа.</p>
+</div>
+
+<h2>Определение класса</h2>
+<pre>@Service
+open class AuftragDao : BaseDao&lt;AuftragDO&gt;(AuftragDO::class.java)</pre>
+
+<h2>Внедрённые зависимости</h2>
+<table>
+<tr><th>Зависимость</th><th>Тип</th><th>Примечания</th></tr>
+<tr><td><code>auftragsCache</code></td><td><code>AuftragsCache</code></td><td>Не автосвязывается (циклическая зависимость); устанавливается через <code>@PostConstruct</code> в <code>AuftragsCache</code></td></tr>
+<tr><td><code>configurationService</code></td><td><code>ConfigurationService</code></td><td>Проверка, настроена ли почта</td></tr>
+<tr><td><code>flatHistoryFormatService</code></td><td><code>FlatHistoryFormatService</code></td><td>Получение записей истории для уведомлений</td></tr>
+<tr><td><code>kundeDao</code></td><td><code>KundeDao</code></td><td>Определение клиента</td></tr>
+<tr><td><code>projektDao</code></td><td><code>ProjektDao</code></td><td>Определение проекта</td></tr>
+<tr><td><code>sendMail</code></td><td><code>SendMail</code></td><td>Доставка уведомлений по email</td></tr>
+<tr><td><code>taskDao</code></td><td><code>TaskDao</code></td><td>Определение задачи для позиций</td></tr>
+<tr><td><code>userDao</code></td><td><code>UserDao</code></td><td>Определение контактного лица</td></tr>
+</table>
+
+<h2>Ключевые операции</h2>
+
+<h3>Запрос и выборка</h3>
+<p><code>select(filter, checkAccess)</code> — основной метод запроса, переопределённый из <code>BaseDao</code>. Строит сложный <code>QueryFilter</code>, поддерживающий:</p>
+<ul>
+<li><strong>Фильтр «Fakturiert»:</strong> При <code>ZU_FAKTURIEREN</code> запрашивает заказы/позиции со статусом <code>ABGESCHLOSSEN</code> или достигнутые графики платежей через LEFT JOIN</li>
+<li><strong>Фильтр по пользователю:</strong> Находит заказы, где пользователь является контактным лицом, руководителем проекта, руководителем отдела или менеджером по продажам</li>
+<li><strong>Фильтр по проекту:</strong> <code>isIn</code> по списку проектов</li>
+<li><strong>Фильтр по дате:</strong> <code>between/ge/le</code> по <code>erfassungsDatum</code> (дата создания)</li>
+<li><strong>Период выполнения:</strong> Делегируется <code>AuftragAndRechnungDaoHelper</code></li>
+<li><strong>Фильтр по типу позиции:</strong> <code>filterPositionsArten</code> с использованием <code>AuftragsPositionsArtFilter</code></li>
+<li><strong>Фильтр по статусу позиции:</strong> <code>filterPositionsStatus</code> — находит заказы, где хотя бы одна неудалённая позиция имеет заданный статус</li>
+<li><strong>Фильтр по типу оплаты:</strong> <code>filterPositionsPaymentTypes</code> с использованием <code>AuftragsPositionsPaymentTypeFilter</code></li>
+<li>Результаты упорядочены по <code>nummer</code> по убыванию</li>
+</ul>
+
+<h3>Валидация: <code>onInsertOrModify(obj, operationType)</code></h3>
+<p>Применяет бизнес-правила перед сохранением:</p>
+<ol>
+<li><code>nummer</code> не должен быть null</li>
+<li><code>status</code> не должен быть null или <code>OPTIONAL</code></li>
+<li>При вставке: <code>nummer</code> должен быть следующим последовательным номером (без пропусков)</li>
+<li>При обновлении: <code>nummer</code> не должен конфликтовать с другим существующим заказом</li>
+<li>Должна существовать хотя бы одна позиция</li>
+<li>Завершающие пустые позиции (id=null, isEmpty=true) удаляются с конца (но первая позиция никогда не удаляется)</li>
+<li>Флаг <code>vollstaendigFakturiert</code> каждой позиции проверяется через <code>checkVollstaendigFakturiert()</code></li>
+<li>Статус UI сериализуется в XML и сохраняется в <code>uiStatusAsXml</code></li>
+<li>Завершающие пустые графики платежей обрезаются</li>
+<li><code>validateDatesInPaymentScheduleWithinPeriodOfPerformanceOfPosition()</code> — проверяет, что все даты графиков платежей находятся в пределах периода выполнения позиции (плюс 3 месяца допуска для конечной даты)</li>
+<li><code>validateAmountsInPaymentScheduleNotGreaterThanNetSumOfPosition()</code> — сумма всех сумм графика платежей для позиции не должна превышать чистую сумму позиции</li>
+</ol>
+
+<h3>Управление номерами</h3>
+<ul>
+<li><code>nextNumber</code> — Возвращает следующий доступный номер заказа (максимальный существующий + 1)</li>
+<li><code>getNextNumber(auftrag)</code> — Если заказ уже имеет ID, извлекает его исходный номер для сохранения; в противном случае назначает следующий последовательный номер</li>
+<li>Начальный номер определён как <code>START_NUMBER = 1</code></li>
+</ul>
+
+<h3>Уведомление: <code>sendNotificationIfRequired(auftrag, operationType, requestUrl)</code></h3>
+<p>Отправляет HTML-уведомление по электронной почте контактному лицу при создании/изменении/удалении заказа. Использует шаблон Groovy <code>mail/orderChangeNotification.html</code>. Включает до 10 последних записей истории. Возвращает <code>false</code>, если почта не настроена, не назначено контактное лицо или у контактного лица нет доступа SELECT.</p>
+
+<h3>Интеграция с историей</h3>
+<ul>
+<li><code>addOwnHistoryEntries(obj, context)</code> — Загружает и объединяет историю для всех позиций (включая удалённые) и графиков платежей</li>
+<li><code>getHistoryPropertyPrefix(context)</code> — Возвращает <code>"pos#N"</code> для записей истории позиций и <code>"payment#N"</code> для записей истории графиков платежей</li>
+<li><code>additionalHistorySearchDOs</code> — Включает <code>AuftragsPositionDO</code> для полнотекстового поиска по истории</li>
+</ul>
+
+<h3>Методы поиска</h3>
+<ul>
+<li><code>getAuftragsPosition(posString)</code> — Разбирает формат <code>"###.##"</code> (номер заказа.номер позиции) и возвращает соответствующую позицию</li>
+<li><code>getAuftragsPosition(id)</code> — Находит позицию по её ID в базе данных</li>
+<li><code>years</code> — Возвращает массив всех лет с активностью заказов (мин/макс <code>angebotsDatum</code>)</li>
+<li><code>buildStatistik(list)</code> — Агрегирует статистику для списка заказов</li>
+</ul>
+
+<h3>Вспомогательные методы установки</h3>
+<p>Методы <code>setContactPerson()</code>, <code>setTask()</code>, <code>setKunde()</code> и <code>setProjekt()</code> разрешают связанные сущности по ID с помощью <code>findOrLoad</code> и устанавливают их в заказе или позиции.</p>
+
+<h2>Дополнительные поля поиска</h2>
+<p>Массив <code>ADDITIONAL_SEARCH_FIELDS</code> расширяет Hibernate Search для индексации полей из связанных сущностей:</p>
+<pre>contactPerson.username, contactPerson.firstname, contactPerson.lastname,
+kunde.name, projekt.name, projekt.kunde.name,
+positionen.position, positionen.art, positionen.status,
+positionen.titel, positionen.bemerkung, positionen.nettoSumme</pre>
+
+<h2>Объект-компаньон</h2>
+<table>
+<tr><th>Константа</th><th>Значение</th></tr>
+<tr><td><code>USER_RIGHT_ID</code></td><td><code>UserRightId.PM_ORDER_BOOK</code></td></tr>
+<tr><td><code>START_NUMBER</code></td><td><code>1</code></td></tr>
+</table>
+
+<h2>Git-история</h2>
+<div class="hist"><pre>868d6abb7 2025 -> 2026
+4550ccc8a MonthlyEmployeeReport: показывать понедельные часы (нетто и брутто). Исправлен select в AuftragDao.positionen.status
+63081666f Заголовки исходных файлов: 2024-> 2025.
+db2599ab8 История в книге заказов, входящих/исходящих счетах и проектах.
+18bf92219 WIP: Обработка записей истории. VisitorBookDao.
+9c633d4ce AuftragDao/AuftragFilter: исправлена логика «к выставлению» и «полностью выставлено».
+ae2c04ee0 Миграция в процессе... (все тесты всех пакетов: OK).
+(Всего более 150 коммитов, охватывающих миграцию на Long ID, рефакторинг Spring, обновления Hibernate Search и т.д.)</pre></div>
+</body>
+</html>

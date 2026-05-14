@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>#120 [RU]</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333}a{color:#0366d6}.meta{font-size:.9em;margin:1em 0}.nav{font-size:.9em;color:#888;margin-bottom:1em}.commentary{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}code{background:#f0f0f0;padding:0 .2em;border-radius:2px}</style>
+</head>
+<body>
+
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Индекс</a> · <a href="file-index.html">← Индекс файлов</a> · <a href="119.html">← Назад</a> · <a href="121.html">Вперёд →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/plugins/org.projectforge.plugins.datatransfer/src/test/kotlin/org/projectforge/plugins/datatransfer/DataTransferPublicAccessTest.kt" target="_blank" title="Просмотреть исходник на GitHub">📄 исходник</a></div>
+
+<h1>#120: <code>DataTransferPublicAccessTest.kt</code></h1>
+<div class="meta"><code>plugins/org.projectforge.plugins.datatransfer/src/test/kotlin/org/projectforge/plugins/datatransfer/DataTransferPublicAccessTest.kt</code> <strong>Путь:</strong> <code>plugins/...datatransfer/src/test/kotlin/.../DataTransferPublicAccessTest.kt</code> · <strong>Строк:</strong> 227 · <strong>Тип:</strong> Интеграционный тест Kotlin JUnit 5 <span style="color:#888">227 строк · 177 кода · 24 комментария · 26 пустых</span></div>
+
+<div class="commentary">
+<p><strong>Интеграционный тест для публичного (внешнего) REST-слоя DataTransfer</strong> — самый полный тест DataTransfer на 227 строк. Тестирует поток анонимного доступа: внешняя ссылка → вход → загрузка/скачивание/удаление → выход, с использованием имитированных HTTP-запросов и JCR-файлов.</p>
+</div>
+
+<div class="commentary">
+<h3>Тестируемые компоненты</h3>
+<ul>
+<li><code>DataTransferPublicSession</code> (<a href="101.html">#101</a>) — управление сессиями, защита от перебора</li>
+<li><code>DataTransferPublicPageRest</code> — возвращает JSON макета страницы для анонимного React-интерфейса</li>
+<li><code>DataTransferPublicServicesRest</code> (<a href="100.html">#100</a>) — конечные точки загрузки, скачивания, удаления, множественной загрузки</li>
+<li><code>LoginProtection</code> — принудительная временная задержка при переборе паролей</li>
+</ul>
+</div>
+
+<div class="commentary">
+<h3>Тестовые сценарии (~10 тестовых методов)</h3>
+<ul>
+<li><strong>Вход с действительными учётными данными:</strong> создаёт область с <code>external_download_enabled=true</code>, <code>externalAccessToken</code>, <code>externalPassword</code>, вызывает <code>DataTransferPublicSession.login()</code> — проверяет, что сессия содержит данные области</li>
+<li><strong>Вход с неверным паролем:</strong> проверяет, что <code>LoginProtection</code> увеличивает счётчик неудачных попыток, и после повторных неудач срабатывает временная задержка</li>
+<li><strong>Блокировка при переборе:</strong> после достаточного количества неудач <code>login()</code> возвращает статус <code>LOGIN_TIME_OFFSET</code> — проверяется вызовом login 3+ раз быстрее, чем окно задержки</li>
+<li><strong>Личный ящик исключён из публичного доступа:</strong> области с <code>isPersonalBox()</code> всегда возвращают <code>LoginResultStatus.FAILED</code> — параноидальная проверка в <code>checkDataBaseEntry()</code></li>
+<li><strong>Загрузка:</strong> имитирует <code>MultipartFile</code> (обёртка загруженного файла Spring), вызывает конечную точку загрузки REST, проверяет, что ID файла появляется в списке <code>ownedFiles</code></li>
+<li><strong>Скачивание:</strong> загружает файл как внешний пользователь, затем скачивает его — проверяет соответствие содержимого <code>InputStreamResource</code></li>
+<li><strong>Удаление собственного файла:</strong> проверяет, что <code>isOwnerOfFile()</code> возвращает true, и удаление выполняется успешно</li>
+<li><strong>Невозможность удалить чужой файл:</strong> внешний пользователь2 пытается удалить загрузку пользователя1 — проверяет, что <code>isOwnerOfFile()</code> возвращает false</li>
+<li><strong>Множественное скачивание:</strong> загрузить 3 файла, скачать все как ZIP — проверяет, что <code>ZipInputStream</code> содержит все 3 записи</li>
+<li><strong>Фиксация сессии:</strong> проверяет, что после входа <code>JSESSIONID</code> изменяется (старая сессия аннулируется, создаётся новая с перенесёнными данными области)</li>
+</ul>
+</div>
+
+<div class="commentary">
+<h3>Имитированный HTTP-слой</h3>
+<p>Использует Mockito для имитации <code>HttpServletRequest</code> и <code>HttpSession</code> — это критично, поскольку <a href="101.html">DataTransferPublicSession</a> хранит данные напрямую в атрибутах HTTP-сессии. Имитированная сессия симулирует <code>getSession(false)</code>, <code>getSession(true)</code>, <code>getAttribute("transferAreas")</code>, <code>setAttribute()</code> и <code>invalidate()</code> — всё это используется в тесте фиксации сессии.</p>
+<p>Также имитируются <code>MultipartFile</code> для тестов загрузки и <code>HttpServletResponse</code> + <code>ServletOutputStream</code> → <code>ByteArrayOutputStream</code> для захвата содержимого при скачивании.</p>
+</div>
+
+</body>
+</html>

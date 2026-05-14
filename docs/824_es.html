@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>#824 [ES]</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:2em;color:#444}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.lang{font-size:.85em;color:#888;float:right}.lang a{color:#888;text-decoration:none;padding:0 .3em}.lang a.active{color:#0366d6;font-weight:600;text-decoration:underline}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}</style>
+</head>
+<body>
+<div class="lang"><a href="824.html">EN</a> · <a href="824_de.html">DE</a> · <a href="824_ru.html">RU</a> · <a href="824_fr.html">FR</a> · <a href="824_es.html" class="active">ES</a></div>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Índice</a> · <a href="file-index.html">← Índice de archivos</a> · <a href="823.html">← Anterior</a> · <a href="825.html">Siguiente →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/kotlin/org/projectforge/business/address/AddressExport.kt" target="_blank" title="Ver fuente en GitHub">📄 fuente</a></div>
+<h1>#824: <code>AddressExport.kt</code></h1>
+<div class="meta"><code>projectforge-business/src/main/kotlin/org/projectforge/business/address/AddressExport.kt</code> @Service("addressExport") — Servicio de exportación a Excel, <code>projectforge-business/src/main/kotlin/org/projectforge/business/address/AddressExport.kt</code> <span style="color:#888">216 líneas · 157 código · 35 comentarios · 24 en blanco</span></div>
+<div class="c">Servicio Spring que exporta datos de direcciones a libros de Excel (<code>.xlsx</code>). Gestiona el registro de columnas, filtrado con control de acceso y filas de encabezado combinadas de múltiples secciones para bloques de direcciones postales, comerciales, de envío y privadas.</div>
+
+<h2>Arquitectura</h2>
+
+<h3>Jerarquía de clases</h3>
+<p><code>AddressExport</code> es una clase <code>open</code> anotada con <code>@Service("addressExport")</code>, diseñada para ser extendida por complementos. El complemento de marketing <code>AddressCampaignValueExport</code> la extiende, sobrescribiendo <code>registerAdditionalCols()</code>, <code>configureSheet()</code> y <code>handleAddressCampaign()</code> para agregar campos específicos de campaña.</p>
+
+<h3>Registro de columnas (<code>registerCols</code>)</h3>
+<p>Registra ~40 columnas en orden:</p>
+<ol>
+  <li><strong>Identidad:</strong> nombre, nombre, formulario, título, estadoContacto</li>
+  <li><strong>Organización:</strong> organización, división, textoCargo, idiomaComunicación</li>
+  <li><strong>Enlace de complemento:</strong> <code>registerAdditionalCols()</code> — punto extensible para valores de campaña</li>
+  <li><strong>Contacto:</strong> correo electrónico, sitio web</li>
+  <li><strong>Dirección postal:</strong> textoDirección, textoDirección2, códigoPostal, ciudad, país, estado</li>
+  <li><strong>Dirección comercial:</strong> bloque completo (registrado automáticamente mediante <code>registerAddress(sheet, "")</code>)</li>
+  <li><strong>Dirección de envío:</strong> bloque completo (<code>registerAddress(sheet, "postal")</code>)</li>
+  <li><strong>Teléfonos:</strong> teléfonoComercial, fax, teléfonoMóvil</li>
+  <li><strong>Privado:</strong> bloque de dirección completo, correoPrivado, teléfonoPrivado, móvilPrivado</li>
+  <li><strong>Metadatos:</strong> cumpleaños, últimaActualización, comentario, huellaDigital, clavePública, id</li>
+</ol>
+<p>Las constantes de tamaño de <code>ExcelUtils.Size</code> controlan los anchos de columna: ESTÁNDAR (predeterminado), CORREO, CÓDIGOPOSTAL, TELÉFONO, EXTRA_LARGO.</p>
+
+<h3>Flujo de exportación (<code>export()</code>)</h3>
+<ol>
+  <li><strong>Control de acceso:</strong> Los miembros de FINANCE_GROUP o MARKETING_GROUP reciben todas las direcciones; otros usuarios solo obtienen sus favoritos personales (coincidentes mediante <code>personalAddressMap</code>).</li>
+  <li><strong>Creación del libro:</strong> Utiliza <code>ExcelWorkbook</code> de Merlin con try-with-resources mediante <code>.use { }</code>.</li>
+  <li><strong>Configuración de hoja:</strong> Fila de título, fila de encabezado con estilo negrita, panel congelado en (2,2) y autofiltro en la fila de encabezado.</li>
+  <li><strong>Regiones de encabezado combinadas:</strong> Cuatro regiones de celdas combinadas en la fila 0 agrupan columnas de direcciones postales, comerciales, de envío y privadas bajo encabezados de sección en negrita.</li>
+  <li><strong>Llamada a enlace:</strong> <code>configureSheet(sheet, *params)</code> para personalización de subclases.</li>
+  <li><strong>Población de filas:</strong> Cada dirección se convierte en una fila de Excel. Llama a <code>ExcelUtils.autoFill()</code> para el mapeo de propiedades estándar, llena manualmente las celdas de dirección postal y el idioma de comunicación, luego invoca <code>handleAddressCampaign()</code> para datos de campaña.</li>
+</ol>
+
+<h3>Puntos de extensión</h3>
+<ul>
+  <li><code>registerAdditionalCols(sheet)</code> — Enlace de complemento para columnas adicionales (ej. valores de campaña).</li>
+  <li><code>configureSheet(sheet, *params)</code> — Personalización posterior a la configuración.</li>
+  <li><code>handleAddressCampaign(row, address, *params)</code> — Inyección de datos de campaña por fila.</li>
+  <li><code>addressCampaignSupported</code> — Indicador booleano, valor predeterminado falso.</li>
+  <li><code>sheetTitle</code> — Clave I18n, valor predeterminado <code>"address.addresses"</code>.</li>
+</ul>
+
+<h2>Historial de Git</h2><div class="hist"><pre>868d6abb7 2025 -> 2026
+83cbccb11 ExcelUtils AddressExport: stream.use (¿los flujos no se cerraban antes?)
+78a38ca8f ExcelUtils.createFont y utilizado por todas las rutinas de creación de fuentes de Excel.
+63081666f Encabezados de archivos fuente: 2024 -> 2025.
+4c04cfd65 CAMBIO MAYOR: Migración de ids enteros a ids Long
+b6092df09 Derechos de autor 2023 -> 2024
+ab45d51fa Derechos de autor 2001-2022 -> 2001-2023.
+dce7927f4 función obsoleta de Kotlin decapitalize() reemplazada
+5f7ef41b8 Derechos de autor 2021 -> 2022
+e1538819c Merlin: usando ahora Autoclosure de ExcelWorkbook
+91554ea83 Nueva versión de Merlin.</pre></div>
+</body>
+</html>

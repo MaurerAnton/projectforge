@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>#1875: BeanHelper.java [RU]</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:2em;color:#444}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.lang{font-size:.85em;color:#888;float:right}.lang a{color:#888;text-decoration:none;padding:0 .3em}.lang a.active{color:#0366d6;font-weight:600;text-decoration:underline}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}.warn{background:#fff3cd;border-left:3px solid #ffc107;padding:.5em 1em;margin:1em 0}.tip{background:#d4edda;border-left:3px solid #28a745;padding:.5em 1em;margin:1em 0}</style>
+</head>
+<body>
+<div class="lang"><a href="1875.html">EN</a> · <a href="1875_de.html">DE</a> · <a href="1875_ru.html" class="active">RU</a> · <a href="1875_fr.html">FR</a> · <a href="1875_es.html">ES</a></div>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Индекс</a> · <a href="file-index.html">← Индекс файлов</a> · <a href="1874.html">← Назад</a> · <a href="1876.html">Вперёд →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-common/src/main/java/org/projectforge/common/BeanHelper.java" target="_blank" title="Просмотреть исходный код на GitHub">📄 исходник</a></div>
+<h1>#1875: <code>BeanHelper.java</code></h1>
+<div class="meta"><code>projectforge-common/src/main/java/org/projectforge/common/BeanHelper.java</code> Вспомогательный класс — пакет org.projectforge.common, projectforge-common/src/main/java/org/projectforge/common/BeanHelper.java <span style="color:#888">678 строк · 481 код · 150 комментариев · 47 пустых</span></div>
+<div class="c">Комплексная утилита для интроспекции и рефлексии JavaBeans. Базовая инфраструктура для уровня интеграции ORM/Wicket в ProjectForge — обеспечивает разрешение имён свойств из методов getter/setter, поиск методов getter/setter с обширным кэшированием (пять внутренних кэшей для производительности), обнаружение аннотаций полей, доступ к вложенным/индексированным свойствам, копирование свойств с обнаружением различий и создание объектов на основе рефлексии. Широко используется во всех модулях ProjectForge для сортировки списков Wicket, привязки форм и преобразования DO в DTO.</div>
+<h2>Архитектура</h2>
+<div class="c">
+<h3>Импорты</h3>
+<ul>
+<li><code>org.apache.commons.lang3.ArrayUtils</code> — Конкатенация массивов для сбора полей/методов по иерархии классов</li>
+<li><code>org.apache.commons.lang3.StringUtils</code> — Манипуляции со строками (capitalize, uncapitalize, split)</li>
+<li><code>java.lang.annotation.Annotation</code> — Обнаружение аннотаций на полях</li>
+<li><code>java.lang.reflect.*</code> — Основной API рефлексии Java: Field, Method, Constructor, Modifier, Array, InvocationTargetException</li>
+<li><code>java.util.*</code> — Коллекции, итераторы, хэш-карты для кэширования</li>
+<li><code>org.slf4j.Logger</code> — Логирование ошибок при сбоях рефлексии</li>
+</ul>
+
+<h3>Внутренняя архитектура кэширования</h3>
+<p>BeanHelper использует <strong>пять статических синхронизированных кэшей</strong> для избежания повторных вызовов рефлексии, которые дороги в Java. Это критически важно для страниц списков Wicket, где BeanHelper вызывается для каждой ячейки в сортируемой таблице данных.</p>
+<table>
+<tr><th>Кэш</th><th>Ключ</th><th>Значение</th><th>Преимущество</th></tr>
+<tr><td><code>declaredFieldsCache</code></td><td>Class</td><td>Field[]</td><td>Избегает повторного сканирования иерархии классов для полей</td></tr>
+<tr><td><code>declaredMethodsCache</code></td><td>Class</td><td>Method[]</td><td>Избегает повторного сканирования иерархии классов для методов</td></tr>
+<tr><td><code>declaredFieldAnnotationsCache</code></td><td>"класс:имяполя"</td><td>Annotation[]</td><td>Избегает повторного разрешения аннотированных полей (критично для сортировки колонок Wicket)</td></tr>
+<tr><td><code>getterMethodsCache</code></td><td>"класс:имяполя"</td><td>Method</td><td>Избегает повторного поиска методов getter</td></tr>
+<tr><td><code>declaredGetterMethodsCache</code></td><td>String</td><td>Method[]</td><td>Объявлен, но, похоже, не используется в предоставленном коде — может заполняться в другом месте</td></tr>
+</table>
+
+<h3>Ключевые операции</h3>
+
+<h4>Разрешение имени свойства</h4>
+<ul>
+<li><code>determinePropertyName(Method)</code> — Удаляет префикс <code>get</code>/<code>set</code>/<code>is</code>/<code>has</code> и приводит первый символ к нижнему регистру</li>
+<li><code>determineGetter(Class, имяполя, onlyPublicGetter)</code> — Находит метод getter (<code>getX()</code>, <code>isX()</code> для boolean, <code>hasX()</code> для boolean), обрабатывает bridge-методы (не возвращает синтетические bridge-методы)</li>
+<li><code>determineSetter(Class, имяполя)</code> — Находит setter с одним параметром</li>
+<li><code>determinePropertyType(Class, имяполя)</code> — Получает возвращаемый тип getter (тип свойства)</li>
+</ul>
+
+<h4>Доступ к аннотациям</h4>
+<p><code>getDeclaredAnnotations(Class, имяполя)</code> поддерживает <strong>пути к вложенным свойствам</strong> (разделённые точкой, например, <code>"address.city.name"</code>) путём обхода цепочки полей через рефлексию для поиска аннотаций конечного поля. Это необходимо для таблиц данных Wicket, которые отображают вложенные свойства объектов с сортируемыми колонками.</p>
+
+<h4>Доступ к свойствам (вложенные + индексированные)</h4>
+<ul>
+<li><code>getProperty(Object, String)</code> — Вызывает getter для bean</li>
+<li><code>setProperty(Object, String, Object)</code> — Вызывает setter</li>
+<li><code>getIndexedProperty(Object, "prop[3]")</code> — Поддерживает индексированный доступ к коллекциям/массивам</li>
+<li><code>getNestedProperty(Object, "a.b.c")</code> — Обходит путь свойства, разделённый точками, корректно обрабатывая null (возвращает null, если любой промежуточный элемент равен null)</li>
+</ul>
+
+<h4>Копирование свойств (copyProperties)</h4>
+<p>Копирует указанные свойства из исходного объекта в целевой, возвращая true, если какое-либо свойство фактически изменилось. Поддерживает:
+<ul>
+<li><strong>Сравнение коллекций</strong>: Поэлементная проверка равенства (с учётом порядка, с использованием итераторов)</li>
+<li><strong>Сравнение массивов</strong>: Использует <code>Arrays.equals()</code></li>
+<li><strong>Сравнение скаляров</strong>: Использует <code>Objects.equals()</code> (безопасно для null)</li>
+<li><strong>Режим WhitespaceEqualsNull</strong>: Считает пустые/отсутствующие строки эквивалентными (копирует только если обе строки непустые и разные)</li>
+</ul>
+
+<h4>Утилиты рефлексии</h4>
+<ul>
+<li><code>getAllDeclaredFields(Class)</code> — Возвращает все поля, включая унаследованные, обходя цепочку суперклассов</li>
+<li><code>getAllDeclaredMethods(Class)</code> — Возвращает все методы, включая унаследованные</li>
+<li><code>getDeclaredPropertyFields(Class)</code> — Возвращает только нетранзиентные, нестатические, нефинальные поля (фактические постоянные свойства)</li>
+<li><code>getFieldValue(Object, Class/String, имяполя)</code> — Читает значение поля через рефлексию (setAccessible для приватных полей)</li>
+<li><code>newInstance(Class, ...)</code> — Несколько перегрузок для рефлексивного создания объектов с различными сигнатурами конструкторов</li>
+<li><code>invoke(Object, Method, args)</code> — Общий вызов метода с обработкой ошибок</li>
+</ul>
+
+<h3>Функция тестового режима</h3>
+<p>Флаг <code>TEST_MODE</code> (управляется <code>enterTestMode()</code>/<code>exitTestMode()</code>) подавляет логирование ошибок во время выполнения тестов. Это позволяет тестам выполнять операции рефлексии, которые, как ожидается, завершатся ошибкой, не засоряя журналы тестов трассировками стека. Методы <code>logInstantiationException()</code> учитывают этот флаг.</p>
+
+<h3>Проектные решения</h3>
+<ol>
+<li><strong>Агрессивное кэширование</strong>: Существует пять кэшей, потому что рефлексия медленна, а BeanHelper вызывается на горячих путях (рендеринг и сортировка таблиц данных Wicket)</li>
+<li><strong>Фильтрация bridge-методов</strong>: <code>determineGetter()</code> пропускает bridge-методы (синтетические методы, создаваемые компилятором для стирания обобщённых типов), чтобы вернуть фактически реализованный метод</li>
+<li><strong>Безопасный обход null</strong>: <code>getNestedProperty()</code> возвращает null в любой точке цепочки, где промежуточное значение равно null, вместо выброса NPE</li>
+<li><strong>Доступность конструкторов</strong>: <code>newInstance()</code> вызывает <code>constructor.setAccessible(true)</code> для создания экземпляров классов с приватными конструкторами</li>
+<li><strong>Отсутствие внешней библиотеки bean</strong>: Несмотря на зависимость от <code>commons-beanutils</code> в сборке Gradle, BeanHelper реализует собственное разрешение свойств вместо прямого использования Apache BeanUtils — вероятно, для контроля производительности и кэширования</li>
+</ol>
+
+<div class="tip">Вспомогательный метод <code>isEqualList()</code> (пакетно-приватный) выполняет поэлементное сравнение с использованием итераторов, а не <code>equals()</code>. Это означает, что равенство коллекций основано на идентичности/равенстве элементов на <em>соответствующих позициях</em>, а не на равенстве множеств — два списка с одинаковыми элементами в разном порядке не считаются равными.</div>
+</div>
+<h2>История Git</h2><div class="hist"><pre>868d6abb7 2025 -> 2026
+63081666f Заголовки исходных файлов: 2024 -> 2025.
+a73905c14 Исправление опечаток в каталогах projectforge*/ Найдено с помощью codespell
+694987647 Миграция в процессе... (все тесты всех пакетов: OK).
+ae50b2522 BeanHelper.getProperty теперь поддерживает вложенные свойства с помощью нового PropertyUtils.
+b6092df09 Авторское право 2023 -> 2024
+ab45d51fa Авторское право 2001-2022 -> 2001-2023.
+0203e3261 AbstractListPage: длительные запросы: изменение порядка сортировки показывает список результатов без кнопки поиска. BeanHelper: множество кэшей для более быстрой сортировки в списках результатов Wicket.</pre></div>
+</body>
+</html>

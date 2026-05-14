@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>#218: IHK ServiceLoader [ES]</title>
+<style>
+body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}
+h1{border-bottom:2px solid #333;padding-bottom:.3em}
+h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}
+h3{margin-top:2em;color:#444}
+a{color:#0366d6}
+.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}
+.nav{font-size:.9em;color:#888;margin-bottom:1em}
+.lang{font-size:.85em;color:#888;float:right}
+.lang a{color:#888;text-decoration:none;padding:0 .3em}
+.lang a.active{color:#0366d6;font-weight:600;text-decoration:underline}
+.meta{font-size:.9em;margin:1em 0;color:#555}
+code{background:#f0f0f0;padding:0 .2em;font-size:.93em}
+pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}
+table{border-collapse:collapse;width:100%;margin:1em 0}
+th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}
+th{background:#f5f5f5;font-weight:600}
+.hist{font-size:.85em;color:#555}
+.warn{background:#fff3cd;border-left:3px solid #ffc107;padding:.5em 1em;margin:1em 0}
+.tip{background:#d4edda;border-left:3px solid #28a745;padding:.5em 1em;margin:1em 0}
+</style>
+</head>
+<body>
+<div class="lang"><a href="133.html">EN</a> · <a href="133_de.html">DE</a> · <a href="133_ru.html">RU</a> · <a href="133_fr.html">FR</a> · <a href="133_es.html" class="active">ES</a></div>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Índice</a> · <a href="file-index.html">← Índice de archivos</a> · <a href="217.html">← Anterior</a> · <a href="219.html">Siguiente →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/plugins/org.projectforge.plugins.memo/src/main/resources/META-INF/services/org.projectforge.plugins.core.AbstractPlugin" target="_blank" title="Ver fuente en GitHub">📄 fuente</a></div>
+<h1>#218: <code>org.projectforge.plugins.core.AbstractPlugin</code> (ServiceLoader)</h1>
+<div class="meta"><code>plugins/org.projectforge.plugins.memo/src/main/resources/META-INF/services/org.projectforge.plugins.core.AbstractPlugin</code> registro de ServiceLoader, <code>plugins/org.projectforge.plugins.ihk/src/main/resources/META-INF/services/org.projectforge.plugins.core.AbstractPlugin</code> <span style="color:#888">1 línea · 1 código · 0 comentarios · 0 en blanco</span></div>
+<div class="c">Archivo de configuración de Java ServiceLoader que registra <code>IHKPlugin</code> como una implementación de <code>org.projectforge.plugins.core.AbstractPlugin</code>. Este archivo de una sola línea es el mecanismo mediante el cual el plugin IHK se descubre y carga en tiempo de ejecución.</div>
+
+<h2>Arquitectura</h2>
+
+<h3>Contenido</h3>
+<pre>org.projectforge.plugins.ihk.IHKPlugin</pre>
+
+<p>Este archivo se encuentra en la ruta estándar de Java ServiceLoader <code>META-INF/services/{nombre-completamente-calificado-de-la-interfaz}</code>. Cuando el escáner de plugins de ProjectForge invoca <code>ServiceLoader.load(AbstractPlugin.class)</code>, la JVM lee todos estos archivos del classpath, instancia cada clase listada y llama a <code>initialize()</code> en cada instancia de plugin.</p>
+
+<h3>Flujo de descubrimiento de plugins</h3>
+<ol>
+  <li>Se inicia el contexto de la aplicación Spring.</li>
+  <li><code>PFPluginService</code> (o el escáner de plugins equivalente) llama a <code>ServiceLoader.load(AbstractPlugin.class)</code>.</li>
+  <li>La JVM encuentra <code>META-INF/services/org.projectforge.plugins.core.AbstractPlugin</code> en cada JAR de plugin o entrada de classpath.</li>
+  <li>Para cada nombre de clase completamente calificado en esos archivos, la clase se carga y se instancia mediante su constructor sin argumentos.</li>
+  <li>El constructor de la clase base <code>AbstractPlugin</code> registra los metadatos del plugin (ID, nombre, descripción).</li>
+  <li>El escáner de plugins llama a <code>initialize()</code>, donde <code>IHKPlugin</code> realiza sus registros de DAO, web, menú, derechos e i18n.</li>
+</ol>
+
+<h2>Decisiones de diseño</h2>
+<ul>
+  <li><strong>SPI estándar de Java:</strong> ProjectForge utiliza <code>java.util.ServiceLoader</code> en lugar del escaneo de <code>@Component</code> de Spring para el descubrimiento de plugins. Esto permite cargar plugins desde JARs externos colocados en un directorio de plugins, independientemente de los paquetes base de escaneo de componentes de Spring.</li>
+  <li><strong>Un archivo, una clase:</strong> Cada plugin proporciona exactamente una clase de implementación por archivo de servicio. El plugin IHK registra únicamente <code>IHKPlugin</code>.</li>
+  <li><strong>Separado del escaneo de beans de Spring:</strong> Aunque <code>IHKPlugin</code> en sí mismo no es un bean de Spring, los componentes que conecta (a través de <code>WicketSupport.get()</code>) son gestionados por Spring. Este enfoque híbrido mantiene el ciclo de vida del plugin separado del ciclo de vida del contexto de Spring.</li>
+  <li><strong>También sirve como ServiceLoader para objetos de dominio:</strong> Este mismo patrón de archivo es crítico para el descubrimiento de objetos de dominio de Hibernate; sin él, las entidades persistentes del plugin no serían encontradas por el escáner ORM.</li>
+</ul>
+
+<div class="tip"><strong>Patrón relacionado:</strong> Cada plugin de ProjectForge tiene este mismo archivo en la misma ruta relativa. El plugin ToDo tiene <code>org.projectforge.plugins.todo.ToDoPlugin</code> (ver #287), el plugin Memo tiene <code>org.projectforge.plugins.memo.MemoPlugin</code>, etc.</div>
+
+<h2>Historial de Git</h2>
+<div class="hist"><pre>50d5d8926 wip: META-INF/services necesarios para plugins (Service loader)
+07b80966b wip: PFPluginService (PluginConfig) -> PluginInfo
+45cad02e9 Plugin IHK añadido (Reemplazará el plugin "Ihk-Export")</pre></div>
+</body>
+</html>

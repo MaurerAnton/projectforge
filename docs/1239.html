@@ -1,10 +1,131 @@
-<!DOCTYPE html>
-<html lang="en"><head><meta charset="utf-8"><title>File #1239: RepairDatabaseService.kt</title>
-<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333}a{color:#0366d6}.meta{background:#f0f0f0;border-radius:6px;padding:1em;margin:1em 0;font-size:.9em}.commentary{margin:.8em 0;background:#fff;padding:.5em 1em;border-radius:6px;border-left:4px solid #ddd;line-height:1.7}table{border-collapse:collapse;width:100%;margin:.8em 0;font-size:.9em}th,td{border:1px solid #ddd;padding:.4em .6em}th{background:#f0f0f0}code{background:#e8e8e8;border-radius:3px;padding:.1em .3em;font-size:.9em}.nav{font-size:.9em;color:#888;margin-bottom:1em}.history{background:#fffbe6;border-radius:6px;padding:1em;margin:1em 0;font-size:.9em;border-left:4px solid #ffc107}</style></head>
-<body><div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="1238.html">← Prev</a> · <a href="1240.html">Next →</a></div>
-<h1>File #1239: <code>RepairDatabaseService.kt</code></h1>
-<div class="meta"><p><strong>Path:</strong> <code>—</code> · <strong>Type:</strong> Other file</p><p><strong>Source:</strong> <a href="https://github.com/micromata/projectforge/blob/develop/—">GitHub</a></p></div>
-<div class="history"><table><tr><th>Commit</th><th>Message</th></tr><tr><td><code>9ebb88522</code></td><td>2016-07-18 Initial commit</td></tr></table></div>
-<div class="commentary"><p>Part of the ProjectForge Wicket web application. Located at <code>—</code>. Project resource file.</p></div>
-<div class="nav" style="margin-top:2em"><a href="1238.html">← #1238</a> · <a href="1240.html">#1240 →</a></div>
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>#1239</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:2em;color:#444}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}</style></head>
+<body><div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="1238.html">← Prev</a> · <a href="1240.html">Next →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/kotlin/org/projectforge/framework/persistence/api/QueryFilter.kt" target="_blank" title="View source on GitHub">📄 source</a></div>
+<h1>#1239: <code>QueryFilter.kt</code></h1>
+<div class="meta"><code>projectforge-business/src/main/kotlin/org/projectforge/framework/persistence/api/QueryFilter.kt</code> Query Builder — Persistence / Database Query Engine, <code>projectforge-business/src/main/kotlin/org/projectforge/framework/persistence/api/QueryFilter.kt</code> <span style="color:#888">382 lines · 258 code · 75 comments · 49 blank</span></div>
+<div class="c">The central database query specification for ProjectForge. Accumulates <code>DBPredicate</code> objects, sort properties, joins, full-text search directives, history search parameters, and pagination controls. Automatically detects which query strategy to use (JPA Criteria API for indexed fields, Hibernate Search full-text for non-indexed, result-list filtering as fallback). Serves as the bridge between <code>MagicFilterProcessor</code> output and <code>BaseDao</code>/<code>DBFilter</code> query execution.</div>
+
+<h2>Architecture</h2>
+
+<h3>Query Strategy Auto-Detection</h3>
+<p>QueryFilter accumulates predicates without specifying the execution strategy. The <code>BaseDao</code> and <code>DBFilter</code> classes determine at query time which approach to use:
+- <strong>Criteria API</strong> (JPA): For indexed/typed predicates on persistent fields
+- <strong>Hibernate Search</strong> (full-text): For <code>DBPredicate.FullSearch</code> using the Lucene index
+- <strong>Result-list filtering</strong>: As a last resort for predicates that can't be expressed in SQL/HQL</p>
+
+<h3>Core Fields</h3>
+<table>
+<tr><th>Field</th><th>Type</th><th>Default</th><th>Purpose</th></tr>
+<tr><td><code>predicates</code></td><td><code>MutableList&lt;DBPredicate&gt;</code></td><td>empty</td><td>Accumulated search conditions</td></tr>
+<tr><td><code>joinList</code></td><td><code>MutableList&lt;DBJoin&gt;</code></td><td>empty</td><td>JPA joins for nested property access</td></tr>
+<tr><td><code>sortProperties</code></td><td><code>MutableList&lt;SortProperty&gt;</code></td><td>empty</td><td>Sort order specification</td></tr>
+<tr><td><code>fullTextSearchFields</code></td><td><code>Array&lt;String&gt;?</code></td><td><code>null</code></td><td>Fields to search for full-text queries</td></tr>
+<tr><td><code>fulltextSearchString</code></td><td><code>String?</code></td><td><code>null</code></td><td>The full-text query string</td></tr>
+<tr><td><code>deleted</code></td><td><code>Boolean?</code></td><td><code>null</code></td><td>Soft-delete filter (null = show all)</td></tr>
+<tr><td><code>maxRows</code></td><td><code>Int</code></td><td>50,000</td><td>Maximum number of returned rows</td></tr>
+<tr><td><code>limitResultSize</code></td><td><code>Int</code></td><td><code>Int.MAX_VALUE</code></td><td>Workaround limit for legacy UITable pages</td></tr>
+<tr><td><code>sortAndLimitMaxRowsWhileSelect</code></td><td><code>Boolean</code></td><td><code>true</code></td><td>Whether limiting is done in the DB query</td></tr>
+<tr><td><code>entityGraphName</code></td><td><code>String?</code></td><td><code>null</code></td><td>JPA entity graph for fetch optimization</td></tr>
+<tr><td><code>autoWildcardSearch</code></td><td><code>Boolean</code></td><td><code>false</code></td><td>Auto-append wildcard to search strings</td></tr>
+<tr><td><code>extended</code></td><td><code>MutableMap&lt;String, Any&gt;</code></td><td>empty</td><td>Extension variables map</td></tr>
+</table>
+
+<h3>History Search Fields</h3>
+<p>Delegated to internal <code>DBHistorySearchParams</code> object:
+<table>
+<tr><th>Field</th><th>Type</th><th>Purpose</th></tr>
+<tr><td><code>searchHistory</code></td><td><code>String?</code></td><td>Hibernate Envers history entry types to search</td></tr>
+<tr><td><code>modifiedFrom</code></td><td><code>PFDateTime?</code></td><td>Lower bound for modification timestamp</td></tr>
+<tr><td><code>modifiedTo</code></td><td><code>PFDateTime?</code></td><td>Upper bound for modification timestamp</td></tr>
+<tr><td><code>modifiedByUserId</code></td><td><code>Long?</code></td><td>Filter by the user who modified the entry</td></tr>
+</table>
+
+<h3>Joins</h3>
+<p><code>createJoin(attr, joinType, fetch, parent)</code> adds a <code>DBJoin</code> to the join list, supporting:
+- Nested property paths (e.g., <code>"order.positions"</code>)
+- INNER/LEFT/FETCH join types
+- Optional parent alias for sub-joins</p>
+
+<h3>Predicate Factory Methods (Companion)</h3>
+<table>
+<tr><th>Method</th><th>Returns</th><th>Purpose</th></tr>
+<tr><td><code>eq(field, value)</code></td><td><code>DBPredicate.Equal</code></td><td>Equality comparison</td></tr>
+<tr><td><code>ne(field, value)</code></td><td><code>DBPredicate.NotEqual</code></td><td>Not-equal comparison</td></tr>
+<tr><td><code>like(field, value)</code></td><td><code>DBPredicate.Like</code></td><td>SQL LIKE with optional auto-wildcard</td></tr>
+<tr><td><code>between(field, from, to)</code></td><td><code>DBPredicate.Between</code></td><td>Range search (inclusive)</td></tr>
+<tr><td><code>ge/gt/le/lt(field, value)</code></td><td><code>DBPredicate.GreaterEqual</code> etc.</td><td>Comparison operators</td></tr>
+<tr><td><code>interval(field, from, to)</code></td><td><code>DBPredicate</code></td><td>Flexible range: between, ge, or le depending on which bounds are given</td></tr>
+<tr><td><code>isNull(field)</code></td><td><code>DBPredicate.IsNull</code></td><td>NULL check</td></tr>
+<tr><td><code>isNotNull(field)</code></td><td><code>DBPredicate.IsNotNull</code></td><td>NOT NULL check</td></tr>
+<tr><td><code>isIn(field, values)</code></td><td><code>DBPredicate.IsIn</code></td><td>IN clause for collections</td></tr>
+<tr><td><code>not(matcher)</code></td><td><code>DBPredicate.Not</code></td><td>Negation wrapper</td></tr>
+<tr><td><code>and(vararg matchers)</code></td><td><code>DBPredicate.And</code></td><td>Conjunction</td></tr>
+<tr><td><code>or(vararg matchers)</code></td><td><code>DBPredicate.Or</code></td><td>Disjunction</td></tr>
+<tr><td><code>taskSearch(field, taskId, recursive)</code></td><td><code>DBPredicate</code></td><td>Task tree search (with descendant expansion if recursive)</td></tr>
+</table>
+
+<h3>Time Period Convenience</h3>
+<p><code>setYearAndMonth(dateField, year, month)</code> builds a <code>between</code> predicate for a specific year/month period. If <code>month &lt;= 0</code>, the entire year range is used.</p>
+
+<h3>Legacy Filter Compatibility</h3>
+<p>The constructor accepts an optional <code>BaseSearchFilter</code> for backward compatibility. It copies <code>searchFields</code>, <code>deleted</code>, <code>searchString</code>, <code>modifiedSince</code>, <code>modifiedByUserId</code>, and <code>maxRows</code> from the legacy filter.</p>
+
+<h3>Filter Finalization</h3>
+<p><code>createDBFilter(): DBFilter</code> materializes the accumulated state into a <code>DBFilter</code> object, adding the implicit <code>deleted</code> predicate if not already present. This is the point where the QueryFilter is converted to its final executable form.</p>
+
+<h2>Git History</h2><div class="hist"><pre>868d6abb7 2025 -> 2026
+7ff207016 AddressPagesRest: Warning of duplicate entries on adding new addresses.
+bb42bd659 QueryFilter.like: fix of param autoWildcardSearch (was ignored)
+fc0d7f60e DBFullTextResultIterator: block size 100 -> 10_000 for much better performance., QueryFilter limit is now 50_000 instead of 10_000.
+63081666f Source file headers: 2024-> 2025.
+2d324f2bb Finance: incoming invoices fixed.
+d9c9b6184 WIP: workaround for address pages rest without pagination.
+04c38072b AddressDao: select optimized, WIP: pagination.
+b71b5073d Migration stuff in progress... (all tests of all packages: OK).
+3264694a8 Migration stuff in progress... (all tests of all packages: OK).
+314408ee0 Migration stuff in progress... (all tests of all packages: OK).
+4000abf4e Migration stuff in progress...
+e66d5f5f7 Migration stuff in progress... TaskTree -> Kotlin and runs now in isolated entity manager
+4c04cfd65 MAJOR-CHANGE! Migration of integer id's to Long id's (including fk's etc.)
+06828f490 Migration stuff in progress...
+b6092df09 Copyright 2023 -> 2024
+ab45d51fa Copyright 2001-2022 -> 2001-2023.
+267283973 PROJECTFORGE-3730: Show validation message for list pages if result list was truncated due to max rows in QueryFilter.
+5f7ef41b8 Copyright 2021 -> 2022
+351392830 DataTransfer: search for personal boxes in list page.
+c0f2b9de0 Tenants functionality removed everywhere (untested).
+ceb63e8a1 Source code header: (C) 2001-2021.
+ac71ed08d AbstractListForm: maxRows/pageSize fixed.
+4ac8f0f48 BaseSearchFilter/QueryFilter/AbstractListForm: pageSize vs. maxRows.
+b209e00ba PFDay.from -> from, fromOrNow, fromOrNull, PFDateTime.from -> from, fromOrNow, fromOrNull
+ae7140482 React: MagicCheckboxInput implemented, deleted entries in list are now decorated with line-through.
+611b20d4e WIP: java.sql.Date -> LocalDate.
+7c79f1922 Copyright of source header -> 2020.
+3ce3f701e CalendarUtils removed.
+967cc1cbc Fixed: EmployeeReport, BuchungssatzDao, AccountingRecord{Edit|List}Form, EmployeeSalary{Edit|List}Form, MonthlyEmployeeReport*, PostausgangsListForm, PosteingangsListForm, MonthConverter. months are now 1-based: 1-January, ..., 12-December.
+d5742e60c Hotfix QueryFilter.
+00d48b950 BuchungssatzDao, QueryFilter: max rows of result set extended to 100,000.
+b7bdea161 Support of filter.searchFields added.
+34357d266 QueryFilter: NPE fix.
+73895b7df WIP: CustomResultFilter...
+1165d1557 WIP Addresses and CustomResultFilter introduced.
+c50c528ce QueryFilter.toString()
+b0a4e8463 tidy up
+d36fe6ad9 Heavy WIP: refactoring
+9896ea5c5 WIP: Session -> EntityManager...
+a5206d947 WIP: DBJoin
+14af0e09e DBAlias -> DBJoin.
+66d9e3a30 WiP: DBQuery* and QueryFilter: aliases....
+efb8e0b16 WiP: DBQuery* and QueryFilter: aliases....
+a9f7fb127 WiP: DBQuery* and QueryFilter...
+7998890ea WiP: DBQuery* and QueryFilter...
+351bde48b WiP: DBQuery* and QueryFilter...
+d32649da3 WIP: DBQuery*, QueryFilter and Predicates refactored....
+3d1a2711a WiP: DBQuery* and QueryFilter...
+20d64abbb WiP: DBQuery* and QueryFilter...
+7959dc2e0 WiP: DBQuery* and QueryFilter...
+a59e59eb1 WiP: DBQuery* and QueryFilter...
+5e65f6b22 WiP: DBQuery*
+a48f5a193 WIP: JPA...
+76a8fb69d Hibernate.Restrictions -> PF.QueryFilter</pre></div>
 </body></html>

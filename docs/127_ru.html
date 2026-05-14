@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>#127: IHKPage [RU]</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:2em;color:#444}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.lang{font-size:.85em;color:#888;float:right}.lang a{color:#888;text-decoration:none;padding:0 .3em}.lang a.active{color:#0366d6;font-weight:600;text-decoration:underline}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}.warn{background:#fff3cd;border-left:3px solid #ffc107;padding:.5em 1em;margin:1em 0}.tip{background:#d4edda;border-left:3px solid #28a745;padding:.5em 1em;margin:1em 0}</style>
+</head>
+<body>
+<div class="lang"><a href="126.html">EN</a> · <a href="126_de.html">DE</a> · <a href="126_ru.html" class="active">RU</a> · <a href="126_fr.html">FR</a> · <a href="126_es.html">ES</a></div>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Индекс</a> · <a href="file-index.html">← Индекс файлов</a> · <a href="126.html">← Назад</a> · <a href="128.html">Вперёд →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/plugins/org.projectforge.plugins.ihk/src/main/java/org/projectforge/plugins/ihk/IHKPage.java" target="_blank" title="Просмотреть исходный код на GitHub">📄 исходник</a></div>
+<h1>#127: <code>IHKPage.java</code></h1>
+<div class="meta"><code>plugins/org.projectforge.plugins.ihk/src/main/java/org/projectforge/plugins/ihk/IHKPage.java</code> <strong>Страница Apache Wicket</strong> — интерфейс для создания еженедельных отчётов IHK по данным табеля учёта рабочего времени. Исходник: <code>plugins/org.projectforge.plugins.ihk/src/main/java/org/projectforge/plugins/ihk/IHKPage.java</code> <span style="color:#888">171 строка · 119 кода · 29 комментариев · 23 пустых</span></div>
+<div class="c">Главная страница плагина IHK — позволяет стажёрам (Auszubildende) выбрать неделю, просмотреть свои записи в табеле и экспортировать их в виде отчёта Excel, соответствующего требованиям IHK. Является частью системы дуального профессионального обучения (Duale Ausbildung), предписанной немецким законодательством.</div>
+<h2>Архитектура</h2>
+<div class="c">Расширяет <strong><code>AbstractStandardFormPage</code></strong> (базовую страницу Wicket в ProjectForge) и реализует <strong><code>ISelectCallerPage</code></strong> (для виджета быстрого выбора календаря). Страница содержит компонент <strong><code>IHKForm</code></strong> в своём теле.<br><br><strong>Жизненный цикл:</strong><br>1. Конструктор: создаёт IHKForm, инициализирует его, добавляет ссылку LogViewer в меню содержимого<br>2. <code>select()</code>: обрабатывает клики быстрого выбора календаря — устанавливает диапазон дат на неделю выбранной даты (понедельник–воскресенье)<br>3. <code>export()</code>: запрашивает табели за выбранную неделю, проверяет наличие описаний, делегирует генерацию Excel-файла в <code>IHKExporter</code>, инициирует загрузку<br>4. <code>edit()</code>: переходит на TimesheetEditPage для исправления отсутствующих описаний</div>
+<h2>Ключевые методы</h2>
+<table><tr><th>Метод</th><th>Строк</th><th>Назначение</th></tr><tr><td><code>findTimesheets()</code></td><td>~20</td><td>Создаёт TimesheetFilter для выбранной недели (понедельник 00:00 – воскресенье 23:59:59.999), запрашивает TimesheetDao</td></tr><tr><td><code>export(boolean)</code></td><td>~35</td><td>Проверяет описания табелей, делегирует IHKExporter, инициирует загрузку файла через DownloadUtils</td></tr><tr><td><code>select(String, Object)</code></td><td>~10</td><td>Обработчик быстрого выбора календаря — устанавливает недельный диапазон по выбранной дате</td></tr></table>
+<h2>Процесс валидации</h2><div class="c">Метод <code>export()</code> имеет два этапа проверки:<br>1. <strong>Табели не найдены:</strong> Если <code>findTimesheets()</code> возвращает пустой результат, выводится ошибка "plugins.ihk.noitemsfound"<br>2. <strong>Отсутствуют описания:</strong> IHK требует, чтобы каждая запись табеля имела описание. Если у какой-либо записи <code>description == null</code>, выводится ошибка "plugins.ihk.nodescriptionfound" и отображается список проблемных записей. Пользователь может вызвать <code>export(true)</code> для обхода проверки (на свой страх и риск).<br><br>Эта двухэтапная валидация представляет собой <strong>UX-паттерн</strong>: сначала быстрый отказ с вежливой ошибкой, затем точное указание записей, требующих исправления, и предоставление запасного варианта для случаев, когда описание действительно не нужно.</div>
+<h2>История Git</h2><div class="hist"><pre>868d6abb7 2025 → 2026
+63081666f 2024→2025
+1b50060c3 BaseDao: get→find, save→insert, getList→select, load→select
+b6092df09 2023→2024
+e7e0786b4 IHK-Plugin: добавлены комментарии, вывод ошибок, исправлена запись xlsx
+b9c16aafa PROJECTFORGE-3720 IHK-Plugin: исправление ошибки загрузки, исправление статических функций
+5d41efc41 LogViewer в IHK-Plugin
+65b67f1b9 использование getLocalDate
+f8ea4cacc окончательное исправление DocNr, обновлён creator/updater
+dfa308efd Изменены имена переменных
+31126b8f9 Изменены имена переменных, добавлены сообщения об ошибках
+9a186ba10 ihk plugin удалены неиспользуемые импорты
+6d44a7fd9 изменение имени файла и слияние
+83ced0b86 Ihk меньше ручного труда (#141)
+723b47df2 MMAUSIHK-12 MMAUSIHK-6: создание табелей с Merlin
+9522de0eb Добавлен список табелей с отсутствующим описанием
+a253f3092 Исправлен экспорт IHK
+b209e00ba PFDay.from → from, PFDateTime.from → from
+45cad02e9 IHK-Plugin добавлен (начальный)
+4cd7c8e69 Замена DateHolder/DayHolder на PFDateTime
+9ebb88522 Начальный коммит</pre></div>
+<h2>Ключевые коммиты</h2><div class="c"><strong>45cad02e9 — Создание плагина:</strong> Плагин IHK был добавлен как замена старого плагина "Ihk-Export". Он генерирует отчёты Excel непосредственно из табелей ProjectForge для соблюдения требований немецкого профессионального обучения.<br><br><strong>9522de0eb — Список отсутствующих описаний:</strong> Добавлен этап проверки на пустые описания табелей с отображением их пользователю. До этого отсутствующие описания приводили к молчаливому созданию неполного отчёта.<br><br><strong>5d41efc41 — Интеграция LogViewer:</strong> Каждый плагин получает выделенную подписку на логи через <code>IHKPlugin.ensureUserLogSubscription()</code>. Ссылка LogViewer в меню содержимого позволяет пользователям просматривать логи плагина, не покидая страницу IHK.<br><br><strong>83ced0b86 — Меньше ручного труда (#141):</strong> Оптимизирован пользовательский интерфейс для уменьшения количества ручных шагов в процессе создания отчёта.</div>
+<div class="warn"><strong>Важный нюанс — Обработка часовых поясов:</strong> Расчёт недельного диапазона использует <code>ThreadLocalUserContext.getTimeZone()</code>, чтобы границы понедельника–воскресенья вычислялись в часовом поясе пользователя. Использование серверного часового пояса привело бы к ошибке смещения на один день для пользователей в других часовых поясах. Коммит <code>bf872fc9a</code> (PROJECTFORGE-2524) специально исправил ошибку часового пояса в экспорте IHK.</div>
+<div class="tip"><strong>Почему Wicket, а не React?</strong> Плагин IHK — один из старых плагинов, который всё ещё использует Apache Wicket для своего интерфейса. Новые плагины используют стек REST+React. IHKPage остаётся на Wicket, потому что: (а) это одностраничная форма без сложного взаимодействия, (б) плагин имеет низкий трафик (используется только стажёрами, а не всеми сотрудниками), и (в) затраты на миграцию не оправдывают выгоду от переписывания.</div>
+</body>
+</html>

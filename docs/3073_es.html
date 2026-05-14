@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>3073: PersonalStatisticsPage.java [ES]</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:1.5em;color:#444;font-size:1em}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.lang{font-size:.85em;color:#888;float:right}.lang a{color:#888;text-decoration:none;padding:0 .3em}.lang a.active{color:#0366d6;font-weight:600;text-decoration:underline}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}pre.diff{background:#fff;font-size:.82em;max-height:300px;overflow-y:auto}</style>
+</head>
+<body>
+<div class="lang"><a href="3073.html">EN</a> · <a href="3073_de.html">DE</a> · <a href="3073_ru.html">RU</a> · <a href="3073_fr.html">FR</a> · <a href="3073_es.html" class="active">ES</a></div>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Índice</a> · <a href="file-index.html">← Índice de archivos</a> · <a href="763.html">← Anterior</a> · <a href="1359.html">Siguiente →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-wicket/src/main/java/org/projectforge/web/statistics/PersonalStatisticsPage.java" target="_blank" title="Ver fuente en GitHub">📄 fuente</a></div>
+<h1>#3073: <code>PersonalStatisticsPage.java</code></h1>
+<div class="meta"><code>projectforge-wicket/src/main/java/org/projectforge/web/statistics/PersonalStatisticsPage.java</code> Clase Java, <code>projectforge-wicket/src/main/java/org/projectforge/web/statistics/PersonalStatisticsPage.java</code> <span style="color:#888">121 líneas · 88 código · 22 comentarios · 11 en blanco</span></div>
+<div class="c"><strong>Propósito:</strong> Archivo fuente: projectforge/web/statistics/PersonalStatisticsPage.java. PersonalStatisticsPage.java es parte de la aplicación de gestión de proyectos de código abierto ProjectForge.</div>
+<h2>Fuente (primeras 100 líneas)</h2>
+<pre>/////////////////////////////////////////////////////////////////////////////
+//
+// Project ProjectForge Community Edition
+//         www.projectforge.org
+//
+// Copyright (C) 2001-2026 Micromata GmbH, Germany (www.micromata.com)
+//
+// ProjectForge tiene doble licencia.
+//
+// Esta edición comunitaria es software libre; puedes redistribuirla y/o
+// modificarla bajo los términos de la Licencia Pública General GNU publicada
+// por la Free Software Foundation; versión 3 de la Licencia.
+//
+// Esta edición comunitaria se distribuye con la esperanza de que sea útil,
+// pero SIN NINGUNA GARANTÍA; sin siquiera la garantía implícita de
+// COMERCIABILIDAD o IDONEIDAD PARA UN PROPÓSITO PARTICULAR. Consulte la
+// Licencia Pública General GNU para más detalles.
+//
+// Deberías haber recibido una copia de la Licencia Pública General GNU junto
+// con este programa; si no, visita http://www.gnu.org/licenses/.
+//
+/////////////////////////////////////////////////////////////////////////////
+
+package org.projectforge.web.statistics;
+
+import org.apache.wicket.AttributeModifier;
+import org.apache.wicket.markup.html.basic.Label;
+import org.apache.wicket.model.IModel;
+import org.apache.wicket.model.LoadableDetachableModel;
+import org.apache.wicket.request.mapper.parameter.PageParameters;
+import org.jfree.chart.JFreeChart;
+import org.projectforge.business.fibu.EmployeeCache;
+import org.projectforge.business.fibu.EmployeeDO;
+import org.projectforge.business.timesheet.TimesheetDao;
+import org.projectforge.framework.persistence.user.api.ThreadLocalUserContext;
+import org.projectforge.framework.utils.NumberHelper;
+import org.projectforge.statistics.TimesheetDisciplineChartBuilder;
+import org.projectforge.web.WicketSupport;
+import org.projectforge.web.wicket.AbstractSecuredPage;
+import org.projectforge.web.wicket.JFreeChartImage;
+
+import java.math.BigDecimal;
+import java.text.NumberFormat;
+
+public class PersonalStatisticsPage extends AbstractSecuredPage {
+    private static final long serialVersionUID = 5957430109012640203L;
+
+    private static final short LAST_N_DAYS = 45;
+
+    private static final int IMAGE_WIDTH = 500;
+
+    private static final int IMAGE_HEIGHT = 400;
+
+    public PersonalStatisticsPage(final PageParameters parameters) {
+        super(parameters);
+        final TimesheetDao timesheetDao = WicketSupport.get(TimesheetDao.class);
+        final Label timesheetDisciplineChartTitle = new Label("timesheetDisciplineChartTitle",
+                getString("personal.statistics.timesheetDisciplineChart.title"));
+        body.add(timesheetDisciplineChartTitle);
+        final EmployeeDO employee = EmployeeCache.getInstance().getEmployeeByUserId(ThreadLocalUserContext.getLoggedInUserId());
+        double workingHoursPerDay = 8;
+        if (employee != null &amp;&amp; NumberHelper.isGreaterZero(employee.getWeeklyWorkingHours())) {
+            workingHoursPerDay = employee.getWeeklyWorkingHours().doubleValue() / 5;
+        }
+        final TimesheetDisciplineChartBuilder chartBuilder = new TimesheetDisciplineChartBuilder();
+        final double innerWorkingDaysPerDay = workingHoursPerDay;
+        IModel&lt;JFreeChart&gt; chart1 = new LoadableDetachableModel&lt;&gt;() {
+            @Override
+            protected JFreeChart load() {
+                return chartBuilder.create(timesheetDao, getUser().getId(), innerWorkingDaysPerDay, LAST_N_DAYS, true);
+            }
+        };
+        JFreeChartImage image = new JFreeChartImage("timesheetStatisticsImage1", chart1, IMAGE_WIDTH, IMAGE_HEIGHT);
+        image.add(AttributeModifier.replace("width", String.valueOf(IMAGE_WIDTH)));
+        image.add(AttributeModifier.replace("height", String.valueOf(IMAGE_HEIGHT)));
+        body.add(image);
+        final NumberFormat format = NumberFormat.getNumberInstance(ThreadLocalUserContext.getLocale());
+        final String planHours = "&lt;span style=\"color: #DE1821; font-weight: bold;\"&gt;"
+                + format.format(chartBuilder.getPlanWorkingHours())
+                + "&lt;/span&gt;";
+        final String actualHours = "&lt;span style=\"color: #40A93B; font-weight: bold;\"&gt;"
+                + format.format(chartBuilder.getActualWorkingHours())
+                + "&lt;/span&gt;";
+        final String numberOfDays = String.valueOf(LAST_N_DAYS);
+        final Label timesheetDisciplineChart1Legend = new Label("timesheetDisciplineChart1Legend", getLocalizedMessage(
+                "personal.statistics.timesheetDisciplineChart1.legend", numberOfDays, planHours, actualHours));
+        timesheetDisciplineChart1Legend.setEscapeModelStrings(false);
+        body.add(timesheetDisciplineChart1Legend);
+
+        IModel&lt;JFreeChart&gt; chart2 = new LoadableDetachableModel&lt;&gt;() {
+            @Override
+            protected JFreeChart load() {
+                return chartBuilder.create(timesheetDao, getUser().getId(), 0, LAST_N_DAYS, false);
+            }
+        };
+        image = new JFreeChartImage("timesheetStatisticsImage2", chart2, IMAGE_WIDTH, IMAGE_HEIGHT);
+        image.add(AttributeModifier.replace("width", String.valueOf(IMAGE_WIDTH)));
+        image.add(AttributeModifier.replace("height", String.valueOf(IMAGE_HEIGHT)));
+        body.add(image);
+        BigDecimal averageBetweenBookings = chartBuilder.getAverageDifferenceBetweenTimesheetAndBooking();</pre>
+<h2>Historial Git</h2>
+<div class="hist">
+<pre>868d6abb7 2025 -> 2026
+63081666f Encabezados de archivos fuente: 2024 -> 2025.
+3785f8347 Trabajo de migración en curso...
+c14b18a48 Trabajo de migración en curso... (todas las pruebas de todos los paquetes: OK).
+67805f2fc ThreadLocalUserContext.user -> ThreadLocalUserContext.loggedInUser (renombrado para evitar malentendidos en el código).</pre>
+<h3>868d6abb7</h3><div class="c"><strong>2025 -> 2026</strong><pre class="diff">868d6abb75cd191a892911ac8e45058932cf9074
+diff --git a/projectforge-wicket/src/main/java/org/projectforge/web/statistics/PersonalStatisticsPage.java b/projectforge-wicket/src/main/java/org/projectforge/web/statistics/PersonalStatisticsPage.java
+index 4b64aace9..7ff379f38 100644
+--- a/projectforge-wicket/src/main/java/org/projectforge/web/statistics/PersonalStatisticsPage.java
++++ b/projectforge-wicket/src/main/java/org/projectforge/web/statistics/PersonalStatisticsPage.java
+@@ -3,7 +3,7 @@
+ // Project ProjectForge Community Edition
+ //         www.projectforge.org
+ //
+-// Copyright (C) 2001-2025 Micromata GmbH, Germany (www.micromata.com)
++// Copyright (C) 2001-2026 Micromata GmbH, Germany (www.micromata.com)
+ //
+ // ProjectForge is dual-licensed.
+ //</pre></div><h3>63081666f</h3><div class="c"><strong>Encabezados de archivos fuente: 2024 -> 2025.</strong><pre class="diff">63081666f620fb87315f01b817e560e0b2f6a33a
+diff --git a/projectforge-wicket/src/main/java/org/projectforge/web/statistics/PersonalStatisticsPage.java b/projectforge-wicket/src/main/java/org/projectforge/web/statistics/PersonalStatisticsPage.java
+index ff02d49c9..4b64aace9 100644
+--- a/projectforge-wicket/src/main/java/org/projectforge/web/statistics/PersonalStatisticsPage.java
++++ b/projectforge-wicket/src/main/java/org/projectforge/web/statistics/PersonalStatisticsPage.java
+@@ -3,7 +3,7 @@
+ // Project ProjectForge Community Edition
+ //         www.projectforge.org
+ //
+-// Copyright (C) 2001-2024 Micromata GmbH, Germany (www.micromata.com)
++// Copyright (C) 2001-2025 Micromata GmbH, Germany (www.micromata.com)
+ //
+ // ProjectForge is dual-licensed.
+ //</pre></div><h3>3785f8347</h3><div class="c"><strong>Trabajo de migración en curso...</strong><pre class="diff">3785f83479d2e37e6410950c957b0848c19f30ea
+diff --git a/projectforge-wicket/src/main/java/org/projectforge/web/statistics/PersonalStatisticsPage.java b/projectforge-wicket/src/main/java/org/projectforge/web/statistics/PersonalStatisticsPage.java
+index f0aeca364..ff02d49c9 100644
+--- a/projectforge-wicket/src/main/java/org/projectforge/web/statistics/PersonalStatisticsPage.java
++++ b/projectforge-wicket/src/main/java/org/projectforge/web/statistics/PersonalStatisticsPage.java
+@@ -25,6 +25,8 @@ package org.projectforge.web.statistics;
+ 
+ import org.apache.wicket.AttributeModifier;
+ import org.apache.wicket.markup.html.basic.Label;
++import org.apache.wicket.model.IModel;
++import org.apache.wicket.model.LoadableDetachableModel;
+ import org.apache.wicket.request.mapper.parameter.PageParameters;
+ import org.jfree.chart.JFreeChart;
+ import org.projectforge.business.fibu.EmployeeCache;
+@@ -37,6 +39,7 @@ import org.projectforge.web.WicketSupport;
+ import org.projectforge.web.wicket.AbstractSecuredPage;
+ import org.projectforge.web.wicket.JFreeChartImage;
+ 
++import java.math.BigDecimal;
+ import java.text.NumberFormat;
+ 
+ public class PersonalStatisticsPage extends AbstractSecuredPage {
+@@ -60,7 +63,13 @@ public class PersonalStatisticsPage extends AbstractSecuredPage {
+             workingHoursPerDay = employee.getWeeklyWorkingHours().doubleValue() / 5;
+         }
+         final TimesheetDisciplineChartBuilder chartBuilder = new TimesheetDisciplineChartBuilder();
+-        final JFreeChart chart1 = chartBuilder.create(timesheetDao, getUser().getId(), workingHoursPerDay, LAST_N_DAYS, true);
++        final double innerWorkingDaysPerDay = workingHoursPerDay;
++        IModel&lt;JFreeChart&gt; chart1 = new LoadableDetachableModel&lt;&gt;() {
++            @Override
++            protected JFreeChart load() {
++                return chartBuilder.create(timesheetDao, getUser().getId(), innerWorkingDaysPerDay, LAST_N_DAYS, true);
++            }
++        };
+         JFreeChartImage image = new JFreeChartImage("timesheetStatisticsImage1", chart1, IMAGE_WIDTH, IMAGE_HEIGHT);
+         image.add(AttributeModifier.replace("width", String.valueOf(IMAGE_WIDTH)));
+         image.add(AttributeModifier.replace("height", String.valueOf(IMAGE_HEIGHT)));
+@@ -78,13 +87,22 @@ public class PersonalStatisticsPage extends AbstractSecuredPage {
+         timesheetDisciplineChart1Legend.setEscapeModelStrings(false);
+         body.add(timesheetDisciplineChart1Legend);
+ 
+-        final JFreeChart chart2 = chartBuilder.create(timesheetDao, getUser().getId(), 0, LAST_N_DAYS, false);
++        IModel&lt;JFreeChart&gt; chart2 = new LoadableDetachableModel&lt;&gt;() {
++            @Override
++            protected JFreeChart load() {
++                return chartBuilder.create(timesheetDao, getUser().getId(), 0, LAST_N_DAYS, false);
++            }
++        };
+         image = new JFreeChartImage("timesheetStatisticsImage2", chart2, IMAGE_WIDTH, IMAGE_HEIGHT);
+         image.add(AttributeModifier.replace("width", String.valueOf(IMAGE_WIDTH)));
+         image.add(AttributeModifier.replace("height", String.valueOf(IMAGE_HEIGHT)));
+         body.add(image);
++        BigDecimal averageBetweenBookings = chartBuilder.getAverageDifferenceBetweenTimesheetAndBooking();
++        if (averageBetweenBookings == null) {
++            averageBetweenBookings = BigDecimal.ZERO;
++        }
+         final String averageDifference = "&lt;span style=\"color: #DE1821; font-weight: bold;\"&gt;"
+-                + format.format(chartBuilder.getAverageDifferenceBetweenTimesheetAndBooking())
++                + format.format(averageBetweenBookings)
+                 + "&lt;/span&gt;";</pre></div><h3>c14b18a48</h3><div class="c"><strong>Trabajo de migración en curso... (todas las pruebas de todos los paquetes: OK).</strong><pre class="diff">c14b18a481323a2c60c10d0f7358e7b503b662c9
+diff --git a/projectforge-wicket/src/main/java/org/projectforge/web/statistics/PersonalStatisticsPage.java b/projectforge-wicket/src/main/java/org/projectforge/web/statistics/PersonalStatisticsPage.java
+index bf11890e8..f0aeca364 100644
+--- a/projectforge-wicket/src/main/java/org/projectforge/web/statistics/PersonalStatisticsPage.java
++++ b/projectforge-wicket/src/main/java/org/projectforge/web/statistics/PersonalStatisticsPage.java
+@@ -27,8 +27,8 @@ import org.apache.wicket.AttributeModifier;
+ import org.apache.wicket.markup.html.basic.Label;
+ import org.apache.wicket.request.mapper.parameter.PageParameters;
+ import org.jfree.chart.JFreeChart;
++import org.projectforge.business.fibu.EmployeeCache;
+ import org.projectforge.business.fibu.EmployeeDO;
+-import org.projectforge.business.fibu.EmployeeDao;
+ import org.projectforge.business.timesheet.TimesheetDao;
+ import org.projectforge.framework.persistence.user.api.ThreadLocalUserContext;
+ import org.projectforge.framework.utils.NumberHelper;
+@@ -39,69 +39,65 @@ import org.projectforge.web.wicket.JFreeChartImage;
+ 
+ import java.text.NumberFormat;
+ 
+-public class PersonalStatisticsPage extends AbstractSecuredPage
+-{
+-  private static final long serialVersionUID = 5957430109012640203L;
++public class PersonalStatisticsPage extends AbstractSecuredPage {
++    private static final long serialVersionUID = 5957430109012640203L;
+ 
+-  private static final short LAST_N_DAYS = 45;
++    private static final short LAST_N_DAYS = 45;
+ 
+-  private static final int IMAGE_WIDTH = 500;
++    private static final int IMAGE_WIDTH = 500;
+ 
+-  private static final int IMAGE_HEIGHT = 400;
++    private static final int IMAGE_HEIGHT = 400;
+ 
+-  public PersonalStatisticsPage(final PageParameters parameters)
+-  {
+-    super(parameters);
+-    final EmployeeDao employeeDao = WicketSupport.get(EmployeeDao.class);
+-    final TimesheetDao timesheetDao = WicketSupport.get(TimesheetDao.class);
+-    final Label timesheetDisciplineChartTitle = new Label("timesheetDisciplineChartTitle",
+-        getString("personal.statistics.timesheetDisciplineChart.title"));
+-    body.add(timesheetDisciplineChartTitle);
+-    final EmployeeDO employee = employeeDao.findByUserId(ThreadLocalUserContext.getLoggedInUserId());
+-    double workingHoursPerDay = 8;
+-    if (employee != null &amp;&amp; NumberHelper.isGreaterZero(employee.getWeeklyWorkingHours())) {
+-      workingHoursPerDay = employee.getWeeklyWorkingHours().doubleValue() / 5;
+-    }
+-    final TimesheetDisciplineChartBuilder chartBuilder = new TimesheetDisciplineChartBuilder();
+-    final JFreeChart chart1 = chartBuilder.create(timesheetDao, getUser().getId(), workingHoursPerDay, LAST_N_DAYS, true);
+-    JFreeChartImage image = new JFreeChartImage("timesheetStatisticsImage1", chart1, IMAGE_WIDTH, IMAGE_HEIGHT);
+-    image.add(AttributeModifier.replace("width", String.valueOf(IMAGE_WIDTH)));
+-    image.add(AttributeModifier.replace("height", String.valueOf(IMAGE_HEIGHT)));
+-    body.add(image);
+-    final NumberFormat format = NumberFormat.getNumberInstance(ThreadLocalUserContext.getLocale());
+-    final String planHours = "&lt;span style=\"color: #DE1821; font-weight: bold;\"&gt;"
+-        + format.format(chartBuilder.getPlanWorkingHours())
+-        + "&lt;/span&gt;";
+-    final String actualHours = "&lt;span style=\"color: #40A93B; font-weight: bold;\"&gt;"
+-        + format.format(chartBuilder.getActualWorkingHours())
+-        + "&lt;/span&gt;";</pre></div><h3>67805f2fc</h3><div class="c"><strong>ThreadLocalUserContext.user -> ThreadLocalUserContext.loggedInUser (renombrado para evitar malentendidos en el código).</strong><pre class="diff">67805f2fc1f3e6a6393accb4a757a8f4049b001c
+diff --git a/projectforge-wicket/src/main/java/org/projectforge/web/statistics/PersonalStatisticsPage.java b/projectforge-wicket/src/main/java/org/projectforge/web/statistics/PersonalStatisticsPage.java
+index 00bd41a14..bf11890e8 100644
+--- a/projectforge-wicket/src/main/java/org/projectforge/web/statistics/PersonalStatisticsPage.java
++++ b/projectforge-wicket/src/main/java/org/projectforge/web/statistics/PersonalStatisticsPage.java
+@@ -57,7 +57,7 @@ public class PersonalStatisticsPage extends AbstractSecuredPage
+     final Label timesheetDisciplineChartTitle = new Label("timesheetDisciplineChartTitle",
+         getString("personal.statistics.timesheetDisciplineChart.title"));
+     body.add(timesheetDisciplineChartTitle);
+-    final EmployeeDO employee = employeeDao.findByUserId(ThreadLocalUserContext.getUserId());
++    final EmployeeDO employee = employeeDao.findByUserId(ThreadLocalUserContext.getLoggedInUserId());
+     double workingHoursPerDay = 8;
+     if (employee != null &amp;&amp; NumberHelper.isGreaterZero(employee.getWeeklyWorkingHours())) {
+       workingHoursPerDay = employee.getWeeklyWorkingHours().doubleValue() / 5;</pre></div>
+</div>
+</body>
+</html>

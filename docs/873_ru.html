@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>#873 [RU]</title>
+<style>
+body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}
+h1{border-bottom:2px solid #333;padding-bottom:.3em}
+h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}
+h3{margin-top:2em;color:#444}
+a{color:#0366d6}
+.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}
+.nav{font-size:.9em;color:#888;margin-bottom:1em}
+.meta{font-size:.9em;margin:1em 0;color:#555}
+code{background:#f0f0f0;padding:0 .2em;font-size:.93em}
+pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}
+table{border-collapse:collapse;width:100%;margin:1em 0}
+th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}
+th{background:#f5f5f5;font-weight:600}
+.hist{font-size:.85em;color:#555}
+.warn{background:#fff3cd;border-left:3px solid #ffc107;padding:.5em 1em;margin:1em 0}
+</style>
+</head>
+<body>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Индекс</a> · <a href="file-index.html">← Индекс файлов</a> · <a href="872.html">← Предыдущий</a> · <a href="874.html">Следующий →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/kotlin/org/projectforge/business/common/BaseUserGroupRightUtils.kt" target="_blank" title="Просмотреть исходник на GitHub">📄 исходник</a></div>
+<h1>#873: <code>BaseUserGroupRightUtils.kt</code></h1>
+<div class="meta"><code>projectforge-business/src/main/kotlin/org/projectforge/business/common/BaseUserGroupRightUtils.kt</code> <strong>Тип:</strong> Объект Kotlin (статическая утилита) · <strong>Назначение:</strong> Основная логика прав доступа · <strong>Исходник:</strong> <code>projectforge-business/src/main/kotlin/org/projectforge/business/common/BaseUserGroupRightUtils.kt</code> <span style="color:#888">136 строк · 93 кода · 33 комментария · 10 пустых</span></div>
+<div class="c">Автономный объект утилиты, содержащий основную логику разрешения прав доступа. Определяет, имеет ли пользователь доступ OWNER, FULL, READONLY, MINIMAL или NONE к объекту <code>BaseUserGroupRightsDO</code>, проверяя поля CSV ID на соответствие членству в группах и прямое совпадение ID пользователя. Используется как <code>BaseUserGroupRight</code> (<a href="864.html">#864</a>), так и <code>TeamCalCache</code>.</div>
+
+<h2>API</h2>
+
+<h3><code>isOwner(user, obj)</code> / <code>isOwner(userId, obj)</code></h3>
+<p>Возвращает <code>true</code>, если <code>userId == obj.ownerId</code> (оба не null). Простая проверка идентичности.</p>
+
+<h3><code>getAccessType(obj, userId): DataobjectAccessType</code></h3>
+<p>Основной метод разрешения. Оценивает доступ в порядке приоритета:</p>
+<ol>
+<li><strong>Защита от null:</strong> Возвращает <code>NONE</code>, если obj или userId равны null</li>
+<li><strong>Проверка владельца:</strong> Возвращает <code>OWNER</code>, если <code>userId == obj.ownerId</code></li>
+<li><strong>Полный доступ:</strong> Проверяет <code>fullAccessGroupIds</code> и <code>fullAccessUserIds</code></li>
+<li><strong>Доступ только для чтения:</strong> Проверяет <code>readonlyAccessGroupIds</code> и <code>readonlyAccessUserIds</code></li>
+<li><strong>Минимальный доступ:</strong> Проверяет <code>minimalAccessGroupIds</code> и <code>minimalAccessUserIds</code></li>
+<li><strong>Запасной вариант:</strong> Возвращает <code>NONE</code></li>
+</ol>
+
+<h3><code>hasReadAccess(obj, userId, throwException?): Boolean</code></h3>
+<p>Возвращает <code>true</code>, если тип доступа — <code>READONLY</code>, <code>FULL</code> или <code>OWNER</code>. В противном случае возвращает <code>false</code> или выбрасывает <code>AccessException("access.exception.noReadAccess")</code>, если <code>throwException</code> равен true.</p>
+
+<h3><code>hasWriteAccess(obj, userId, throwException?): Boolean</code></h3>
+<p>Возвращает <code>true</code>, если тип доступа — <code>FULL</code> или <code>OWNER</code>. В противном случае возвращает <code>false</code> или выбрасывает <code>AccessException("access.exception.noWriteAccess")</code>.</p>
+
+<h3><code>hasAccess(obj, userId, operationType, throwException?)</code></h3>
+<p>Направляет к <code>hasReadAccess</code> или <code>hasWriteAccess</code> на основе <code>operationType.isWriteType</code>.</p>
+
+<h3><code>hasAccess(obj, oldObj, userId, operationType, throwException?)</code></h3>
+<p>Для операций записи сначала проверяет <em>старый</em> объект (разрешая модификацию, если у пользователя уже был доступ на запись). В противном случае проверяет новый объект. Для операций чтения проверяет <code>oldObj ?: obj</code>.</p>
+
+<h2>Внутренняя логика</h2>
+
+<h3><code>isMemberOfAny(groupIds, userIds, userId): Boolean</code></h3>
+<p>Приватный помощник, выполняющий фактическую проверку членства в группе/пользователе:</p>
+<ul>
+<li>Если <code>groupIds</code> не пуст, проверяет <code>UserGroupCache.getInstance().isUserMemberOfAtLeastOneGroup(userId, *groupIds)</code></li>
+<li>Если <code>userIds</code> содержит указанный <code>userId</code>, возвращает true</li>
+<li>Использует <code>StringHelper.splitToLongObjects()</code> для разбора CSV-столбцов в <code>Array&lt;Long&gt;</code></li>
+</ul>
+
+<h2>Поток данных</h2>
+<pre>
+BaseUserGroupRightsDO (CSV-столбцы)
+  │
+  ├─ StringHelper.splitToLongObjects()
+  │
+  ├─ UserGroupCache.isUserMemberOfAtLeastOneGroup()  ← группы
+  └─ Прямое сравнение userId                          ← пользователи
+  │
+  ▼
+DataobjectAccessType (OWNER / FULL / READONLY / MINIMAL / NONE)
+  │
+  ▼
+hasReadAccess / hasWriteAccess → Boolean
+</pre>
+
+<h2>Обоснование дизайна</h2>
+<p>Паттерн <code>object</code> (синглтон Kotlin) был выбран, потому что логика доступа является чисто функциональной — без состояния или зависимостей, только вычисления. Это позволяет вызывать её откуда угодно (сервисы, кэши, конструкторы сущностей) без накладных расходов на внедрение.</p>
+
+<p>Многоуровневая оценка (владелец → полный → только чтение → минимальный → нет) означает, что первое совпадение выигрывает. Если пользователь состоит как в группе полного доступа, <em>так и</em> в группе только для чтения, он получает доступ <code>FULL</code>. Параметр <code>oldObj</code> в <code>hasAccess</code> поддерживает паттерн, при котором разрешение на изменение объекта проверяется относительно состояния до модификации — критически важно для операций обновления, где списки доступа объекта могут измениться в процессе редактирования.</p>
+
+<h2>Внешние зависимости</h2>
+<ul>
+<li><code>UserGroupCache</code> — синглтон-кэш для поиска членства в группах</li>
+<li><code>StringHelper.splitToLongObjects()</code> — разбирает строки CSV ID в <code>Array&lt;Long&gt;</code></li>
+<li><code>AccessException</code> — выбрасывается, когда <code>throwException = true</code> и доступ запрещён</li>
+</ul>
+
+<h2>История Git</h2>
+<div class="hist"><pre>
+868d6abb7 2025 -> 2026
+63081666f Заголовки исходных файлов: 2024-> 2025.
+4c04cfd65 MAJOR-CHANGE! Миграция целочисленных id на Long id
+b6092df09 Авторское право 2023 -> 2024
+ab45d51fa Авторское право 2001-2022 -> 2001-2023.
+232a91c5a Реализован BaseUserGroupRightUtils. WIP BankingPlugin и обработка заданий.
+</pre></div>
+</body>
+</html>

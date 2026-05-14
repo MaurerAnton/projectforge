@@ -1,10 +1,36 @@
-<!DOCTYPE html>
-<html lang="en"><head><meta charset="utf-8"><title>File #1269: AccessControl.kt</title>
-<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333}a{color:#0366d6}.meta{background:#f0f0f0;border-radius:6px;padding:1em;margin:1em 0;font-size:.9em}.commentary{margin:.8em 0;background:#fff;padding:.5em 1em;border-radius:6px;border-left:4px solid #ddd;line-height:1.7}table{border-collapse:collapse;width:100%;margin:.8em 0;font-size:.9em}th,td{border:1px solid #ddd;padding:.4em .6em}th{background:#f0f0f0}code{background:#e8e8e8;border-radius:3px;padding:.1em .3em;font-size:.9em}.nav{font-size:.9em;color:#888;margin-bottom:1em}.history{background:#fffbe6;border-radius:6px;padding:1em;margin:1em 0;font-size:.9em;border-left:4px solid #ffc107}</style></head>
-<body><div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="1268.html">← Prev</a> · <a href="1270.html">Next →</a></div>
-<h1>File #1269: <code>AccessControl.kt</code></h1>
-<div class="meta"><p><strong>Path:</strong> <code>N/A</code> · <strong>Type:</strong> Other file</p><p><strong>Source:</strong> <a href="https://github.com/micromata/projectforge/blob/develop/N/A">GitHub</a></p></div>
-<div class="history"><table><tr><th>Commit</th><th>Message</th></tr><tr><td><code>9ebb88522</code></td><td>2016-07-18 Initial commit</td></tr></table></div>
-<div class="commentary"><p>Part of the ProjectForge Wicket web application. Located at <code>N/A</code>. Project resource file.</p></div>
-<div class="nav" style="margin-top:2em"><a href="1268.html">← #1268</a> · <a href="1270.html">#1270 →</a></div>
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>#1269: CollectionHandler.kt</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:2em;color:#444}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}</style></head>
+<body><div class="nav"><a href="https://maureranton.github.io/projectforge/">&#8592; Index</a> &#183; <a href="file-index.html">&#8592; File index</a> &#183; <a href="1268.html">&#8592; Prev</a> &#183; <a href="1270.html">Next &#8594;</a></div>
+<h1>#1269: <code>CollectionHandler.kt</code></h1>
+<div class="meta"><code>projectforge-business/src/main/kotlin/org/projectforge/framework/persistence/candh/CollectionHandler.kt</code> Copy-and-History Handler (Collections), projectforge-business/src/main/kotlin/org/projectforge/framework/persistence/candh/CollectionHandler.kt <span style="color:#888">334 lines · 252 code · 72 comments · 10 blank</span></div>
+<div class="c">Handles mutable collections (<code>TreeSet</code>, <code>ArrayList</code>, <code>HashSet</code>, <code>PersistentSet</code>, <code>PersistentList</code>) in the CandH framework. Compares src and dest collections to detect added, removed, and kept entries. Supports deep copy of collection entries (when managed by owner entity via <code>@PersistenceBehavior(autoUpdateCollectionEntries=true)</code>), soft-delete via <code>@SoftDeleteCollection</code>, and history tracking for collection changes.</div>
+
+<h2>Architecture</h2>
+<h3>Collection Management Detection</h3>
+<p><code>collectionManagedBySrcClazz()</code> returns true when:</p>
+<ul>
+<li>Property is not annotated with <code>@NoHistory</code></li>
+<li>Has <code>@JoinColumn</code>, <code>@JoinTable</code>, or <code>@OneToMany(mappedBy=...)</code></li>
+</ul>
+
+<h3>Key Features</h3>
+<table>
+<tr><th>Feature</th><th>Description</th></tr>
+<tr><td><strong>Diff Engine</strong></td><td>Uses <code>CollectionUtils.compareCollections()</code> to separate added/removed/kept entries</td></tr>
+<tr><td><strong>Soft Delete</strong></td><td><code>@SoftDeleteCollection</code> marks entries as deleted instead of removing them, preserving history and avoiding unique constraint violations</td></tr>
+<tr><td><strong>Entry Reactivation</strong></td><td>Detects re-added soft-deleted entries and reactivates them</td></tr>
+<tr><td><strong>Deep Copy</strong></td><td>When <code>autoUpdateCollectionEntries=true</code>, uses <code>copyValues()</code> recursively on kept entries to detect nested modifications</td></tr>
+<tr><td><strong>Collection Instantiation</strong></td><td>Auto-creates matching collection type (TreeSet->TreeSet, HashSet->HashSet, ArrayList->ArrayList) when dest is null</td></tr>
+</table>
+
+<h3>Companion: New Entry History</h3>
+<p><code>writeInsertHistoryEntriesForNewCollectionEntries()</code> recursively walks merged collections to create history entries for newly inserted child entities (whose IDs were null before merge). Handles nested collection hierarchies (e.g. invoice → positions → cost assignments).</p>
+
+<h2>Git History</h2><div class="hist"><pre>
+868d6abb7 2025 -> 2026
+a77a6570f WIP: Import of creditor invoices
+e8a5e51d4 WIP: Import of creditor invoices
+2d25df051 User comments on changes: users/groups: clone comments also for history entries
+6a32032d6 Hibernate.isInitialized(obj) -> HibernateUtils.isFullyInitialized(obj)
+</pre></div>
 </body></html>

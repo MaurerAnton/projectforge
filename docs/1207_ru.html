@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>#1207 [RU]</title>
+<style>
+body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}
+h1{border-bottom:2px solid #333;padding-bottom:.3em}
+h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}
+h3{margin-top:2em;color:#444}
+a{color:#0366d6}
+.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}
+.nav{font-size:.9em;color:#888;margin-bottom:1em}
+.meta{font-size:.9em;margin:1em 0;color:#555}
+code{background:#f0f0f0;padding:0 .2em;font-size:.93em}
+pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}
+table{border-collapse:collapse;width:100%;margin:1em 0}
+th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}
+th{background:#f5f5f5;font-weight:600}
+.hist{font-size:.85em;color:#555}
+</style>
+</head>
+<body>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">&#8592; Индекс</a> &#183; <a href="file-index.html">&#8592; Индекс файлов</a> &#183; <a href="1200.html">&#8592; Пред.</a> &#183; <a href="1202.html">След. &#8594;</a></div>
+<h1>#1207: <code>AbstractJob.kt</code></h1>
+<div class="meta"><code>projectforge-business/src/main/kotlin/org/projectforge/framework/jobs/AbstractJob.kt</code> Каркас заданий, projectforge-business/src/main/kotlin/org/projectforge/framework/jobs/AbstractJob.kt <span style="color:#888">429 строк · 280 кода · 93 комментария · 56 пустых</span></div>
+<div class="c">Абстрактный базовый класс для фоновых заданий в ProjectForge. Поддерживает стратегии постановки в очередь (нет, по очереди, по очереди и пользователю, отказ), опциональный тайм-аут (по умолчанию 120 с), отслеживание прогресса (общее/обработанное количество) и отмену через корутины Kotlin. Задания имеют жизненный цикл и предоставляют <code>readAccess</code> / <code>writeAccess</code> для проверки прав. Интегрируется с <code>UserGroupCache</code> для отображения владельца.</div>
+
+<h2>Архитектура</h2>
+<h3>Иерархия классов</h3>
+<ul>
+  <li><strong>AbstractJob</strong> — абстрактный класс, реализующий <code>Comparable&lt;AbstractJob&gt;</code></li>
+  <li>Подклассы должны реализовать <code>suspend fun run()</code></li>
+</ul>
+
+<h3>Ключевые перечисления</h3>
+<table>
+  <tr><th>Перечисление</th><th>Значения</th><th>Назначение</th></tr>
+  <tr><td><code>QueueStrategy</code></td><td>NONE, PER_QUEUE, PER_QUEUE_AND_USER, REFUSE_PER_QUEUE, REFUSE_PER_QUEUE_AND_USER</td><td>Управляет блокировкой/отказом новых заданий в той же области</td></tr>
+  <tr><td><code>Status</code></td><td>RUNNING, WAITING, FINISHED, FAILED, CANCELLED, REFUSED</td><td>Реализует <code>I18nEnum</code>; определяет порядок в списке заданий</td></tr>
+  <tr><td><code>ErrorCode</code></td><td>TIMEOUT_WHILE_WAITING, REFUSED_BY_ANOTHER_RUNNING_JOB</td><td>Причина сбоя/отказа</td></tr>
+</table>
+
+<h3>Жизненный цикл задания</h3>
+<p>Жизненный цикл управляется <code>JobHandler</code>:</p>
+<ol>
+  <li><code>addJob()</code> — задание добавлено в обработчик, статус = WAITING</li>
+  <li>Проверка очереди — сравнение с выполняющимися заданиями через <code>isBlocking()</code></li>
+  <li><code>onBeforeStart()</code> — хук перед выполнением</li>
+  <li><code>start()</code> — устанавливает статус RUNNING, вызывает <code>run()</code></li>
+  <li>При успехе: <code>onFinish()</code> → <code>onAfterFinish()</code> → <code>onAfterTermination()</code></li>
+  <li>При отмене: <code>cancel()</code> → <code>onBeforeCancel()</code> → <code>onAfterCancel()</code> → <code>onAfterTermination()</code></li>
+  <li>При сбое: <code>markJobAsFailed()</code> → <code>onAfterException()</code> → <code>onAfterTermination()</code></li>
+</ol>
+
+<h3>Ключевые свойства</h3>
+<table>
+  <tr><th>Свойство</th><th>Тип</th><th>Описание</th></tr>
+  <tr><td><code>title</code></td><td>String</td><td>Человекочитаемый заголовок для отображения/логирования</td></tr>
+  <tr><td><code>area</code></td><td>String?</td><td>Группирует задания; стратегия очереди действует в пределах одной области</td></tr>
+  <tr><td><code>ownerId</code></td><td>Long?</td><td>Пользователь, запустивший задание</td></tr>
+  <tr><td><code>id</code></td><td>Int</td><td>Автоинкрементный уникальный идентификатор задания</td></tr>
+  <tr><td><code>timeout</code></td><td>Int</td><td>Тайм-аут в мс (из параметра конструктора в секундах)</td></tr>
+  <tr><td><code>timeoutReached</code></td><td>Boolean</td><td>True, если задание превысило тайм-аут во время выполнения</td></tr>
+  <tr><td><code>isActive</code></td><td>Boolean</td><td>Удобное свойство: status==RUNNING && coroutineJob.isActive</td></tr>
+  <tr><td><code>progressPercentage</code></td><td>Int</td><td>Вычисляется из processedNumber/totalNumber</td></tr>
+  <tr><td><code>terminatedForDeletion</code></td><td>Boolean</td><td>True, если завершено более 1 часа назад (очистка)</td></tr>
+  <tr><td><code>info</code></td><td>String</td><td>Информация о статусе в формате Markdown (владелец, время, статус, заголовок)</td></tr>
+</table>
+
+<h3>Права доступа</h3>
+<ul>
+  <li><code>readAccess(user)</code> — по умолчанию делегирует <code>writeAccess(user)</code></li>
+  <li><code>writeAccess(user)</code> — абстрактный, должен быть реализован подклассом</li>
+  <li><code>isOwner</code> — проверяет, совпадает ли текущий вошедший пользователь с <code>ownerId</code></li>
+</ul>
+
+<h3>Точки интеграции</h3>
+<ul>
+  <li><strong>JobHandler</strong> — управляет заданиями, вызывает методы жизненного цикла</li>
+  <li><strong>JobHandlerScheduler</strong> — запускает <code>tidyUp()</code> каждую минуту</li>
+  <li><strong>AccessChecker</strong> — внедряется через <code>@Autowired</code></li>
+  <li><strong>Корутины</strong> — дескриптор <code>Job</code> хранится как <code>coroutinesJob</code></li>
+  <li><strong>I18n</strong> — метки статусов через <code>I18nEnum.i18nKey</code></li>
+</ul>
+
+<h2>История Git</h2><div class="hist"><pre>
+868d6abb7 2025 -> 2026
+63081666f Заголовки исходных файлов: 2024-> 2025.
+cba940301 Миграция в процессе...
+67805f2fc ThreadLocalUserContext.user -> ThreadLocalUserContext.loggedInUser (переименовано)
+4c04cfd65 КРУПНОЕ ИЗМЕНЕНИЕ! Миграция целочисленных id на Long id (включая внешние ключи и т.д.)
+b6092df09 Авторские права 2023 -> 2024
+ab45d51fa Авторские права 2001-2022 -> 2001-2023.
+163492453 WIP: Задания и записи банковских счетов.
+232a91c5a Реализован BaseUserGroupRightUtils. WIP BankingPlugin и обработка заданий.
+38bec971a ThreadLocal -> Kotlin
+09b3f0df7 WIP: Монитор заданий. ListStatisticsSupport -> MarkdownBuilder
+fcc4c67f6 WIP: Монитор заданий.
+a1646e91a WIP: Плагин банкинга (и новый модуль импорта).
+d93f61491 WIP: Плагин банкинга (и новый модуль импорта).
+cd69cc40f WIP: Плагин банкинга (и новый модуль импорта).
+f68cda98e Монитор заданий.
+67eed70e4 WIP: Плагин банкинга (и новый модуль импорта). Запущен JobHandler/монитор.
+</pre></div>
+</body>
+</html>

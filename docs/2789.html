@@ -1,166 +1,23 @@
-<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>#2789</title>
-<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}.hist{font-size:.85em;color:#555}</style></head>
-<body><div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="2788.html">← Prev</a> · <a href="2790.html">Next →</a></div>
-<h1>#2789: <code>WicketTaskFormatter.java</code></h1>
-<div class="meta">Java class, <code>projectforge-wicket/src/main/java/org/projectforge/business/task/formatter/WicketTaskFormatter.java</code></div>
-<div class="c">Java formatter business task formatter.</div>
-<h2>Git History</h2><div class="hist"><pre>868d6abb7 2025 -&gt; 2026
-63081666f Source file headers: 2024-&gt; 2025.
-a72903e36 *.java, *.kt: StringBuffer -&gt; StringBuilder.
-4c04cfd65 MAJOR-CHANGE! Migration of integer id's to Long id's (including fk's etc.)
-06828f490 Migration stuff in progress...
-b6092df09 Copyright 2023 -&gt; 2024
-ab45d51fa Copyright 2001-2022 -&gt; 2001-2023.
-83c9c7098 WIP: BigCalendar -&gt; Fullcalendar
-5f7ef41b8 Copyright 2021 -&gt; 2022
-c0f2b9de0 Tenants functionality removed everywhere (untested).
-ceb63e8a1 Source code header: (C) 2001-2021.
-a6a7aece4 Optimize Imports
-7c79f1922 Copyright of source header -&gt; 2020.
-f979e8a42 MGC-UPDATE: Update auf Version 3.0.0-SNAPSHOT
-da404549a PROJECTFORGE-3227 remove unused and duplicated code
-fc785c559 PROJECTFORGE-2645 fix access list did not work anymore</pre></div>
-<h2>Source</h2><pre>/////////////////////////////////////////////////////////////////////////////
-//
-// Project ProjectForge Community Edition
-//         www.projectforge.org
-//
-// Copyright (C) 2001-2026 Micromata GmbH, Germany (www.micromata.com)
-//
-// ProjectForge is dual-licensed.
-//
-// This community edition is free software; you can redistribute it and/or
-// modify it under the terms of the GNU General Public License as published
-// by the Free Software Foundation; version 3 of the License.
-//
-// This community edition is distributed in the hope that it will be useful,
-// but WITHOUT ANY WARRANTY; without even the implied warranty of
-// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General
-// Public License for more details.
-//
-// You should have received a copy of the GNU General Public License along
-// with this program; if not, see http://www.gnu.org/licenses/.
-//
-/////////////////////////////////////////////////////////////////////////////
-
-package org.projectforge.business.task.formatter;
-
-import org.apache.commons.lang3.Validate;
-import org.apache.wicket.request.cycle.RequestCycle;
-import org.hibernate.Hibernate;
-import org.projectforge.business.task.*;
-import org.projectforge.business.utils.HtmlHelper;
-import org.projectforge.web.common.WicketHtmlHelper;
-
-import java.util.List;
-
-public class WicketTaskFormatter extends TaskFormatter
-{
-  private static final String IMAGE_INFO_ICON = &quot;images/information.png&quot;;
-
-  /**
-   * enableLinks = false, lineThroughDeletedTasks = true
-   *
-   * @param taskId
-   * @see #getTaskPath(Long, boolean)
-   */
-  public static String getTaskPath(final RequestCycle requestCycle, final Long taskId)
-  {
-    return getTaskPath(requestCycle, taskId, true);
-  }
-
-  /**
-   * Gets the path of the task as String: ProjectForge -&amp;gt; ... -&amp;gt; database -&amp;gt; backup strategy.
-   *
-   * @param taskId
-   * @param enableLinks If true, every task title is associated with a link to EditTask.
-   */
-  public static String getTaskPath(final RequestCycle requestCycle, final Long taskId,
-      final boolean lineThroughDeletedTasks)
-  {
-    return getTaskPath(requestCycle, taskId, null, lineThroughDeletedTasks);
-  }
-
-  /**
-   * Gets the path of the task as String: ProjectForge -&amp;gt; ... -&amp;gt; database -&amp;gt; backup strategy.
-   *
-   * @param taskId
-   * @param lineThroughDeletedTasks If true, deleted task will be visualized by line through.
-   * @param ancestorTaskId          If not null, the path will shown between taskId and ancestorTaskId. If mainTaskId is not an
-   *                                ancestor of taskId, the whole path will be shown.
-   */
-  public static String getTaskPath(final RequestCycle requestCycle, final Long taskId, final Long ancestorTaskId,
-      final boolean lineThroughDeletedTasks)
-  {
-    final TaskTree taskTree = TaskTreeHelper.getTaskTree();
-    if (taskId == null || taskTree.getTaskNodeById(taskId) == null) {
-      return null;
-    }
-    final List&lt;TaskNode&gt; list = taskTree.getPath(taskId, ancestorTaskId);
-    if (list.size() &gt; 0) {
-      final StringBuilder buf = new StringBuilder();
-      int i = 0;
-      for (final TaskNode node : list) {
-        final TaskDO task = node.getTask();
-        if (i++ &gt; 0) {
-          buf.append(&quot; -&amp;gt; &quot;);
-        }
-        appendFormattedTask(requestCycle, buf, task, false, lineThroughDeletedTasks);
-      }
-      return buf.toString();
-    } else if (ancestorTaskId != null) {
-      return &quot;&quot;;
-    } else {
-      return getI18nMessage(&quot;task.path.rootTask&quot;);
-    }
-  }
-
-  /**
-   * Writes the html formatted task to the given StringBuilder.
-   *
-   * @param buf
-   * @param task
-   * @param enableLink        If true, the task has a link to the EditTask.action.
-   * @param showPathAsTooltip If true, an info icon with the whole task path as tooltip will be added.
-   */
-  public static void appendFormattedTask(final RequestCycle requestCycle, final StringBuilder buf, TaskDO task,
-      final boolean showPathAsTooltip,
-      final boolean lineThroughDeletedTask)
-  {
-    Validate.notNull(buf);
-    Validate.notNull(task);
-    if (showPathAsTooltip == true) {
-      final String taskPath = getTaskPath(requestCycle, task.getId(), null, false);
-      if (taskPath != null) {
-        WicketHtmlHelper.appendImageTag(requestCycle, buf, IMAGE_INFO_ICON, taskPath);
-      }
-    }
-    // if (enableLink == true) {
-    // htmlHelper.appendAncorStartTag(locUrlBuilder, buf,
-    // WicketUtils.getBookmarkablePageUrl(TaskEditPage.class, &quot;id&quot;, String.valueOf(task.getId())));
-    // }
-    if (Hibernate.isInitialized(task) == false) {
-      final TaskTree taskTree = TaskTreeHelper.getTaskTree();
-      task = taskTree.getTaskById(task.getId());
-    }
-    if (task.getDeleted() == true) {
-      if (lineThroughDeletedTask == true) {
-        buf.append(&quot;&lt;span&quot;);
-        HtmlHelper.attribute(buf, &quot;style&quot;, &quot;text-decoration: line-through;&quot;);
-        buf.append(&quot;&gt;&quot;);
-        buf.append(HtmlHelper.escapeXml(task.getTitle()));
-        buf.append(&quot;&lt;/span&gt;&quot;);
-      } else {
-        buf.append(HtmlHelper.escapeXml(task.getTitle())).append(&quot; (&quot;);
-        buf.append(getI18nMessage(&quot;task.deleted&quot;));
-        buf.append(&quot;)&quot;);
-      }
-    } else {
-      buf.append(HtmlHelper.escapeXml(task.getTitle()));
-    }
-    // if (enableLink == true) {
-    // htmlHelper.appendAncorEndTag(buf);
-    // }
-  }
-}</pre>
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>#2789: AbstractAjaxCallback.java</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:2em;color:#444}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.lang{font-size:.85em;color:#888;float:right}.lang a{color:#888;text-decoration:none;padding:0 .3em}.lang a.active{color:#0366d6;font-weight:600;text-decoration:underline}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}</style></head>
+<body><div class="lang"><a href="2789.html" class="active">EN</a> · <a href="2789_de.html">DE</a> · <a href="2789_ru.html">RU</a> · <a href="2789_fr.html">FR</a> · <a href="2789_es.html">ES</a></div>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="2788.html">← Prev</a> · <a href="2790.html">Next →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-wicket/src/main/java/net/ftlines/wicket/fullcalendar/callback/AbstractAjaxCallback.java" target="_blank" title="View source on GitHub">📄 source</a></div>
+<h1>#2789: <code>AbstractAjaxCallback.java</code></h1>
+<div class="meta"><code>projectforge-wicket/src/main/java/net/ftlines/wicket/fullcalendar/callback/AbstractAjaxCallback.java</code> Abstract Wicket Behavior (FullCalendar Ajax Callback base) · <code>projectforge-wicket/src/main/java/net/ftlines/wicket/fullcalendar/callback/AbstractAjaxCallback.java</code> <span style="color:#888">65 lines · 18 code · 37 comments · 10 blank</span></div>
+<div class="c">The abstract base class for all FullCalendar Ajax callback behaviors. Extends Wicket's <code>AbstractDefaultAjaxBehavior</code> and provides an essential URL/script manipulation mechanism: it appends a placeholder token (<code>&lt;PLACEHOLDER&gt;</code>) to both the callback URL and callback script, which concrete subclasses replace with event-specific data (like event IDs, source UUIDs, or date ranges) through the abstract <code>configureCallbackScript</code> method. This enables dynamically-generated callback scripts that embed event identifiers directly in the JavaScript function body, rather than relying on Wicket's standard parameter-passing mechanism, which is necessary because FullCalendar invokes these callbacks with its own argument convention.</div>
+<h2>Architecture</h2>
+<h3>Placeholder Pattern</h3>
+<p>The core idea: Wicket generates a callback URL like <code>/wicket/page?3-1.IBehaviorListener.0-calendar&lt;PLACEHOLDER&gt;</code> and a callback script like <code>function() { Wicket.Ajax.ajax({'u':'...&lt;PLACEHOLDER&gt;'}) }</code>. The <code>configureCallbackScript(String script, String urlTail)</code> method (implemented by subclasses) replaces <code>&lt;PLACEHOLDER&gt;</code> in the script with FullCalendar-appropriate logic and the <code>urlTail</code> parameter (which is the full URL with placeholder) with the appropriately modified URL.</p>
+<p>The placeholder is appended to <code>getCallbackUrl()</code> via string concatenation — Wicket's URL encoding preserves it literally. The <code>getCallbackScript()</code> override intercepts Wicket's script generation and passes both the script and the placeholder-augmented URL to the subclass for customization.</p>
+<h3>Subclass Contract</h3>
+<p>Concrete callbacks must implement <code>configureCallbackScript(String script, String urlTail)</code>. The <code>script</code> parameter is the Wicket-generated callback JavaScript; <code>urlTail</code> is the full callback URL with <code>&lt;PLACEHOLDER&gt;</code> appended. Subclasses replace the placeholder with event-specific JavaScript expressions (e.g., concatenating an event ID variable from FullCalendar's callback arguments).</p>
+<h3>Calendar Access</h3>
+<p>The <code>getCalendar()</code> helper casts <code>getComponent()</code> to <code>FullCalendar</code>, providing subclasses with access to the calendar instance, its configuration, and its event manager. This is used by callbacks that need to look up events or modify the calendar state.</p>
+<h3>Package-Private Visibility</h3>
+<p>The class and its abstract methods are package-private — callbacks are internal to the <code>callback</code> package. External code interacts through the <code>FullCalendar</code> template methods and the <code>Config</code> callback model, not directly with behavior classes.</p>
+<h2>Git History</h2>
+<div class="hist"><table>
+<tr><th>Commit</th><th>What changed</th></tr>
+<tr><td><code>868d6abb7</code> through <code>ceb63e8a1</code></td><td>Six annual copyright header updates. The placeholder-based callback URL/script manipulation pattern has been stable — it encapsulates the core integration challenge between Wicket's Ajax behavior system and FullCalendar's JavaScript callback conventions.</td></tr>
+</table></div>
 </body></html>

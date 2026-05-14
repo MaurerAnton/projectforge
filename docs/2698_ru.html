@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>#2698: FormPage.jsx [RU]</title>
+<style>
+body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}
+h1{border-bottom:2px solid #333;padding-bottom:.3em}
+h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}
+h3{margin-top:2em;color:#444}
+a{color:#0366d6}
+.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}
+.nav{font-size:.9em;color:#888;margin-bottom:1em}
+.lang{font-size:.85em;color:#888;float:right}
+.lang a{color:#888;text-decoration:none;padding:0 .3em}
+.lang a.active{color:#0366d6;font-weight:600;text-decoration:underline}
+.meta{font-size:.9em;margin:1em 0;color:#555}
+code{background:#f0f0f0;padding:0 .2em;font-size:.93em}
+pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}
+table{border-collapse:collapse;width:100%;margin:1em 0}
+th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}
+th{background:#f5f5f5;font-weight:600}
+.hist{font-size:.85em;color:#555}
+</style>
+</head>
+<body>
+<div class="lang"><a href="2698.html">EN</a> · <a href="2698_de.html">DE</a> · <a href="2698_ru.html" class="active">RU</a> · <a href="2698_fr.html">FR</a> · <a href="2698_es.html">ES</a></div>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Индекс</a> · <a href="file-index.html">← Индекс файлов</a> · <a href="292.html">← Предыдущий</a> · <a href="3256.html">Следующий →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-webapp/src/containers/page/form/FormPage.jsx" target="_blank" title="Просмотреть исходный код на GitHub">📄 исходник</a></div>
+<h1>#2698: <code>FormPage.jsx</code></h1>
+<div class="meta"><code>projectforge-webapp/src/containers/page/form/FormPage.jsx</code> Тип: JavaScript/React · Роль: Страница · Источник: projectforge-webapp/src/containers/page/form/FormPage.jsx <span style="color:#888">191 строка · 175 кода · 4 комментария · 12 пустых</span></div>
+<div class="c">Компонент React-формы, обрабатывающий редактирование сущностей, валидацию, расположение полей и действия отправки/отмены.</div>
+<h2>Структура кода</h2>
+<p>Используемые хуки: <code>Dispatch</code>, <code>Params</code>, <code>Selector</code>, <code>Location</code>, <code>SearchParams</code>, <code>Effect</code>, <code>Memo</code></p>
+<p>Импорты из: <code>../../../actions</code>, <code>../../../components/base/dynamicLayout</code>, <code>../../../components/base/page/edit/TabNavigation</code>, <code>../../../components/design</code>, <code>../../../components/design/loading-container</code>, <code>../../../utilities/layout</code>, <code>../../../utilities/rest</code>, <code>../../ProjectForge.module.scss</code>, <code>./history</code>, <code>prop-types</code>, <code>react</code>, <code>react-redux</code>, <code>react-router</code></p>
+<p>Имеет PropTypes для: <code>FormPage</code></p>
+<p>Использует CSS-модули для стилизации.</p>
+<h2>Исходный код (сокращённый)</h2>
+<pre>import PropTypes from &#x27;prop-types&#x27;;
+import React from &#x27;react&#x27;;
+import { useDispatch, useSelector } from &#x27;react-redux&#x27;;
+import { useLocation, useParams, useSearchParams } from &#x27;react-router&#x27;;
+import {
+    callAction,
+    loadFormPage,
+    setCurrentData,
+    setCurrentVariables,
+    switchFromCurrentCategory,
+} from &#x27;../../../actions&#x27;;
+import DynamicLayout from &#x27;../../../components/base/dynamicLayout&#x27;;
+import TabNavigation from &#x27;../../../components/base/page/edit/TabNavigation&#x27;;
+import { Alert, Container, TabContent, TabPane } from &#x27;../../../components/design&#x27;;
+import LoadingContainer from &#x27;../../../components/design/loading-container&#x27;;
+import { getTranslation } from &#x27;../../../utilities/layout&#x27;;
+import { getServiceURL } from &#x27;../../../utilities/rest&#x27;;
+import style from &#x27;../../ProjectForge.module.scss&#x27;;
+import FormHistory from &#x27;./history&#x27;;
+
+function FormPage(
+    {
+        isPublic = false,
+    },
+) {
+    const dispatch = useDispatch();
+    const onCallAction = (...args) =&gt; dispatch(callAction(...args));
+    const onCategorySwitch = (...args) =&gt; dispatch(switchFromCurrentCategory(...args));
+    const onDataChange = (...args) =&gt; dispatch(setCurrentData(...args));
+    const onNewFormPage = (...args) =&gt; dispatch(loadFormPage(...args));
+    const onVariablesChange = (...args) =&gt; dispatch(setCurrentVariables(...args));
+    const {
+        type,
+        category: currentCategory,
+        id,
+        tab,
+    } = useParams();
+    const category = useSelector(({ form }) =&gt; form.categories[currentCategory]) || {};
+    const {
+        data,
+        isFetching,
+        ui,
+        validationErrors,
+        variables,
+    } = category;
+    const location = useLocation();
+    const [searchParams] = useSearchParams();
+    const { userAccess } = ui || {};
+
+    React.useEffect(
+        () =&gt; {
+            // Проверка, является ли это программной навигацией с флагом noReload
+            // Перезагрузки браузера всегда должны получать свежие данные
+            const isNoReloadNavigation = location.state
+                &amp;&amp; location.state.noReload
+                &amp;&amp; window.performance
+                &amp;&amp; window.performance.navigation.type !== 1; // 1 = TYPE_RELOAD
+
+            if (isNoReloadNavigation) {
+                onCategorySwitch(
+                    currentCategory,
+                    location.state.newVariables || {},
+                    location.state.merge,
+                );
+            } else {
+                onNewFormPage(
+                    currentCategory,
+                    id,
+                    getServiceURL(
+                        `${isPublic ? &#x27;/rsPublic/&#x27; : &#x27;&#x27;}${currentCategory}/${type || &#x27;dynamic&#x27;}`,
+                        {
+                            ...Object.fromEntries(searchParams.entries()),
+                            id,
+                        },
+                    ),
+                    location.state,
+                );
+            }
+        },
+        [
+            currentCategory,
+            id,
+            location.state &amp;&amp; location.state.noReload,
+            location.state &amp;&amp; location.state.newVariables,
+        ],
+    );
+
+    const globalValidation = React.useMemo(() =&gt; {
+        if (validationErrors === undefined) {
+            return null;
+        }
+        const globalErrors = validationErrors.filter((entry) =&gt; entry.fieldId === undefined);
+
+        if (globalErrors.length === 0) {
+            return null;
+        }
+
+        return (
+            &lt;Alert color=&quot;danger&quot;&gt;
+                &lt;ul&gt;
+                    {globalErrors.map(({ message, messageId }) =&gt; (
+                        &lt;li key={`form-page-global-validation-${messageId}`}&gt;
+                            {message}
+                        &lt;/li&gt;
+                    ))}
+                &lt;/ul&gt;
+            &lt;/Alert&gt;
+        );
+    }, [validationErrors]);
+
+    if (ui === undefined || ui.title === undefined) {
+        return &lt;LoadingContainer loading /&gt;;
+    }
+
+    // Формируем базовый URL из текущего местоположения для сохранения вложенных маршрутов (например, /calendar/)
+    // Удаляем суффикс /history, если он присутствует, и удаляем параметры запроса
+    const formBaseUrl = location.pathname.replace(/\/history$/, &#x27;&#x27;).split(&#x27;?&#x27;)[0];
+    const tabs = [
+        {
+            id: &#x27;form&#x27;,
+// ... (сокращено, всего 191 строка)</pre>
+
+<h2>История Git</h2>
+<div class="hist"><pre>bf988bc6d Устранение 43 уязвимостей npm: react-scripts→Vite, ESLint 9, очистка зависимостей, исправления ошибок
+d61a30129 FormPage.jsx: исправлен бесконечный крутящийся индикатор.
+05bcb43b9 Исправлена обработка записей истории в модальных диалогах.
+f02617502 HistoryEntry.jsx: diffSummary, редактирование пользовательского комментария отображается только при наличии.
+3490f27f1 исправлена страница календаря и табеля учёта времени</pre></div>
+</body>
+</html>

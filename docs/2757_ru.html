@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>#2757: rest.js [RU]</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:2em;color:#444}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.lang{font-size:.85em;color:#888;float:right}.lang a{color:#888;text-decoration:none;padding:0 .3em}.lang a.active{color:#0366d6;font-weight:600;text-decoration:underline}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}.warn{background:#fff3cd;border-left:3px solid #ffc107;padding:.5em 1em;margin:1em 0}.tip{background:#d4edda;border-left:3px solid #28a745;padding:.5em 1em;margin:1em 0}</style>
+</head>
+<body>
+<div class="lang"><a href="2757.html">EN</a> · <a href="2757_de.html">DE</a> · <a href="2757_ru.html" class="active">RU</a> · <a href="2757_fr.html">FR</a> · <a href="2757_es.html">ES</a></div>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Индекс</a> · <a href="file-index.html">← Индекс файлов</a> · <a href="2756.html">← Пред.</a> · <a href="2758.html">След. →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-webapp/src/utilities/rest.js" target="_blank" title="Посмотреть исходник на GitHub">📄 исходник</a></div>
+
+<h1>#2757: <code>rest.js</code></h1>
+<div class="meta"><code>projectforge-webapp/src/utilities/rest.js</code> <strong>JavaScript / React утилита</strong> — центральный REST API клиент для React-фронтенда ProjectForge. Исходник: <code>projectforge-webapp/src/utilities/rest.js</code> <span style="color:#888">88 строк · 68 кода · 7 комментариев · 13 пустых</span></div>
+
+<div class="c">Каждый React-компонент, взаимодействующий с бэкендом ProjectForge, проходит через этот модуль. Он предоставляет тонкую обёртку над <code>fetch</code> API с построением URL с учётом окружения, аутентификацией через сессионные куки (<code>credentials: 'include'</code>), адаптивным дебаунсингом для медленных соединений и обработкой JSON-запросов/ответов. Это <strong>единая точка контакта</strong> между React SPA и REST-слоем Spring Boot — во фронтенде нет другого HTTP-клиента.</div>
+
+<h2>Архитектура</h2>
+
+<h3>Конвейер построения URL</h3>
+<div class="c">Модуль строит REST URL через трёхэтапный конвейер, каждый этап решает свою задачу:<br><br>
+<strong>Этап 1 — baseURL:</strong> Определяет источник сервера. В разработке (<code>import.meta.env.DEV</code>) указывает на <code>http://localhost:8080</code> — dev-сервер Spring Boot. В продакшене возвращает пустую строку, делая все URL относительными к источнику страницы (CORS не требуется). Проверка <code>MODE !== 'test'</code> предотвращает утечку URL тестового сервера в Jest-тесты.<br><br>
+<strong>Этап 2 — getServiceURL / baseRestURL:</strong> Добавляет префикс REST. Если URL сервиса начинается с <code>/</code> (абсолютный от корня), используется <code>baseURL</code> напрямую. В противном случае используется <code>baseRestURL</code>, который добавляет <code>/rs</code> — стандартный префикс REST-эндпоинтов ProjectForge. Это позволяет использовать как <code>getServiceURL('/some/path')</code> (абсолютный), так и <code>getServiceURL('user/list')</code> (относительно /rs).<br><br>
+<strong>Этап 3 — evalServiceURL / createQueryParams:</strong> Добавляет параметры запроса. Фильтрует значения <code>undefined</code>, кодирует каждое значение и корректно использует <code>?</code> или <code>&amp;</code> в зависимости от того, содержит ли URL уже строку запроса.</div>
+
+<h3>Стратегия дебаунсинга — учёт Save-Data</h3>
+<div class="c">Константа <code>debouncedWaitTime</code> адаптируется на основе клиентского сигнала <strong>Save-Data</strong> (<a href="https://developer.mozilla.org/en-US/docs/Web/API/NetworkInformation/saveData">MDN</a>). Когда пользователь включил режим экономии данных (часто на мобильных устройствах), время ожидания увеличивается с 250 мс до 1000 мс — снижая частоту запросов на лимитированных соединениях. Это используется компонентами автодополнения (поиск адресов, пользователей, задач) для ограничения API-вызовов во время ввода.<br><br>
+Реализация защитная: <code>navigator && navigator.connection && navigator.connection.saveData</code> — три проверки перед доступом к свойству, так как <code>navigator.connection</code> доступен не во всех браузерах (Firefox, Safari).</div>
+
+<h2>Экспортируемый API</h2>
+<table>
+<tr><th>Экспорт</th><th>Тип</th><th>Назначение</th></tr>
+<tr><td><code>debouncedWaitTime</code></td><td>const (250 или 1000)</td><td>Адаптивный дебаунс для полей автозаполнения на основе заголовка Save-Data</td></tr>
+<tr><td><code>baseURL</code></td><td>const (строка)</td><td>Источник сервера — localhost:8080 в dev, пусто в prod</td></tr>
+<tr><td><code>baseRestURL</code></td><td>const (строка)</td><td>baseURL + "/rs" — стандартный префикс REST-эндпоинтов</td></tr>
+<tr><td><code>createQueryParams(obj)</code></td><td>функция → строка</td><td>Строит <code>key=val&amp;key=val</code> из объекта, фильтрует undefined значения</td></tr>
+<tr><td><code>evalServiceURL(url, params)</code></td><td>функция → строка</td><td>Добавляет параметры запроса к URL, обрабатывает существующие ? и &amp;</td></tr>
+<tr><td><code>getServiceURL(url, params)</code></td><td>функция → строка</td><td>Полный построитель URL — добавляет base + REST префикс, добавляет параметры</td></tr>
+<tr><td><code>handleHTTPErrors(res)</code></td><td>функция → Response</td><td>Выбрасывает ошибку при не-2xx ответах, пропускает при успехе</td></tr>
+<tr><td><code>fetchJsonGet(url, params, cb)</code></td><td>функция → Promise</td><td>GET с JSON-ответом, парсит и передаёт в колбэк</td></tr>
+<tr><td><code>fetchJsonPost(url, body, cb)</code></td><td>функция → Promise</td><td>POST с JSON-сериализованным телом и JSON-ответом</td></tr>
+<tr><td><code>fetchGet(url, params, cb)</code></td><td>функция → Promise</td><td>Простой GET с опциональным колбэком (без JSON-парсинга)</td></tr>
+<tr><td><code>getObjectFromQuery(str)</code></td><td>функция → объект</td><td>Обратная операция createQueryParams — парсит <code>?key=val&amp;...</code> в объект</td></tr>
+</table>
+
+<h2>Обработка ошибок</h2>
+<div class="c">Все три fetch-функции используют одинаковый шаблон обработки ошибок: <code>.catch((error) => alert('Внутренняя ошибка: ' + error))</code>. Директива <code>/* eslint-disable no-alert */</code> в начале файла подтверждает, что <code>alert()</code> обычно запрещён ESLint, но здесь используется намеренно как уведомление пользователя в крайнем случае.<br><br>
+Это <strong>осознанный компромисс</strong>: правильная система тостов (на Redux, с i18n) была бы лучше с точки зрения UX, но <code>rest.js</code> находится на дне графа зависимостей — он не может импортировать Redux или React-компоненты. Использование <code>alert()</code> означает, что обработчик ошибок не имеет зависимостей и работает в любом контексте (даже вне жизненного цикла React). Директива <code>/* eslint-disable no-alert */</code> была добавлена в коммите <code>ac30e55f7</code> для подавления предупреждения линтера об этом намеренном выборе.</div>
+
+<h2>Аутентификация</h2>
+<div class="c">Все fetch-вызовы используют <code>credentials: 'include'</code> — это указывает браузеру отправлять HTTP-only сессионные куки с каждым запросом. Это стандартный механизм аутентификации для SPA, обслуживаемых с того же источника, что и API. Сессионная кука устанавливается бэкендом Spring Boot при входе и автоматически включается браузером. Нет управления токенами, нет заголовка Authorization и нет клиентской логики сессии — браузер обрабатывает это прозрачно через флаг <code>credentials</code>.</div>
+
+<h2>Использование во фронтенде</h2>
+<div class="c">Этот модуль импортируется практически каждым React-компонентом, который получает данные. Типичные шаблоны использования:</div>
+<pre>// В React-компоненте:
+import { fetchJsonGet, fetchJsonPost } from '../utilities/rest';
+
+// Загрузка списка
+fetchJsonGet('user/list', { search: 'kai' }, (data) => setUsers(data));
+
+// Сохранение сущности
+fetchJsonPost('user/save', { id: 1, username: 'kai' }, (data) => console.log('сохранено', data));
+
+// Простой GET для загрузки файла
+fetchGet('export/excel', { id: 123 }, () => setDownloading(false));</pre>
+
+<h2>Потребители</h2>
+<div class="c">Модуль импортируется во всём React-фронтенде — адресная книга, календарь, табели учёта времени, управление пользователями, опросы, скрипты и все UI плагины. На момент написания около 40+ React-компонентов импортируют из этого файла. Любое изменение логики построения URL (например, изменение префикса REST с <code>/rs</code> на что-то другое) затронет каждый API-вызов в приложении.</div>
+
+<h2>История Git</h2>
+<div class="hist">
+<table>
+<tr><th>Коммит</th><th>Что изменилось в этом файле</th></tr>
+<tr><td><code>bf988bc6d</code></td><td><strong>Миграция с React-scripts на Vite.</strong> Определение окружения изменилось с <code>process.env.NODE_ENV === 'development'</code> (соглашение CRA) на <code>import.meta.env.DEV && import.meta.env.MODE !== 'test'</code> (соглашение Vite). Добавленная проверка <code>MODE !== 'test'</code> предотвращает указание Jest на localhost:8080 во время тестов — распространённая ошибка при миграции с CRA на Vite, где режим тестового окружения — 'test', а не 'development'.</td></tr>
+<tr><td><code>823ef0992</code></td><td><strong>Защитная проверка колбэка в <code>fetchGet</code>.</strong> Изменено с <code>.then(() => callback())</code> на <code>.then(() => { if (typeof callback === 'function' && callback()); })</code>. Функция <code>fetchGet</code> имеет опциональный колбэк — при вызове без него (например, запросы "забыл и забыл") старый код выбрасывал <code>TypeError: callback is not a function</code>. Проверка молча пропускает колбэк, если он не функция.</td></tr>
+<tr><td><code>253b9f38b</code></td><td><strong>Форматирование кода.</strong> Многострочные цепочки fetch-вызовов преобразованы в однострочные. Было: <code>fetch(\n    getServiceURL(...), {\n        method: 'GET',\n        ...</code>. Стало: <code>fetch(getServiceURL(...), { method: 'GET', ...</code>. Уменьшен визуальный шум, поведение не изменилось.</td></tr>
+<tr><td><code>ac30e55f7</code></td><td><strong>Добавлено подавление ESLint.</strong> Вставлено <code>/* eslint-disable no-alert */</code> в начале файла. Обработчики ошибок используют <code>alert()</code> для уведомления пользователя об ошибках, что запрещено рекомендуемой конфигурацией ESLint. Подавление подтверждает, что это намеренно — механизм уведомления об ошибках без зависимостей для модуля на дне графа зависимостей.</td></tr>
+<tr><td><code>bbd81edc3</code></td><td><strong>Форматирование под ESLint.</strong> Стрелочные функции изменены с <code>params => ...</code> на <code>(params) => ...</code> (с круглыми скобками для одного параметра). Избыточное тело функции в <code>getServiceURL</code> удалено — функция ранее была определена с <code>function getServiceURL(...) { ... }</code>, и переписывание было только изменением форматирования.</td></tr>
+</table>
+</div>
+
+<h2>Проектные решения</h2>
+<table>
+<tr><th>Решение</th><th>Почему</th><th>Компромисс</th></tr>
+<tr><td>Без Axios, чистый <code>fetch</code></td><td>Ноль зависимостей. Модуль занимает ~80 строк и покрывает все нужды фронтенда. Добавление Axios (~14 КБ в gzip) ради перехватчиков и автоматического JSON-парсинга не оправдано для трёх HTTP-методов.</td><td>Нет перехватчиков запросов/ответов — обновление токена аутентификации потребовало бы собственного кода. Сейчас не нужно, так как аутентификация основана на куках.</td></tr>
+<tr><td>Колбэки вместо возврата промисов</td><td>Исторически. Когда этот модуль был написан (2019), фронтенд использовал классовые компоненты с <code>this.setState</code> в колбэках. Возврат промисов потребовал бы <code>.then(data => this.setState(...))</code> в каждом потребителе — шаблон с колбэками был проще в то время.</td><td>Сложнее объединять в цепочки, сложнее использовать с async/await. Потребители должны передавать колбэки, даже если им просто нужны данные. Современная переработка возвращала бы промисы.</td></tr>
+<tr><td><code>alert()</code> для обработки ошибок</td><td>Ноль зависимостей, работает в любом контексте. Правильная система тостов потребовала бы импорта React/Redux — создавая риск циклических зависимостей.</td><td>Некрасиво, не поддерживает i18n, блокирует поток UI. Лучше было бы использовать отложенный эмиттер событий ошибок: <code>window.dispatchEvent(new CustomEvent('rest:error', {detail: error}))</code> — обрабатываемый React-границей ошибок или компонентом тостов.</td></tr>
+<tr><td>Дебаунс с учётом <code>saveData</code></td><td>Прогрессивное улучшение. Пользователи с лимитированными соединениями (мобильные, развивающиеся страны) получают более медленный дебаунс — меньше API-вызовов, меньше трафика. Пользователи с безлимитными соединениями получают более быстрый дебаунс — более отзывчивый автокомплит.</td><td>Поддержка браузеров ограничена — <code>navigator.connection</code> доступен только в Chromium. Пользователи Firefox/Safari всегда получают значение по умолчанию 250 мс. Отказоустойчивость работает корректно.</td></tr>
+</table>
+
+</body>
+</html>

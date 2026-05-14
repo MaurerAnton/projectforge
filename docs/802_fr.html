@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>#802: AbstractAggregatedValues.java [FR]</title>
+<style>
+body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}
+h1{border-bottom:2px solid #333;padding-bottom:.3em}
+h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}
+h3{margin-top:2em;color:#444}
+a{color:#0366d6}
+.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}
+.nav{font-size:.9em;color:#888;margin-bottom:1em}
+.lang{font-size:.85em;color:#888;float:right}
+.lang a{color:#888;text-decoration:none;padding:0 .3em}
+.lang a.active{color:#0366d6;font-weight:600;text-decoration:underline}
+.meta{font-size:.9em;margin:1em 0;color:#555}
+code{background:#f0f0f0;padding:0 .2em;font-size:.93em}
+pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}
+table{border-collapse:collapse;width:100%;margin:1em 0}
+th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}
+th{background:#f5f5f5;font-weight:600}
+.hist{font-size:.85em;color:#555}
+</style>
+</head>
+<body>
+<div class="lang"><a href="802.html">EN</a> · <a href="802_de.html">DE</a> · <a href="802_ru.html">RU</a> · <a href="802_fr.html" class="active">FR</a> · <a href="802_es.html">ES</a></div>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← Index des fichiers</a> · <a href="801.html">← Précédent</a> · <a href="803.html">Suivant →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/java/org/projectforge/statistics/AbstractAggregatedValues.java" target="_blank" title="Voir la source sur GitHub">📄 source</a></div>
+<h1>#802: <code>AbstractAggregatedValues.java</code></h1>
+<div class="meta"><code>projectforge-business/src/main/java/org/projectforge/statistics/AbstractAggregatedValues.java</code> Classe de base abstraite, projectforge-business/src/main/java/org/projectforge/statistics/AbstractAggregatedValues.java <span style="color:#888">146 lignes · 85 code · 43 commentaires · 18 vides</span></div>
+
+<div class="c"><h2>Classe de base d'agrégation statistique</h2>
+<p><strong>Une classe de base abstraite générique pour accumuler des valeurs agrégées dans le temps.</strong> Utilisée par le module de statistiques et spécifiquement par <a href="171.html">LiquidityForecast</a> pour les calculs de délais de paiement pondérés. Les sous-classes (<code>IntAggregatedValues</code>, <code>BigDecimalAggregatedValues</code>) fournissent des implémentations spécifiques aux types.</p>
+<p>Le paramètre générique <code>&lt;T&gt;</code> permet d'effectuer des opérations arithmétiques sur n'importe quel type numérique sans duplication de code. La classe stocke deux <code>LinkedList</code> parallèles — une pour les valeurs, une pour les poids — permettant à la fois des moyennes simples et des moyennes pondérées sur le même ensemble de données.</p></div>
+
+<div class="c"><h2>Patron de méthode template</h2>
+<p>La classe implémente le patron <strong>Template Method</strong>. Les algorithmes principaux (<code>getAverage()</code>, <code>getWeightedAverage()</code>) sont définis dans la classe abstraite, tandis que l'arithmétique spécifique au type est déléguée aux sous-classes via six méthodes abstraites :</p>
+<table>
+<tr><th>Méthode abstraite</th><th>Objectif</th></tr>
+<tr><td><code>getZero()</code></td><td>Retourne l'élément neutre additif pour le type T (ex. <code>0</code> ou <code>BigDecimal.ZERO</code>)</td></tr>
+<tr><td><code>sum(T, T)</code></td><td>Additionne deux valeurs de type T</td></tr>
+<tr><td><code>convert(int)</code></td><td>Convertit un compte <code>int</code> en type T pour la division</td></tr>
+<tr><td><code>divide(T, T)</code></td><td>Divise la somme par le compte/poids</td></tr>
+<tr><td><code>multiply(T, T)</code></td><td>Multiplie la valeur par le poids (pour la moyenne pondérée)</td></tr>
+<tr><td><code>isZero(T)</code></td><td>Vérifie si une valeur est zéro (protège contre la division par zéro)</td></tr>
+</table></div>
+
+<div class="c"><h2>Mise en cache par indicateur de modification (dirty flag)</h2>
+<p>Les résultats de <code>average</code> et <code>weightedAverage</code> sont calculés paresseusement et mis en cache à l'aide d'un <strong>indicateur de modification</strong>. Deux champs booléens (<code>averageDirty</code>, <code>weightedAverageDirty</code>) suivent si la valeur en cache est obsolète. L'appel à <code>add()</code> définit les deux indicateurs à <code>true</code>. Les valeurs en cache ne sont recalculées que lorsque <code>getAverage()</code> ou <code>getWeightedAverage()</code> est appelé et que l'indicateur correspondant est défini.</p>
+<p>Cette optimisation évite de recalculer les moyennes à chaque ajout, ce qui est important lorsque de nombreuses valeurs sont ajoutées en séquence avant que la moyenne ne soit demandée.</p></div>
+
+<div class="c"><h2>API fluide (chaînage de méthodes)</h2>
+<p>Les surcharges de <code>add()</code> et <code>clear()</code> retournent <code>this</code>, permettant un chaînage fluide :</p>
+<pre>aggregatedValues.add(val1).add(val2, weight2).add(val3).getWeightedAverage();</pre>
+</div>
+
+<div class="c"><h2>Contexte d'utilisation : LiquidityForecast</h2>
+<p>Dans <a href="171.html">LiquidityForecast</a>, cette classe est utilisée pour calculer le délai de paiement moyen pondéré sur plusieurs positions de facture. Chaque position apporte une valeur (montant) et un poids (jours jusqu'au paiement). La moyenne pondérée donne un délai de paiement représentatif unique pour la prévision.</p></div>
+
+<h2>Historique Git</h2><div class="hist"><pre>868d6abb7 2025 -> 2026
+63081666f En-têtes des fichiers source : 2024 -> 2025.
+b6092df09 Copyright 2023 -> 2024
+ab45d51fa Copyright 2001-2022 -> 2001-2023.
+5f7ef41b8 Copyright 2021 -> 2022
+ceb63e8a1 En-tête du code source : (C) 2001-2021.
+7c79f1922 Copyright de l'en-tête source -> 2020.
+73a9755df Nettoyage de code : blocs catch réduits, opérateur diamant, StringBuilder, list.sort
+000ca723d Suppression des expressions booléennes inutiles (business)
+dd5ca38ac Copyright de tous les en-têtes de fichiers Java mis à jour ou créés.</pre></div>
+</body>
+</html>

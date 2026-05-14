@@ -2,76 +2,42 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>#928: EmployeeServiceSupport.kt</title>
+<title>#928: EmployeeScriptingService.kt</title>
 <style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:2em;color:#444}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}</style>
 </head>
 <body>
-<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="927.html">← Prev</a> · <a href="929.html">Next →</a></div>
-<h1>#928: <code>EmployeeServiceSupport.kt</code></h1>
-<div class="meta">Type: Spring Service (internal) · Purpose: Internal implementation of EmployeeService — validation, persistence, and lookup logic for time-dependent attributes · Path: <code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/EmployeeServiceSupport.kt</code></div>
-<div class="c">The implementation engine behind <code>EmployeeService</code>. Marked <code>internal</code> — not accessible outside the <code>fibu</code> package. Contains all the actual logic for querying, validating, inserting, updating, soft-deleting, and undeleteing <code>EmployeeValidSinceAttrDO</code> entries. Also resolves current attribute values (annual leave, weekly hours, status) from the validity-period entries.</div>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="927.html">← Prev</a> · <a href="929.html">Next →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/kotlin/org/projectforge/business/fibu/EmployeeScriptingService.kt" target="_blank" title="View source on GitHub">📄 source</a></div>
+<h1>#928: <code>EmployeeScriptingService.kt</code></h1>
+<div class="meta"><code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/EmployeeScriptingService.kt</code> Type: Scripting Proxy Service · Purpose: Read-only wrapper around EmployeeService for Groovy/Kotlin script access · Path: <code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/EmployeeScriptingService.kt</code> <span style="color:#888">198 lines · 66 code · 117 comments · 15 blank</span></div>
+<div class="c">Scripting proxy that wraps <code>EmployeeService</code> providing <strong>read-only</strong> access to employee business logic for Groovy/Kotlin scripts. Available in scripts as: <code>employeeService</code>. Exposes time-dependent attribute lookups, active-status checks, employee search, and monthly report generation. This is the newer, preferred scripting interface compared to <code>EmployeeScriptingDao</code>.</div>
 
 <h2>Architecture &amp; Design</h2>
 
-<h3>Dependencies</h3>
+<h3>Delegation Pattern</h3>
+<p>Every method delegates directly to the underlying <code>EmployeeService</code> instance (constructor-injected as <code>__employeeService</code>). The proxy follows the same pattern as <code>ScriptingDao</code> but wraps a service instead of a DAO — providing business logic rather than just entity access.</p>
+
+<h3>Exposed Methods</h3>
 <table>
-<tr><th>Dependency</th><th>Role</th></tr>
-<tr><td><code>BaseDOPersistenceService</code></td><td>Generic CRUD operations (<code>insert</code>, <code>update</code>, <code>markAsDeleted</code>, <code>undelete</code>) with access-check support.</td></tr>
-<tr><td><code>EmployeeCache</code></td><td>Invalidated after every mutation (<code>setExpired()</code>) to force cache refresh.</td></tr>
-<tr><td><code>EmployeeDao</code></td><td>Entity lookup and access-check delegation (<code>checkLoggedInUserSelectAccess</code>, <code>checkLoggedInUserInsertAccess</code>, <code>checkLoggedInUserUpdateAccess</code>).</td></tr>
-<tr><td><code>PfPersistenceService</code></td><td>Direct query execution for <code>ValidSinceAttr</code> lookups and validations.</td></tr>
+<tr><th>Method</th><th>Underlying Service Call</th><th>Purpose</th></tr>
+<tr><td><code>getWeeklyWorkingHours(employee)</code></td><td><code>EmployeeService.getWeeklyWorkingHours(employee)</code></td><td>Weekly hours valid today</td></tr>
+<tr><td><code>getWeeklyWorkingHours(employee, validAtDate, checkAccess)</code></td><td><code>EmployeeService.getWeeklyWorkingHours(employee, validAtDate, checkAccess)</code></td><td>Weekly hours at historical date — CRITICAL for scripts needing historical data</td></tr>
+<tr><td><code>getAnnualLeaveDays(employee)</code></td><td><code>EmployeeService.getAnnualLeaveDays(employee)</code></td><td>Annual leave valid today</td></tr>
+<tr><td><code>getAnnualLeaveDays(employee, validAtDate, checkAccess)</code></td><td><code>EmployeeService.getAnnualLeaveDays(employee, validAtDate, checkAccess)</code></td><td>Annual leave at historical date</td></tr>
+<tr><td><code>isEmployeeActive(employee, showRecentlyLeavers)</code></td><td><code>EmployeeService.isEmployeeActive()</code></td><td>Active-status check</td></tr>
+<tr><td><code>getEmployeeStatus(employee, checkAccess)</code></td><td><code>EmployeeService.getEmployeeStatus()</code></td><td>Current <code>EmployeeStatus</code> enum</td></tr>
+<tr><td><code>selectAllActive(checkAccess, showRecentLeft)</code></td><td><code>EmployeeService.selectAllActive()</code></td><td>All active employees</td></tr>
+<tr><td><code>findByUserId(userId)</code></td><td><code>EmployeeService.findByUserId()</code></td><td>Lookup by user ID</td></tr>
+<tr><td><code>findByStaffnumber(staffnumber)</code></td><td><code>EmployeeService.findByStaffnumber()</code></td><td>Lookup by staff number (Int and String overloads)</td></tr>
+<tr><td><code>selectAllValidSinceAttrs(employee, type, deleted, checkAccess)</code></td><td><code>EmployeeService.selectAllValidSinceAttrs()</code></td><td>All time-dependent attributes with optional filtering</td></tr>
+<tr><td><code>getReportOfMonth(year, month, user)</code></td><td><code>EmployeeService.getReportOfMonth()</code></td><td>Monthly employee report with aggregated timesheet data</td></tr>
 </table>
 
-<h3>Query Methods</h3>
-<ul>
-<li><strong><code>findValidSinceAttr(id, expectedType, checkAccess)</code></strong> — Simple entity lookup by ID with optional type validation (throws <code>IllegalArgumentException</code> if type mismatch).</li>
-<li><strong><code>selectAllValidSinceAttrs(employee, type, deleted, checkAccess)</code></strong> — Core query: fetches all <code>ValidSinceAttr</code> for an employee, optionally filtered by type and deletion status. Ordered by <code>validSince DESC</code>.</li>
-<li><strong><code>selectAnnualLeaveDayEntries()</code></strong> / <strong><code>selectWeeklyWorkingHoursEntries()</code></strong> — Convenience wrappers filtering by <code>ANNUAL_LEAVE</code> or <code>WEEKLY_HOURS</code> type. Available with <code>employeeId</code> or <code>EmployeeDO</code> parameters.</li>
-</ul>
-
-<h3>Active Entry Resolution (<code>getActiveEntry</code>)</h3>
-<p>The <code>getActiveEntry(entries, validAtDate)</code> method solves a key business problem: given a list of <code>ValidSinceAttr</code> entries with <code>validSince</code> dates, find the one that is currently applicable at a given point in time. Algorithm:</p>
-<ol>
-<li>Iterate all non-deleted entries.</li>
-<li>For each entry where <code>validAtDate >= entry.validSince</code>, compare to the best-found-so-far.</li>
-<li>Select the entry with the <strong>latest</strong> <code>validSince</code> that is still before/on the reference date.</li>
-</ol>
-<p>This supports historical lookups — asking "what was the annual leave for employee X on date Y" — which is critical for accurate reporting.</p>
-
-<h3>Validation Logic (<code>validate</code>)</h3>
-<p>Before insert or update, the system checks if another <code>ValidSinceAttr</code> exists with the same <code>(employee, type, validSince)</code> combination:</p>
-<ul>
-<li><strong>New entry (id==null):</strong> Uses <code>FIND_BY_TYPE_AND_DATE</code> named query.</li>
-<li><strong>Existing entry:</strong> Uses <code>FIND_OTHER_BY_TYPE_AND_DATE</code> (excludes current ID).</li>
-<li><strong>Deleted-entry re-use:</strong> If a deleted entry with the same <code>validSince</code> exists, it is returned for re-use rather than throwing. This handles the UX scenario where users can't see deleted entries but try to add a new one that would collide — the system silently undeletes and updates the existing record instead.</li>
-<li>If a non-deleted duplicate exists, throws <code>IllegalArgumentException</code>.</li>
-</ul>
-
-<h3>CRUD Operations</h3>
-<ul>
-<li><strong><code>insert()</code></strong> — Validates, then either inserts new or undeletes existing (re-use logic). Always expires the employee cache.</li>
-<li><strong><code>insertValidSinceAttr()</code></strong> — Convenience factory: creates <code>EmployeeValidSinceAttrDO</code>, sets all fields, and inserts.</li>
-<li><strong><code>updateValidSinceAttr()</code></strong> — Complex update with copy semantics: validates, potentially marks existing entry as deleted and undeletes/modifies a previously-deleted one with the target date.</li>
-<li><strong><code>markValidSinceAttrAsDeleted()</code></strong> — Validates, then soft-deletes with access check.</li>
-<li><strong><code>undeleteValidSinceAttr()</code></strong> — Validates, then undeletes with access check.</li>
-</ul>
-
-<h3>Concrete Value Getters</h3>
-<ul>
-<li><strong><code>getEmployeeStatus()</code></strong> — Selects STATUS entries, gets active entry, converts value to <code>EmployeeStatus</code> enum via <code>safeValueOf()</code>. Logs error if unknown status value encountered.</li>
-<li><strong><code>getAnnualLeaveDays()</code></strong> — Selects ANNUAL_LEAVE entries, gets active entry, converts to <code>BigDecimal</code>.</li>
-<li><strong><code>getWeeklyWorkingHours()</code></strong> — Selects WEEKLY_HOURS entries, gets active entry, converts to <code>BigDecimal</code>.</li>
-</ul>
-<p>All return null if employee or validAtDate is null (for test compatibility with CallAllPagesTest/Wicket).</p>
+<h3>Design Rationale</h3>
+<p>Scripts need access to business logic like "get weekly hours for employee at date X" or "is this employee active?" — not just CRUD. This proxy exposes only read-only methods. Scripts should never mutate data through this interface; mutations go through dedicated scripting DAOs.</p>
 
 <h2>Git History</h2>
-<div class="hist"><pre>868d6abb7 2025 -> 2026
-28efde264 Employee: weeklyWorkingHours now as time-dependent attr. eintritt/austritt: timestamp -> date
-63081666f Source file headers: 2024-> 2025.
-5f9bbfbd3 Fix typos in projectforge-business directory
-4ae4f3ea3 Bugfixes while going-live...
-b5dc26e24 Migration stuff in progress... (all tests of all packages: OK).
-b0efaddc2 Migration stuff in progress... (all tests of all packages: OK).
-6aca64431 Migration stuff in progress... (all tests of all packages: OK).</pre></div>
+<div class="hist"><pre>8d821622d EmployeeScriptingService.getReportOfMonth
+b589ea0c1 EmployeeScriptingService.kt: selectAllValidSinceAttrs added.
+10d4e0aad Add EmployeeScriptingService for script access to employee data</pre></div>
 </body>
 </html>

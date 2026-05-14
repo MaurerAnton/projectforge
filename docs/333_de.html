@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>333: ConsoleTimeoutReader.kt [DE]</title>
+<style>
+body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}
+h1{border-bottom:2px solid #333;padding-bottom:.3em}
+h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}
+h3{margin-top:1.5em;color:#444;font-size:1em}
+a{color:#0366d6}
+.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}
+.nav{font-size:.9em;color:#888;margin-bottom:1em}
+.lang{font-size:.85em;color:#888;float:right}
+.lang a{color:#888;text-decoration:none;padding:0 .3em}
+.lang a.active{color:#0366d6;font-weight:600;text-decoration:underline}
+.meta{font-size:.9em;margin:1em 0;color:#555}
+code{background:#f0f0f0;padding:0 .2em;font-size:.93em}
+pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}
+table{border-collapse:collapse;width:100%;margin:1em 0}
+th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}
+th{background:#f5f5f5;font-weight:600}
+.hist{font-size:.85em;color:#555}
+pre.diff{background:#fff;font-size:.82em;max-height:300px;overflow-y:auto}
+</style>
+</head>
+<body>
+<div class="lang"><a href="333.html">EN</a> · <a href="333_de.html" class="active">DE</a> · <a href="333_ru.html">RU</a> · <a href="333_fr.html">FR</a> · <a href="333_es.html">ES</a></div>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← Datei-Index</a> · <a href="2731.html">← Vorherige</a> · <a href="1048.html">Nächste →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-application/src/main/kotlin/org/projectforge/start/ConsoleTimeoutReader.kt" target="_blank" title="Quellcode auf GitHub anzeigen">📄 Quelle</a></div>
+<h1>#333: <code>ConsoleTimeoutReader.kt</code></h1>
+<div class="meta"><code>projectforge-application/src/main/kotlin/org/projectforge/start/ConsoleTimeoutReader.kt</code> Kotlin-Klasse, <code>projectforge-application/src/main/kotlin/org/projectforge/start/ConsoleTimeoutReader.kt</code> <span style="color:#888">123 Zeilen · 77 Code · 36 Kommentare · 10 leer</span></div>
+<div class="c"><strong>Zweck:</strong> Quelldatei: org/projectforge/start/ConsoleTimeoutReader.kt. ConsoleTimeoutReader.kt ist Teil der Open-Source-Projektmanagement-Anwendung ProjectForge.</div>
+<h2>Quellcode (erste 100 Zeilen)</h2>
+<pre>/////////////////////////////////////////////////////////////////////////////
+//
+// Project ProjectForge Community Edition
+//         www.projectforge.org
+//
+// Copyright (C) 2001-2026 Micromata GmbH, Deutschland (www.micromata.com)
+//
+// ProjectForge ist dual-lizenziert.
+//
+// Diese Community-Edition ist freie Software; Sie können es weiterverteilen und/oder
+// modifizieren unter den Bedingungen der GNU General Public License, wie veröffentlicht
+// von der Free Software Foundation; Version 3 der Lizenz.
+//
+// Diese Community-Edition wird in der Hoffnung verteilt, dass sie nützlich sein wird,
+// aber OHNE JEGLICHE GEWÄHRLEISTUNG; ohne die stillschweigende Garantie der
+// MARKTGÄNGIGKEIT oder EIGNUNG FÜR EINEN BESTIMMTEN ZWECK. Siehe die GNU General
+// Public License für weitere Details.
+//
+// Sie sollten eine Kopie der GNU General Public License zusammen mit
+// diesem Programm erhalten haben; falls nicht, siehe http://www.gnu.org/licenses/.
+//
+/////////////////////////////////////////////////////////////////////////////
+
+package org.projectforge.start
+
+import mu.KotlinLogging
+import org.apache.commons.lang3.StringUtils
+import org.slf4j.LoggerFactory
+import java.io.BufferedReader
+import java.io.IOException
+import java.io.InputStreamReader
+import java.time.Duration
+import java.util.concurrent.ExecutionException
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.TimeoutException
+import kotlin.system.exitProcess
+
+private val log = KotlinLogging.logger {}
+
+/**
+ * Zum Lesen einer Systemkonsoleneingabe (mit Zeitüberschreitung).
+ */
+open class ConsoleTimeoutReader
+/**
+ * @param frage
+ * @param standardAntwort Die Antwort, wenn der Benutzer einfach die Eingabetaste drückt.
+ */
+@JvmOverloads
+constructor(
+  private val frage: String,
+  private val standardAntwort: String? = null,
+  var zeitUeberschreitungSekunden: Int = KONSOLEN_EINGABE_ZEITUEBERSCHREITUNG
+) {
+  private val streamReader = InputStreamReader(System.`in`)
+  private val bufferedReader = BufferedReader(streamReader)
+
+  fun fragen(): String? {
+    log.info("ProjectForge wartet $zeitUeberschreitungSekunden Sekunden auf Ihre Eingabe in der Konsole (falls ohne Konsole ausgeführt, wird ProjectForge trotzdem fortgesetzt): $frage")
+    println()
+    println(StringUtils.center(" FRAGE ", 120, "?"))
+    println()
+    var antwort: String?
+    do {
+      antwort = leseKonsolenAntwortMitZeitueberschreitung()
+      if (antwort == null) return null
+      val ergebnis = if (standardAntwort != null &amp;&amp; antwort.isEmpty()) {
+        standardAntwort
+      } else {
+        antwort.trim { it &lt;= ' ' }.lowercase()
+      }
+      if (antwortGueltig(ergebnis)) return ergebnis
+    } while (true)
+  }
+
+  /**
+   * Wenn der Benutzer einfach die Eingabetaste drückt, ist der Parameter antwort die konfigurierte Standardantwort oder ein leerer String,
+   * falls kein Standardwert definiert ist.
+   *
+   * @param antwort Antwort von der Konsoleneingabe ("" oder Eingabe in Kleinbuchstaben).
+   * @return true, wenn die Antwort mit 'j' oder 'n' beginnt, andernfalls false.
+   */
+  protected open fun antwortGueltig(antwort: String): Boolean {
+    return antwort.startsWith("j") || antwort.startsWith("n")
+  }
+
+  private fun leseKonsolenAntwortMitZeitueberschreitung(): String? {
+    val zeitueberschreitung = Duration.ofSeconds(zeitUeberschreitungSekunden.toLong())
+    val executor = Executors.newSingleThreadExecutor()
+    val handler = executor.submit&lt;String&gt; { leseKonsolenAntwort(frage) }
+    var antwort: String? = null
+    try {
+      antwort = handler[zeitueberschreitung.toMillis(), TimeUnit.MILLISECONDS]
+    } catch (ex: TimeoutException) {
+      log.info("Zeitüberschreitung der Konsoleneingabe überschritten (&gt;" + zeitUeberschreitungSekunden + "s). Abbruch.")
+      handler.cancel(true)
+    } catch (ex: InterruptedException) {
+      log.info("Zeitüberschreitung der Konsoleneingabe überschritten (&gt;" + zeitUeberschreitungSekunden + "s). Abbruch.")
+      handler.cancel(true)
+    } catch (ex: ExecutionException) {</pre>
+<h2>Git-Verlauf</h2>
+<div class="hist">
+<pre>868d6abb7 2025 -> 2026
+63081666f Quellcode-Dateiköpfe: 2024 -> 2025.
+b6092df09 Copyright 2023 -> 2024
+ab45d51fa Copyright 2001-2022 -> 2001-2023.
+4def09990 Veraltete Kotlin-Funktionen: toLowerCase -> lowerCase, toUpperCase -> uppercase.</pre>
+<h3>868d6abb7</h3><div class="c"><strong>2025 -> 2026</strong><pre class="diff">868d6abb75cd191a892911ac8e45058932cf9074
+diff --git a/projectforge-application/src/main/kotlin/org/projectforge/start/ConsoleTimeoutReader.kt b/projectforge-application/src/main/kotlin/org/projectforge/start/ConsoleTimeoutReader.kt
+index 6464bf280..95e1afbea 100644
+--- a/projectforge-application/src/main/kotlin/org/projectforge/start/ConsoleTimeoutReader.kt
++++ b/projectforge-application/src/main/kotlin/org/projectforge/start/ConsoleTimeoutReader.kt
+@@ -3,7 +3,7 @@
+ // Project ProjectForge Community Edition
+ //         www.projectforge.org
+ //
+-// Copyright (C) 2001-2025 Micromata GmbH, Germany (www.micromata.com)
++// Copyright (C) 2001-2026 Micromata GmbH, Germany (www.micromata.com)
+ //
+ // ProjectForge is dual-licensed.
+ //</pre></div><h3>63081666f</h3><div class="c"><strong>Quellcode-Dateiköpfe: 2024 -> 2025.</strong><pre class="diff">63081666f620fb87315f01b817e560e0b2f6a33a
+diff --git a/projectforge-application/src/main/kotlin/org/projectforge/start/ConsoleTimeoutReader.kt b/projectforge-application/src/main/kotlin/org/projectforge/start/ConsoleTimeoutReader.kt
+index e2d880025..6464bf280 100644
+--- a/projectforge-application/src/main/kotlin/org/projectforge/start/ConsoleTimeoutReader.kt
++++ b/projectforge-application/src/main/kotlin/org/projectforge/start/ConsoleTimeoutReader.kt
+@@ -3,7 +3,7 @@
+ // Project ProjectForge Community Edition
+ //         www.projectforge.org
+ //
+-// Copyright (C) 2001-2024 Micromata GmbH, Germany (www.micromata.com)
++// Copyright (C) 2001-2025 Micromata GmbH, Germany (www.micromata.com)
+ //
+ // ProjectForge is dual-licensed.
+ //</pre></div><h3>b6092df09</h3><div class="c"><strong>Copyright 2023 -> 2024</strong><pre class="diff">b6092df0927c4a3b161e888445f31dcab57493f2
+diff --git a/projectforge-application/src/main/kotlin/org/projectforge/start/ConsoleTimeoutReader.kt b/projectforge-application/src/main/kotlin/org/projectforge/start/ConsoleTimeoutReader.kt
+index ea873a836..e2d880025 100644
+--- a/projectforge-application/src/main/kotlin/org/projectforge/start/ConsoleTimeoutReader.kt
++++ b/projectforge-application/src/main/kotlin/org/projectforge/start/ConsoleTimeoutReader.kt
+@@ -3,7 +3,7 @@
+ // Project ProjectForge Community Edition
+ //         www.projectforge.org
+ //
+-// Copyright (C) 2001-2023 Micromata GmbH, Germany (www.micromata.com)
++// Copyright (C) 2001-2024 Micromata GmbH, Germany (www.micromata.com)
+ //
+ // ProjectForge is dual-licensed.
+ //</pre></div><h3>ab45d51fa</h3><div class="c"><strong>Copyright 2001-2022 -> 2001-2023.</strong><pre class="diff">ab45d51fa419ede6174b31d69987f96d4b841ff9
+diff --git a/projectforge-application/src/main/kotlin/org/projectforge/start/ConsoleTimeoutReader.kt b/projectforge-application/src/main/kotlin/org/projectforge/start/ConsoleTimeoutReader.kt
+index 133bc81d1..ea873a836 100644
+--- a/projectforge-application/src/main/kotlin/org/projectforge/start/ConsoleTimeoutReader.kt
++++ b/projectforge-application/src/main/kotlin/org/projectforge/start/ConsoleTimeoutReader.kt
+@@ -3,7 +3,7 @@
+ // Project ProjectForge Community Edition
+ //         www.projectforge.org
+ //
+-// Copyright (C) 2001-2022 Micromata GmbH, Germany (www.micromata.com)
++// Copyright (C) 2001-2023 Micromata GmbH, Germany (www.micromata.com)
+ //
+ // ProjectForge is dual-licensed.
+ //</pre></div><h3>4def09990</h3><div class="c"><strong>Veraltete Kotlin-Funktionen: toLowerCase -> lowerCase, toUpperCase -> uppercase.</strong><pre class="diff">4def099906252d291059bdc513a2273ebd704228
+diff --git a/projectforge-application/src/main/kotlin/org/projectforge/start/ConsoleTimeoutReader.kt b/projectforge-application/src/main/kotlin/org/projectforge/start/ConsoleTimeoutReader.kt
+index 55fb4a075..133bc81d1 100644
+--- a/projectforge-application/src/main/kotlin/org/projectforge/start/ConsoleTimeoutReader.kt
++++ b/projectforge-application/src/main/kotlin/org/projectforge/start/ConsoleTimeoutReader.kt
+@@ -67,7 +67,7 @@ constructor(
+       val result = if (defaultAnswer != null &amp;&amp; answer.isEmpty()) {
+         defaultAnswer
+       } else {
+-        answer.trim { it &lt;= ' ' }.toLowerCase()
++        answer.trim { it &lt;= ' ' }.lowercase()
+       }
+       if (answerValid(result)) return result
+     } while (true)</pre></div>
+</div>
+</body>
+</html>

@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>#826: AddressImageDO [RU]</title>
+<style>
+body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}
+h1{border-bottom:2px solid #333;padding-bottom:.3em}
+h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}
+h3{margin-top:2em;color:#444}
+a{color:#0366d6}
+.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}
+.nav{font-size:.9em;color:#888;margin-bottom:1em}
+.lang{font-size:.85em;color:#888;float:right}
+.lang a{color:#888;text-decoration:none;padding:0 .3em}
+.lang a.active{color:#0366d6;font-weight:600;text-decoration:underline}
+.meta{font-size:.9em;margin:1em 0;color:#555}
+code{background:#f0f0f0;padding:0 .2em;font-size:.93em}
+pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}
+table{border-collapse:collapse;width:100%;margin:1em 0}
+th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}
+th{background:#f5f5f5;font-weight:600}
+.hist{font-size:.85em;color:#555}
+</style>
+</head>
+<body>
+
+<div class="lang">
+  <a href="826.html">EN</a> · 
+  <a href="826_de.html">DE</a> · 
+  <a href="826_ru.html" class="active">RU</a> · 
+  <a href="826_fr.html">FR</a> · 
+  <a href="826_es.html">ES</a>
+</div>
+
+<div class="nav">
+  <a href="https://maureranton.github.io/projectforge/">← Индекс</a> · 
+  <a href="file-index.html">← Индекс файлов</a> · 
+  <a href="825.html">← Предыдущий</a>
+</div>
+
+<h1>#826: <code>AddressImageDO.kt</code></h1>
+
+<div class="meta">
+  <code>projectforge-business/src/main/kotlin/org/projectforge/business/address/AddressImageDO.kt</code> 
+  JPA-сущность — изображения адресов, 
+  <code>projectforge-business/src/main/kotlin/org/projectforge/business/address/AddressImageDO.kt</code> 
+  <span style="color:#888">87 строк · 53 кода · 25 комментариев · 9 пустых</span>
+</div>
+
+<div class="c">
+  JPA-сущность для хранения изображений адресов (фотографий, логотипов) с ленивой загрузкой BLOB и миниатюрами для предпросмотра. 
+  Отделена от <code>AddressDO</code> для повышения производительности — изображения загружаются только по запросу через именованные запросы.
+</div>
+
+<h2>Архитектура</h2>
+
+<p>
+  Данная Kotlin-сущность была выделена из <code>AddressDO</code> (коммит <code>f99817436</code>) для улучшения производительности за счёт 
+  <strong>ленивой загрузки</strong>. Ключевые аспекты дизайна:
+</p>
+
+<ul>
+  <li><strong>Таблица:</strong> <code>T_ADDRESS_IMAGE</code>, связана с родительской <code>AddressDO</code> через <code>@OneToOne</code> с <code>FetchType.LAZY</code>.</li>
+  <li><strong>BLOB-колонки:</strong> <code>image</code> (полный размер) и <code>imagePreview</code> (миниатюра) обе аннотированы <code>@Basic(fetch = FetchType.LAZY)</code>, что предотвращает загрузку тяжёлых BLOB-данных в списках. Именованные запросы <code>SELECT_WITHOUT_IMAGES</code> и <code>SELECT_IMAGE_ONLY</code> обеспечивают выборочное получение.</li>
+  <li><strong>Тип изображения:</strong> Перечисляется через <code>ImageType</code> (JPG, GIF, PNG), хранится как строка из 5 символов.</li>
+  <li><strong>JSON-сериализация:</strong> Обратная ссылка <code>address</code> использует <code>@JsonSerialize(using = IdOnlySerializer::class)</code> — при сериализации в JSON (REST API) передаётся только <code>address.id</code>, что предотвращает циклическую сериализацию и глубокие графы объектов.</li>
+  <li><strong>Hibernate Search:</strong> Аннотация <code>@Indexed</code> отсутствует у этой сущности, что означает, что изображения адресов индексируются неявно через родительскую <code>AddressDO</code> (которая зарегистрирована в полнотекстовом поиске).</li>
+</ul>
+
+<h3>Именованные запросы</h3>
+
+<table>
+  <tr>
+    <th>Запрос</th>
+    <th>Назначение</th>
+  </tr>
+  <tr>
+    <td><code>SELECT_WITHOUT_IMAGES</code></td>
+    <td>Получение метаданных изображения (ID, тип, lastUpdate) без BLOB-данных — используется в списках</td>
+  </tr>
+  <tr>
+    <td><code>SELECT_IMAGE_ONLY</code></td>
+    <td>Получение полного BLOB изображения — используется для скачивания</td>
+  </tr>
+  <tr>
+    <td><code>SELECT_IMAGE_PREVIEW_ONLY</code></td>
+    <td>Получение BLOB миниатюры/предпросмотра — используется в галереях</td>
+  </tr>
+  <tr>
+    <td><code>DELETE_ALL_IMAGES_BY_ADDRESS_ID</code></td>
+    <td>Массовое удаление всех изображений адреса — используется при удалении адреса</td>
+  </tr>
+</table>
+
+<p>
+  Сущность поддерживает обработку изображений CardDAV (коммит <code>c5b4b738b</code>), что делает фотографии адресов доступными 
+  по протоколу CardDAV вместе с данными vCard.
+</p>
+
+<h2>История Git</h2>
+
+<div class="hist">
+<pre>
+868d6abb7 2025 -> 2026
+63081666f Заголовки исходных файлов: 2024 -> 2025.
+0237d5eba Рефакторинг JSON-сериализации: введены IdOnlySerializer и IdsOnlySerializer.
+2bcdfbbc6 WIP: хранение ордеров.
+943947aaa Адреса: поддержка gif и jpeg (также для сервера carddav).
+c5b4b738b WIP: CardDav сервер, обработка изображений.
+d6ad9ea38 Работа над миграцией в процессе...
+66ec668f6 Работа над миграцией в процессе...
+e33c8b9c2 Работа над миграцией в процессе...
+06828f490 Работа над миграцией в процессе...
+b6092df09 Copyright 2023 -> 2024
+ab45d51fa Copyright 2001-2022 -> 2001-2023.
+5f7ef41b8 Copyright 2021 -> 2022
+f54103172 AddressDao.forceDelete теперь работает корректно, даже если были изображения.
+ceb63e8a1 Заголовок исходного кода: (C) 2001-2021.
+ae182f8a1 Github issue #135, оптимизация производительности с JProfiler.
+f99817436 Изображения адресов теперь в отдельной сущности. Улучшает производительность за счёт ленивой загрузки.
+7c79f1922 Copyright заголовка исходников -> 2020.
+af35917ac Ещё больше очистки кода
+ca5a7c00f Оптимизация импортов
+05244ff19 Обновлены или созданы заголовки всех Kotlin-файлов.
+da6eec0f6 AddressAttrDataDO.java -> AddressAttrDataDO.kt
+9ebb88522 Первоначальный коммит
+</pre>
+</div>
+
+</body>
+</html>

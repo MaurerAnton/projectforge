@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>#988: EmployeeSalaryImportService.kt [RU]</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:2em;color:#444}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}</style>
+</head>
+<body>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Индекс</a> · <a href="file-index.html">← Индекс файлов</a> · <a href="987.html">← Предыдущий</a> · <a href="989.html">Следующий →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/kotlin/org/projectforge/business/fibu/datev/EmployeeSalaryImportService.kt" target="_blank" title="Просмотр исходного кода на GitHub">📄 исходник</a></div>
+
+<h1>#988: <code>EmployeeSalaryImportService.kt</code></h1>
+
+<div class="meta"><code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/datev/EmployeeSalaryImportService.kt</code> 
+  <strong>Тип:</strong> Spring-сервис (оркестрация импорта)<br>
+  <strong>Пакет:</strong> <code>org.projectforge.business.fibu.datev</code><br>
+  <strong>Фактический путь:</strong> <code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/datev/EmployeeSalaryImportService.kt</code><br>
+  <strong>Примечание:</strong> Файл <strong>не</strong> существует по запрошенному пути (<code>.../excelimport/...</code>). Он находится в подпакете <code>datev</code>. Документация ниже отражает фактический исходный код.
+ <span style="color:#888">139 строк · 101 строка кода · 25 комментариев · 13 пустых строк</span></div>
+
+<div class="c">
+  <p>Сервис оркестрации для конвейера <strong>импорта зарплат сотрудников</strong>. Следует тому же трёхфазному жизненному циклу импорта (импорт → сверка → фиксация), который установлен в <code>DatevImportService</code>. Координирует работу <code>EmployeeSalaryExcelImporter</code> (парсинг), <code>EmployeeSalaryDao</code> (персистентность) и <code>EmployeeSalaryService</code> (поиск).</p>
+</div>
+
+<h2>Архитектура</h2>
+
+<h3>Зависимости</h3>
+<table>
+  <tr><th>Зависимость</th><th>Роль</th></tr>
+  <tr><td><code>EmployeeSalaryExcelImporter</code></td><td>Разбирает книгу Excel в <code>ImportStorage&lt;EmployeeSalaryDO&gt;</code></td></tr>
+  <tr><td><code>EmployeeSalaryService</code></td><td>Поиск существующих зарплат по месяцу для сверки</td></tr>
+  <tr><td><code>EmployeeSalaryDao</code></td><td>Пакетная фиксация и контроль доступа</td></tr>
+</table>
+
+<h2>Жизненный цикл импорта</h2>
+
+<h3>Фаза 1: Импорт</h3>
+<p><code>importData(inputStream, filename, year, month)</code> — открывает <code>ExcelWorkbook</code>, создаёт <code>ImportStorage</code>, делегирует выполнение <code>EmployeeSalaryExcelImporter.doImport()</code>. Возвращает заполненное хранилище.</p>
+
+<h3>Фаза 2: Сверка</h3>
+<p><code>reconcile(storage, sheetName, year, month)</code> — ищет существующие зарплаты за указанные год/месяц через <code>employeeSalaryService.selectByMonth()</code>, затем сопоставляет каждый импортированный элемент с существующей записью в БД по идентификатору сотрудника. Устанавливает <code>oldValue</code>, <code>id</code> и временную метку <code>created</code> для элемента на этапе фиксации. Устанавливает статус <code>RECONCILED</code>.</p>
+
+<h3>Фаза 3: Фиксация</h3>
+<p><code>commit(storage, sheetName)</code> — требует статуса <code>RECONCILED</code>. Собирает выбранные элементы, копирует существующий <code>id</code> из <code>oldValue</code> для обновлений и выполняет пакетную фиксацию через <code>employeeSalaryDao.insertOrUpdate()</code> блоками по 50. Устанавливает статус <code>IMPORTED</code>.</p>
+
+<h2>Контроль доступа</h2>
+<p><code>checkLoggedinUserRight()</code> делегирует выполнение <code>employeeSalaryDao.checkLoggedInUserInsertAccess()</code>, который проверяет, имеет ли пользователь право на вставку для зарплат сотрудников.</p>
+
+<h2>Размер блока вставки</h2>
+<p><code>SALARY_INSERT_BLOCK_SIZE = 50</code> — управляет размером пакета для операций персистентности.</p>
+
+<h2>История Git</h2>
+<div class="hist"><pre>
+868d6abb7 2025 -> 2026
+63081666f Заголовки исходных файлов: 2024 -> 2025.
+1012e347a Работа над миграцией в процессе... (все тесты всех пакетов: OK).
+</pre></div>
+
+</body>
+</html>

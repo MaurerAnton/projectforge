@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>#575: PropertyConverter.java [RU]</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:2em;color:#444}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.lang{font-size:.85em;color:#888;float:right}.lang a{color:#888;text-decoration:none;padding:0 .3em}.lang a.active{color:#0366d6;font-weight:600;text-decoration:underline}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}</style>
+</head>
+<body>
+<div class="lang"><a href="575.html">EN</a> · <a href="575_de.html">DE</a> · <a href="575_ru.html" class="active">RU</a> · <a href="575_fr.html">FR</a> · <a href="575_es.html">ES</a></div>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Индекс</a> · <a href="file-index.html">← Индекс файлов</a> · <a href="534.html">← Предыдущий</a> · <a href="102.html">Следующий →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/java/org/projectforge/business/teamcal/event/ical/converter/PropertyConverter.java" target="_blank" title="Просмотреть исходный код на GitHub">📄 исходный код</a></div>
+<h1>#575: <code>PropertyConverter.java</code></h1>
+<div class="meta"><code>projectforge-business/src/main/java/org/projectforge/business/teamcal/event/ical/converter/PropertyConverter.java</code> Тип: Java · Роль: Календарь · Источник: projectforge-business/src/main/java/org/projectforge/business/teamcal/event/ical/converter/PropertyConverter.java <span style="color:#888">110 строк · 76 кода · 22 комментария · 12 пустых</span></div>
+<div class="c">Конвертер XML-потока, реализующий IConverter для типобезопасной сериализации/десериализации между строковыми представлениями и Java-объектами.</div>
+<h2>Структура кода</h2>
+<p>Пакет: <code>org.projectforge.business.teamcal.event.ical.converter</code></p>
+<p>Классы: <code>PropertyConverter</code></p>
+<p>Реализует: <code>VEventComponentConverter</code></p>
+<p>Методы (4): <code>toVEvent</code>, <code>toVEvent</code>, <code>isAllDay</code>, <code>parseAdditionalParameters</code></p>
+<p>Импорты: 8 пакетов</p>
+<h2>Исходный код (сокращённый)</h2>
+<pre>
+package org.projectforge.business.teamcal.event.ical.converter;
+
+import net.fortuna.ical4j.model.Parameter;
+import net.fortuna.ical4j.model.ParameterBuilder;
+import net.fortuna.ical4j.model.ParameterList;
+import net.fortuna.ical4j.model.Property;
+import net.fortuna.ical4j.model.component.VEvent;
+import net.fortuna.ical4j.model.property.DtStart;
+import org.projectforge.business.teamcal.event.ical.VEventComponentConverter;
+import org.projectforge.business.teamcal.event.model.TeamEventDO;
+
+public abstract class PropertyConverter implements VEventComponentConverter {
+    private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(PropertyConverter.class);
+
+    public Property toVEvent(final TeamEventDO event) {
+        return null;
+    }
+
+    @Override
+    public boolean toVEvent(TeamEventDO event, VEvent vEvent) {
+        Property property = this.toVEvent(event);
+
+        if (property == null) {
+            return false;
+        }
+
+        vEvent.getProperties().add(property);
+
+        return true;
+    }
+
+    protected boolean isAllDay(final VEvent vEvent) {
+        if (vEvent.getDateTimeStart().isEmpty()) {
+            return false;
+        }
+        DtStart&lt;?&gt; dtStart = vEvent.getDateTimeStart().get();
+        return dtStart.toString().contains(&quot;VALUE=DATE&quot;);
+    }
+
+    protected void parseAdditionalParameters(final ParameterList list, final String additonalParams) {
+        if (list == null || additonalParams == null) {
+            return;
+        }
+        StringBuilder sb = new StringBuilder();
+        boolean escaped = false;
+        char[] chars = additonalParams.toCharArray();
+        String name = null;
+
+        for (char c : chars) {
+            switch (c) {
+                case &#x27;;&#x27;:
+                    if (!escaped &amp;&amp; name != null &amp;&amp; sb.length() &gt; 0) {
+                        try {
+                            Parameter parameter = new ParameterBuilder().name(name).value(sb.toString().replaceAll(&quot;\&quot;&quot;, &quot;&quot;)).build();
+                            list.add(parameter);
+                        } catch (Exception e) {
+                            log.error(&quot;Ошибка при разборе дополнительных параметров: &quot; + e.getMessage(), e);
+                        }
+                        name = null;
+                        sb.setLength(0);
+                    }
+                    break;
+                case &#x27;&quot;&#x27;:
+                    escaped = (!escaped);
+                    break;
+                case &#x27;=&#x27;:
+                    if (!escaped &amp;&amp; sb.length() &gt; 0) {
+                        name = sb.toString();
+                        sb.setLength(0);
+                    }
+                    break;
+                default:
+                    sb.append(c);
+                    break;
+            }
+        }
+
+        if (!escaped &amp;&amp; name != null &amp;&amp; sb.length() &gt; 0) {
+            try {
+                Parameter parameter = new ParameterBuilder().name(name).value(sb.toString().replaceAll(&quot;\&quot;&quot;, &quot;&quot;)).build();
+                list.add(parameter);
+            } catch (Exception e) {
+                log.error(&quot;Ошибка при разборе дополнительных параметров: &quot; + e.getMessage(), e);
+            }
+        }
+    }
+}</pre>
+
+<h2>История Git</h2><div class="hist"><pre>868d6abb7 2025 → 2026
+63081666f Заголовки исходных файлов: 2024 → 2025.
+61966790f Ical4j: миграционные материалы...
+b6092df09 Авторские права 2023 → 2024
+ab45d51fa Авторские права 2001-2022 → 2001-2023.</pre></div>
+</body>
+</html>

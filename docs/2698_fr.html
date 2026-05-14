@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>#2698: FormPage.jsx [FR]</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:2em;color:#444}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.lang{font-size:.85em;color:#888;float:right}.lang a{color:#888;text-decoration:none;padding:0 .3em}.lang a.active{color:#0366d6;font-weight:600;text-decoration:underline}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}</style>
+</head>
+<body>
+<div class="lang"><a href="2698.html">EN</a> · <a href="2698_de.html">DE</a> · <a href="2698_ru.html">RU</a> · <a href="2698_fr.html" class="active">FR</a> · <a href="2698_es.html">ES</a></div>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← Index des fichiers</a> · <a href="292.html">← Précédent</a> · <a href="3256.html">Suivant →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-webapp/src/containers/page/form/FormPage.jsx" target="_blank" title="Voir la source sur GitHub">📄 source</a></div>
+<h1>#2698 : <code>FormPage.jsx</code></h1>
+<div class="meta"><code>projectforge-webapp/src/containers/page/form/FormPage.jsx</code> Type : JavaScript/React · Rôle : Page · Source : projectforge-webapp/src/containers/page/form/FormPage.jsx <span style="color:#888">191 lignes · 175 code · 4 commentaires · 12 vides</span></div>
+<div class="c">Composant React de formulaire gérant l'édition d'entités, la validation, la disposition des champs et les actions de soumission/annulation.</div>
+<h2>Structure du code</h2>
+<p>Hooks utilisés : <code>Dispatch</code>, <code>Params</code>, <code>Selector</code>, <code>Location</code>, <code>SearchParams</code>, <code>Effect</code>, <code>Memo</code></p>
+<p>Importations depuis : <code>../../../actions</code>, <code>../../../components/base/dynamicLayout</code>, <code>../../../components/base/page/edit/TabNavigation</code>, <code>../../../components/design</code>, <code>../../../components/design/loading-container</code>, <code>../../../utilities/layout</code>, <code>../../../utilities/rest</code>, <code>../../ProjectForge.module.scss</code>, <code>./history</code>, <code>prop-types</code>, <code>react</code>, <code>react-redux</code>, <code>react-router</code></p>
+<p>Possède des PropTypes pour : <code>FormPage</code></p>
+<p>Utilise les modules CSS pour le style.</p>
+<h2>Code source (abrégé)</h2>
+<pre>import PropTypes from 'prop-types';
+import React from 'react';
+import { useDispatch, useSelector } from 'react-redux';
+import { useLocation, useParams, useSearchParams } from 'react-router';
+import {
+    callAction,
+    loadFormPage,
+    setCurrentData,
+    setCurrentVariables,
+    switchFromCurrentCategory,
+} from '../../../actions';
+import DynamicLayout from '../../../components/base/dynamicLayout';
+import TabNavigation from '../../../components/base/page/edit/TabNavigation';
+import { Alert, Container, TabContent, TabPane } from '../../../components/design';
+import LoadingContainer from '../../../components/design/loading-container';
+import { getTranslation } from '../../../utilities/layout';
+import { getServiceURL } from '../../../utilities/rest';
+import style from '../../ProjectForge.module.scss';
+import FormHistory from './history';
+
+function FormPage(
+    {
+        isPublic = false,
+    },
+) {
+    const dispatch = useDispatch();
+    const onCallAction = (...args) =&gt; dispatch(callAction(...args));
+    const onCategorySwitch = (...args) =&gt; dispatch(switchFromCurrentCategory(...args));
+    const onDataChange = (...args) =&gt; dispatch(setCurrentData(...args));
+    const onNewFormPage = (...args) =&gt; dispatch(loadFormPage(...args));
+    const onVariablesChange = (...args) =&gt; dispatch(setCurrentVariables(...args));
+    const {
+        type,
+        category: currentCategory,
+        id,
+        tab,
+    } = useParams();
+    const category = useSelector(({ form }) =&gt; form.categories[currentCategory]) || {};
+    const {
+        data,
+        isFetching,
+        ui,
+        validationErrors,
+        variables,
+    } = category;
+    const location = useLocation();
+    const [searchParams] = useSearchParams();
+    const { userAccess } = ui || {};
+
+    React.useEffect(
+        () =&gt; {
+            // Vérifie s'il s'agit d'une navigation programmatique avec le drapeau noReload
+            // Les rechargements du navigateur doivent toujours récupérer des données fraîches
+            const isNoReloadNavigation = location.state
+                &amp;&amp; location.state.noReload
+                &amp;&amp; window.performance
+                &amp;&amp; window.performance.navigation.type !== 1; // 1 = TYPE_RELOAD
+
+            if (isNoReloadNavigation) {
+                onCategorySwitch(
+                    currentCategory,
+                    location.state.newVariables || {},
+                    location.state.merge,
+                );
+            } else {
+                onNewFormPage(
+                    currentCategory,
+                    id,
+                    getServiceURL(
+                        `${isPublic ? '/rsPublic/' : ''}${currentCategory}/${type || 'dynamic'}`,
+                        {
+                            ...Object.fromEntries(searchParams.entries()),
+                            id,
+                        },
+                    ),
+                    location.state,
+                );
+            }
+        },
+        [
+            currentCategory,
+            id,
+            location.state &amp;&amp; location.state.noReload,
+            location.state &amp;&amp; location.state.newVariables,
+        ],
+    );
+
+    const globalValidation = React.useMemo(() =&gt; {
+        if (validationErrors === undefined) {
+            return null;
+        }
+        const globalErrors = validationErrors.filter((entry) =&gt; entry.fieldId === undefined);
+
+        if (globalErrors.length === 0) {
+            return null;
+        }
+
+        return (
+            &lt;Alert color="danger"&gt;
+                &lt;ul&gt;
+                    {globalErrors.map(({ message, messageId }) =&gt; (
+                        &lt;li key={`form-page-global-validation-${messageId}`}&gt;
+                            {message}
+                        &lt;/li&gt;
+                    ))}
+                &lt;/ul&gt;
+            &lt;/Alert&gt;
+        );
+    }, [validationErrors]);
+
+    if (ui === undefined || ui.title === undefined) {
+        return &lt;LoadingContainer loading /&gt;;
+    }
+
+    // Construit l'URL de base à partir de l'emplacement actuel pour préserver les routes imbriquées (ex : /calendar/)
+    // Supprime le suffixe /history s'il est présent, et supprime les paramètres de requête
+    const formBaseUrl = location.pathname.replace(/\/history$/, '').split('?')[0];
+    const tabs = [
+        {
+            id: 'form',
+// ... (tronqué, total 191 lignes)</pre>
+
+<h2>Historique Git</h2><div class="hist"><pre>bf988bc6d Élimination de 43 vulnérabilités npm : react-scripts→Vite, ESLint 9, nettoyage des dépendances, corrections de bugs
+d61a30129 FormPage.jsx : roue de chargement infini corrigée.
+05bcb43b9 Gestion des entrées d'historique dans les boîtes de dialogue modales corrigée.
+f02617502 HistoryEntry.jsx : diffSummary, modification du commentaire utilisateur affiché uniquement si disponible.
+3490f27f1 correction de la page calendrier et du tableau des horaires</pre></div>
+</body>
+</html>

@@ -1,103 +1,31 @@
 <!DOCTYPE html>
 <html lang="en">
-<head><meta charset="UTF-8"><title>#948: KostCache.kt</title>
+<head><meta charset="UTF-8"><title>#948: IRechnung.kt</title>
 <style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:2em;color:#444}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}</style></head>
 <body>
-<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="947.html">← Prev</a> · <a href="949.html">Next →</a></div>
-<h1>#948: <code>KostCache.kt</code></h1>
-<div class="meta">Type: Cache Component · Purpose: In-memory cache for Kost1, Kost2, and Kost2Art entities · Source: projectforge-business/src/main/kotlin/org/projectforge/business/fibu/kost/KostCache.kt</div>
-<div class="c">Central caching component for all cost center data (<code>Kost1DO</code>, <code>Kost2DO</code>, <code>Kost2ArtDO</code>). Extends <code>AbstractCache</code> to leverage the ProjectForge caching framework. Maintains synchronized hash maps for fast lookup by ID and by numeric components, avoiding repeated JPA queries for frequently accessed cost center data.</div>
-<h2>Cache Structure</h2>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="947.html">← Prev</a> · <a href="949.html">Next →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/kotlin/org/projectforge/business/fibu/IRechnung.kt" target="_blank" title="View source on GitHub">📄 source</a></div>
+<h1>#948: <code>IRechnung.kt</code></h1>
+<div class="meta"><code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/IRechnung.kt</code> Type: Interface · Purpose: Abstract contract for invoice-like objects used by RechnungCalculator · Source: projectforge-business/src/main/kotlin/org/projectforge/business/fibu/IRechnung.kt <span style="color:#888">35 lines · 7 code · 25 comments · 3 blank</span></div>
+<div class="c">Core interface needed by <code>RechnungCalculator</code> for polymorphic invoice calculations. Provides a unified API over outgoing invoices (<code>RechnungDO</code>) and incoming invoices (<code>EingangsrechnungDO</code>), exposing payment amount, positions, and currency.</div>
+<h2>Interface Design</h2>
 <table>
-<tr><th>Map</th><th>Key</th><th>Value</th><th>Description</th></tr>
-<tr><td><code>kost1Map</code></td><td><code>Long</code> (Kost1DO.id)</td><td><code>Kost1DO</code></td><td>Synchronized mutable map; updated on insert/modify</td></tr>
-<tr><td><code>kost2Map</code></td><td><code>Long</code> (Kost2DO.id)</td><td><code>Kost2DO</code></td><td>Synchronized mutable map; updated on insert/modify</td></tr>
-<tr><td><code>kost2ArtMap</code></td><td><code>Long</code> (Kost2ArtDO.id)</td><td><code>Kost2ArtDO</code></td><td>Read-only after refresh, replaced on full refresh</td></tr>
-<tr><td><code>allKost2Arts</code></td><td>—</td><td><code>List&lt;Kost2Art&gt;</code></td><td>Reporting wrapper list (Kost2ArtImpl)</td></tr>
+<tr><th>Property</th><th>Type</th><th>Description</th></tr>
+<tr><td><code>zahlBetrag</code></td><td><code>BigDecimal?</code></td><td>Total payment amount (nullable)</td></tr>
+<tr><td><code>positionen</code></td><td><code>List<IRechnungsPosition>?</code></td><td>List of invoice positions</td></tr>
+<tr><td><code>currency</code></td><td><code>String?</code></td><td>ISO currency code (e.g. "EUR", "USD")</td></tr>
 </table>
-<h2>Key Methods</h2>
-<table>
-<tr><th>Method</th><th>Description</th></tr>
-<tr><td><code>getKost2(id)</code></td><td>Get Kost2 by ID from cache (primary lookup)</td></tr>
-<tr><td><code>getKost2IfNotInitialized(kost2)</code></td><td>If lazy proxy, reload from cache to prevent lazy-loading N+1</td></tr>
-<tr><td><code>getKost2(str)</code></td><td>Get Kost2 by formatted string (parses "5.123.45.67")</td></tr>
-<tr><td><code>getKost2(nk, b, tb, art)</code></td><td>Get Kost2 by individual numeric components</td></tr>
-<tr><td><code>getActiveKost2(nk, b, tb)</code></td><td>Filter cached Kost2 by prefix and effective status</td></tr>
-<tr><td><code>getKost1(id)</code> / <code>getKost1(str)</code></td><td>Analogous Kost1 lookups</td></tr>
-<tr><td><code>findKost1(obj)</code> / <code>findKost2(obj)</code></td><td>Polymorphic find by Kost1DO, String, or Number</td></tr>
-<tr><td><code>getKost2Art(id)</code></td><td>Get cost type by 2-digit ID</td></tr>
-<tr><td><code>getKost2ArtsForProjekt(projektId)</code></td><td>Cost types used in a project's Kost2 entries</td></tr>
-<tr><td><code>getAllKost2ArtsForProjekt(projektId)</code></td><td>All cost types, marked if project already uses them</td></tr>
-<tr><td><code>getKost2ForProjekt(projektId)</code></td><td>All Kost2 entries for a given project</td></tr>
-</table>
-<h2>Refresh Mechanism</h2>
-<p>The <code>refresh()</code> method is called by <code>AbstractCache</code>'s infrastructure (via <code>checkRefresh()</code> which is invoked at the start of every public method). Refresh loads all Kost1, Kost2, and Kost2Art records in a single read-only isolated transaction:</p>
-<ol>
-<li>Loads all <code>Kost1DO</code> and <code>Kost2DO</code> entities into mutable maps</li>
-<li>Checks if any non-deleted Kost2 entries exist (<code>kost2EntriesExists</code> flag)</li>
-<li>Rebuilds <code>allKost2Arts</code> list wrapped as <code>Kost2ArtImpl</code> for reporting</li>
-</ol>
-<h2>Cache Invalidation</h2>
+<h3>Implementors</h3>
 <ul>
-<li>After any Kost2 insert/modify: <code>Kost2Dao.afterInsertOrModify</code> → <code>KostCache.updateKost2(kost2)</code></li>
-<li>After any Kost1 insert/modify: <code>KostCache.updateKost1(kost1)</code></li>
-<li>After any Kunde modification: cache expired (registered listener in <code>@PostConstruct</code>)</li>
+<li><code>AbstractRechnungDO</code> — base class for both incoming and outgoing invoices</li>
+<li><code>RechnungDO</code> — outgoing invoices to customers</li>
+<li><code>EingangsrechnungDO</code> — incoming invoices from vendors</li>
 </ul>
-<h2>Hibernate Initialization Guard</h2>
-<p>The <code>get*IfNotInitialized()</code> methods prevent a critical performance pitfall: when a Hibernate lazy proxy is accessed outside a transaction, it triggers N+1 queries. These methods use <code>HibernateUtils.isFullyInitialized()</code> to detect proxies and reload from the cache instead. This guard is applied to Kost1DO, Kost2DO, and Kost2ArtDO.</p>
-<h2>Thread Safety</h2>
-<ul>
-<li><code>kost1Map</code> and <code>kost2Map</code>: Mutable, synchronized access via <code>synchronized(kost2Map)</code> blocks</li>
-<li><code>kost2ArtMap</code> and <code>allKost2Arts</code>: Replaced atomically on refresh (read-only after assignment)</li>
-</ul>
-<h2>Source Code (abridged)</h2>
-<pre>@Component
-class KostCache : AbstractCache() {
-    @Autowired private lateinit var persistenceService: PfPersistenceService
-    @Autowired private lateinit var kundeDao: KundeDao
+<h2>Design Rationale</h2>
+<p>Introduced together with <code>IRechnungsPosition</code> to decouple the <code>RechnungCalculator</code> from concrete entity types. This allows the same calculation logic (net/gross sums, VAT, currency conversion) to operate on any invoice-like DTO without JPA entity dependencies. The <code>currency</code> field was added later to support multi-currency invoice processing.</p>
 
-    private lateinit var kost1Map: MutableMap&lt;Long, Kost1DO&gt;
-    private lateinit var kost2Map: MutableMap&lt;Long, Kost2DO&gt;
-    private lateinit var kost2ArtMap: Map&lt;Long, Kost2ArtDO&gt;
-
-    fun getKost2(id: Long?): Kost2DO? {
-        id ?: return null
-        checkRefresh()
-        synchronized(kost2Map) { return kost2Map[id] }
-    }
-
-    override fun refresh() {
-        persistenceService.runIsolatedReadOnly { context ->
-            this.kost1Map = persistenceService
-                .executeQuery("from Kost1DO t", Kost1DO::class.java)
-                .filter { it.id != null }
-                .associateBy { it.id!! }.toMutableMap()
-            this.kost2Map = persistenceService
-                .executeQuery("from Kost2DO t", Kost2DO::class.java)
-                .filter { it.id != null }
-                .associateBy { it.id!! }.toMutableMap()
-            // ... updateKost2Arts()
-        }
-    }
-    companion object { lateinit var instance: KostCache }
-}</pre>
+<h2>Architecture Analysis</h2>
+<div class="c">Resides in <strong>projectforge-business</strong>, the core module containing domain logic, services, and persistence. Defines a <strong>contract/interface</strong> that multiple implementations can satisfy, enabling polymorphic behavior and testability.</div>
 <h2>Git History</h2>
-<div class="hist"><pre>868d6abb7 2025 -> 2026
-8239a53ee Kost2: Virtuelle Status-Vererbung von ProjektDO
-581988c45 WIP: Parsing of creditor invoices.
-6a32032d6 Hibernate.isInitialized -> HibernateUtils.isFullyInitialized
-63081666f Source file headers: 2024-> 2025.
-db2599ab8 History in orderbook, invoices and projects.
-50c3b7b46 Migration (all tests OK).
-b3782c8a8 Migration stuff...
-4942c854d Migration stuff...
-d394f410f Migration (all tests OK).
-f928d12b1 Migration (all tests OK).
-2e9839891 Migration stuff...
-ba2479571 Migration stuff...
-b3293f0cc PersistenceService: stats handling improved.
-85b4e1175 PfPersistenceService: query -> executeQuery.
-b095e6f7d Big change of Transaction handling.
-4c04cfd65 MAJOR-CHANGE! Integer id's to Long id's. (file created)</pre></div>
+<div class="hist"><table><tr><th>Commit</th><th>What changed</th></tr><tr><td><code>868d6abb75</code></td><td>2025 -> 2026</td></tr><tr><td><code>4d4c6b449b</code></td><td>Currency field added to invoices (incoming and outgoing)</td></tr><tr><td><code>63081666f6</code></td><td>Source file headers: 2024-> 2025.</td></tr><tr><td><code>b47c21af64</code></td><td>Refactored caching and calculations with invoices (not yet finished)</td></tr><tr><td><code>b6092df092</code></td><td>Copyright 2023 -> 2024</td></tr><tr><td><code>ab45d51fa4</code></td><td>Copyright 2001-2022 -> 2001-2023.</td></tr><tr><td><code>2dc192b7a5</code></td><td>AG grid: auto-format of currency, Formatter works now also with AG grid (rating, dates, timestamps). Currency rendering by client (Formatter.jsx) added.</td></tr><tr><td><code>5f7ef41b8c</code></td><td>Copyright 2021 -> 2022</td></tr><tr><td><code>4c615b323a</code></td><td>Nothing real: compiler warnings fixed.</td></tr><tr><td><code>ceb63e8a1b</code></td><td>Source code header: (C) 2001-2021.</td></tr><tr><td><code>07cb34acba</code></td><td>IRechnung, IRechnungsPosition introduced. DTOs fro Eingangsrechnung{sPosition}DO added.</td></tr></table></div>
 </body>
 </html>

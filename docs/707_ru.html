@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>#707 [RU]</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:2em;color:#444}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}.warn{background:#fff3cd;border-left:3px solid #ffc107;padding:.5em 1em;margin:1em 0}.tip{background:#d4edda;border-left:3px solid #28a745;padding:.5em 1em;margin:1em 0}</style>
+</head>
+<body>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Индекс</a> · <a href="file-index.html">← Индекс файлов</a> · <a href="706.html">← Назад</a> · <a href="708.html">Вперёд →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/java/org/projectforge/framework/persistence/xstream/HibernateProxyConverter.java" target="_blank" title="Посмотреть исходник на GitHub">📄 исходник</a></div>
+<h1>#707: <code>HibernateProxyConverter.java</code></h1>
+<div class="meta"><code>projectforge-business/src/main/java/org/projectforge/framework/persistence/xstream/HibernateProxyConverter.java</code> Конвертер XStream — распаковывает Hibernate-прокси ленивой загрузки в реальные экземпляры сущностей во время маршаллинга, <code>projectforge-business/src/main/java/org/projectforge/framework/persistence/xstream/HibernateProxyConverter.java</code> <span style="color:#888">63 строки · 31 код · 25 комментариев · 7 пустых</span></div>
+<div class="c">Расширяет <code>ReflectionConverter</code> от XStream, чтобы перехватывать любой объект, реализующий <code>org.hibernate.proxy.HibernateProxy</code>, до того как XStream запустит рефлексивную сериализацию. При обнаружении Hibernate-прокси вызывает <code>getHibernateLazyInitializer().getImplementation()</code> для извлечения базового экземпляра сущности, затем делегирует маршаллинг подходящему конвертеру для <em>реального</em> класса. Без этого конвертера XStream сериализовал бы прокси-объект, сгенерированный Javassist/CGLIB (бессмысленную оболочку, содержащую только ленивый инициализатор), что привело бы к пустому или сломанному XML-выводу для любой лениво загружаемой ассоциации сущностей.</div>
+
+<h2>Архитектура</h2>
+
+<h3>Иерархия классов</h3>
+<p><code>HibernateProxyConverter</code> расширяет <code>com.thoughtworks.xstream.converters.reflection.ReflectionConverter</code> — стандартный конвертер XStream для объектов, для которых нет более специфичного конвертера. Он использует рефлексию для обхода полей и их сериализации. Расширяя этот базовый класс, конвертер автоматически наследует всё стандартное поведение рефлексивной сериализации — он переопределяет только точки перехвата, связанные с прокси.</p>
+
+<h3>Поля</h3>
+<table>
+<tr><th>Поле</th><th>Тип</th><th>Назначение</th></tr>
+<tr><td><code>converterLookup</code></td><td><code>ConverterLookup</code></td><td>Ссылка на реестр конвертеров XStream. Используется во время маршаллинга для делегирования правильному конвертеру для реального класса распакованной сущности. Устанавливается через внедрение в конструктор.</td></tr>
+</table>
+
+<h3>canConvert(Class clazz)</h3>
+<p>Возвращает <code>true</code> для любого класса, для которого <code>HibernateProxy.class.isAssignableFrom(clazz)</code>. Это соответствует всем классам Hibernate-прокси, сгенерированным Javassist/CGLIB (которые реализуют интерфейс <code>HibernateProxy</code>). Когда этот метод возвращает <code>true</code>, XStream направляет маршаллинг через этот конвертер вместо стандартного <code>ReflectionConverter</code>.</p>
+
+<div class="warn">Важно: Этот конвертер должен быть зарегистрирован <em>до</em> стандартного <code>ReflectionConverter</code> в цепочке конвертеров XStream, иначе стандартный конвертер перехватит прокси первым (поскольку прокси — обычные классы) и сериализует внутренности прокси вместо реальной сущности.</div>
+
+<h3>marshal(Object, HierarchicalStreamWriter, MarshallingContext)</h3>
+<p>Основная логика распаковки:</p>
+<ol>
+  <li><strong>Проверка типа:</strong> Проверяет <code>item instanceof HibernateProxy</code>.</li>
+  <li><strong>Распаковка:</strong> Вызывает <code>((HibernateProxy) arg0).getHibernateLazyInitializer().getImplementation()</code> для получения реальной сущности. Вызов <code>LazyInitializer.getImplementation()</code> принудительно инициализирует прокси — это запускает запрос к базе данных, если сущность ещё не загружена.</li>
+  <li><strong>Делегирование:</strong> Использует <code>converterLookup.lookupConverterForType(item.getClass())</code> для поиска подходящего конвертера для класса реальной сущности, затем вызывает <code>converter.marshal(item, writer, context)</code>. Это гарантирует, что реальная сущность сериализуется с использованием правильного конвертера (возможно, того же <code>HibernateProxyConverter</code>, если реальная сущность также является прокси, или стандартного рефлексивного конвертера в противном случае).</li>
+</ol>
+
+<h3>Отсутствие переопределения unmarshal()</h3>
+<p>Этот конвертер не переопределяет <code>unmarshal()</code>. Во время десериализации XStream создаёт стандартные Java-объекты — нет необходимости создавать Hibernate-прокси из XML. Десериализованные поля устанавливаются в сущность через рефлексию, и Hibernate оборачивает их, когда сущность позже сохраняется или сливается.</p>
+
+<h2>Точки интеграции</h2>
+<ul>
+  <li>Регистрируется в экземплярах XStream вместе с <a href="704.html">HibernateMapper</a> и <a href="702.html">HibernateCollectionConverter</a>.</li>
+  <li>Используется подсистемой экспорта XML (<a href="710.html">XStreamMarshallingStrategy</a>) при сериализации графов сущностей.</li>
+  <li>Зависит от интерфейса Hibernate <code>LazyInitializer</code> — если будущая версия Hibernate изменит способ, которым прокси предоставляют базовую сущность, этот конвертер потребует обновления.</li>
+</ul>
+
+<h2>Проектные решения и подводные камни</h2>
+<ul>
+  <li><strong>Принудительная инициализация:</strong> Вызов <code>getImplementation()</code> принудительно загружает ленивый прокси. Это означает, что XML-экспорт графа сущностей может вызвать каскадные запросы к базе данных для каждой лениво загружаемой ассоциации. Вызывающий код должен убедиться, что сессия Hibernate остаётся открытой, и рассмотреть использование <code>JOIN FETCH</code> или шаблона <code>OpenSessionInView</code> для предварительной загрузки ассоциаций перед сериализацией.</li>
+  <li><strong>Безопасность двойной распаковки:</strong> Если распакованная сущность сама является Hibernate-прокси (например, прокси оборачивает другой прокси), поиск конвертера-делегата может снова найти этот же <code>HibernateProxyConverter</code>, и распаковка повторяется. В конечном итоге это завершается, поскольку цепочка доходит до реального класса сущности.</li>
+  <li><strong>converterLookup.lookupConverterForType(item.getClass()):</strong> После распаковки поиск использует <code>item.getClass()</code> (класс реальной сущности), а не класс прокси. Это означает, что любые пользовательские конвертеры, зарегистрированные для конкретных типов сущностей, будут корректно выбраны, а не обойдены обёрткой прокси.</li>
+  <li><strong>Видимость на уровне пакета:</strong> Класс имеет видимость на уровне пакета (<code>class HibernateProxyConverter</code> без <code>public</code>), что указывает на то, что это внутренняя деталь реализации пакета <code>persistence.xstream</code>, не предназначенная для прямого использования вне фреймворка.</li>
+  <li><strong>Именование аргументов конструктора:</strong> Использует имена параметров <code>arg0</code>, <code>arg1</code> — стиль старой Java, предполагающий, что этот код появился в более старой версии кодовой базы.</li>
+</ul>
+
+<h2>История Git</h2><div class="hist"><pre>868d6abb7 2025 -> 2026
+63081666f Заголовки исходных файлов: 2024 -> 2025.
+b6092df09 Авторские права 2023 -> 2024
+ab45d51fa Авторские права 2001-2022 -> 2001-2023.
+5f7ef41b8 Авторские права 2021 -> 2022
+ceb63e8a1 Заголовок исходного кода: (C) 2001-2021.
+7c79f1922 Авторские права в заголовке исходника -> 2020.
+32f634b88 Оптимизация импортов
+dd5ca38ac Обновлены или созданы авторские права во всех заголовках java-файлов.
+9ebb88522 Первоначальный коммит</pre></div>
+</body>
+</html>

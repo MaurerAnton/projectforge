@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>#759: XmlOmitField [ES]</title>
+<style>
+  body { font-family: system-ui, sans-serif; max-width: 960px; margin: 2em auto; padding: 0 1em; background: #fafafa; color: #222; line-height: 1.6; }
+  h1 { border-bottom: 2px solid #333; padding-bottom: 0.3em; }
+  h2 { margin-top: 2.5em; border-bottom: 1px solid #ddd; padding-bottom: 0.2em; color: #333; }
+  h3 { margin-top: 2em; color: #444; }
+  a { color: #0366d6; }
+  .c { border-left: 3px solid #ddd; padding: .5em 1em; margin: 1em 0; background: #fff; }
+  .nav { font-size: .9em; color: #888; margin-bottom: 1em; }
+  .lang { font-size: .85em; color: #888; float: right; }
+  .lang a { color: #888; text-decoration: none; padding: 0 .3em; }
+  .lang a.active { color: #0366d6; font-weight: 600; text-decoration: underline; }
+  .meta { font-size: .9em; margin: 1em 0; color: #555; }
+  code { background: #f0f0f0; padding: 0 .2em; font-size: .93em; }
+  pre { background: #f5f5f5; padding: .8em 1em; border: 1px solid #ddd; border-radius: 4px; overflow-x: auto; font-size: .88em; line-height: 1.4; }
+  table { border-collapse: collapse; width: 100%; margin: 1em 0; }
+  th, td { border: 1px solid #ddd; padding: .5em .8em; text-align: left; font-size: .9em; }
+  th { background: #f5f5f5; font-weight: 600; }
+  .hist { font-size: .85em; color: #555; }
+</style>
+</head>
+<body>
+<div class="lang"><a href="759.html">EN</a> · <a href="759_de.html">DE</a> · <a href="759_ru.html">RU</a> · <a href="759_fr.html">FR</a> · <a href="759_es.html" class="active">ES</a></div>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Índice</a> · <a href="file-index.html">← Índice de archivos</a> · <a href="758.html">← Anterior</a> · <a href="760.html">Siguiente →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/java/org/projectforge/framework/xmlstream/XmlOmitField.java" target="_blank" title="Ver fuente en GitHub">📄 fuente</a></div>
+
+<h1>#759: <code>XmlOmitField.java</code></h1>
+<div class="meta"><code>projectforge-business/src/main/java/org/projectforge/framework/xmlstream/XmlOmitField.java</code> <strong>Anotación marcadora Java</strong> — excluye un campo de la serialización XML de XmlStream. Fuente: <code>projectforge-business/src/main/java/org/projectforge/framework/xmlstream/XmlOmitField.java</code> <span style="color:#888">39 líneas · 9 código · 26 comentarios · 4 en blanco</span></div>
+
+<div class="c">
+<strong>Propósito:</strong> Una anotación marcadora sin parámetros que indica al framework XmlStream que omita un campo durante la serialización y deserialización XML. Es el equivalente de XmlStream a la palabra clave <code>transient</code> de Java y a <code>@XmlTransient</code> de JAXB, pero limitado exclusivamente al framework XmlStream de ProjectForge — dejando el campo intacto para la serialización Java, la persistencia JPA y otros subsistemas.
+</div>
+
+<h2>Arquitectura</h2>
+
+<div class="c">
+La anotación en sí es mínima — 3 líneas de código, <code>@Target(FIELD)</code>, <code>@Retention(RUNTIME)</code>. Su poder proviene de los <em>consumidores</em> que verifican su presencia:<br><br>
+• <strong><code>XmlObjectWriter.writeField()</code></strong> (<a href="758.html">#758</a>, línea ~242): <code>if (field.isAnnotationPresent(XmlOmitField.class)) continue;</code><br>
+• <strong><code>XmlObjectReader.read()</code></strong> (<a href="757.html">#757</a>, línea ~471): omite los campos anotados con <code>@XmlOmitField</code> durante la deserialización<br><br>
+No hay lógica en la anotación misma — es un marcador puro consumido de forma reflectiva por el par lector/escritor.
+</div>
+
+<h2>¿Por qué una anotación separada en lugar de <code>transient</code>?</h2>
+
+<div class="c">
+La palabra clave <code>transient</code> de Java excluye un campo de <strong>todos</strong> los mecanismos de serialización — Serialización Java, XStream, XmlStream, mapeadores JSON, todo. Esto suele ser demasiado amplio:<br><br>
+<strong>Escenario:</strong> Un campo como <code>computedHash</code> debería almacenarse en caché en la sesión HTTP (serialización Java) pero no debe aparecer en exportaciones XML (derrochador, engañoso).<br><br>
+<strong>Solución:</strong> Hacer que el campo no sea transitorio (para que participe en la serialización de sesión Java) y anotarlo con <code>@XmlOmitField</code> (para que XmlStream lo omita). Esto proporciona un control <em>por framework</em> sobre la visibilidad de la serialización.<br><br>
+<strong>Ejemplo de seguridad:</strong> <code>password</code> en <code>PFUserDO</code>. El campo es <code>transient</code> (seguridad de sesión) Y está anotado con <code>@XmlOmitField</code> (seguridad XML). Incluso si alguien elimina <code>transient</code> para depuración, la anotación proporciona una segunda barrera que evita que las contraseñas se filtren en las exportaciones XML.
+</div>
+
+<h2>Contraste con <code>@XmlField(defaultValue=...)</code></h2>
+
+<table>
+<tr><th>Mecanismo</th><th>Cuando se omite el campo</th><th>Caso de uso</th></tr>
+<tr><td><code>@XmlOmitField</code></td><td><strong>Siempre</strong> — independientemente del valor</td><td>Contraseñas, campos calculados, estado temporal, datos sensibles</td></tr>
+<tr><td><code>@XmlField(defaultIntValue=0)</code></td><td><strong>Condicionalmente</strong> — solo cuando el valor es igual al predeterminado</td><td>Optimización de tamaño: omitir valores cero, cadenas vacías, nulos</td></tr>
+</table>
+
+<div class="c">
+La diferencia es semántica: <code>@XmlOmitField</code> dice "este campo no tiene nada que hacer en XML", mientras que <code>@XmlField(defaultValue=...)</code> dice "este campo a veces es redundante — omítelo cuando lo sea". Uno es una política estricta, el otro es una optimización suave.
+</div>
+
+<h2>Historial de Git</h2>
+<div class="hist">
+<pre>868d6abb7 2025 → 2026 (actualización de año de copyright)
+63081666f Encabezados de archivos fuente: 2024→2025
+b6092df09 Copyright 2023 → 2024
+ab45d51fa Copyright 2001-2022 → 2001-2023
+5f7ef41b8 Copyright 2021 → 2022
+cd27dd997 paquete xstream → xmlstream (renombrado para evitar confusión con la librería XStream)
+ceb63e8a1 Encabezado de código fuente: (C) 2001-2021
+7c79f1922 Copyright del encabezado fuente → 2020
+32f634b88 Optimizar importaciones
+dd5ca38ac Copyright de todos los encabezados de archivos Java actualizado o creado
+9ebb88522 Commit inicial</pre>
+</div>
+
+<div class="c">
+La anotación ha permanecido sin cambios desde el commit inicial — solo los encabezados de copyright y un cambio de nombre de paquete (<code>xstream</code> → <code>xmlstream</code>). Esta estabilidad refleja su diseño: una anotación marcadora sin parámetros no tiene partes móviles que puedan romperse. El único cambio significativo fue <code>cd27dd997</code> que renombró el paquete de <code>xstream</code> a <code>xmlstream</code> para evitar colisión de nombres con la librería XStream (<code>com.thoughtworks.xstream</code>).
+</div>
+
+<h2>Trío de anotaciones XmlStream</h2>
+
+<table>
+<tr><th>Anotación</th><th>Archivo</th><th>Rol</th></tr>
+<tr><td><code>@XmlField</code></td><td><a href="755.html">#755</a></td><td>Declara un campo para serialización con nombre, tipo, valor predeterminado, formato, orden</td></tr>
+<tr><td><code>@XmlObject</code></td><td><a href="756.html">#756</a></td><td>Declara una clase como serializable en XML con alias</td></tr>
+<tr><td><code>@XmlOmitField</code></td><td><strong>#759</strong></td><td>Excluye un campo de la serialización por completo</td></tr>
+</table>
+
+<div class="c">
+Juntas, estas tres anotaciones forman la superficie de configuración completa del framework XmlStream. <code>@XmlObject</code> habilita una clase para serialización, <code>@XmlField</code> configura campos individuales, y <code>@XmlOmitField</code> deshabilita campos selectivamente. Esto es más simple que JAXB (que tiene ~20 anotaciones) y más explícito que el enfoque de convención pura de XStream.
+</div>
+
+</body>
+</html>

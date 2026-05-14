@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>#1338 [DE]</title>
+<style>
+body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}
+h1{border-bottom:2px solid #333;padding-bottom:.3em}
+h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}
+h3{margin-top:2em;color:#444}
+a{color:#0366d6}
+.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}
+.nav{font-size:.9em;color:#888;margin-bottom:1em}
+.meta{font-size:.9em;margin:1em 0;color:#555}
+code{background:#f0f0f0;padding:0 .2em;font-size:.93em}
+pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}
+table{border-collapse:collapse;width:100%;margin:1em 0}
+th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}
+th{background:#f5f5f5;font-weight:600}
+.hist{font-size:.85em;color:#555}
+</style>
+</head>
+<body>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← Datei-Index</a> · <a href="1337.html">← Vorherige</a> · <a href="1339.html">Nächste →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/kotlin/org/projectforge/framework/persistence/metamodel/EntityInfo.kt" target="_blank" title="Quellcode auf GitHub anzeigen">📄 Quelle</a></div>
+<h1>#1338: <code>EntityInfo.kt</code></h1>
+<div class="meta"><code>projectforge-business/src/main/kotlin/org/projectforge/framework/persistence/metamodel/EntityInfo.kt</code> Metamodell-Entität — JPA-Persistenz-Metamodell, <code>projectforge-business/src/main/kotlin/org/projectforge/framework/persistence/metamodel/EntityInfo.kt</code> <span style="color:#888">111 Zeilen · 71 Code · 27 Kommentare · 13 leer</span></div>
+<div class="c">Kapselt einen JPA-<code>EntityType</code>, um introspektiven Zugriff auf Entitätsmetadaten zu ermöglichen: Eigenschaftsermittlung, Annotationsprüfung, Spaltenlängenabfragen und Persistenzprüfungen. Wird vom Importsubsystem und der Persistenzschicht verwendet, um dynamisch zwischen importierten Daten und JPA-Entitätseigenschaften abzubilden.</div>
+
+<h2>Architektur</h2>
+
+<h3>Klassenentwurf</h3>
+<p><code>EntityInfo</code> kapselt einen JPA-<code>EntityType&lt;*&gt;</code> und befüllt eager eine Liste von <code>EntityPropertyInfo</code>-Objekten für jedes JPA-Attribut, das einen <code>javaMember</code> besitzt. Es dient als Brücke zwischen JPAs Metamodell und den Laufzeit-Reflexionsanforderungen von ProjectForge.</p>
+
+<h3>Konstruktorparameter</h3>
+<table>
+<tr><th>Parameter</th><th>Typ</th><th>Zweck</th></tr>
+<tr><td><code>entityClass</code></td><td><code>Class&lt;*&gt;</code></td><td>Die Java/Kotlin-Klasse der Entität</td></tr>
+<tr><td><code>name</code></td><td><code>String</code></td><td>Entitätsname (typischerweise der JPA-Entitätsname)</td></tr>
+<tr><td><code>entityType</code></td><td><code>EntityType&lt;*&gt;</code></td><td>JPA-Metamodell-Typ, der Attributzugriff bereitstellt</td></tr>
+<tr><td><code>tableName</code></td><td><code>String?</code></td><td>Optionaler Datenbank-Tabellenname</td></tr>
+</table>
+
+<h3>Kernmethoden</h3>
+<table>
+<tr><th>Methode</th><th>Rückgabe</th><th>Beschreibung</th></tr>
+<tr><td><code>getIdProperty()</code></td><td><code>String?</code></td><td>Gibt den Namen der ID-Eigenschaft zurück (erste als ID markierte Eigenschaft)</td></tr>
+<tr><td><code>isPersistedProperty(property: KCallable)</code></td><td><code>Boolean</code></td><td>Prüft, ob ein Kotlin-Callable einem persistierten JPA-Attribut entspricht</td></tr>
+<tr><td><code>isPersistedProperty(propertyName: String)</code></td><td><code>Boolean</code></td><td>Prüft anhand des Eigenschaftsnamens</td></tr>
+<tr><td><code>getPropertyInfo(propertyName)</code></td><td><code>EntityPropertyInfo?</code></td><td>Ruft vollständige Eigenschaftsmetadaten ab</td></tr>
+<tr><td><code>getPropertiesWithAnnotation(annotationClass)</code></td><td><code>List&lt;EntityPropertyInfo&gt;</code></td><td>Findet alle Eigenschaften mit einer bestimmten Annotation</td></tr>
+<tr><td><code>getColumnAnnotation(propertyName)</code></td><td><code>Column?</code></td><td>Ruft die JPA-<code>@Column</code>-Annotation ab</td></tr>
+<tr><td><code>getColumnLength(propertyName)</code></td><td><code>Int?</code></td><td>Extrahiert die Spaltenlänge aus <code>@Column(length=...)</code>; protokolliert Warnung bei Fehlern für DO-Entitäten</td></tr>
+</table>
+
+<h3>Integration der Kotlin-Reflexion</h3>
+<p>Die Klasse unterstützt sowohl stringbasierte Eigenschaftssuchen als auch Kotlin-Reflexion (<code>KCallable</code>, <code>KMutableProperty1</code>). Die Überladungen von <code>isPersistedProperty</code> ermöglichen Aufrufern zu prüfen, ob eine Kotlin-Eigenschaft einer JPA-Spalte entspricht – essenziell für die automatische Eigenschaftszuordnung des Importsubsystems.</p>
+
+<h3>Caching für Spaltenlänge</h3>
+<p><code>getColumnLength()</code> verwendet einen internen <code>columnWithoutLength</code>-Set, um wiederholte Protokollmeldungen zu vermeiden, wenn eine Eigenschaft keine <code>@Column</code>-Annotation besitzt. Eigenschaften, die auf "DO" enden, werden auf ERROR-Level protokolliert, andere auf INFO-Level – wobei DO-Entitäten als erwartet behandelt werden, vollständige JPA-Annotationen zu besitzen.</p>
+
+<h3>Beziehungen</h3>
+<ul>
+<li><strong>EntityPropertyInfo</strong>: Wird für jedes JPA-Attribut während der <code>init</code>-Phase erstellt</li>
+<li><strong>EntityType</strong>: Die JPA-Metamodell-Quelle (typischerweise Hibernates <code>AbstractManagedType</code>)</li>
+<li><strong>Importsubsystem</strong>: Wird von Importeuren verwendet, um Feldzuordnungen gegen die Entitätsstruktur zu validieren</li>
+<li><strong>HibernateSearchMeta</strong>: Ergänzt dies durch Hibernate-Search-Index-Metadaten</li>
+</ul>
+
+<h2>Git-Verlauf</h2>
+<div class="hist"><pre>868d6abb7 2025 -> 2026
+63081666f Quellcode-Dateiköpfe: 2024 -> 2025.
+bbc198d03 Migrationskram in Arbeit... (alle Tests aller Pakete: OK).
+e801b0336 Migrationskram in Arbeit...
+efee0def3 Migrationskram in Arbeit...
+eb4e16a33 Migrationskram in Arbeit...
+ca4cb86c8 Migrationskram in Arbeit...
+e4545c8e1 Migrationskram in Arbeit...
+7f86d3730 Migrationskram in Arbeit...
+d476c7b0d Migrationskram in Arbeit...
+067a4cbb1 Migrationskram in Arbeit...
+67ce75fe9 Migrationskram in Arbeit...</pre></div>
+</body>
+</html>

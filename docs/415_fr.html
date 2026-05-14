@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>#415: KundeDao.java [FR]</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:2em;color:#444}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.lang{font-size:.85em;color:#888;float:right}.lang a{color:#888;text-decoration:none;padding:0 .3em}.lang a.active{color:#0366d6;font-weight:600;text-decoration:underline}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}</style>
+</head>
+<body>
+<div class="lang"><a href="415.html">EN</a> · <a href="415_de.html">DE</a> · <a href="415_ru.html">RU</a> · <a href="415_fr.html" class="active">FR</a> · <a href="415_es.html">ES</a></div>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← Index des fichiers</a> · <a href="283.html">← Précédent</a> · <a href="573.html">Suivant →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/java/org/projectforge/business/fibu/KundeDao.java" target="_blank" title="Voir la source sur GitHub">📄 source</a></div>
+<h1>#415: <code>KundeDao.java</code></h1>
+<div class="meta"><code>projectforge-business/src/main/java/org/projectforge/business/fibu/KundeDao.java</code> Type : Java · Rôle : Objet d'accès aux données · Source : projectforge-business/src/main/java/org/projectforge/business/fibu/KundeDao.java <span style="color:#888">129 lignes · 89 code · 26 commentaires · 14 vides</span></div>
+<div class="c">Objet d'accès aux données pour les entités Kunde. Étend BaseDao pour fournir des opérations CRUD, des requêtes Hibernate Search et un accès aux données au niveau de la logique métier.</div>
+<h2>Structure du code</h2>
+<p>Package : <code>org.projectforge.business.fibu</code></p>
+<p>Classes : <code>KundeDao</code></p>
+<p>Étend : <code>BaseDao</code></p>
+<p>Méthodes (9) : <code>select</code>, <code>hasUserSelectAccess</code>, <code>hasUserSelectAccess</code>, <code>hasAccess</code>, <code>hasHistoryAccess</code>, <code>newInstance</code>, <code>isNew</code>, <code>onInsert</code>, <code>doesNumberAlreadyExist</code></p>
+<p>Importations : 11 packages</p>
+<h2>Code source (abrégé)</h2>
+<pre>
+package org.projectforge.business.fibu;
+
+import org.jetbrains.annotations.NotNull;
+import org.projectforge.business.user.ProjectForgeGroup;
+import org.projectforge.common.i18n.UserException;
+import org.projectforge.framework.access.OperationType;
+import org.projectforge.framework.persistence.api.BaseDao;
+import org.projectforge.framework.persistence.api.BaseSearchFilter;
+import org.projectforge.framework.persistence.api.QueryFilter;
+import org.projectforge.framework.persistence.api.SortProperty;
+import org.projectforge.framework.persistence.user.entities.PFUserDO;
+import org.springframework.stereotype.Service;
+
+import java.util.List;
+
+@Service
+public class KundeDao extends BaseDao&lt;KundeDO&gt; {
+    private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(KundeDao.class);
+
+    public KundeDao() {
+        super(KundeDO.class);
+        avoidNullIdCheckBeforeSave = true;
+        this.idProperty = &quot;nummer&quot;;
+    }
+
+    @Override
+    public List&lt;KundeDO&gt; select(final BaseSearchFilter filter) {
+        final QueryFilter queryFilter = new QueryFilter(filter);
+        queryFilter.addOrder(SortProperty.asc(&quot;nummer&quot;));
+        return select(queryFilter);
+    }
+
+    /**
+     * retourne Toujours vrai, aucun accès de sélection générique nécessaire pour les objets adresse.
+     */
+    @Override
+    public boolean hasUserSelectAccess(final PFUserDO user, final boolean throwException) {
+        return accessChecker.isUserMemberOfGroup(user, throwException, ProjectForgeGroup.FINANCE_GROUP,
+                ProjectForgeGroup.CONTROLLING_GROUP,
+                ProjectForgeGroup.PROJECT_MANAGER, ProjectForgeGroup.PROJECT_ASSISTANT);
+    }
+
+    @Override
+    public boolean hasUserSelectAccess(final PFUserDO user, final KundeDO obj, final boolean throwException) {
+        if (obj == null) {
+            return true;
+        }
+        if (accessChecker.isUserMemberOfGroup(user, ProjectForgeGroup.FINANCE_GROUP,
+                ProjectForgeGroup.CONTROLLING_GROUP)) {
+            return true;
+        }
+        if (accessChecker.isUserMemberOfGroup(user, ProjectForgeGroup.PROJECT_MANAGER,
+                ProjectForgeGroup.PROJECT_ASSISTANT)) {
+            if (obj.getStatus() != null
+                    &amp;&amp; !obj.getStatus().isIn(KundeStatus.ENDED, KundeStatus.NONACTIVE, KundeStatus.NONEXISTENT)
+                    &amp;&amp; !obj.getDeleted()) {
+                // Un chef de projet ne voit pas les clients inactifs ou supprimés.
+                return true;
+            }
+        }
+        if (throwException) {
+            accessChecker.checkIsUserMemberOfGroup(user, ProjectForgeGroup.FINANCE_GROUP);
+            log.error(&quot;Cela ne devrait pas arriver ! Une exception devrait être levée.&quot;);
+        }
+        return false;
+    }
+
+    @Override
+    public boolean hasAccess(final PFUserDO user, final KundeDO obj, final KundeDO oldObj,
+                             final OperationType operationType,
+                             final boolean throwException) {
+        return accessChecker.isUserMemberOfGroup(user, throwException, ProjectForgeGroup.FINANCE_GROUP);
+    }
+
+    @Override
+    public boolean hasHistoryAccess(final PFUserDO user, final boolean throwException) {
+        return accessChecker.isUserMemberOfGroup(user, throwException, ProjectForgeGroup.FINANCE_GROUP,
+                ProjectForgeGroup.CONTROLLING_GROUP);
+    }
+
+    @Override
+    public KundeDO newInstance() {
+        return new KundeDO();
+    }
+
+    @Override
+    public boolean isNew(@NotNull KundeDO obj) {
+        return obj.getCreated() == null; // l'identifiant n'est pas nul lors de l'insertion de nouveaux clients
+    }
+
+    @Override
+    public void onInsert(KundeDO obj) {
+        if (doesNumberAlreadyExist(obj)) {
+            obj.setCreated(null);
+            throw new UserException(&quot;fibu.kunde.validation.existingCustomerNr&quot;);
+        }
+    }
+
+    public boolean doesNumberAlreadyExist(final KundeDO customer) {
+        if (customer == null || customer.getNummer() == null) {
+            return false;
+        }
+        KundeDO existingCustomer = find(customer.getNummer(), false);
+        return existingCustomer != null;
+    }
+}</pre>
+
+<h2>Historique Git</h2><div class="hist"><pre>868d6abb7 2025 -&gt; 2026
+88be16404 BaseDao/KundeDao.isNew(data)
+63081666f En-têtes des fichiers source : 2024 -&gt; 2025.
+3785f8347 Migration en cours...
+1b50060c3 BaseDao : renommé : get -&gt; find, save -&gt; insert, getList -&gt; select, load -&gt; select</pre></div>
+</body>
+</html>

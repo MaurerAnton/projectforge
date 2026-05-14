@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="es"><head><meta charset="utf-8"><title>#980 [ES]</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:2em;color:#444}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}</style></head>
+<body><div class="nav"><a href="https://maureranton.github.io/projectforge/">← Índice</a> · <a href="file-index.html">← Índice de archivos</a> · <a href="979.html">← Anterior</a> · <a href="981.html">Siguiente →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/kotlin/org/projectforge/business/fibu/SEPATransferGenerator.kt" target="_blank" title="Ver fuente en GitHub">📄 fuente</a></div>
+<h1>#980: <code>SEPATransferGenerator.kt</code></h1>
+<div class="meta"><code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/SEPATransferGenerator.kt</code> Generador de Transferencias SEPA, projectforge-business/src/main/kotlin/org/projectforge/business/fibu/SEPATransferGenerator.kt <span style="color:#888">229 líneas · 153 código · 40 comentarios · 36 en blanco</span></div>
+<div class="c">Orquesta la generación de XML de Transferencia SEPA (pain.001.001.03) a partir de facturas de ProjectForge. Coordina todo el pipeline: carga de facturas, validación de IBAN/Konto, agrupación por deudor, construcción de XML mediante <code>SEPAXmlBuilder</code> y empaquetado del resultado en <code>SEPATransferResult</code>.</div>
+
+<h2>Arquitectura</h2>
+<h3>Pipeline Principal</h3>
+<p>El generador sigue un pipeline de múltiples etapas:</p>
+<ol>
+  <li><strong>Selección de Entrada:</strong> Recibe una lista de IDs de facturas u objetos <code>RechnungDO</code> para procesar.</li>
+  <li><strong>Validación:</strong> Verifica que cada factura tenga un IBAN/BIC válido y un Konto asociado para los datos bancarios. Filtra facturas ya exportadas.</li>
+  <li><strong>Agrupación:</strong> Agrupa facturas por deudor (Kunde) para transferencias por lotes cuando sea posible.</li>
+  <li><strong>Generación de XML:</strong> Delega en <code>SEPAXmlBuilder</code> para construir el XML en formato pain.001.</li>
+  <li><strong>Ensamblado del Resultado:</strong> Empaqueta el XML generado, los recuentos de facturas procesadas y cualquier error en <code>SEPATransferResult</code>.</li>
+</ol>
+
+<h3>Grafo de Dependencias</h3>
+<p>El generador depende en gran medida de la capa de caché de fibu (<code>ProjektCache</code>, <code>KundeCache</code>, <code>KontoCache</code>) para resolver las relaciones de las facturas sin consultas adicionales a la base de datos. Utiliza <code>RechnungDao</code> para la persistencia de facturas y para marcarlas como exportadas.</p>
+
+<h3>Decisiones de Diseño</h3>
+<ul>
+  <li><strong>Idempotencia:</strong> Omite facturas ya marcadas con una fecha de exportación SEPA para evitar transferencias duplicadas.</li>
+  <li><strong>Acumulación de Errores:</strong> Recopila todos los errores de validación en lugar de fallar en el primero, proporcionando un informe de errores completo.</li>
+  <li><strong>Formato XML:</strong> Utiliza pain.001.001.03 (ISO 20022) como estándar de Transferencia SEPA, compatible con bancos de la UE.</li>
+  <li><strong>Precisión de Fecha/Hora:</strong> Genera IDs de mensaje únicos por ejecución de exportación usando marcas de tiempo, garantizando la trazabilidad.</li>
+</ul>
+
+<h2>Métodos Clave</h2>
+<table>
+<tr><th>Método</th><th>Descripción</th></tr>
+<tr><td><code>generate(invoices, exportDate)</code></td><td>Punto de entrada principal: valida, agrupa, construye XML, devuelve <code>SEPATransferResult</code></td></tr>
+<tr><td><code>buildXml(...)</code></td><td>Construye el documento XML SEPA pain.001 completo mediante <code>SEPAXmlBuilder</code></td></tr>
+<tr><td><code>validateInvoice(invoice)</code></td><td>Verifica la validez de IBAN/BIC/Konto para una sola factura</td></tr>
+</table>
+
+<h2>Historial de Git</h2><div class="hist"><pre>
+868d6abb7 2025 -> 2026
+63081666f Encabezados de archivos fuente: 2024 -> 2025.
+53e88fb6e Exportación SEPA: paymentType ahora configurable (ZAH en lugar de ZIN).
+b6092df09 Copyright 2023 -> 2024
+ab45d51fa Copyright 2001-2022 -> 2001-2023.
+f0b91f12a Transferencia SEPA: si una factura fue exportada antes, se marca con exportDate, no se elimina.
+5288f771e El generador SEPA ahora crea XML válido sin problemas de espacio de nombres y sin definiciones xmlns duplicadas.
+3b4908eb7 Exportación SEPA para facturas: ahora se utilizan datos de RechnungDO en cooperación con SEPATransferGeneratorUtils.
+e4a9008d4 Añadida exportación SEPA para facturas.
+</pre></div>
+</body></html>

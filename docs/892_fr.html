@@ -1,0 +1,143 @@
+Here is the complete HTML translated into French, with the language set to `fr` and the title updated to include `[FR]`.
+
+```html
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>#892: AuftragDao.kt [FR]</title>
+<style>
+body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}
+h1{border-bottom:2px solid #333;padding-bottom:.3em}
+h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}
+h3{margin-top:2em;color:#444}
+a{color:#0366d6}
+.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}
+.nav{font-size:.9em;color:#888;margin-bottom:1em}
+.meta{font-size:.9em;margin:1em 0;color:#555}
+code{background:#f0f0f0;padding:0 .2em;font-size:.93em}
+pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}
+table{border-collapse:collapse;width:100%;margin:1em 0}
+th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}
+th{background:#f5f5f5;font-weight:600}
+.hist{font-size:.85em;color:#555}
+</style>
+</head>
+<body>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← Index des fichiers</a> · <a href="891.html">← Précédent</a> · <a href="893.html">Suivant →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/kotlin/org/projectforge/business/fibu/AuftragDao.kt" target="_blank" title="Voir la source sur GitHub">📄 source</a></div>
+
+<h1>#892: <code>AuftragDao.kt</code></h1>
+
+<div class="meta"><code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/AuftragDao.kt</code> 
+<p><strong>Type :</strong> Spring <code>@Service</code> — Objet d'accès aux données</p>
+<p><strong>Paquetage :</strong> <code>org.projectforge.business.fibu</code></p>
+<p><strong>Chemin complet :</strong> <code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/AuftragDao.kt</code></p>
+ <span style="color:#888">644 lignes · 481 code · 93 commentaires · 70 vides</span></div>
+
+<div class="c">
+<p>L'objet d'accès aux données principal pour <code>AuftragDO</code> (commandes/devis). Étend <code>BaseDao&lt;AuftragDO&gt;</code> et fournit des opérations CRUD complètes, un filtrage avancé (par statut, type de poste, type de paiement, affectation utilisateur, projet, plages de dates), une validation lors de l'insertion/modification, des notifications par e-mail, le chargement de l'historique et une intégration avec <code>AuftragsCache</code>. Responsable de la logique « à facturer » et du filtrage multi-niveaux des postes de commande.</p>
+</div>
+
+<h2>Définition de la classe</h2>
+<pre>@Service
+open class AuftragDao : BaseDao&lt;AuftragDO&gt;(AuftragDO::class.java)</pre>
+
+<h2>Dépendances injectées</h2>
+<table>
+<tr><th>Dépendance</th><th>Type</th><th>Notes</th></tr>
+<tr><td><code>auftragsCache</code></td><td><code>AuftragsCache</code></td><td>Non autowired (dépendance cyclique) ; défini via <code>@PostConstruct</code> dans <code>AuftragsCache</code></td></tr>
+<tr><td><code>configurationService</code></td><td><code>ConfigurationService</code></td><td>Vérifie si la messagerie est configurée</td></tr>
+<tr><td><code>flatHistoryFormatService</code></td><td><code>FlatHistoryFormatService</code></td><td>Récupération des entrées d'historique pour les notifications</td></tr>
+<tr><td><code>kundeDao</code></td><td><code>KundeDao</code></td><td>Résolution du client</td></tr>
+<tr><td><code>projektDao</code></td><td><code>ProjektDao</code></td><td>Résolution du projet</td></tr>
+<tr><td><code>sendMail</code></td><td><code>SendMail</code></td><td>Livraison des notifications par e-mail</td></tr>
+<tr><td><code>taskDao</code></td><td><code>TaskDao</code></td><td>Résolution de la tâche pour les postes</td></tr>
+<tr><td><code>userDao</code></td><td><code>UserDao</code></td><td>Résolution de la personne de contact</td></tr>
+</table>
+
+<h2>Opérations clés</h2>
+
+<h3>Requête et sélection</h3>
+<p><code>select(filter, checkAccess)</code> — La méthode de requête principale, redéfinie depuis <code>BaseDao</code>. Construit un <code>QueryFilter</code> complexe prenant en charge :</p>
+<ul>
+<li><strong>Filtre Fakturiert :</strong> Lorsque <code>ZU_FAKTURIEREN</code>, interroge les commandes/postes avec le statut <code>ABGESCHLOSSEN</code> ou les échéances de paiement atteintes via une LEFT JOIN</li>
+<li><strong>Filtre utilisateur :</strong> Correspond aux commandes où l'utilisateur est la personne de contact, le chef de projet, le responsable commercial ou le directeur des ventes</li>
+<li><strong>Filtre projet :</strong> <code>isIn</code> sur la liste des projets</li>
+<li><strong>Filtre de date :</strong> <code>between/ge/le</code> sur <code>erfassungsDatum</code> (date de création)</li>
+<li><strong>Période de prestation :</strong> Délègue à <code>AuftragAndRechnungDaoHelper</code></li>
+<li><strong>Filtre type de poste :</strong> <code>filterPositionsArten</code> utilisant <code>AuftragsPositionsArtFilter</code></li>
+<li><strong>Filtre statut de poste :</strong> <code>filterPositionsStatus</code> — correspond aux commandes où au moins un poste non supprimé a le statut donné</li>
+<li><strong>Filtre type de paiement :</strong> <code>filterPositionsPaymentTypes</code> utilisant <code>AuftragsPositionsPaymentTypeFilter</code></li>
+<li>Résultats triés par <code>nummer</code> décroissant</li>
+</ul>
+
+<h3>Validation : <code>onInsertOrModify(obj, operationType)</code></h3>
+<p>Applique les règles métier avant la persistance :</p>
+<ol>
+<li><code>nummer</code> ne doit pas être nul</li>
+<li><code>status</code> ne doit pas être nul ni <code>OPTIONAL</code></li>
+<li>Lors de l'insertion : <code>nummer</code> doit être le prochain numéro séquentiel (sans trou)</li>
+<li>Lors de la mise à jour : <code>nummer</code> ne doit pas entrer en conflit avec une autre commande existante</li>
+<li>Au moins un poste doit exister</li>
+<li>Les postes vides en fin de liste (id=null, isEmpty=true) sont supprimés (mais le premier poste n'est jamais supprimé)</li>
+<li>Le drapeau <code>vollstaendigFakturiert</code> de chaque poste est vérifié via <code>checkVollstaendigFakturiert()</code></li>
+<li>Le statut de l'interface utilisateur est sérialisé en XML et stocké dans <code>uiStatusAsXml</code></li>
+<li>Les échéances de paiement vides en fin de liste sont élaguées</li>
+<li><code>validateDatesInPaymentScheduleWithinPeriodOfPerformanceOfPosition()</code> — garantit que toutes les dates d'échéance se situent dans la période de prestation du poste (tolérance de 3 mois pour la date de fin)</li>
+<li><code>validateAmountsInPaymentScheduleNotGreaterThanNetSumOfPosition()</code> — la somme de tous les montants d'échéance pour un poste ne doit pas dépasser le montant net du poste</li>
+</ol>
+
+<h3>Gestion des numéros</h3>
+<ul>
+<li><code>nextNumber</code> — Renvoie le prochain numéro de commande disponible (le plus élevé existant + 1)</li>
+<li><code>getNextNumber(auftrag)</code> — Si la commande a déjà un ID, récupère son numéro d'origine pour le conserver ; sinon, attribue le prochain numéro séquentiel</li>
+<li>Le numéro de départ est défini comme <code>START_NUMBER = 1</code></li>
+</ul>
+
+<h3>Notification : <code>sendNotificationIfRequired(auftrag, operationType, requestUrl)</code></h3>
+<p>Envoie une notification par e-mail HTML à la personne de contact lorsqu'une commande est créée/modifiée/supprimée. Utilise le modèle Groovy <code>mail/orderChangeNotification.html</code>. Inclut jusqu'à 10 entrées d'historique les plus récentes. Renvoie <code>false</code> si la messagerie n'est pas configurée, si aucune personne de contact n'est assignée ou si la personne de contact n'a pas les droits d'accès SELECT.</p>
+
+<h3>Intégration de l'historique</h3>
+<ul>
+<li><code>addOwnHistoryEntries(obj, context)</code> — Charge et fusionne l'historique pour tous les postes (y compris supprimés) et les échéances de paiement</li>
+<li><code>getHistoryPropertyPrefix(context)</code> — Renvoie <code>"pos#N"</code> pour les entrées d'historique des postes et <code>"payment#N"</code> pour les entrées d'historique des échéances de paiement</li>
+<li><code>additionalHistorySearchDOs</code> — Inclut <code>AuftragsPositionDO</code> pour la recherche d'historique en texte intégral</li>
+</ul>
+
+<h3>Méthodes de recherche</h3>
+<ul>
+<li><code>getAuftragsPosition(posString)</code> — Analyse le format <code>"###.##"</code> (numéro de commande.numéro de poste) et renvoie le poste correspondant</li>
+<li><code>getAuftragsPosition(id)</code> — Trouve un poste par son identifiant en base de données</li>
+<li><code>years</code> — Renvoie un tableau de toutes les années avec activité de commande (min/max de <code>angebotsDatum</code>)</li>
+<li><code>buildStatistik(list)</code> — Agrège les statistiques pour une liste de commandes</li>
+</ul>
+
+<h3>Assistants de définition (setters)</h3>
+<p>Les méthodes <code>setContactPerson()</code>, <code>setTask()</code>, <code>setKunde()</code> et <code>setProjekt()</code> résolvent les entités associées par ID en utilisant <code>findOrLoad</code> et les définissent sur la commande ou le poste.</p>
+
+<h2>Champs de recherche supplémentaires</h2>
+<p>Le tableau <code>ADDITIONAL_SEARCH_FIELDS</code> étend la recherche Hibernate pour indexer les champs des entités associées :</p>
+<pre>contactPerson.username, contactPerson.firstname, contactPerson.lastname,
+kunde.name, projekt.name, projekt.kunde.name,
+positionen.position, positionen.art, positionen.status,
+positionen.titel, positionen.bemerkung, positionen.nettoSumme</pre>
+
+<h2>Objet compagnon</h2>
+<table>
+<tr><th>Constante</th><th>Valeur</th></tr>
+<tr><td><code>USER_RIGHT_ID</code></td><td><code>UserRightId.PM_ORDER_BOOK</code></td></tr>
+<tr><td><code>START_NUMBER</code></td><td><code>1</code></td></tr>
+</table>
+
+<h2>Historique Git</h2>
+<div class="hist"><pre>868d6abb7 2025 -> 2026
+4550ccc8a MonthlyEmployeeReport: affichage des heures hebdomadaires nettes et brutes. Correction du select dans AuftragDao.positionen.status
+63081666f En-têtes des fichiers sources : 2024 -> 2025.
+db2599ab8 Historique dans le carnet de commandes, factures entrantes/sortantes et projets.
+18bf92219 WIP : Gestion des entrées d'historique. VisitorBookDao.
+9c633d4ce AuftragDao/AuftragFilter : correction des commandes à facturer et entièrement facturées.
+ae2c04ee0 Travaux de migration en cours... (tous les tests de tous les paquetages : OK).
+(150+ commits au total, couvrant la migration vers les identifiants Long, le refactoring Spring, les mises à jour de Hibernate Search, etc.)</pre></div>
+</body>
+</html>

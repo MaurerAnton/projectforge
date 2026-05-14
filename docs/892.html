@@ -2,7 +2,8 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>#892: AuftragsOrderState.kt</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>#892: AuftragDao.kt</title>
 <style>
 body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}
 h1{border-bottom:2px solid #333;padding-bottom:.3em}
@@ -21,49 +22,119 @@ th{background:#f5f5f5;font-weight:600}
 </style>
 </head>
 <body>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="891.html">← Prev</a> · <a href="893.html">Next →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/kotlin/org/projectforge/business/fibu/AuftragDao.kt" target="_blank" title="View source on GitHub">📄 source</a></div>
 
-<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="891.html">← Prev</a> · <a href="893.html">Next →</a></div>
+<h1>#892: <code>AuftragDao.kt</code></h1>
 
-<h1>#892: <code>AuftragsOrderState.kt</code></h1>
-
-<div class="meta">
-  <strong>Type:</strong> Enum &middot;
-  <strong>Purpose:</strong> Categorizes the business state of an order or order position &middot;
-  <strong>Package:</strong> <code>org.projectforge.business.fibu</code><br>
-  <strong>Source path:</strong> <code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/AuftragsOrderState.kt</code>
-</div>
+<div class="meta"><code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/AuftragDao.kt</code> 
+<p><strong>Type:</strong> Spring <code>@Service</code> — Data Access Object</p>
+<p><strong>Package:</strong> <code>org.projectforge.business.fibu</code></p>
+<p><strong>Full path:</strong> <code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/AuftragDao.kt</code></p>
+ <span style="color:#888">644 lines · 481 code · 93 comments · 70 blank</span></div>
 
 <div class="c">
-  A three-value enum that classifies orders/positions into business categories: <strong>POTENTIAL</strong> (acquisition phase), <strong>COMMISSIONED</strong> (confirmed/ordered), or <strong>LOST</strong> (not won). Used for summarization in order book statistics and forecast views. Renamed from "ORDERED" to "COMMISSIONED" to better reflect business terminology.
+<p>The primary data access object for <code>AuftragDO</code> (orders/quotes). Extends <code>BaseDao&lt;AuftragDO&gt;</code> and provides comprehensive CRUD operations, advanced filtering (by status, position type, payment type, user assignment, project, date ranges), validation during insert/modify, email notifications, history loading, and integration with the <code>AuftragsCache</code>. Responsible for the "to be invoiced" logic and multi-level order position filtering.</p>
 </div>
 
-<h2>Enum Values</h2>
+<h2>Class Definition</h2>
+<pre>@Service
+open class AuftragDao : BaseDao&lt;AuftragDO&gt;(AuftragDO::class.java)</pre>
+
+<h2>Injected Dependencies</h2>
 <table>
-  <tr><th>Value</th><th>Meaning</th></tr>
-  <tr><td><code>POTENTIAL</code></td><td>Order/position is in the acquisition/pipeline phase — not yet confirmed</td></tr>
-  <tr><td><code>COMMISSIONED</code></td><td>Order/position has been officially commissioned/ordered by the customer</td></tr>
-  <tr><td><code>LOST</code></td><td>Order/position was not won</td></tr>
+<tr><th>Dependency</th><th>Type</th><th>Notes</th></tr>
+<tr><td><code>auftragsCache</code></td><td><code>AuftragsCache</code></td><td>Not autowired (cyclic dependency); set via <code>@PostConstruct</code> in <code>AuftragsCache</code></td></tr>
+<tr><td><code>configurationService</code></td><td><code>ConfigurationService</code></td><td>Check if mail is configured</td></tr>
+<tr><td><code>flatHistoryFormatService</code></td><td><code>FlatHistoryFormatService</code></td><td>History entry retrieval for notifications</td></tr>
+<tr><td><code>kundeDao</code></td><td><code>KundeDao</code></td><td>Customer resolution</td></tr>
+<tr><td><code>projektDao</code></td><td><code>ProjektDao</code></td><td>Project resolution</td></tr>
+<tr><td><code>sendMail</code></td><td><code>SendMail</code></td><td>Email notification delivery</td></tr>
+<tr><td><code>taskDao</code></td><td><code>TaskDao</code></td><td>Task resolution for positions</td></tr>
+<tr><td><code>userDao</code></td><td><code>UserDao</code></td><td>Contact person resolution</td></tr>
 </table>
 
-<h2>Methods</h2>
+<h2>Key Operations</h2>
+
+<h3>Query &amp; Selection</h3>
+<p><code>select(filter, checkAccess)</code> — The core query method, overridden from <code>BaseDao</code>. Builds a complex <code>QueryFilter</code> supporting:</p>
 <ul>
-  <li><code>isIn(vararg state: AuftragsOrderState): Boolean</code> — checks if this value matches any of the given states. Used in conditional logic throughout order processing.</li>
+<li><strong>Fakturiert filter:</strong> When <code>ZU_FAKTURIEREN</code>, queries orders/positions with status <code>ABGESCHLOSSEN</code> or reached payment schedules via a LEFT JOIN</li>
+<li><strong>User filter:</strong> Matches orders where the user is contact person, project manager, head of business, or sales manager</li>
+<li><strong>Project filter:</strong> <code>isIn</code> on project list</li>
+<li><strong>Date filter:</strong> <code>between/ge/le</code> on <code>erfassungsDatum</code> (creation date)</li>
+<li><strong>Period of performance:</strong> Delegates to <code>AuftragAndRechnungDaoHelper</code></li>
+<li><strong>Position type filter:</strong> <code>filterPositionsArten</code> using <code>AuftragsPositionsArtFilter</code></li>
+<li><strong>Position status filter:</strong> <code>filterPositionsStatus</code> — matches orders where any non-deleted position has the given status</li>
+<li><strong>Payment type filter:</strong> <code>filterPositionsPaymentTypes</code> using <code>AuftragsPositionsPaymentTypeFilter</code></li>
+<li>Results ordered by <code>nummer</code> descending</li>
 </ul>
 
-<h2>Git History</h2>
-<div class="hist"><pre>
-868d6abb7 2025 -> 2026
-63081666f Source file headers: 2024-> 2025.
-42dc9fa16 Orders: ordered -> commissioned.
-d02c8a770 Migration stuff in progress...
-b6092df09 Copyright 2023 -> 2024
-ab45d51fa Copyright 2001-2022 -> 2001-2023.
-5f7ef41b8 Copyright 2021 -> 2022
-ceb63e8a1 Source code header: (C) 2001-2021.
-7c79f1922 Copyright of source header -> 2020.
-dd5ca38ac CopyRight of all java file-header updated or created.
-9ebb88522 Initial commit
-</pre></div>
+<h3>Validation: <code>onInsertOrModify(obj, operationType)</code></h3>
+<p>Enforces business rules before persisting:</p>
+<ol>
+<li><code>nummer</code> must not be null</li>
+<li><code>status</code> must not be null or <code>OPTIONAL</code></li>
+<li>On insert: <code>nummer</code> must be the next sequential number (no gaps)</li>
+<li>On update: <code>nummer</code> must not conflict with another existing order</li>
+<li>At least one position must exist</li>
+<li>Trailing empty positions (id=null, isEmpty=true) are removed from the end (but the first position is never removed)</li>
+<li>Each position's <code>vollstaendigFakturiert</code> flag is checked via <code>checkVollstaendigFakturiert()</code></li>
+<li>UI status is serialized to XML and stored in <code>uiStatusAsXml</code></li>
+<li>Trailing empty payment schedules are pruned</li>
+<li><code>validateDatesInPaymentScheduleWithinPeriodOfPerformanceOfPosition()</code> — ensures all payment schedule dates fall within the position's period of performance (plus 3 months tolerance for the end date)</li>
+<li><code>validateAmountsInPaymentScheduleNotGreaterThanNetSumOfPosition()</code> — sum of all payment schedule amounts for a position must not exceed the position's net sum</li>
+</ol>
 
+<h3>Number Management</h3>
+<ul>
+<li><code>nextNumber</code> — Returns the next available order number (highest existing + 1)</li>
+<li><code>getNextNumber(auftrag)</code> — If the order already has an ID, retrieves its original number to preserve it; otherwise assigns the next sequential number</li>
+<li>Starting number is defined as <code>START_NUMBER = 1</code></li>
+</ul>
+
+<h3>Notification: <code>sendNotificationIfRequired(auftrag, operationType, requestUrl)</code></h3>
+<p>Sends an HTML email notification to the contact person when an order is created/modified/deleted. Uses Groovy template <code>mail/orderChangeNotification.html</code>. Includes up to 10 most recent history entries. Returns <code>false</code> if mail is not configured, no contact person is assigned, or the contact person lacks SELECT access.</p>
+
+<h3>History Integration</h3>
+<ul>
+<li><code>addOwnHistoryEntries(obj, context)</code> — Loads and merges history for all positionen (including deleted) and payment schedules</li>
+<li><code>getHistoryPropertyPrefix(context)</code> — Returns <code>"pos#N"</code> for position history entries and <code>"payment#N"</code> for payment schedule history entries</li>
+<li><code>additionalHistorySearchDOs</code> — Includes <code>AuftragsPositionDO</code> for full-text history search</li>
+</ul>
+
+<h3>Lookup Methods</h3>
+<ul>
+<li><code>getAuftragsPosition(posString)</code> — Parses format <code>"###.##"</code> (order number.position number) and returns the matching position</li>
+<li><code>getAuftragsPosition(id)</code> — Finds a position by its database ID</li>
+<li><code>years</code> — Returns array of all years with order activity (min/max of <code>angebotsDatum</code>)</li>
+<li><code>buildStatistik(list)</code> — Aggregates statistics for a list of orders</li>
+</ul>
+
+<h3>Setter Helpers</h3>
+<p>Methods <code>setContactPerson()</code>, <code>setTask()</code>, <code>setKunde()</code>, and <code>setProjekt()</code> resolve related entities by ID using <code>findOrLoad</code> and set them on the order or position.</p>
+
+<h2>Additional Search Fields</h2>
+<p>The <code>ADDITIONAL_SEARCH_FIELDS</code> array extends Hibernate Search to index fields from related entities:</p>
+<pre>contactPerson.username, contactPerson.firstname, contactPerson.lastname,
+kunde.name, projekt.name, projekt.kunde.name,
+positionen.position, positionen.art, positionen.status,
+positionen.titel, positionen.bemerkung, positionen.nettoSumme</pre>
+
+<h2>Companion Object</h2>
+<table>
+<tr><th>Constant</th><th>Value</th></tr>
+<tr><td><code>USER_RIGHT_ID</code></td><td><code>UserRightId.PM_ORDER_BOOK</code></td></tr>
+<tr><td><code>START_NUMBER</code></td><td><code>1</code></td></tr>
+</table>
+
+<h2>Git History</h2>
+<div class="hist"><pre>868d6abb7 2025 -> 2026
+4550ccc8a MonthlyEmployeeReport: show weekly net and gross hours. Fix select in AuftragDao.positionen.status
+63081666f Source file headers: 2024-> 2025.
+db2599ab8 History in orderbook, incoming/outgoing invoices and projects.
+18bf92219 WIP: History entries handling. VisitorBookDao.
+9c633d4ce AuftragDao/AuftragFilter: to-be-invoiced and fully-invoiced fixed.
+ae2c04ee0 Migration stuff in progress... (all tests of all packages: OK).
+(150+ commits total, spanning migration to Long IDs, Spring refactoring, Hibernate Search updates, etc.)</pre></div>
 </body>
 </html>

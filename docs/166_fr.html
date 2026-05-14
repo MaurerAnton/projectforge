@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>166: LiquidityForecastPage.java [FR]</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:1.5em;color:#444;font-size:1em}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.lang{font-size:.85em;color:#888;float:right}.lang a{color:#888;text-decoration:none;padding:0 .3em}.lang a.active{color:#0366d6;font-weight:600;text-decoration:underline}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}pre.diff{background:#fff;font-size:.82em;max-height:300px;overflow-y:auto}</style>
+</head>
+<body>
+<div class="lang"><a href="166.html">EN</a> · <a href="166_de.html">DE</a> · <a href="166_ru.html">RU</a> · <a href="166_fr.html" class="active">FR</a> · <a href="166_es.html">ES</a></div>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← Index des fichiers</a> · <a href="593.html">← Précédent</a> · <a href="1035.html">Suivant →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/plugins/org.projectforge.plugins.liquidityplanning/src/main/java/org/projectforge/plugins/liquidityplanning/LiquidityForecastPage.java" target="_blank" title="Voir la source sur GitHub">📄 source</a></div>
+<h1>#166 : <code>LiquidityForecastPage.java</code></h1>
+<div class="meta"><code>plugins/org.projectforge.plugins.liquidityplanning/src/main/java/org/projectforge/plugins/liquidityplanning/LiquidityForecastPage.java</code> Classe Java, <code>plugins/org.projectforge.plugins.liquidityplanning/src/main/java/org/projectforge/plugins/liquidityplanning/LiquidityForecastPage.java</code> <span style="color:#888">127 lignes · 77 code · 35 commentaires · 15 vides</span></div>
+<div class="c"><strong>Objectif :</strong> Fichier source : projectforge/plugins/liquidityplanning/LiquidityForecastPage.java. LiquidityForecastPage.java fait partie de l'application open-source de gestion de projet ProjectForge.</div>
+<h2>Source (100 premières lignes)</h2>
+<pre>/////////////////////////////////////////////////////////////////////////////
+//
+// Projet ProjectForge Community Edition
+//         www.projectforge.org
+//
+// Copyright (C) 2001-2026 Micromata GmbH, Allemagne (www.micromata.com)
+//
+// ProjectForge est sous double licence.
+//
+// Cette édition communautaire est un logiciel libre ; vous pouvez la redistribuer et/ou
+// la modifier selon les termes de la GNU General Public License telle que publiée
+// par la Free Software Foundation ; version 3 de la Licence.
+//
+// Cette édition communautaire est distribuée dans l'espoir qu'elle sera utile,
+// mais SANS AUCUNE GARANTIE ; sans même la garantie implicite de
+// QUALITÉ MARCHANDE ou d'ADÉQUATION À UN USAGE PARTICULIER. Voir la GNU General
+// Public License pour plus de détails.
+//
+// Vous devriez avoir reçu une copie de la GNU General Public License avec
+// ce programme ; sinon, consultez http://www.gnu.org/licenses/.
+//
+/////////////////////////////////////////////////////////////////////////////
+
+package org.projectforge.plugins.liquidityplanning;
+
+import org.apache.wicket.AttributeModifier;
+import org.apache.wicket.model.IModel;
+import org.apache.wicket.model.LoadableDetachableModel;
+import org.apache.wicket.request.mapper.parameter.PageParameters;
+import org.jfree.chart.JFreeChart;
+import org.projectforge.web.WicketSupport;
+import org.projectforge.web.wicket.AbstractStandardFormPage;
+import org.projectforge.web.wicket.JFreeChartImage;
+import org.projectforge.web.wicket.bootstrap.GridBuilder;
+import org.projectforge.web.wicket.flowlayout.ImagePanel;
+
+import java.util.Objects;
+
+public class LiquidityForecastPage extends AbstractStandardFormPage {
+    private static final long serialVersionUID = 6510134821712582764L;
+
+    private static final int IMAGE_WIDTH = 800;
+
+    private static final int IMAGE_HEIGHT = 400;
+
+    private LiquidityForecast forecast;
+
+    private final GridBuilder gridBuilder;
+
+    private ImagePanel xyPlotImage, barChartImage;
+
+    private final LiquidityForecastForm form;
+
+    public LiquidityForecastPage(final PageParameters parameters) {
+        super(parameters);
+        form = new LiquidityForecastForm(this);
+        body.add(form);
+        form.init();
+        gridBuilder = new GridBuilder(body, "flowgrid");
+    }
+
+    /**
+     * @see org.projectforge.web.wicket.AbstractSecuredPage#onInitialize()
+     */
+    @Override
+    protected void onInitialize() {
+        super.onInitialize();
+        xyPlotImage = new ImagePanel(gridBuilder.getPanel().newChildId());
+        gridBuilder.getPanel().add(xyPlotImage);
+        gridBuilder.newGridPanel();
+        barChartImage = new ImagePanel(gridBuilder.getPanel().newChildId());
+        gridBuilder.getPanel().add(barChartImage);
+    }
+
+    /**
+     * @see org.projectforge.web.wicket.AbstractUnsecureBasePage#onBeforeRender()
+     */
+    @Override
+    protected void onBeforeRender() {
+        //    if (forecast == null) {
+        //      forecast = LiquidityEntryListPage.getForecast();
+        //    }
+        super.onBeforeRender();
+        if (forecast == null || !Objects.equals(form.getSettings().getBaseDate(), forecast.getBaseDate())) {
+            forecast = WicketSupport.get(LiquidityForecastBuilder.class).build(form.getSettings().getBaseDate());
+        }
+        {
+            IModel&lt;JFreeChart&gt; chartModel = new LoadableDetachableModel&lt;&gt;() {
+                @Override
+                protected JFreeChart load() {
+                    return new LiquidityChartBuilder().createXYPlot(forecast, form.getSettings()); // Méthode pour créer le diagramme
+                }
+            };
+            final JFreeChartImage image = new JFreeChartImage(ImagePanel.IMAGE_ID, chartModel, IMAGE_WIDTH, IMAGE_HEIGHT);
+            image.add(AttributeModifier.replace("width", String.valueOf(IMAGE_WIDTH)));
+            image.add(AttributeModifier.replace("height", String.valueOf(IMAGE_HEIGHT)));
+            xyPlotImage.addImageIfNotPresent(image);
+        }
+        {
+            IModel&lt;JFreeChart&gt; chartModel = new LoadableDetachableModel&lt;&gt;() {</pre>
+<h2>Historique Git</h2>
+<div class="hist">
+<pre>868d6abb7 2025 -> 2026
+63081666f En-têtes des fichiers source : 2024 -> 2025.
+b810d1c78 Migration en cours... (tous les tests de tous les packages : OK).
+3785f8347 Migration en cours...
+43453fcaf Migration en cours...</pre>
+<h3>868d6abb7</h3><div class="c"><strong>2025 -> 2026</strong><pre class="diff">868d6abb75cd191a892911ac8e45058932cf9074
+diff --git a/plugins/org.projectforge.plugins.liquidityplanning/src/main/java/org/projectforge/plugins/liquidityplanning/LiquidityForecastPage.java b/plugins/org.projectforge.plugins.liquidityplanning/src/main/java/org/projectforge/plugins/liquidityplanning/LiquidityForecastPage.java
+index baf22f3a6..d96e91a81 100644
+--- a/plugins/org.projectforge.plugins.liquidityplanning/src/main/java/org/projectforge/plugins/liquidityplanning/LiquidityForecastPage.java
++++ b/plugins/org.projectforge.plugins.liquidityplanning/src/main/java/org/projectforge/plugins/liquidityplanning/LiquidityForecastPage.java
+@@ -3,7 +3,7 @@
+ // Projet ProjectForge Community Edition
+ //         www.projectforge.org
+ //
+-// Copyright (C) 2001-2025 Micromata GmbH, Allemagne (www.micromata.com)
++// Copyright (C) 2001-2026 Micromata GmbH, Allemagne (www.micromata.com)
+ //
+ // ProjectForge est sous double licence.
+ //</pre></div><h3>63081666f</h3><div class="c"><strong>En-têtes des fichiers source : 2024 -> 2025.</strong><pre class="diff">63081666f620fb87315f01b817e560e0b2f6a33a
+diff --git a/plugins/org.projectforge.plugins.liquidityplanning/src/main/java/org/projectforge/plugins/liquidityplanning/LiquidityForecastPage.java b/plugins/org.projectforge.plugins.liquidityplanning/src/main/java/org/projectforge/plugins/liquidityplanning/LiquidityForecastPage.java
+index fb5b7a1e0..baf22f3a6 100644
+--- a/plugins/org.projectforge.plugins.liquidityplanning/src/main/java/org/projectforge/plugins/liquidityplanning/LiquidityForecastPage.java
++++ b/plugins/org.projectforge.plugins.liquidityplanning/src/main/java/org/projectforge/plugins/liquidityplanning/LiquidityForecastPage.java
+@@ -3,7 +3,7 @@
+ // Projet ProjectForge Community Edition
+ //         www.projectforge.org
+ //
+-// Copyright (C) 2001-2024 Micromata GmbH, Allemagne (www.micromata.com)
++// Copyright (C) 2001-2025 Micromata GmbH, Allemagne (www.micromata.com)
+ //
+ // ProjectForge est sous double licence.
+ //</pre></div><h3>b810d1c78</h3><div class="c"><strong>Migration en cours... (tous les tests de tous les packages : OK).</strong><pre class="diff">b810d1c7812193f8ed72e354764f4d41c24062ae
+diff --git a/plugins/org.projectforge.plugins.liquidityplanning/src/main/java/org/projectforge/plugins/liquidityplanning/LiquidityForecastPage.java b/plugins/org.projectforge.plugins.liquidityplanning/src/main/java/org/projectforge/plugins/liquidityplanning/LiquidityForecastPage.java
+index a710d11f5..fb5b7a1e0 100644
+--- a/plugins/org.projectforge.plugins.liquidityplanning/src/main/java/org/projectforge/plugins/liquidityplanning/LiquidityForecastPage.java
++++ b/plugins/org.projectforge.plugins.liquidityplanning/src/main/java/org/projectforge/plugins/liquidityplanning/LiquidityForecastPage.java
+@@ -94,7 +94,7 @@ public class LiquidityForecastPage extends AbstractStandardFormPage {
+             final JFreeChartImage image = new JFreeChartImage(ImagePanel.IMAGE_ID, chartModel, IMAGE_WIDTH, IMAGE_HEIGHT);
+             image.add(AttributeModifier.replace("width", String.valueOf(IMAGE_WIDTH)));
+             image.add(AttributeModifier.replace("height", String.valueOf(IMAGE_HEIGHT)));
+-            xyPlotImage.addImage(image);
++            xyPlotImage.addImageIfNotPresent(image);
+         }
+         {
+             IModel&lt;JFreeChart&gt; chartModel = new LoadableDetachableModel&lt;&gt;() {
+@@ -106,7 +106,7 @@ public class LiquidityForecastPage extends AbstractStandardFormPage {
+             final JFreeChartImage image = new JFreeChartImage(ImagePanel.IMAGE_ID, chartModel, IMAGE_WIDTH, IMAGE_HEIGHT);
+             image.add(AttributeModifier.replace("width", String.valueOf(IMAGE_WIDTH)));
+             image.add(AttributeModifier.replace("height", String.valueOf(IMAGE_HEIGHT)));
+-            barChartImage.addImage(image);
++            barChartImage.addImageIfNotPresent(image);
+         }
+     }
+ </pre></div><h3>3785f8347</h3><div class="c"><strong>Migration en cours...</strong><pre class="diff">3785f83479d2e37e6410950c957b0848c19f30ea
+diff --git a/plugins/org.projectforge.plugins.liquidityplanning/src/main/java/org/projectforge/plugins/liquidityplanning/LiquidityForecastPage.java b/plugins/org.projectforge.plugins.liquidityplanning/src/main/java/org/projectforge/plugins/liquidityplanning/LiquidityForecastPage.java
+index 5e79e2aad..a710d11f5 100644
+--- a/plugins/org.projectforge.plugins.liquidityplanning/src/main/java/org/projectforge/plugins/liquidityplanning/LiquidityForecastPage.java
++++ b/plugins/org.projectforge.plugins.liquidityplanning/src/main/java/org/projectforge/plugins/liquidityplanning/LiquidityForecastPage.java
+@@ -24,11 +24,10 @@
+ package org.projectforge.plugins.liquidityplanning;
+ 
+ import org.apache.wicket.AttributeModifier;
++import org.apache.wicket.model.IModel;
++import org.apache.wicket.model.LoadableDetachableModel;
+ import org.apache.wicket.request.mapper.parameter.PageParameters;
+-import org.apache.wicket.spring.injection.annot.SpringBean;
+ import org.jfree.chart.JFreeChart;
+-import org.projectforge.business.fibu.EingangsrechnungDao;
+-import org.projectforge.business.fibu.RechnungDao;
+ import org.projectforge.web.WicketSupport;
+ import org.projectforge.web.wicket.AbstractStandardFormPage;
+ import org.projectforge.web.wicket.JFreeChartImage;
+@@ -37,89 +36,92 @@ import org.projectforge.web.wicket.flowlayout.ImagePanel;
+ 
+ import java.util.Objects;
+ 
+-public class LiquidityForecastPage extends AbstractStandardFormPage
+-{
+-  private static final long serialVersionUID = 6510134821712582764L;
++public class LiquidityForecastPage extends AbstractStandardFormPage {
++    private static final long serialVersionUID = 6510134821712582764L;
+ 
+-  private static final int IMAGE_WIDTH = 800;
++    private static final int IMAGE_WIDTH = 800;
+ 
+-  private static final int IMAGE_HEIGHT = 400;
++    private static final int IMAGE_HEIGHT = 400;
+ 
+-  private LiquidityForecast forecast;
++    private LiquidityForecast forecast;
+ 
+-  private final GridBuilder gridBuilder;
++    private final GridBuilder gridBuilder;
+ 
+-  private ImagePanel xyPlotImage, barChartImage;
++    private ImagePanel xyPlotImage, barChartImage;
+ 
+-  private final LiquidityForecastForm form;
++    private final LiquidityForecastForm form;
+ 
+-  public LiquidityForecastPage(final PageParameters parameters)
+-  {
+-    super(parameters);
+-    form = new LiquidityForecastForm(this);
+-    body.add(form);
+-    form.init();
+-    gridBuilder = new GridBuilder(body, "flowgrid");
+-  }
+-
+-  /**
+-   * @see org.projectforge.web.wicket.AbstractSecuredPage#onInitialize()
+-   */
+-  @Override</pre></div><h3>43453fcaf</h3><div class="c"><strong>Migration en cours...</strong><pre class="diff">43453fcafee5296d6a44684e27f8d09ee29fed06
+diff --git a/plugins/org.projectforge.plugins.liquidityplanning/src/main/java/org/projectforge/plugins/liquidityplanning/LiquidityForecastPage.java b/plugins/org.projectforge.plugins.liquidityplanning/src/main/java/org/projectforge/plugins/liquidityplanning/LiquidityForecastPage.java
+index 2906c2f16..5e79e2aad 100644
+--- a/plugins/org.projectforge.plugins.liquidityplanning/src/main/java/org/projectforge/plugins/liquidityplanning/LiquidityForecastPage.java
++++ b/plugins/org.projectforge.plugins.liquidityplanning/src/main/java/org/projectforge/plugins/liquidityplanning/LiquidityForecastPage.java
+@@ -29,6 +29,7 @@ import org.apache.wicket.spring.injection.annot.SpringBean;
+ import org.jfree.chart.JFreeChart;
+ import org.projectforge.business.fibu.EingangsrechnungDao;
+ import org.projectforge.business.fibu.RechnungDao;
++import org.projectforge.web.WicketSupport;
+ import org.projectforge.web.wicket.AbstractStandardFormPage;
+ import org.projectforge.web.wicket.JFreeChartImage;
+ import org.projectforge.web.wicket.bootstrap.GridBuilder;
+@@ -44,18 +45,6 @@ public class LiquidityForecastPage extends AbstractStandardFormPage
+ 
+   private static final int IMAGE_HEIGHT = 400;
+ 
+-  @SpringBean
+-  private LiquidityEntryDao liquidityEntryDao;
+-
+-  @SpringBean
+-  private LiquidityForecastBuilder liquidityForecastBuilder;
+-
+-  @SpringBean
+-  private RechnungDao rechnungDao;
+-
+-  @SpringBean
+-  private EingangsrechnungDao eingangsrechnungDao;
+-
+   private LiquidityForecast forecast;
+ 
+   private final GridBuilder gridBuilder;
+@@ -98,7 +87,7 @@ public class LiquidityForecastPage extends AbstractStandardFormPage
+     //    }
+     super.onBeforeRender();
+     if (forecast == null || !Objects.equals(form.getSettings().getBaseDate(), forecast.getBaseDate())) {
+-      forecast = liquidityForecastBuilder.build(form.getSettings().getBaseDate());
++      forecast = WicketSupport.get(LiquidityForecastBuilder.class).build(form.getSettings().getBaseDate());
+     }
+     final LiquidityChartBuilder chartBuilder = new LiquidityChartBuilder();
+     {</pre></div>
+</div>
+</body></html>

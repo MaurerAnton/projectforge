@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>#800: ExceptionHelper [ES]</title>
+<style>
+body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}
+h1{border-bottom:2px solid #333;padding-bottom:.3em}
+h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}
+h3{margin-top:2em;color:#444}
+a{color:#0366d6}
+.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}
+.nav{font-size:.9em;color:#888;margin-bottom:1em}
+.lang{font-size:.85em;color:#888;float:right}
+.lang a{color:#888;text-decoration:none;padding:0 .3em}
+.lang a.active{color:#0366d6;font-weight:600;text-decoration:underline}
+.meta{font-size:.9em;margin:1em 0;color:#555}
+code{background:#f0f0f0;padding:0 .2em;font-size:.93em}
+pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}
+table{border-collapse:collapse;width:100%;margin:1em 0}
+th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}
+th{background:#f5f5f5;font-weight:600}
+.hist{font-size:.85em;color:#555}
+.warn{background:#fff3cd;border-left:3px solid #ffc107;padding:.5em 1em;margin:1em 0}
+.tip{background:#d4edda;border-left:3px solid #28a745;padding:.5em 1em;margin:1em 0}
+</style>
+</head>
+<body>
+<div class="lang">
+<a href="800.html">EN</a> · <a href="800_de.html">DE</a> · <a href="800_ru.html">RU</a> · <a href="800_fr.html">FR</a> · <a href="800_es.html" class="active">ES</a>
+</div>
+<div class="nav">
+<a href="https://maureranton.github.io/projectforge/">← Índice</a> · <a href="file-index.html">← Índice de archivos</a> · <a href="799.html">← Anterior</a> · <a href="801.html">Siguiente →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/java/org/projectforge/framework/utils/ExceptionHelper.java" target="_blank">📄 fuente</a>
+</div>
+<h1>#800: <code>ExceptionHelper.java</code></h1>
+<div class="meta"><code>projectforge-business/src/main/java/org/projectforge/framework/utils/ExceptionHelper.java</code> · 97 líneas · 50 código · 39 comentarios · 8 en blanco</div>
+<div class="c">Tres métodos de utilidad estáticos para el manejo de excepciones: <strong>trazas de pila filtradas</strong> (colapsa marcos irrelevantes y omite proxies CGLIB), <strong>traza de pila a String</strong> (printStackTrace estándar a escritor), y <strong>resolución recursiva de causa raíz</strong>. Se utiliza principalmente en la capa de seguridad/acceso para producir mensajes de error legibles que muestren solo las rutas de código de ProjectForge, no los internos de Spring/Hibernate/Tomcat.</div>
+
+<h2>Métodos</h2>
+<table>
+<tr><th>Método</th><th>Qué hace</th><th>Por qué existe</th></tr>
+<tr>
+<td><code>getFilteredStackTrace(ex, namespace)</code></td>
+<td>Construye una cadena de traza de pila que contiene <strong>solo marcos del espacio de nombres dado</strong>. Los marcos consecutivos que no coinciden se colapsan en <code>"at ..."</code>. Los marcos que contienen <code>CGLIB$$</code> siempre se omiten — son clases proxy de Hibernate con nombres distorsionados como <code>AddressDO$$EnhancerByCGLIB$$a1b2c3d4</code>.</td>
+<td>Los errores de violación de acceso mostrarían de otro modo 50+ líneas de internos de Spring Security y Tomcat antes de mostrar la única línea relevante de ProjectForge. La traza filtrada muestra <em>solo</em> la cadena de llamadas relevante para el desarrollador.</td>
+</tr>
+<tr>
+<td><code>printStackTrace(ex)</code></td>
+<td>Convierte una traza de pila completa a String mediante StringWriter+PrintWriter. Patrón estándar de Java.</td>
+<td>Los frameworks de registro necesitan String, no PrintStream. Se usa cuando las excepciones deben serializarse a JSON o almacenarse en columnas de base de datos.</td>
+</tr>
+<tr>
+<td><code>getRootCause(ex)</code></td>
+<td>Desenvuelve recursivamente <code>getCause()</code> hasta encontrar la excepción más interna. Devuelve la excepción original si no existe causa.</td>
+<td>Spring envuelve excepciones en gran medida (UndeclaredThrowableException, InvocationTargetException, DataAccessException). El error real siempre está al fondo. Este método lo extrae.</td>
+</tr>
+</table>
+
+<h2>Algoritmo de filtrado por espacio de nombres</h2>
+<div class="c">El método <code>getFilteredStackTrace</code> utiliza un <strong>enfoque de máquina de estados</strong> con dos modos:<br><br>
+<strong>Modo normal:</strong> Imprime marcos. Cuando se encuentra un marco que no coincide, genera <code>"at ..."</code> (colapsando los marcos irrelevantes) y cambia a <strong>modo ignorado</strong>.<br>
+<strong>Modo ignorado:</strong> Omite marcos silenciosamente hasta que aparece un marco coincidente, luego vuelve al modo normal y lo imprime.<br><br>
+Esto produce una salida compacta como: <code>at org.projectforge.access.AccessChecker.check(AccessChecker.java:79) at ... at org.projectforge.task.TaskDao.hasAccess(TaskDao.java:176)</code> — donde <code>"at ..."</code> reemplaza todos los marcos de Spring/Tomcat/Hibernate entre las dos líneas relevantes.</div>
+
+<h2>Consumidores</h2>
+<div class="c">Es llamado por la <strong>capa de control de acceso</strong> (<code>AccessCheckerImpl</code>, <code>AccessException</code>) al construir mensajes de error para violaciones de permisos. También es usado por <code>ScriptExecutor</code> para producir salida de error legible en fallos de scripts Groovy/Kotlin — sin la traza filtrada, un simple NPE en un script produciría una traza de pila de 200 líneas dominada por el runtime de Groovy y los internos de los proxies de Spring.</div>
+
+<h2>Historial Git</h2>
+<div class="hist">
+<table>
+<tr><th>Commit</th><th>Qué cambió</th></tr>
+<tr><td><code>868d6abb7</code></td><td>Copyright 2025→2026</td></tr>
+<tr><td><code>63081666f</code></td><td>Copyright 2024→2025</td></tr>
+<tr><td><code>b6092df09</code></td><td>Copyright 2023→2024</td></tr>
+<tr><td><code>ab45d51fa</code></td><td>Copyright 2001-2022→2001-2023</td></tr>
+<tr><td><code>5f7ef41b8</code></td><td>Copyright 2021→2022</td></tr>
+<tr><td><code>ceb63e8a1</code></td><td>Copyright 2001-2021</td></tr>
+<tr><td><code>7c79f192</code></td><td>Copyright 2020</td></tr>
+<tr><td><code>73a9755d</code></td><td><strong>Pase de limpieza de código en todas las utilidades.</strong> Se colapsaron bloques catch idénticos, se reemplazó <code>ArrayList&lt;Class&gt;</code> con el operador diamante <code>ArrayList&lt;&gt;</code>, se reemplazó <code>StringBuffer</code> con <code>StringBuilder</code>, se cambió <code>Collections.sort</code> a <code>List.sort</code>. El propio código de ExceptionHelper usa <code>StringBuilder</code> en <code>getFilteredStackTrace</code> — este commit aseguró consistencia con la migración global del proyecto de StringBuffer sincronizado a StringBuilder no sincronizado.</td>
+</tr>
+</table>
+</div>
+
+<div class="warn"><strong>Advertencia — Detección de CGLIB$$:</strong> El método <code>ignore()</code> verifica <code>CGLIB$$</code> en el nombre de la clase. Cuando ProjectForge actualice a Hibernate 6.x, los proxies usarán ByteBuddy en lugar de CGLIB — los nombres de clase contendrán <code>$HibernateProxy$</code> o <code>$ByteBuddy$</code> en su lugar. El método <code>ignore()</code> necesitará actualizarse para manejar ambos patrones.</div>
+
+</body>
+</html>

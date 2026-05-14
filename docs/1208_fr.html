@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>#1208 [FR]</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:2em;color:#444}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}</style>
+</head>
+<body>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">&#8592; Index</a> &#183; <a href="file-index.html">&#8592; Index des fichiers</a> &#183; <a href="1201.html">&#8592; Précédent</a> &#183; <a href="1203.html">Suivant &#8594;</a></div>
+<h1>#1208 : <code>JobHandler.kt</code></h1>
+<div class="meta"><code>projectforge-business/src/main/kotlin/org/projectforge/framework/jobs/JobHandler.kt</code> Service Spring, projectforge-business/src/main/kotlin/org/projectforge/framework/jobs/JobHandler.kt <span style="color:#888">290 lignes · 228 code · 40 commentaires · 22 vides</span></div>
+<div class="c">Ordonnanceur central de tâches et gestionnaire de cycle de vie pour <code>AbstractJob</code>. Gère l'enregistrement des tâches, l'évaluation de la stratégie de file d'attente, l'exécution basée sur les coroutines, l'application des délais d'attente, le nettoyage des tâches terminées et la surveillance de l'état de santé via des alertes par e-mail. Implémente <code>ShutdownListener</code> pour annuler les tâches en cours d'exécution de manière gracieuse lors de l'arrêt de l'application.</div>
+
+<h2>Architecture</h2>
+<h3>Aperçu de la classe</h3>
+<ul>
+  <li><strong>@Service</strong> — Singleton géré par Spring</li>
+  <li><strong>ShutdownListener</strong> — enregistré via <code>ShutdownService</code> dans <code>@PostConstruct</code></li>
+  <li>Maintient une <code>List&lt;AbstractJob&gt;</code> comme registre des tâches</li>
+</ul>
+
+<h3>Gestion du cycle de vie des tâches</h3>
+<table>
+  <tr><th>Méthode</th><th>Description</th></tr>
+  <tr><td><code>addJob(job)</code></td><td>Enregistre la tâche, lance une coroutine via <code>runBlocking { launch { ... } }</code> qui attend le dégagement de la file d'attente puis appelle <code>job.start()</code></td></tr>
+  <tr><td><code>tidyUp()</code></td><td>Appelée chaque minute par <code>JobHandlerScheduler</code> ; annule les tâches en timeout, supprime les anciennes tâches terminées</td></tr>
+  <tr><td><code>cancelJob(job)</code></td><td>Annule la tâche si l'utilisateur a un accès en écriture ; appelle <code>job.cancel()</code></td></tr>
+  <tr><td><code>shutdown()</code></td><td>Annule et attend la fin de toutes les tâches en cours lors de l'arrêt de l'application</td></tr>
+</table>
+
+<h3>Évaluation de la stratégie de file d'attente</h3>
+<p>La méthode <code>addJob</code> lance une coroutine qui :</p>
+<ol>
+  <li>Itère jusqu'à 10 000 fois (compteur de sécurité, attente max de 10 000 secondes)</li>
+  <li>Vérifie toutes les tâches existantes pour un blocage via <code>other.isBlocking(job)</code></li>
+  <li>Si bloqué avec la stratégie REFUSE, marque la tâche comme REFUSÉE (errorCode : REFUSED_BY_ANOTHER_RUNNING_JOB)</li>
+  <li>Si bloqué avec la stratégie PER_QUEUE, définit le statut sur WAITING et attend 1000 ms</li>
+  <li>Si aucun blocage trouvé, définit le statut sur RUNNING et démarre l'exécution</li>
+  <li>Si la boucle est épuisée, marque la tâche comme ÉCHOUÉE (errorCode : TIMEOUT_WHILE_WAITING)</li>
+</ol>
+
+<h3>Surveillance de l'état de santé</h3>
+<ul>
+  <li><code>checkStatus()</code> — vérifie que <code>tidyUp()</code> a été appelé dans les 5 dernières minutes</li>
+  <li><code>reportErrorMail(message)</code> — envoie un e-mail à l'adresse de support via <code>SendMail</code> en utilisant le template Groovy <code>mail/feedback.txt</code></li>
+</ul>
+
+<h3>Propagation du contexte de coroutine</h3>
+<p>Lors du lancement de la coroutine de tâche, les contextes suivants sont propagés :</p>
+<ul>
+  <li><strong>userContext</strong> — <code>ThreadLocalUserContext.userContextAsContextElement</code> (préserve l'utilisateur connecté)</li>
+  <li><strong>localeContext</strong> — <code>ThreadLocalUserContext.localeAsContextElement</code> (préserve la locale pour l'i18n)</li>
+  <li><strong>mdcContext</strong> — <code>MDCContext()</code> (préserve le MDC SLF4J pour la journalisation)</li>
+</ul>
+
+<h3>Constantes de nettoyage</h3>
+<ul>
+  <li><code>KEEP_TERMINATED_JOBS_INTERVALL_MS</code> = 1 heure (<code>Constants.MILLIS_PER_HOUR</code>)</li>
+</ul>
+
+<h2>Historique Git</h2><div class="hist"><pre>
+868d6abb7 2025 -> 2026
+00ec94e68 Nouvelle version de fr-opensagres-xdocreport-poi-xwpf-converter-pdf, DataTransferBridge, ThreadLocalUserContext pour les coroutines.
+63081666f En-têtes des fichiers source : 2024 -> 2025.
+5f9fbbbd3 Correction de fautes de frappe dans le répertoire projectforge-business
+f8961fd66 Gestion améliorée de l'arrêt : ShutdownService arrête certains services avant la base de données.
+67805f2fc ThreadLocalUserContext.user -> ThreadLocalUserContext.loggedInUser
+77bade6df javax.* -> jakarta.*
+b6092df09 Copyright 2023 -> 2024
+a060d94b0 JobHandler n'était pas planifié. Corrigé.
+bdcc7ed73 Rapport d'échec du planificateur Spring par e-mail (à tester).
+ab45d51fa Copyright 2001-2022 -> 2001-2023.
+163492453 WIP : Tâches et enregistrements de comptes bancaires.
+9f6ae7a0f WIP : Tâches.
+232a91c5a BaseUserGroupRightUtils implémenté. WIP BankingPlugin et gestion des tâches.
+7bc51ed17 WIP : Tâches.
+38bec971a ThreadLocal -> Kotlin
+f99714d0a Correction d'un mauvais import de log.
+fcc4c67f6 WIP : Jobmonitor.
+d93f61491 WIP : Plugin bancaire (et nouveau module d'import).
+cd69cc40f WIP : Plugin bancaire (et nouveau module d'import).
+67eed70e4 WIP : Plugin bancaire (et nouveau module d'import). Démarrage de JobHandler/monitor.
+</pre></div>
+</body>
+</html>

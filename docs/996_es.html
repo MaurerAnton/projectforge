@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="es">
+<head><meta charset="UTF-8"><title>#996: Kost2DO.kt [ES]</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:2em;color:#444}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}</style></head>
+<body>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Índice</a> · <a href="file-index.html">← Índice de archivos</a> · <a href="995.html">← Anterior</a> · <a href="997.html">Siguiente →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/kotlin/org/projectforge/business/fibu/kost/Kost2DO.kt" target="_blank" title="Ver fuente en GitHub">📄 fuente</a></div>
+<h1>#996: <code>Kost2DO.kt</code></h1>
+<div class="meta"><code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/kost/Kost2DO.kt</code> Tipo: Entidad JPA (DO) · Propósito: Entidad de centro de costo Kost2 con número de 8 dígitos + tipo de costo · Fuente: projectforge-business/src/main/kotlin/org/projectforge/business/fibu/kost/Kost2DO.kt <span style="color:#888">252 líneas · 149 código · 78 comentarios · 25 en blanco</span></div>
+<div class="c">Representa un centro de costo Kost2 — la entidad de costo más detallada (en comparación con Kost1). Un Kost2 se identifica mediante una combinación de 3 componentes numéricos (Nummernkreis, Bereich, Teilbereich = 6 dígitos) y un Kost2Art (tipo de costo, 2 dígitos). Cada Kost2 pertenece a un proyecto y tiene una clasificación de tipo de costo específica.</div>
+<h2>Diseño de la entidad</h2>
+<table>
+<tr><th>Campo</th><th>Tipo</th><th>Columna BD</th><th>Descripción</th></tr>
+<tr><td><code>kostentraegerStatus</code></td><td><code>KostentraegerStatus?</code></td><td>VARCHAR(30)</td><td>ACTIVE, NONACTIVE o ENDED</td></tr>
+<tr><td><code>nummernkreis</code></td><td><code>Int</code></td><td>INT</td><td>Primer dígito (1-9)</td></tr>
+<tr><td><code>bereich</code></td><td><code>Int</code></td><td>INT</td><td>Dígitos 2-4; para 5.xxx este es el número de cliente</td></tr>
+<tr><td><code>teilbereich</code></td><td><code>Int</code></td><td>INT</td><td>Dígitos 5-6</td></tr>
+<tr><td><code>kost2Art</code></td><td><code>Kost2ArtDO?</code></td><td>FK kost2_art_id</td><td>ManyToOne al tipo de costo (clasificación de 2 dígitos)</td></tr>
+<tr><td><code>workFraction</code></td><td><code>BigDecimal?</code></td><td>PRECISION(10,5)</td><td>Fracción de asignación de trabajo</td></tr>
+<tr><td><code>description</code></td><td><code>String?</code></td><td>VARCHAR(4000)</td><td>Descripción</td></tr>
+<tr><td><code>comment</code></td><td><code>String?</code></td><td>VARCHAR(4000)</td><td>Comentario opcional</td></tr>
+<tr><td><code>projekt</code></td><td><code>ProjektDO?</code></td><td>FK projekt_id</td><td>Proyecto asociado (carga diferida)</td></tr>
+</table>
+<h3>Propiedades calculadas (transitorias)</h3>
+<table>
+<tr><th>Propiedad</th><th>Tipo</th><th>Descripción</th></tr>
+<tr><td><code>effectiveKostentraegerStatus</code></td><td><code>KostentraegerStatus?</code></td><td>Hereda ENDED del proyecto si el proyecto está ENDED o eliminado</td></tr>
+<tr><td><code>nummer</code></td><td><code>Int</code></td><td>Entero calculado de 8 dígitos (mediante KostFormatter.getKostAsInt)</td></tr>
+<tr><td><code>formattedNumber</code></td><td><code>String</code></td><td>Formateado como #.###.##.## (indexado para búsqueda)</td></tr>
+<tr><td><code>rawNumberString</code></td><td><code>String</code></td><td>Cadena compacta de 8 dígitos para indexación de búsqueda</td></tr>
+<tr><td><code>toolTip</code></td><td><code>String</code></td><td>Tooltip formateado mediante OldKostFormatter</td></tr>
+</table>
+<h3>Consultas nombradas</h3>
+<table>
+<tr><th>Nombre</th><th>Propósito</th></tr>
+<tr><td><code>FIND_BY_NK_BEREICH_TEILBEREICH_KOST2ART</code></td><td>Buscar por los 4 componentes</td></tr>
+<tr><td><code>FIND_OTHER_BY_NK_BEREICH_TEILBEREICH_KOST2ART</code></td><td>Buscar duplicado (excluir自身) para verificación de unicidad</td></tr>
+<tr><td><code>FIND_ACTIVES_BY_NK_BEREICH_TEILBEREICH</code></td><td>Buscar entradas activas por prefijo de 6 dígitos</td></tr>
+</table>
+<h2>Herencia de estado virtual</h2>
+<p>La propiedad <code>effectiveKostentraegerStatus</code> implementa un patrón de diseño clave (introducido en el commit <code>8239a53ee</code>): si el <code>Projekt</code> vinculado tiene estado <code>ENDED</code> o está eliminado, el Kost2 se trata como ENDED independientemente de su propio estado. Esto evita inconsistencias de datos cuando los proyectos se cierran.</p>
+<h2>Detalles de persistencia</h2>
+<ul>
+<li>Mapeado a <code>T_FIBU_KOST2</code> con restricción única en los 4 componentes numéricos</li>
+<li>Índices en <code>kost2_art_id</code> y <code>projekt_id</code> para rendimiento de joins</li>
+<li>Extiende <code>DefaultBaseDO</code>, implementa <code>Comparable&lt;Kost2DO&gt;</code> y <code>DisplayNameCapable</code></li>
+<li>Implementa fábrica <code>@JsonCreator</code> para deserialización desde Long ID</li>
+<li>Equals/hashCode usa nummernkreis, bereich, teilbereich y kost2Art</li>
+<li>Todas las propiedades Kotlin declaradas <code>open</code> para soporte de proxy de carga diferida de Hibernate</li>
+</ul>
+<h2>Código fuente (resumido)</h2>
+<pre>@Entity @Indexed @Table(name = "T_FIBU_KOST2", ...)
+open class Kost2DO : DefaultBaseDO(), Comparable&lt;Kost2DO&gt;, DisplayNameCapable {
+    open var kostentraegerStatus: KostentraegerStatus? = null
+
+    val effectiveKostentraegerStatus: KostentraegerStatus?
+        get() {
+            val projektRef = PfCaches.instance.getProjektIfNotInitialized(projekt) ?: projekt
+            if (projektRef != null &&
+                (projektRef.status == ProjektStatus.ENDED || projektRef.deleted))
+                return KostentraegerStatus.ENDED
+            return kostentraegerStatus
+        }
+
+    open var nummernkreis: Int = 0
+    open var bereich: Int = 0
+    open var teilbereich: Int = 0
+    open var kost2Art: Kost2ArtDO? = null
+    open var projekt: ProjektDO? = null
+    // ... propiedades calculadas formattedNumber, rawNumberString, toolTip
+}</pre>
+<h2>Historial Git</h2>
+<div class="hist"><pre>868d6abb7 2025 -> 2026
+5c652782f AbstractTestBase inicializa PfCaches.
+dca4456f7 Corregido para casos de prueba.
+8239a53ee Kost2: Herencia de estado virtual desde ProjektDO
+38e843800 CostSearch: búsqueda por cadena numérica simple.
+63081666f Encabezados de archivos fuente: 2024 -> 2025.
+0237d5eba Json: IdOnlySerializer e IdsOnlySerializer.
+98555d5d8 Corrección de error: búsqueda por números.
+b3782c8a8 Cosas de migración...
+c8f8ed935 Todas las entidades FetchType.LAZY.
+4c04cfd65 ¡CAMBIO MAYOR! IDs Integer a IDs Long.
+a1cf6f591 Limpieza de código
+b78b870bd ShortDisplayNameCapable -> DisplayNameCapable
+8675a1dbe Entidades JPA Kotlin declaradas open (corrección de carga diferida)
+252b28955 JsonCreator para deserialización desde Int
+d849a79cc JsonCreator para deserialización desde Number
+0de418e75 DTO Tenant agregado a BaseDTO.
+6d1f7a7cd Kost2DO.java -> Kost2DO.kt</pre></div>
+</body>
+</html>

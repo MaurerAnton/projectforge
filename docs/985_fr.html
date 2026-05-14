@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>#985 : BuchungssatzExcelImporter.kt [FR]</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:2em;color:#444}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}</style>
+</head>
+<body>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← Index des fichiers</a> · <a href="984.html">← Précédent</a> · <a href="986.html">Suivant →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/kotlin/org/projectforge/business/fibu/datev/BuchungssatzExcelImporter.kt" target="_blank" title="Voir la source sur GitHub">📄 source</a></div>
+
+<h1>#985 : <code>BuchungssatzExcelImporter.kt</code></h1>
+
+<div class="meta"><code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/datev/BuchungssatzExcelImporter.kt</code> 
+  <strong>Type :</strong> Classe d'import Excel<br>
+  <strong>Paquetage :</strong> <code>org.projectforge.business.fibu.datev</code><br>
+  <strong>Chemin réel :</strong> <code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/datev/BuchungssatzExcelImporter.kt</code><br>
+  <strong>Remarque :</strong> Le fichier <strong>n'existe pas</strong> au chemin demandé (<code>.../excelimport/...</code>). Il se trouve dans le sous-paquetage <code>datev</code>. La documentation ci-dessous reflète la source réelle.
+ <span style="color:#888">219 lignes · 180 lignes de code · 30 commentaires · 9 lignes vides</span></div>
+
+<div class="c">
+  <p>Importe les <strong>Buchungssätze</strong> (écritures comptables / pièces de journal) à partir de classeurs Excel en utilisant le framework Merlin Excel. Chaque feuille Excel représente un mois (nom de la feuille = numéro du mois 01–12). Lit 12 colonnes avec validateurs et résout les entités référencées (<code>Konto</code>, <code>Kost1</code>, <code>Kost2</code>) pendant l'import.</p>
+</div>
+
+<h2>Architecture</h2>
+
+<h3>Dépendances</h3>
+<table>
+  <tr><th>Dépendance</th><th>Rôle</th></tr>
+  <tr><td><code>ImportStorage&lt;BuchungssatzDO&gt;</code></td><td>Accumule les feuilles et éléments importés avec les erreurs de validation</td></tr>
+  <tr><td><code>KontoDao</code></td><td>Résout les numéros de compte (Konto) en entités <code>KontoDO</code></td></tr>
+  <tr><td><code>Kost1Dao</code></td><td>Résout les codes de centre de coûts hérités (Kostenstelle 1)</td></tr>
+  <tr><td><code>Kost2Dao</code></td><td>Résout les codes de centre de coûts / porteur de coûts (Kostenstelle 2)</td></tr>
+</table>
+
+<h2>Correspondance des colonnes (Enum : <code>Cols</code>)</h2>
+<table>
+  <tr><th>Enum</th><th>En-tête</th><th>Alias</th><th>Validateur</th><th>Propriété cible</th></tr>
+  <tr><td><code>SATZNR</code></td><td>SatzNr.</td><td>Satz-Nr.</td><td>NumberValidator (>=1, obligatoire, unique)</td><td><code>satznr</code></td></tr>
+  <tr><td><code>BETRAG</code></td><td>Betrag</td><td>—</td><td>NumberValidator (obligatoire)</td><td><code>betrag</code></td></tr>
+  <tr><td><code>SH</code></td><td>SH</td><td>S/H</td><td>OptionsValidator ("S","H", obligatoire)</td><td><code>sh</code></td></tr>
+  <tr><td><code>KONTO</code></td><td>Konto</td><td>—</td><td>NumberValidator (obligatoire)</td><td><code>konto</code></td></tr>
+  <tr><td><code>GEGENKONTO</code></td><td>Gegenkonto</td><td>—</td><td>Validator (obligatoire)</td><td><code>gegenKonto</code></td></tr>
+  <tr><td><code>KOST1</code></td><td>Alt.-Kst.</td><td>Kost1</td><td>Validator (obligatoire)</td><td><code>kost1</code></td></tr>
+  <tr><td><code>KOST2</code></td><td>Kostenstelle/-träger</td><td>Kost2, Kst.</td><td>Validator (obligatoire)</td><td><code>kost2</code></td></tr>
+  <tr><td><code>MENGE</code></td><td>Menge</td><td>—</td><td>—</td><td><code>menge</code></td></tr>
+  <tr><td><code>BELEG</code></td><td>Beleg</td><td>—</td><td>—</td><td><code>beleg</code></td></tr>
+  <tr><td><code>DATUM</code></td><td>Datum</td><td>—</td><td>DateValidator (formats allemands, 1990–2100)</td><td><code>datum</code></td></tr>
+  <tr><td><code>TEXT</code></td><td>Text</td><td>—</td><td>—</td><td><code>text</code></td></tr>
+  <tr><td><code>KOMMENTAR</code></td><td>Kommentar</td><td>Bemerkung</td><td>—</td><td><code>comment</code></td></tr>
+</table>
+
+<h2>Flux d'import</h2>
+<ol>
+  <li><code>doImport(workbook)</code> parcourt toutes les feuilles (0..N).</li>
+  <li>Le nom de la feuille est interprété comme un entier de mois (01 pour janvier). Si l'analyse échoue, la feuille est ignorée.</li>
+  <li>Les colonnes sont enregistrées avec des validateurs via le framework Merlin.</li>
+  <li>Colonnes de vérification des lignes vides : <code>DATUM, SATZNR, BETRAG, KONTO, GEGENKONTO, KOST1, KOST2</code>.</li>
+  <li><code>sheet.analyze(true)</code> valide toutes les données.</li>
+  <li><code>importBuchungssaetze(sheet, month)</code> parcourt les lignes de données :
+    <ul>
+      <li>Analyse la date via <code>PFDay</code> ; valide la cohérence de l'année (toutes les entrées doivent être dans la même année).</li>
+      <li>Valide le mois : les entrées ne peuvent pas être dans le futur par rapport au mois de la feuille.</li>
+      <li>Résout <code>Konto</code> et <code>Gegenkonto</code> via <code>kontoDao.getKonto()</code> — les erreurs sont enregistrées si non trouvés.</li>
+      <li>Résout <code>Kost1</code> et <code>Kost2</code> via les DAO respectifs — les erreurs sont enregistrées si non trouvés.</li>
+      <li>Appelle <code>satz.calculate(true)</code> pour le calcul final.</li>
+      <li>Encapsule dans <code>MyImportedElement</code> pour le support de la comparaison/conciliation.</li>
+    </ul>
+  </li>
+</ol>
+
+<h3>Validation des dates</h3>
+<p>Utilise <code>ExcelColumnDateValidator</code> avec les formats de date allemands. Plage : 1990-01-01 au 2100-12-31.</p>
+
+<h2>Historique Git</h2>
+<div class="hist"><pre>
+868d6abb7 2025 -> 2026
+312d5e61c Nettoyage
+63081666f En-têtes des fichiers source : 2024 -> 2025.
+1012e347a Travaux de migration en cours... (tous les tests de tous les paquetages : OK).
+1204b927b Travaux de migration en cours... (tous les tests de tous les paquetages : OK).
+3aeda5ef5 Gros changement : tous les save|update|...InTrans renommés (InTrans supprimé).
+b095e6f7d !!!!! Gros changement dans la gestion des transactions : réutilisation de PfPersistenceContext.
+b6092df09 Copyright 2023 -> 2024
+ab45d51fa Copyright 2001-2022 -> 2001-2023.
+5f7ef41b8 Copyright 2021 -> 2022
+</pre></div>
+
+</body>
+</html>

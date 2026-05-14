@@ -1,9 +1,22 @@
 <!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>#636</title>
 <style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333}a{color:#0366d6}.meta{font-size:.9em;margin:1em 0}.nav{font-size:.9em;color:#888;margin-bottom:1em}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}code{background:#f0f0f0;padding:0 .2em}</style></head>
-<body><div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="635.html">← Prev</a> · <a href="637.html">Next →</a></div>
-<h1>#636: <code>DatabaseResultRowEntryImpl.java</code></h1>
-<div class="meta"><strong>Lines:</strong> 64 · <strong>Author:</strong> Kai Reinhard · <strong>Type:</strong> Java POJO — implements <a href="632.html">DatabaseResultRowEntry</a></div>
-<div class="c"><p><strong>Simple immutable POJO holding one column value from a JDBC <code>ResultSet</code>.</strong> 64 lines. All three fields are set via constructor and exposed through getters — no setters, effectively immutable after construction (though <code>value</code> itself could be mutable if the Object is a mutable type).</p>
-<p><strong>Fields:</strong> <code>type</code> (int — <code>java.sql.Types</code> constant like <code>Types.VARCHAR=12</code>), <code>name</code> (String — column label from <code>ResultSetMetaData.getColumnName()</code>), <code>value</code> (Object — the raw JDBC value from <code>ResultSet.getObject()</code>).</p>
-<p><strong>Usage:</strong> Created in <a href="635.html">DatabaseExecutorImpl.query()</a> line 105: <code>new DatabaseResultRowEntryImpl(type, name, value)</code> — one instance per column per row. These objects are short-lived — created during <code>while(rs.next())</code> iteration and typically consumed immediately by the caller who casts <code>getValue()</code> to the expected type.</p></div>
+<body>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="635.html">← Prev</a> · <a href="637.html">Next →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/java/org/projectforge/database/DatabaseSupport.java" target="_blank" title="View source on GitHub">📄 source</a></div>
+
+<h1>#636: <code>DatabaseSupport.java</code></h1>
+<div class="meta"><code>projectforge-business/src/main/java/org/projectforge/database/DatabaseSupport.java</code> <strong>Lines:</strong> 101 · <strong>Author:</strong> Kai Reinhard · <strong>Type:</strong> Java singleton — <code>org.projectforge.database</code> package <span style="color:#888">101 lines · 47 code · 42 comments · 12 blank</span></div>
+
+<div class="c"><p><strong>Database dialect abstraction layer.</strong> Singleton (static <code>getInstance()</code> + <code>setInstance()</code> — set during application startup). Holds the detected <code>DatabaseDialect</code> (PostgreSQL or HSQL) and provides dialect-specific optimizations. 101 lines.</p>
+
+<p><strong>Constructor:</strong> <code>DatabaseSupport(DatabaseDialect dialect)</code> — logs the detected dialect at INFO level: <em>"Setting database dialect to: PostgreSQL"</em>. The dialect is determined by <code>ConfigurationService</code> from the JDBC URL at startup.</p>
+
+<p><strong>Key method — <code>getIntervalInSeconds(fromProperty, toProperty)</code>:</strong> This is the critical performance method. For calculating duration (e.g. timesheet <code>stopTime - startTime</code>), instead of fetching all rows into Java and computing differences in memory (<code>O(n)</code> memory + CPU), it generates a <strong>database-side SUM in SQL</strong>:</p>
+<pre>PostgreSQL: "SUM(EXTRACT(EPOCH FROM toProperty) - EXTRACT(EPOCH FROM fromProperty))"</pre>
+<p>This returns the total seconds as a single database aggregate — <code>O(1)</code> result size regardless of row count. Critical for installations with many timesheet entries. The commented-out alternative <code>EXTRACT(EPOCH FROM SUM(to - from))</code> was considered but the per-row calculation was chosen for precision.</p>
+<p><strong>Fallback:</strong> If the database is not PostgreSQL (i.e. HSQL for testing), returns <code>null</code>. The caller must then fetch all rows and compute the sum in Java. A <strong>one-time warning</strong> is logged (guarded by <code>static boolean errorMessageShown</code>) asking to contact the developer if the installation has &gt;10,000 timesheet entries — the Java-side aggregation becomes slow at scale.</p>
+
+<p><strong><code>getShutdownDatabaseStatement()</code>:</strong> Called by <code>WicketApplication</code> on shutdown. For HSQL (embedded test database), returns <code>"SHUTDOWN COMPACT"</code> — safely closes the embedded database and compacts the data file. For PostgreSQL, returns <code>null</code> — the connection pool handles shutdown.</p>
+
+<p><strong>Design note:</strong> This is the <strong>only</strong> place in the codebase where database-specific SQL is generated. All other SQL is generated by Hibernate/HQL which is database-agnostic. This class exists specifically for the interval optimization which HQL cannot express portably.</p></div>
+
 </body></html>

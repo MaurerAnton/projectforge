@@ -1,5 +1,143 @@
-<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>#160</title><style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333}a{color:#0366d6}.meta{font-size:.9em;margin:1em 0}.nav{font-size:.9em;color:#888;margin-bottom:1em}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}</style></head>
-<body><div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="159.html">← Prev</a> · <a href="161.html">Next →</a></div>
-<h1>#160: <code>LiquidityEntryListPage.java</code></h1>
-<div class="meta"><strong>Wicket list page.</strong> Extends <code>AbstractListPage</code>. Columns: expectedDateOfPayment, dateOfPayment (with overdue highlighting in red), subject, amount (right-aligned, color-coded green=credit/red=debit), type, paid (checkmark icon), business partner. Sortable. Includes a <strong>chart panel</strong> at the top — embeds <a href="153.html">LiquidityChartBuilder</a> output as a <code>JFreeChart</code> PNG image, with settings controls (next days, show/hide paid entries, chart type bar/line).</div>
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>#160: LiquidityEntryListForm.java</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:2em;color:#444}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.lang{font-size:.85em;color:#888;float:right}.lang a{color:#888;text-decoration:none;padding:0 .3em}.lang a.active{color:#0366d6;font-weight:600;text-decoration:underline}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}</style></head>
+<body><div class="lang"><a href="160.html" class="active">EN</a> · <a href="160_de.html">DE</a> · <a href="160_ru.html">RU</a> · <a href="160_fr.html">FR</a> · <a href="160_es.html">ES</a></div>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="3249.html">← Prev</a> · <a href="7.html">Next →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/plugins/org.projectforge.plugins.liquidityplanning/src/main/java/org/projectforge/plugins/liquidityplanning/LiquidityEntryListForm.java" target="_blank" title="View source on GitHub">📄 source</a></div>
+<h1>#160: <code>LiquidityEntryListForm.java</code></h1>
+<div class="meta"><code>plugins/org.projectforge.plugins.liquidityplanning/src/main/java/org/projectforge/plugins/liquidityplanning/LiquidityEntryListForm.java</code> Type: Java · Role: Form · Source: plugins/org.projectforge.plugins.liquidityplanning/src/main/java/org/projectforge/plugins/liquidityplanning/LiquidityEntryListForm.java <span style="color:#888">194 lines · 148 code · 34 comments · 12 blank</span></div>
+<div class="c">Wicket Form implementation for LiquidityEntry list. Handles form validation, submit logic, and field-to-entity binding.</div>
+<h2>Code Structure</h2>
+<p>Package: <code>org.projectforge.plugins.liquidityplanning</code></p>
+<p>Classes: <code>LiquidityEntryListForm</code></p>
+<p>Extends: <code>AbstractListForm</code></p>
+<p>Methods (14): <code>getStats</code>, <code>init</code>, <code>getObject</code>, <code>isVisible</code>, <code>getObject</code>, <code>getObject</code>, <code>getObject</code>, <code>getObject</code>, <code>onOptionsPanelCreate</code>, <code>onUpdate</code>, <code>onUpdate</code>, <code>newSearchFilterInstance</code>, <code>getLogger</code>, <code>getBaseDateProperties</code></p>
+<p>Fields (1): <code>serialVersionUID</code></p>
+<p>Imports: 16 packages</p>
+<h2>Source Code (abridged)</h2>
+<pre>
+package org.projectforge.plugins.liquidityplanning;
+
+import org.apache.wicket.markup.html.form.DropDownChoice;
+import org.apache.wicket.markup.html.form.FormComponentUpdatingBehavior;
+import org.apache.wicket.model.Model;
+import org.apache.wicket.model.PropertyModel;
+import org.projectforge.business.fibu.AmountType;
+import org.projectforge.business.fibu.PaymentStatus;
+import org.projectforge.business.utils.CurrencyFormatter;
+import org.projectforge.framework.time.PFDay;
+import org.projectforge.web.wicket.AbstractListForm;
+import org.projectforge.web.wicket.WebConstants;
+import org.projectforge.web.wicket.components.LabelValueChoiceRenderer;
+import org.projectforge.web.wicket.components.LocalDateModel;
+import org.projectforge.web.wicket.components.LocalDatePanel;
+import org.projectforge.web.wicket.flowlayout.*;
+import org.slf4j.Logger;
+
+import java.time.LocalDate;
+
+/**
+ * The list formular for the list view (this example has no filter settings). See ToDoListPage for seeing how to use
+ * filter settings.
+ *
+ * @author Kai Reinhard (k.reinhard@micromata.de)
+ */
+public class LiquidityEntryListForm extends AbstractListForm&lt;LiquidityFilter, LiquidityEntryListPage&gt; {
+  private static final long serialVersionUID = 2040255193023406307L;
+
+  private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(LiquidityEntryListForm.class);
+
+  public LiquidityEntryListForm(final LiquidityEntryListPage parentPage) {
+    super(parentPage);
+  }
+
+  private LiquidityEntriesStatistics getStats() {
+    return parentPage.getStatistics();
+  }
+
+  @SuppressWarnings(&quot;serial&quot;)
+  @Override
+  protected void init() {
+    super.init();
+    gridBuilder.newGridPanel();
+    {
+      final FieldsetPanel fs = gridBuilder.newFieldset(getString(&quot;plugins.liquidityplanning.forecast.baseDate&quot;));
+      final FieldProperties&lt;LocalDate&gt; props = getBaseDateProperties();
+      LocalDatePanel baseDatePanel = new LocalDatePanel(fs.newChildId(), new LocalDateModel(props.getModel()));
+      baseDatePanel.setRequired(false);
+      fs.add(baseDatePanel);
+      fs.addHelpIcon(getString(&quot;plugins.liquidityplanning.forecast.baseDate.tooltip&quot;));
+    }
+    gridBuilder.newGridPanel();
+    {
+      // Statistics
+      final FieldsetPanel fs = gridBuilder.newFieldset(getString(&quot;statistics&quot;)).suppressLabelForWarning();
+      fs.add(new DivTextPanel(fs.newChildId(), new Model&lt;String&gt;() {
+        @Override
+        public String getObject() {
+          return &quot;*** &quot; + getString(&quot;plugins.liquidityplanning.forecast.baseDate&quot;) + &quot;: &quot; + PFDay.fromOrNow(getSearchFilter().getBaseDate()).format() + &quot; ***&quot;
+                  + WebConstants.HTML_TEXT_DIVIDER;
+        }
+      }, TextStyle.RED) {
+        @Override
+        public boolean isVisible() {
+          final LocalDate baseDate = getSearchFilter().getBaseDate();
+          return baseDate != null &amp;&amp; baseDate.isBefore(LocalDate.now());
+        }
+      });
+      fs.add(new DivTextPanel(fs.newChildId(), new Model&lt;String&gt;() {
+        @Override
+        public String getObject() {
+          return getString(&quot;fibu.rechnung.status.bezahlt&quot;)
+                  + &quot;: &quot;
+                  + CurrencyFormatter.format(getStats().getPaid())
+                  + WebConstants.HTML_TEXT_DIVIDER;
+        }
+      }));
+      fs.add(new DivTextPanel(fs.newChildId(), new Model&lt;String&gt;() {
+        @Override
+        public String getObject() {
+          return getString(&quot;totalSum&quot;) + &quot;: &quot; + CurrencyFormatter.format(getStats().getTotal())
+                  + WebConstants.HTML_TEXT_DIVIDER;
+        }
+      }));
+      fs.add(new DivTextPanel(fs.newChildId(), new Model&lt;String&gt;() {
+        @Override
+        public String getObject() {
+          return getString(&quot;fibu.rechnung.offen&quot;) + &quot;: &quot; + CurrencyFormatter.format(getStats().getOpen())
+                  + WebConstants.HTML_TEXT_DIVIDER;
+        }
+      }, TextStyle.BLUE));
+      fs.add(new DivTextPanel(fs.newChildId(), new Model&lt;String&gt;() {
+        @Override
+        public String getObject() {
+          return getString(&quot;fibu.rechnung.filter.ueberfaellig&quot;) + &quot;: &quot;
+                  + CurrencyFormatter.format(getStats().getOverdue());
+        }
+      }, TextStyle.RED));
+    }
+  }
+
+  /**
+   * @see org.projectforge.web.wicket.AbstractListForm#onOptionsPanelCreate(org.projectforge.web.wicket.flowlayout.FieldsetPanel,
+   * org.projectforge.web.wicket.flowlayout.DivPanel)
+   */
+  @SuppressWarnings(&quot;serial&quot;)
+  @Override
+  protected void onOptionsPanelCreate(final FieldsetPanel optionsFieldsetPanel, final DivPanel optionsCheckBoxesPanel) {
+    // DropDownChoice next days
+    final LabelValueChoiceRenderer&lt;Integer&gt; nextDaysRenderer = new LabelValueChoiceRenderer&lt;&gt;();
+    nextDaysRenderer.addValue(0, getString(&quot;filter.all&quot;));
+    nextDaysRenderer.addValue(7, getLocalizedMessage(&quot;search.nextDays&quot;, 7));
+    nextDaysRenderer.addValue(10, getLocalizedMessage(&quot;search.nextDays&quot;, 10));
+    nextDaysRenderer.addValue(14, getLocalizedMessage(&quot;search.nextDays&quot;, 14));
+    nextDaysRenderer.addValue(30, getLocalizedMessage(&quot;search.nextDays&quot;, 30));
+    nextDaysRenderer.addValue(60, getLocalizedMessage(&quot;search.nextDays&quot;, 60));
+    nextDaysRenderer.addValue(90, getLocalizedMessage(&quot;search.nextDays&quot;, 90));
+    final DropDownChoice&lt;Integer&gt; nextDaysChoice = new DropDownChoice&lt;&gt;(
+// ... (truncated, total 172 lines)</pre>
+
+<h2>Git History</h2><div class="hist"><pre>868d6abb7 2025 -&gt; 2026
+63081666f Source file headers: 2024-&gt; 2025.
+b6092df09 Copyright 2023 -&gt; 2024
+ab45d51fa Copyright 2001-2022 -&gt; 2001-2023.
+4548710df WIP: migration.</pre></div>
 </body></html>

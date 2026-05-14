@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>#752: Status [DE]</title>
+<style>
+  body { font-family: system-ui, sans-serif; max-width: 960px; margin: 2em auto; padding: 0 1em; background: #fafafa; color: #222; line-height: 1.6; }
+  h1 { border-bottom: 2px solid #333; padding-bottom: 0.3em; }
+  h2 { margin-top: 2.5em; border-bottom: 1px solid #ddd; padding-bottom: 0.2em; color: #333; }
+  h3 { margin-top: 2em; color: #444; }
+  a { color: #0366d6; }
+  .c { border-left: 3px solid #ddd; padding: .5em 1em; margin: 1em 0; background: #fff; }
+  .nav { font-size: .9em; color: #888; margin-bottom: 1em; }
+  .lang { font-size: .85em; color: #888; float: right; }
+  .lang a { color: #888; text-decoration: none; padding: 0 .3em; }
+  .lang a.active { color: #0366d6; font-weight: 600; text-decoration: underline; }
+  .meta { font-size: .9em; margin: 1em 0; color: #555; }
+  code { background: #f0f0f0; padding: 0 .2em; font-size: .93em; }
+  pre { background: #f5f5f5; padding: .8em 1em; border: 1px solid #ddd; border-radius: 4px; overflow-x: auto; font-size: .88em; line-height: 1.4; }
+  table { border-collapse: collapse; width: 100%; margin: 1em 0; }
+  th, td { border: 1px solid #ddd; padding: .5em .8em; text-align: left; font-size: .9em; }
+  th { background: #f5f5f5; font-weight: 600; }
+  .hist { font-size: .85em; color: #555; }
+</style>
+</head>
+<body>
+<div class="lang"><a href="760.html">EN</a> · <a href="760_de.html" class="active">DE</a> · <a href="760_ru.html">RU</a> · <a href="760_fr.html">FR</a> · <a href="760_es.html">ES</a></div>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← Dateiindex</a> · <a href="751.html">← Zurück</a> · <a href="753.html">Weiter →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/java/org/projectforge/framework/xmlstream/Status.java" target="_blank" title="Quellcode auf GitHub anzeigen">📄 Quelle</a></div>
+
+<h1>#752: <code>Status.java</code></h1>
+<div class="meta"><code>projectforge-business/src/main/java/org/projectforge/framework/xmlstream/Status.java</code> <strong>Java-Enum</strong> — Einzelwert-Sentinel zur Steuerung der XML-Deserialisierung. 32 Zeilen. Quelle: <code>projectforge-business/src/main/java/org/projectforge/framework/xmlstream/Status.java</code> <span style="color:#888">32 Zeilen · 5 Code · 25 Kommentare · 2 leer</span></div>
+
+<div class="c">
+<strong>Zweck:</strong> Ein Enum mit einem <strong>einzelnen Wert</strong>: <code>IGNORE</code>. 32 Zeilen, davon 21 für den GPLv3-Lizenzheader. Eine der kürzesten und ungewöhnlichsten Dateien im Projekt. Der Javadoc zu <code>IGNORE</code> erklärt: <em>"Wird von XmlObjectReader.newInstance(Class, org.dom4j.Element, String) verwendet"</em> — es wird von der Methode <code>newInstance()</code> des <code>XmlObjectReader</code> beim XML-Lesen verwendet.
+</div>
+
+<h2>Warum ein Einzelwert-Enum?</h2>
+
+<div class="c">
+<p>Dies ist das <strong>Sentinel-Muster</strong> — ein spezieller Wert, der signalisiert, dass ein Element beim Lesen übersprungen werden muss. Wenn <code>XmlObjectReader.newInstance()</code> auf ein XML-Element stößt, für das keine registrierte Klasse existiert (z. B. ein Tag aus einer alten Formatversion, die in einer neueren Version entfernt wurde), gibt es <code>Status.IGNORE</code> zurück, anstatt mit einem Fehler abzustürzen.</p>
+
+<p><strong>Warum nicht einfach <code>null</code> zurückgeben?</strong> Weil <code>null</code> mehrdeutig ist: Es könnte "überspringen" ODER "ein Fehler ist aufgetreten" ODER "das Element ist leer" bedeuten. <code>Status.IGNORE</code> ist ein explizites, benanntes Signal: "Ich erkenne dieses Element als ignorierbar an, überspringe es bewusst und fahre mit der Verarbeitung fort."</p>
+</div>
+
+<h2>Drei-Zustands-Auflösung</h2>
+
+<div class="c">
+<p>Das Enum ermöglicht saubere Drei-Zustands-Rückgabewert-Semantiken:</p>
+<pre>
+Object result = newInstance(clazz, element, version);
+if (result == Status.IGNORE) {
+    // Unbekanntes Element, überspringen
+} else if (result == null) {
+    // Erkannt, aber hat null-Wert (Feld ist leer)
+} else {
+    // Normales deserialisiertes Objekt
+}
+</pre>
+<p>Dies ist deutlich sauberer als die Rückgabe von <code>null</code> mit mehrdeutiger Semantik. Das Muster ist in Parsern und Deserialisierern üblich – z. B. verwendet Rust <code>Option&lt;T&gt;</code>, Haskell verwendet <code>Maybe</code>, und hier – ein Einzelelement-Enum.</p>
+</div>
+
+<h2>Verwendungsort</h2>
+
+<div class="c">
+<p>Methode <code>XmlObjectReader.newInstance(Class&lt;?&gt; clazz, Element rootElement, String version)</code> — eine geschützte Factory-Methode, die von Unterklassen überschrieben werden kann. Auf jeder Ebene wird die <code>AliasMap</code> geprüft: Wenn das Tag registriert ist, wird ein Objekt erstellt; wenn nicht registriert – wird <code>Status.IGNORE</code> zurückgegeben, und der aufrufende Code überspringt dieses Element. Dies ermöglicht es XML-Dateien, "zusätzliche" Tags zu enthalten (z. B. aus einer neueren Formatversion, wenn sie von einer älteren Version gelesen werden), ohne Fehler zu verursachen – ein Mechanismus für Abwärtskompatibilität.</p>
+</div>
+
+<h2>Warum Enum, nicht eine Konstante?</h2>
+
+<div class="c">
+<p>Ein Enum mit einem Wert ist gleichzeitig sowohl ein <strong>Typ</strong> als auch ein <strong>Wert</strong>. Wenn <code>newInstance()</code> nur <code>Object</code> zurückgeben würde (wobei <code>null</code> = überspringen), müsste der aufrufende Code <code>if (result == null)</code> verwenden. Aber <code>null</code> könnte auch ein legitimes Ergebnis sein (ein wirklich leeres Feld). Die Verwendung eines separaten Typs <code>Status</code> ermöglicht es dem aufrufenden Code, präzise zwischen "dies überspringen" (IGNORE) und "Wert ist nicht vorhanden" (null) zu unterscheiden.</p>
+</div>
+
+<h2>Gegenüberstellung: Status.IGNORE vs. @XmlOmitField vs. Standard-Überspringen</h2>
+
+<table>
+<tr><th>Mechanismus</th><th>Geltungsbereich</th><th>Wann aktiviert</th></tr>
+<tr><td><code>Status.IGNORE</code></td><td>Laufzeit — pro Element, während des Lesens</td><td>XML-Tag hat keine entsprechende registrierte Java-Klasse</td></tr>
+<tr><td><code>@XmlOmitField</code> (<a href="757.html">#757</a>)</td><td>Kompilierzeit — bei Felddeklaration</td><td>Immer — Feld wird nie serialisiert/deserialisiert</td></tr>
+<tr><td>Standardwert-Überspringen</td><td>Kompilierzeit — in <code>@XmlField</code></td><td>Feld entspricht deklariertem Standardwert</td></tr>
+</table>
+
+<h2>Git-Verlauf</h2>
+<div class="hist">
+<pre>868d6abb7 2025 → 2026 (Aktualisierung des Copyright-Jahres)
+63081666f Quellcodedatei-Header: 2024→2025
+b6092df09 Copyright 2023 → 2024
+ab45d51fa Copyright 2001-2022 → 2001-2023
+5f7ef41b8 Copyright 2021 → 2022
+cd27dd997 Paket xstream → xmlstream
+ceb63e8a1 Quellcode-Header: (C) 2001-2021
+7c79f1922 Copyright des Quell-Headers → 2020
+dd5ca38ac CopyRight aller Java-Datei-Header erstellt oder aktualisiert
+9ebb88522 Erster Commit</pre>
+</div>
+
+<div class="c">
+Das Enum hat einen Wert (<code>IGNORE</code>) und hat sich seit dem ersten Commit nie geändert, abgesehen von Copyright-Headern und der Paketumbenennung. Ein Einzelwert-Enum mit einem klaren Sentinel-Zweck ist ein "abgeschlossenes" Design – es gibt nichts hinzuzufügen oder zu ändern. Dies ist eine der stabilsten Dateien in der gesamten ProjectForge-Codebasis.
+</div>
+
+</body>
+</html>

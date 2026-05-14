@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>#985: BuchungssatzExcelImporter.kt [DE]</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:2em;color:#444}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}</style>
+</head>
+<body>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← Dateiindex</a> · <a href="984.html">← Vorherige</a> · <a href="986.html">Nächste →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/kotlin/org/projectforge/business/fibu/datev/BuchungssatzExcelImporter.kt" target="_blank" title="Quellcode auf GitHub anzeigen">📄 Quelle</a></div>
+
+<h1>#985: <code>BuchungssatzExcelImporter.kt</code></h1>
+
+<div class="meta"><code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/datev/BuchungssatzExcelImporter.kt</code> 
+  <strong>Typ:</strong> Excel-Import-Klasse<br>
+  <strong>Paket:</strong> <code>org.projectforge.business.fibu.datev</code><br>
+  <strong>Tatsächlicher Pfad:</strong> <code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/datev/BuchungssatzExcelImporter.kt</code><br>
+  <strong>Hinweis:</strong> Die Datei existiert <strong>nicht</strong> unter dem angeforderten Pfad (<code>.../excelimport/...</code>). Sie befindet sich im Unterpaket <code>datev</code>. Die nachfolgende Dokumentation spiegelt die tatsächliche Quelle wider.
+ <span style="color:#888">219 Zeilen · 180 Code · 30 Kommentare · 9 leer</span></div>
+
+<div class="c">
+  <p>Importiert <strong>Buchungssätze</strong> aus Excel-Arbeitsmappen unter Verwendung des Merlin-Excel-Frameworks. Jedes Excel-Blatt repräsentiert einen Monat (Blattname = Monatsnummer 01–12). Liest 12 Spalten mit Validatoren und löst referenzierte Entitäten (<code>Konto</code>, <code>Kost1</code>, <code>Kost2</code>) während des Imports auf.</p>
+</div>
+
+<h2>Architektur</h2>
+
+<h3>Abhängigkeiten</h3>
+<table>
+  <tr><th>Abhängigkeit</th><th>Rolle</th></tr>
+  <tr><td><code>ImportStorage&lt;BuchungssatzDO&gt;</code></td><td>Sammelt importierte Blätter und Elemente mit Validierungsfehlern</td></tr>
+  <tr><td><code>KontoDao</code></td><td>Löst Konto-/Kontonummern in <code>KontoDO</code>-Entitäten auf</td></tr>
+  <tr><td><code>Kost1Dao</code></td><td>Löst Codes für veraltete Kostenstellen (Kostenstelle 1) auf</td></tr>
+  <tr><td><code>Kost2Dao</code></td><td>Löst Codes für Kostenstellen/-träger (Kostenstelle 2) auf</td></tr>
+</table>
+
+<h2>Spaltenzuordnung (Enum: <code>Cols</code>)</h2>
+<table>
+  <tr><th>Enum</th><th>Kopfzeile</th><th>Aliase</th><th>Validator</th><th>Zieleigenschaft</th></tr>
+  <tr><td><code>SATZNR</code></td><td>SatzNr.</td><td>Satz-Nr.</td><td>NumberValidator (>=1, erforderlich, eindeutig)</td><td><code>satznr</code></td></tr>
+  <tr><td><code>BETRAG</code></td><td>Betrag</td><td>—</td><td>NumberValidator (erforderlich)</td><td><code>betrag</code></td></tr>
+  <tr><td><code>SH</code></td><td>SH</td><td>S/H</td><td>OptionsValidator ("S","H", erforderlich)</td><td><code>sh</code></td></tr>
+  <tr><td><code>KONTO</code></td><td>Konto</td><td>—</td><td>NumberValidator (erforderlich)</td><td><code>konto</code></td></tr>
+  <tr><td><code>GEGENKONTO</code></td><td>Gegenkonto</td><td>—</td><td>Validator (erforderlich)</td><td><code>gegenKonto</code></td></tr>
+  <tr><td><code>KOST1</code></td><td>Alt.-Kst.</td><td>Kost1</td><td>Validator (erforderlich)</td><td><code>kost1</code></td></tr>
+  <tr><td><code>KOST2</code></td><td>Kostenstelle/-träger</td><td>Kost2, Kst.</td><td>Validator (erforderlich)</td><td><code>kost2</code></td></tr>
+  <tr><td><code>MENGE</code></td><td>Menge</td><td>—</td><td>—</td><td><code>menge</code></td></tr>
+  <tr><td><code>BELEG</code></td><td>Beleg</td><td>—</td><td>—</td><td><code>beleg</code></td></tr>
+  <tr><td><code>DATUM</code></td><td>Datum</td><td>—</td><td>DateValidator (deutsche Formate, 1990–2100)</td><td><code>datum</code></td></tr>
+  <tr><td><code>TEXT</code></td><td>Text</td><td>—</td><td>—</td><td><code>text</code></td></tr>
+  <tr><td><code>KOMMENTAR</code></td><td>Kommentar</td><td>Bemerkung</td><td>—</td><td><code>comment</code></td></tr>
+</table>
+
+<h2>Importablauf</h2>
+<ol>
+  <li><code>doImport(workbook)</code> durchläuft alle Blätter (0..N).</li>
+  <li>Der Blattname wird als Monatszahl (01 für Januar) geparst. Wenn das Parsen fehlschlägt, wird das Blatt übersprungen.</li>
+  <li>Spalten werden mit Validatoren über das Merlin-Framework registriert.</li>
+  <li>Prüfspalten für leere Zeilen: <code>DATUM, SATZNR, BETRAG, KONTO, GEGENKONTO, KOST1, KOST2</code>.</li>
+  <li><code>sheet.analyze(true)</code> validiert alle Daten.</li>
+  <li><code>importBuchungssaetze(sheet, month)</code> durchläuft Datenzeilen:
+    <ul>
+      <li>Parst Datum über <code>PFDay</code>; validiert Jahreskonsistenz (alle Einträge müssen im selben Jahr sein).</li>
+      <li>Validiert Monat: Einträge dürfen nicht in der Zukunft relativ zum Blattmonat liegen.</li>
+      <li>Löst <code>Konto</code> und <code>Gegenkonto</code> über <code>kontoDao.getKonto()</code> auf — Fehler werden aufgezeichnet, falls nicht gefunden.</li>
+      <li>Löst <code>Kost1</code> und <code>Kost2</code> über die entsprechenden DAOs auf — Fehler werden aufgezeichnet, falls nicht gefunden.</li>
+      <li>Ruft <code>satz.calculate(true)</code> für die abschließende Berechnung auf.</li>
+      <li>Kapselt in <code>MyImportedElement</code> für Diff-/Abgleichsunterstützung.</li>
+    </ul>
+  </li>
+</ol>
+
+<h3>Datumsvalidierung</h3>
+<p>Verwendet <code>ExcelColumnDateValidator</code> mit deutschen Datumsformaten. Bereich: 1990-01-01 bis 2100-12-31.</p>
+
+<h2>Git-Verlauf</h2>
+<div class="hist"><pre>
+868d6abb7 2025 -> 2026
+312d5e61c Bereinigung
+63081666f Quellcodedatei-Header: 2024 -> 2025.
+1012e347a Migration in Arbeit... (alle Tests aller Pakete: OK).
+1204b927b Migration in Arbeit... (alle Tests aller Pakete: OK).
+3aeda5ef5 Große Änderung: Alle save|update|...InTrans umbenannt (InTrans entfernt).
+b095e6f7d !!!!! Große Änderung der Transaktionsverwaltung: Wiederverwendung von PfPersistenceContext.
+b6092df09 Copyright 2023 -> 2024
+ab45d51fa Copyright 2001-2022 -> 2001-2023.
+5f7ef41b8 Copyright 2021 -> 2022
+</pre></div>
+
+</body>
+</html>

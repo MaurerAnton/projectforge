@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>#1338 [FR]</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:2em;color:#444}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}</style>
+</head>
+<body>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← Index des fichiers</a> · <a href="1337.html">← Précédent</a> · <a href="1339.html">Suivant →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/kotlin/org/projectforge/framework/persistence/metamodel/EntityInfo.kt" target="_blank" title="Voir la source sur GitHub">📄 source</a></div>
+<h1>#1338 : <code>EntityInfo.kt</code></h1>
+<div class="meta"><code>projectforge-business/src/main/kotlin/org/projectforge/framework/persistence/metamodel/EntityInfo.kt</code> Entité du métamodèle — Métamodèle de persistance JPA, <code>projectforge-business/src/main/kotlin/org/projectforge/framework/persistence/metamodel/EntityInfo.kt</code> <span style="color:#888">111 lignes · 71 code · 27 commentaires · 13 vides</span></div>
+<div class="c">Encapsule un <code>EntityType</code> JPA pour fournir un accès introspectif aux métadonnées de l'entité : découverte des propriétés, inspection des annotations, recherche de longueur de colonne et vérifications de persistance. Utilisé par le sous-système d'importation et la couche de persistance pour mapper dynamiquement les données importées avec les propriétés des entités JPA.</div>
+
+<h2>Architecture</h2>
+
+<h3>Conception de la classe</h3>
+<p><code>EntityInfo</code> encapsule un <code>EntityType&lt;*&gt;</code> JPA et remplit de manière proactive une liste d'objets <code>EntityPropertyInfo</code> pour chaque attribut JPA possédant un <code>javaMember</code>. Il sert de pont entre le métamodèle JPA et les besoins de réflexion runtime de ProjectForge.</p>
+
+<h3>Paramètres du constructeur</h3>
+<table>
+<tr><th>Paramètre</th><th>Type</th><th>Objectif</th></tr>
+<tr><td><code>entityClass</code></td><td><code>Class&lt;*&gt;</code></td><td>La classe Java/Kotlin de l'entité</td></tr>
+<tr><td><code>name</code></td><td><code>String</code></td><td>Nom de l'entité (généralement le nom de l'entité JPA)</td></tr>
+<tr><td><code>entityType</code></td><td><code>EntityType&lt;*&gt;</code></td><td>Type de métamodèle JPA fournissant l'accès aux attributs</td></tr>
+<tr><td><code>tableName</code></td><td><code>String?</code></td><td>Nom optionnel de la table de base de données</td></tr>
+</table>
+
+<h3>Méthodes principales</h3>
+<table>
+<tr><th>Méthode</th><th>Retour</th><th>Description</th></tr>
+<tr><td><code>getIdProperty()</code></td><td><code>String?</code></td><td>Retourne le nom de la propriété ID (première propriété marquée comme ID)</td></tr>
+<tr><td><code>isPersistedProperty(property: KCallable)</code></td><td><code>Boolean</code></td><td>Vérifie si un callable Kotlin correspond à un attribut JPA persisté</td></tr>
+<tr><td><code>isPersistedProperty(propertyName: String)</code></td><td><code>Boolean</code></td><td>Vérifie par nom de propriété</td></tr>
+<tr><td><code>getPropertyInfo(propertyName)</code></td><td><code>EntityPropertyInfo?</code></td><td>Récupère les métadonnées complètes de la propriété</td></tr>
+<tr><td><code>getPropertiesWithAnnotation(annotationClass)</code></td><td><code>List&lt;EntityPropertyInfo&gt;</code></td><td>Trouve toutes les propriétés portant une annotation spécifique</td></tr>
+<tr><td><code>getColumnAnnotation(propertyName)</code></td><td><code>Column?</code></td><td>Récupère l'annotation JPA <code>@Column</code></td></tr>
+<tr><td><code>getColumnLength(propertyName)</code></td><td><code>Int?</code></td><td>Extrait la longueur de colonne de <code>@Column(length=...)</code> ; enregistre un avertissement en cas d'échec pour les entités DO</td></tr>
+</table>
+
+<h3>Intégration de la réflexion Kotlin</h3>
+<p>La classe prend en charge à la fois les recherches de propriétés par chaîne et la réflexion Kotlin (<code>KCallable</code>, <code>KMutableProperty1</code>). Les surcharges de <code>isPersistedProperty</code> permettent aux appelants de vérifier si une propriété Kotlin correspond à une colonne JPA, ce qui est essentiel pour le mappage automatique des propriétés du sous-système d'importation.</p>
+
+<h3>Mise en cache pour la longueur de colonne</h3>
+<p><code>getColumnLength()</code> utilise un ensemble interne <code>columnWithoutLength</code> pour éviter les messages de journalisation répétés lorsqu'une propriété n'a pas d'annotation <code>@Column</code>. Les propriétés se terminant par "DO" sont enregistrées au niveau ERREUR, les autres au niveau INFO — en considérant que les entités DO sont censées avoir des annotations JPA complètes.</p>
+
+<h3>Relations</h3>
+<ul>
+<li><strong>EntityPropertyInfo</strong> : Créé pour chaque attribut JPA lors de l'<code>init</code></li>
+<li><strong>EntityType</strong> : La source du métamodèle JPA (généralement <code>AbstractManagedType</code> d'Hibernate)</li>
+<li><strong>Sous-système d'importation</strong> : Utilisé par les importateurs pour valider les correspondances de champs par rapport à la structure de l'entité</li>
+<li><strong>HibernateSearchMeta</strong> : Complète ceci en fournissant les métadonnées d'index Hibernate Search</li>
+</ul>
+
+<h2>Historique Git</h2><div class="hist"><pre>868d6abb7 2025 -> 2026
+63081666f En-têtes des fichiers source : 2024 -> 2025.
+bbc198d03 Migration en cours... (tous les tests de tous les packages : OK).
+e801b0336 Migration en cours...
+efee0def3 Migration en cours...
+eb4e16a33 Migration en cours...
+ca4cb86c8 Migration en cours...
+e4545c8e1 Migration en cours...
+7f86d3730 Migration en cours...
+d476c7b0d Migration en cours...
+067a4cbb1 Migration en cours...
+67ce75fe9 Migration en cours...</pre></div>
+</body>
+</html>

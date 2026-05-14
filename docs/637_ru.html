@@ -1,0 +1,32 @@
+<!DOCTYPE html><html lang="ru"><head><meta charset="utf-8"><title>#637 [RU]</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333}a{color:#0366d6}.meta{font-size:.9em;margin:1em 0}.nav{font-size:.9em;color:#888;margin-bottom:1em}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}code{background:#f0f0f0;padding:0 .2em}</style></head>
+<body>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Индекс</a> · <a href="file-index.html">← Индекс файлов</a> · <a href="636.html">← Назад</a> · <a href="638.html">Вперёд →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/java/org/projectforge/database/jdbc/DatabaseExecutorImpl.java" target="_blank" title="Просмотреть исходный код на GitHub">📄 исходник</a></div>
+
+<h1>#637: <code>DatabaseExecutorImpl.java</code></h1>
+<div class="meta"><code>projectforge-business/src/main/java/org/projectforge/database/jdbc/DatabaseExecutorImpl.java</code> <strong>Строк:</strong> 161 · <strong>Автор:</strong> Kai Reinhard · <strong>Тип:</strong> Java — реализует <a href="631.html">DatabaseExecutor</a> · <strong>Пакет:</strong> <code>org.projectforge.database.jdbc</code> <span style="color:#888">161 строка · 120 кода · 29 комментариев · 12 пустых</span></div>
+
+<div class="c"><p><strong>Простая JDBC-реализация интерфейса DatabaseExecutor.</strong> 161 строка. <strong>Важное предупреждение Javadoc:</strong> <em>"НЕ ИСПОЛЬЗУЙТЕ ЭТОТ КЛАСС В ПРОДАКШЕНЕ! Он предназначен только для демонстрации, так как здесь нет пула соединений и соединения могут теряться!!!!!"</em> — этот класс предназначен для <strong>миграций Flyway</strong> (которые выполняются до инициализации Hibernate), скриптов исправления данных и разработки/тестирования. Продакшен-код использует реализацию на основе <code>JdbcTemplate</code> с пулом соединений HikariCP.</p>
+
+<p><strong>Архитектура:</strong> Каждый метод создаёт анонимный подкласс <code>JdbcExecutor</code> (<a href="638.html">#638</a>), который переопределяет шаблонный метод <code>execute(PreparedStatement)</code>. Это <strong>шаблонный метод</strong> — <code>JdbcExecutor</code> управляет жизненным циклом соединения (открытие, установка параметров, закрытие), а каждый анонимный подкласс предоставляет конкретную JDBC-операцию.</p>
+
+<p><strong>Детали методов:</strong></p>
+<ul>
+<li><code>execute(sql, ignoreErrors)</code> — выполняет DDL/DML через <code>stmt.execute()</code>. Ничего не возвращает. Когда <code>ignoreErrors=true</code>, <code>JdbcExecutor</code> перехватывает <code>SQLException</code> и логирует его на уровне WARN, не пробрасывая дальше. Используется для идемпотентных операций, таких как <code>DROP TABLE IF EXISTS</code>.</li>
+<li><code>query(sql, args...)</code> — основной метод запроса. Создаёт <code>JdbcExecutor</code>, чей переопределённый <code>execute()</code>:
+  <ol><li>Вызывает <code>stmt.executeQuery()</code> для получения <code>ResultSet</code></li>
+  <li>Проходит в цикле <code>while(rs.next())</code>, создавая один <code>DatabaseResultRowImpl</code> на строку</li>
+  <li>Для каждой строки проходит по колонкам <code>ResultSetMetaData</code> (преобразование индексации с 1 на 0)</li>
+  <li>Создаёт <code>DatabaseResultRowEntryImpl(type, name, value)</code> для каждой колонки</li>
+  <li>Возвращает <code>List&lt;DatabaseResultRow&gt;</code> — корректно заполненный метаданными колонок</li></ol>
+  <strong>Безопасность ресурсов:</strong> <code>ResultSet</code> закрывается в блоке <code>finally</code> — это критично, так как обходится управление ресурсами Hibernate.</li>
+<li><code>queryForInt(sql, args...)</code> — возвращает одно целое число. Выбрасывает <code>RuntimeException</code>, если результирующий набор пуст (нет <code>rs.next()</code>). Используется для <code>SELECT COUNT(*)</code> и подобных агрегатных запросов. Закрывает <code>ResultSet</code> в finally.</li>
+<li><code>update(sql, args...)</code> — выполняет <code>stmt.executeUpdate()</code>, возвращает количество затронутых строк как <code>Integer</code>. Приводится из <code>Object</code> — обобщённый шаблон <code>JdbcExecutor</code> возвращает <code>Object</code> для поддержки разных типов возвращаемых значений.</li></ul>
+
+<p><strong>Два конструктора:</strong> <code>DatabaseExecutorImpl()</code> (без аргументов — DataSource должен быть установлен позже через <code>setDataSource()</code>) и <code>DatabaseExecutorImpl(DataSource)</code> (готов к использованию). Конструктор без аргументов существует для сценариев конфигурации Spring XML, где DataSource внедряется через сеттер свойства.</p>
+
+<p><strong>Поток DataSource:</strong> DataSource поступает из Spring-бина <code>@Bean DataSource</code> (настраивается в application properties: <code>spring.datasource.url</code>, <code>spring.datasource.username</code>, <code>spring.datasource.password</code>). В продакшене это пулированный DataSource HikariCP — но этот класс не использует функции пула. Его предупреждение об "отсутствии пула соединений" относится к его собственной обработке соединений: каждый вызов <code>JdbcExecutor</code> открывает новое "сырое" JDBC-соединение через <code>DataSource.getConnection()</code> вместо заимствования из пула, что <em>должно</em> работать с HikariCP, но не является предполагаемым использованием.</p>
+
+<p><strong>Зависимости:</strong> <code>JdbcExecutor</code> (<a href="638.html">#638</a>), <code>DatabaseResultRowImpl</code> (<a href="637.html">#637</a>), <code>DatabaseResultRowEntryImpl</code> (<a href="636.html">#636</a>). Все в одном подпакете <code>jdbc</code>.</p></div>
+
+</body></html>

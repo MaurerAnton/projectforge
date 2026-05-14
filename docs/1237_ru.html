@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>#1237 [RU]</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:2em;color:#444}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}</style>
+</head>
+<body>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Индекс</a> · <a href="file-index.html">← Индекс файлов</a> · <a href="1236.html">← Назад</a> · <a href="1238.html">Вперёд →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/kotlin/org/projectforge/framework/persistence/api/MagicFilterProcessor.kt" target="_blank" title="Просмотреть исходный код на GitHub">📄 исходник</a></div>
+<h1>#1237: <code>MagicFilterProcessor.kt</code></h1>
+<div class="meta"><code>projectforge-business/src/main/kotlin/org/projectforge/framework/persistence/api/MagicFilterProcessor.kt</code> Объект / Обработчик фильтров — Поисковый движок персистентности, <code>projectforge-business/src/main/kotlin/org/projectforge/framework/persistence/api/MagicFilterProcessor.kt</code> <span style="color:#888">222 строки · 179 кода · 33 комментария · 10 пустых</span></div>
+<div class="c">Объект-одиночка на Kotlin, преобразующий пользовательские объекты <code>MagicFilter</code> в готовый для базы данных <code>QueryFilter</code>. Интерпретирует каждый <code>MagicFilterEntry</code> с помощью рефлексии JPA-метамодели (<code>PropUtils</code>) и метаданных Hibernate Search (<code>HibernateSearchMeta</code>) для построения типизированных предикатов: строковые поиски LIKE, диапазоны дат/чисел, равенство булевых значений, поиск по дереву задач, фильтры значений I18nEnum и запросы истории Hibernate Envers.</div>
+
+<h2>Архитектура</h2>
+
+<h3>Конвейер обработки</h3>
+<pre>MagicFilter  ──►  MagicFilterProcessor.doIt()  ──►  QueryFilter  ──►  DBFilter  ──►  JPA/Hibernate</pre>
+<p>Обработчик устраняет разрыв между ориентированным на UI <code>MagicFilter</code> (который может представлять фильтры из React/AG-Grid фронтендов) и ориентированным на базу данных <code>QueryFilter</code> (который строит запросы JPA Criteria API и полнотекстовые запросы Hibernate Search).</p>
+
+<h3>Основная точка входа</h3>
+<pre>fun doIt(entityClass: Class&lt;*&gt;, magicFilter: MagicFilter, queryFilter: QueryFilter = QueryFilter()): QueryFilter</pre>
+<p>Принимает класс сущности для рефлексии, MagicFilter от пользователя и опционально существующий QueryFilter для заполнения. Возвращает полностью заполненный QueryFilter.</p>
+
+<h3>Шаги обработки</h3>
+<ol>
+<li><strong>Извлечение специальных полей</strong>: <code>deleted</code>, <code>searchHistory</code>, <code>MODIFIED_HISTORY_VALUE</code> извлекаются из записей и обрабатываются напрямую</li>
+<li><strong>Перенос основных фильтров</strong>: <code>deleted</code>, <code>maxRows</code>, <code>searchHistory</code>, <code>sortProperties</code>, <code>extended</code> копируются в QueryFilter</li>
+<li><strong>Полнотекстовый поиск</strong>: Если <code>searchString</code> не пустая, добавляется <code>DBPredicate.FullSearch</code> с поддержкой подстановочных знаков</li>
+<li><strong>Итерация по поиску полей</strong>: Каждый <code>MagicFilterEntry</code> классифицируется и преобразуется в <code>createFieldSearchEntry()</code></li>
+</ol>
+
+<h3>Генерация предикатов на основе типов (createFieldSearchEntry)</h3>
+<table>
+<tr><th>Тип поля</th><th>Сгенерированный предикат</th><th>Примечания</th></tr>
+<tr><td>Запись истории</td><td>Устанавливает <code>modifiedFrom</code>, <code>modifiedTo</code>, <code>modifiedByUserId</code> в QueryFilter</td><td>Использует Hibernate Envers</td></tr>
+<tr><td><code>String</code></td><td><code>DBPredicate.Like(field, value, autoWildcardSearch)</code></td><td>LIKE без учёта регистра</td></tr>
+<tr><td><code>Date</code></td><td><code>QueryFilter.interval()</code> / <code>eq()</code> / <code>isNull()</code></td><td>Разбирается через PFDateTimeUtils</td></tr>
+<tr><td><code>LocalDate</code></td><td><code>QueryFilter.interval()</code> / <code>eq()</code> / <code>isNull()</code></td><td>Разбирается через PFDayUtils</td></tr>
+<tr><td><code>Integer</code></td><td><code>QueryFilter.interval()</code> / <code>eq()</code> / <code>isNull()</code></td><td>Разбирается через NumberHelper</td></tr>
+<tr><td><code>Boolean</code></td><td><code>QueryFilter.eq(field, value == "true")</code></td><td>Преобразование строки в булево значение</td></tr>
+<tr><td>Подкласс <code>TaskDO</code></td><td><code>QueryFilter.taskSearch()</code></td><td>Рекурсивный поиск по дереву задач с ID потомков</td></tr>
+<tr><td>Подкласс <code>BaseDO</code></td><td><code>QueryFilter.eq()</code> / <code>isNull()</code></td><td>Разбирается как целочисленный ID</td></tr>
+<tr><td>Подкласс <code>I18nEnum</code></td><td><code>DBPredicate.IsIn(field, enumConstants)</code></td><td>Многозначный фильтр перечисления через IN</td></tr>
+<tr><td>Не найдено (JPA метамодель)</td><td>Запасной вариант <code>DBPredicate.FullSearch()</code> с массивом полей</td><td>Использует метаданные индекса Hibernate Search для неперсистентных полей</td></tr>
+<tr><td>Не найдено (оба)</td><td>Записывается предупреждение, запись игнорируется</td><td>Корректная деградация</td></tr>
+</table>
+
+<h3>Вспомогательные методы</h3>
+<table>
+<tr><th>Метод</th><th>Назначение</th></tr>
+<tr><td><code>isHistoryEntry(field)</code></td><td>Проверяет, соответствует ли поле любому значению перечисления <code>MagicFilterEntry.HistorySearch</code></td></tr>
+<tr><td><code>isModifiedInterval(field)</code></td><td>Специфическая проверка для поля истории <code>MODIFIED_INTERVAL</code></td></tr>
+<tr><td><code>isModifiedByUserId(field)</code></td><td>Специфическая проверка для поля истории <code>MODIFIED_BY_USER</code></td></tr>
+</table>
+
+<h3>Ключевые точки интеграции</h3>
+<ul>
+<li><strong>PropUtils.getField()</strong>: Определение типа поля на основе рефлексии для классов сущностей</li>
+<li><strong>HibernateSearchMeta.getClassInfo()</strong>: Метаданные индекса Hibernate Search для неперсистентных полей</li>
+<li><strong>PFDateTimeUtils / PFDayUtils</strong>: Разбор строк даты для типов даты/времени фреймворка</li>
+<li><strong>TaskTree</strong>: Иерархия задач для рекурсивного разрешения фильтра задач</li>
+<li><strong>UserGroupCache</strong>: Информация о пользователе для фильтров истории MODIFIED_BY_USER (вызывается во время <code>MagicFilter.init()</code>)</li>
+</ul>
+
+<h2>История Git</h2><div class="hist"><pre>868d6abb7 2025 -> 2026
+63081666f Заголовки исходных файлов: 2024-> 2025.
+04c38072b AddressDao: оптимизированный select, WIP: пагинация.
+7957637da Миграция в процессе... (все тесты всех пакетов: OK).
+3264694a8 Миграция в процессе... (все тесты всех пакетов: OK).
+4c04cfd65 MAJOR-CHANGE! Миграция целочисленных id на Long id (включая внешние ключи и т.д.)
+b6092df09 Авторское право 2023 -> 2024
+ab45d51fa Авторское право 2001-2022 -> 2001-2023.
+9c4cc0ae3 WIP: Использование AGGrid в страницах списков.
+5f7ef41b8 Авторское право 2021 -> 2022
+d5dda1711 Исправление ошибки в поиске по списку: поиск по ключевым словам и modified-by-user теперь поддерживается в поиске по истории.
+09bec8f9d UITable и MagicFilterProcessor: поддержка типа Boolean.
+ceb63e8a1 Заголовок исходного кода: (C) 2001-2021.
+8a2e1215a Добавлена поддержка pageSize в MagicFilterProcessor.
+658d96c77 WIP 93: реализация выпадающих вариантов в записях магического фильтра.
+b2657ec3a Список отпусков, MagicFilterProcessort теперь поддерживает значения I18nEnum.
+0a321235d Реализован MagicFilterEntry.synthetic (myFavorites и дубликаты фильтра адресов теперь поддерживаются как настройки фильтра).
+9709a04cf Адрес: реализован поиск дубликатов и избранного.
+ae7140482 React: реализован MagicCheckboxInput, удаленные записи в списке теперь отображаются с зачеркиванием.
+2ecda305b Введен PFUTCDateTime, разбор дат теперь обрабатывается PFDayUtils и PFDateTimeUtils.
+611b20d4e WIP: java.sql.Date -> LocalDate.
+1f0ceacca MagicFilter: автоматическое изменение searchString как str*
+243613fe9 Повторное добавление MagicFilter.searchString, добавлен перевод.
+7c79f1922 Авторское право заголовка исходного кода -> 2020.
+13cfb0330 WIP: Миграция на PFDate и PFDateTime.
+1165d1557 WIP Введены Addresses и CustomResultFilter.
+3096abc37 MagicFilter.autoWildcardSearch
+dc60c1487 MagicFilter.autoWildcardSearch
+031b5b380 MagicFilter.autostartWithSearch
+bf3d20864 Исправлен DB.SortProperty.
+a9f7fb127 WiP: DBQuery* и QueryFilter...
+d32649da3 WIP: Рефакторинг DBQuery*, QueryFilter и Predicates....
+d651c2d98 MagicFilterEntry.value.str -> value.value. user/ac -> user/aco
+619521cf5 MagicFilter: Тест: Entry.value -> Entry.value.stringValue.
+41bb8904e MagicFilter: Тест: Entry.value -> Entry.value.stringValue.
+db997435f WIP: MagicFilter...
+c0c5e427c WIP: MagicFilter...
+aba5af116 BaseDao.contains и BaseDao.getHistoryEntries теперь публичны. WIP: MagicFilter...
+5e3bbdfc5 WIP: MagicFilter...
+7cefcd6f3 WIP: MagicFilter...
+507854213 WIP: MagicFilter...</pre></div>
+</body>
+</html>

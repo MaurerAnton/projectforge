@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<title>#907 : AuftragsStatistik.kt [FR]</title>
+<style>
+body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}
+h1{border-bottom:2px solid #333;padding-bottom:.3em}
+h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}
+h3{margin-top:2em;color:#444}
+a{color:#0366d6}
+.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}
+.nav{font-size:.9em;color:#888;margin-bottom:1em}
+.meta{font-size:.9em;margin:1em 0;color:#555}
+code{background:#f0f0f0;padding:0 .2em;font-size:.93em}
+pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}
+table{border-collapse:collapse;width:100%;margin:1em 0}
+th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}
+th{background:#f5f5f5;font-weight:600}
+.hist{font-size:.85em;color:#555}
+</style>
+</head>
+<body>
+
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← Index des fichiers</a> · <a href="906.html">← Précédent</a> · <a href="908.html">Suivant →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/kotlin/org/projectforge/business/fibu/AuftragsStatistik.kt" target="_blank" title="Voir la source sur GitHub">📄 source</a></div>
+
+<h1>#907 : <code>AuftragsStatistik.kt</code></h1>
+
+<div class="meta"><code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/AuftragsStatistik.kt</code> 
+  <strong>Type :</strong> Classe de données (Sérialisable) &middot;
+  <strong>Objectif :</strong> Agrège les statistiques financières sur un ensemble de commandes &middot;
+  <strong>Paquetage :</strong> <code>org.projectforge.business.fibu</code><br>
+  <strong>Chemin source :</strong> <code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/AuftragsStatistik.kt</code>
+ <span style="color:#888">129 lignes · 72 code · 44 commentaires · 13 vides</span></div>
+
+<div class="c">
+  Une classe d'accumulateur <code>Sérialisable</code> qui résume les valeurs monétaires et les comptages sur plusieurs instances <code>AuftragDO</code>. Utilisée dans le carnet de commandes et les vues de prévisions pour afficher des chiffres agrégés du pipeline. Délègue le calcul par commande à <code>AuftragsCache.getOrderInfo()</code> qui retourne un objet <code>OrderInfo</code> avec des sommes pré-calculées. Fournit des cumuls séparés pour les catégories acquisition (potentiel), commissionné, facturé, non encore facturé et à facturer, ainsi que les compteurs correspondants.
+</div>
+
+<h2>Architecture &amp; Conception</h2>
+
+<h3>Champs</h3>
+
+<table>
+  <tr><th>Champ</th><th>Type</th><th>Description</th></tr>
+  <tr><td><code>nettoSum</code></td><td><code>BigDecimal</code> (set privé)</td><td>Somme nette totale sur toutes les commandes</td></tr>
+  <tr><td><code>akquiseSum</code></td><td><code>BigDecimal</code> (set privé)</td><td>Somme pour les commandes en état d'acquisition/potentiel uniquement</td></tr>
+  <tr><td><code>beauftragtSum</code></td><td><code>BigDecimal</code> (set privé)</td><td>Somme pour les positions commissionnées/commandées uniquement (LOI, BEAUFTRAGT, ESKALATION)</td></tr>
+  <tr><td><code>invoicedSum</code></td><td><code>BigDecimal</code> (set privé)</td><td>Somme des montants déjà facturés sur toutes les commandes</td></tr>
+  <tr><td><code>notYetInvoicedSum</code></td><td><code>BigDecimal</code> (set privé)</td><td>Différence entre la somme nette et la somme facturée (reste ouvert)</td></tr>
+  <tr><td><code>toBeInvoiced</code></td><td><code>BigDecimal</code> (set privé)</td><td>Somme des montants des commandes terminées non encore entièrement facturées ou avec des jalons de paiement non atteints</td></tr>
+  <tr><td><code>counter</code></td><td><code>Int</code> (set privé)</td><td>Nombre total de commandes comptées</td></tr>
+  <tr><td><code>counterAkquise</code></td><td><code>Int</code> (set privé)</td><td>Nombre de commandes avec somme d'acquisition > 0</td></tr>
+  <tr><td><code>counterBeauftragt</code></td><td><code>Int</code> (set privé)</td><td>Nombre de commandes avec somme commissionnée > 0</td></tr>
+  <tr><td><code>counterNotYetInvoiced</code></td><td><code>Int</code> (set privé)</td><td>Nombre de commandes avec montant non encore facturé > 0</td></tr>
+  <tr><td><code>counterToBeInvoiced</code></td><td><code>Int</code> (set privé)</td><td>Nombre de commandes avec montant à facturer > 0</td></tr>
+  <tr><td><code>counterInvoiced</code></td><td><code>Int</code> (set privé)</td><td>Nombre de commandes avec montant facturé > 0</td></tr>
+</table>
+
+<h3>Initialisation</h3>
+<p>Toutes les sommes sont initialisées à <code>BigDecimal.ZERO</code> et tous les compteurs à <code>0</code> dans le bloc <code>init</code>.</p>
+
+<h3>Méthode principale : <code>add(auftrag: AuftragDO)</code></h3>
+<p>Pour chaque commande, récupère le <code>OrderInfo</code> via <code>WicketSupport.get(AuftragsCache::class.java).getOrderInfo(auftrag)</code>. Le <code>OrderInfo</code> contient des décompositions pré-calculées (<code>akquiseSum</code>, <code>commissionedNetSum</code>, <code>notYetInvoicedSum</code>, <code>toBeInvoicedSum</code>, <code>invoicedSum</code>, <code>netSum</code>). Pour chaque somme > <code>BigDecimal.ZERO</code>, l'accumulateur de statistiques incrémente le compteur correspondant et ajoute le montant en utilisant <code>NumberHelper.add()</code> (addition BigDecimal sécurisée qui gère les valeurs nulles).</p>
+
+<h3>Sémantique calculée</h3>
+<ul>
+  <li><strong>notYetInvoicedSum</strong> — représente les montants ouverts : somme nette totale moins ce qui a déjà été facturé. C'est le montant encore à facturer.</li>
+  <li><strong>toBeInvoiced</strong> — sous-ensemble plus restreint : uniquement les commandes qui sont <code>ABGESCHLOSSEN</code> (terminées) mais pas encore <code>vollstaendigFakturiert</code> (entièrement facturées) ou qui ont des échéances de paiement non atteintes. Représente les candidats immédiats à la facturation.</li>
+  <li><strong>akquiseSum</strong> — provenant des commandes dans les états du pipeline (POTENZIAL, IN_ERSTELLUNG, GELEGT)</li>
+  <li><strong>beauftragtSum</strong> — provenant des commandes effectivement commissionnées (LOI, BEAUFTRAGT, ESKALATION)</li>
+</ul>
+
+<h3>Sérialisation</h3>
+<p>Implémente <code>Sérialisable</code> avec <code>serialVersionUID = -5486964211679100585L</code> pour la sérialisation des pages Wicket. Le <code>set privé</code> sur tous les champs permet un accès en lecture depuis l'extérieur tout en empêchant la mutation directe (seule <code>add()</code> modifie l'état).</p>
+
+<h2>Classes associées</h2>
+<ul>
+  <li><strong>Produit par :</strong> <code>AuftragDao</code> — crée et remplit cette statistique à partir des listes de commandes</li>
+  <li><strong>Agrège :</strong> <code>AuftragDO</code> — commandes individuelles en cours de sommation</li>
+  <li><strong>Délègue à :</strong> <code>AuftragsCache</code> — fournit un <code>OrderInfo</code> par commande avec des décompositions pré-calculées</li>
+  <li><strong>Utilise :</strong> <code>NumberHelper.add()</code> — addition BigDecimal sécurisée</li>
+  <li><strong>Utilise :</strong> <code>WicketSupport</code> — recherche de bean Spring pour <code>AuftragsCache</code></li>
+</ul>
+
+<h2>Historique Git</h2>
+<div class="hist"><pre>
+868d6abb7 2025 -> 2026
+63081666f En-têtes des fichiers source : 2024 -> 2025.
+42dc9fa16 Commandes : commandé -> commissionné.
+87dd5b87c AuftragsCache refactorisé, trucs de migration... (tous les tests OK)
+f88994f41 Travaux de migration en cours...
+b6092df09 Copyright 2023 -> 2024
+ab45d51fa Copyright 2001-2022 -> 2001-2023.
+9a65e1bc0 AuftragDO : statistiques refactorisées (non encore facturé, à facturer, facturé etc.)
+f80509d49 OrderBook : statistiques et valeurs à facturer améliorées.
+013c514bd AuftragsCache pour de bien meilleures performances de la vue liste du carnet de commandes.
+</pre></div>
+
+</body>
+</html>

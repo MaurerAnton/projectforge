@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>#710 [DE]</title>
+<style>
+body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}
+h1{border-bottom:2px solid #333;padding-bottom:.3em}
+h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}
+h3{margin-top:2em;color:#444}
+a{color:#0366d6}
+.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}
+.nav{font-size:.9em;color:#888;margin-bottom:1em}
+.meta{font-size:.9em;margin:1em 0;color:#555}
+code{background:#f0f0f0;padding:0 .2em;font-size:.93em}
+pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}
+table{border-collapse:collapse;width:100%;margin:1em 0}
+th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}
+th{background:#f5f5f5;font-weight:600}
+.hist{font-size:.85em;color:#555}
+.warn{background:#fff3cd;border-left:3px solid #ffc107;padding:.5em 1em;margin:1em 0}
+.tip{background:#d4edda;border-left:3px solid #28a745;padding:.5em 1em;margin:1em 0}
+</style>
+</head>
+<body>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← Datei-Index</a> · <a href="709.html">← Vorherige</a> · <a href="711.html">Nächste →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/java/org/projectforge/framework/persistence/xstream/ProxyIdRefMarshaller.java" target="_blank" title="Quellcode auf GitHub anzeigen">📄 Quelle</a></div>
+<h1>#710: <code>ProxyIdRefMarshaller.java</code></h1>
+<div class="meta"><code>projectforge-business/src/main/java/org/projectforge/framework/persistence/xstream/ProxyIdRefMarshaller.java</code> XStream-Marshaller — ID-basierter Referenz-Marshaller mit CGLIB-Proxy-Entfernung, Hibernate-Proxy-Entpackung und Vermeidung zirkulärer Referenzen, <code>projectforge-business/src/main/java/org/projectforge/framework/persistence/xstream/ProxyIdRefMarshaller.java</code> <span style="color:#888">91 Zeilen · 54 Code · 24 Kommentare · 13 leer</span></div>
+<div class="c">Erweitert XStreams <code>ReferenceByIdMarshaller</code>, um eine robuste Serialisierung von Entitätsgraphen mit drei Ebenen der Proxy-Behandlung zu ermöglichen: (1) Entfernt Spring CGLIB <code>Enhancer</code>-Proxies durch Durchlaufen der Superklassenkette, (2) entpackt Hibernate-Proxies via <a href="706.html">HibernateProxyHelper.get()</a> und (3) weist jedem veränderbaren Objekt inkrementelle numerische IDs zu und schreibt ID/IDREF-Referenzen, wenn dasselbe Objekt erneut angetroffen wird. Dies verhindert Endlosschleifen durch bidirektionale JPA-Assoziationen und stellt sicher, dass die Entitätsidentität (Datenbank-ID) im serialisierten XML erhalten bleibt – dieselbe Entität, die in mehreren Assoziationspfaden erscheint, wird nur einmal serialisiert, mit nachfolgenden Erscheinungen als <code>&lt;entity reference="3"/&gt;</code>. Dies ist der ausgefeilteste Proxy-bewusste Marshaller in der ProjectForge XStream-Brückenschicht.</div>
+
+<h2>Architektur</h2>
+
+<h3>Klassenhierarchie</h3>
+<pre>TreeMarshaller
+  └── AbstractReferenceMarshaller       (fügt Objektreferenzverfolgung hinzu)
+       ├── ReferenceByXPathMarshaller   (<a href="707.html">#707</a> — XPath-basierte Referenzen)
+       └── ReferenceByIdMarshaller      (ID/IDREF-basierte Referenzen)
+            └── ProxyIdRefMarshaller    (diese Klasse — fügt Proxy-Entfernung + CGLIB-Behandlung hinzu)</pre>
+
+<h3>Felder</h3>
+<table>
+<tr><th>Feld</th><th>Typ</th><th>Zweck</th></tr>
+<tr><td><code>references</code></td><td><code>ObjectIdDictionary</code></td><td>Verfolgt jedes serialisierte Objekt, bildet Objektidentität → generierte ID ab. Wird verwendet, um zirkuläre/doppelte Referenzen zu erkennen.</td></tr>
+<tr><td><code>idGenerator</code></td><td><code>IDGenerator</code></td><td>Generiert eindeutige sequenzielle IDs. Standardmäßig <code>SequenceGenerator(1)</code>, der IDs "1", "2", "3", ... erzeugt.</td></tr>
+<tr><td><code>classMapper</code></td><td><code>Mapper</code></td><td>Zwischengespeicherte Referenz auf den XStream-Klassen-Mapper (nicht den <code>mapper</code> aus der Superklasse, der ihn überschattet).</td></tr>
+<tr><td><code>log</code></td><td><code>org.slf4j.Logger</code></td><td>Statischer SLF4J-Logger für Debug-Level-Tracing von marshallierten Objekten.</td></tr>
+</table>
+
+<h3>Konstruktoren</h3>
+<p>Zwei Konstruktor-Überladungen:</p>
+<ol>
+  <li><strong>Vollständiger Konstruktor:</strong> Akzeptiert <code>HierarchicalStreamWriter</code>, <code>ConverterLookup</code>, <code>Mapper</code> und <code>IDGenerator</code>. Ermöglicht benutzerdefinierte ID-Generierungsstrategien.</li>
+  <li><strong>Bequemlichkeitskonstruktor:</strong> Lässt den <code>IDGenerator</code>-Parameter weg und verwendet standardmäßig <code>SequenceGenerator(1)</code> — erzeugt sequenzielle numerische IDs beginnend bei 1.</li>
+</ol>
+
+<h3>convertAnother(Object item) — Kernalgorithmus</h3>
+<p>Dies ist die überschriebene Methode, in der die gesamte Proxy-Behandlung und Referenzverfolgung stattfindet. Sie ersetzt XStreams standardmäßiges <code>convertAnother()</code> durch Proxy-bewusste Logik:</p>
+
+<ol>
+  <li><strong>CGLIB Enhancer-Entfernung (Zeilen ~56-59):</strong>
+    <pre>Class&lt;?&gt; targetClass = item.getClass();
+while (Enhancer.isEnhanced(targetClass)) {
+    targetClass = targetClass.getSuperclass();
+}</pre>
+    Durchläuft die Superklassenkette und entfernt Spring CGLIB-Proxies (erstellt durch <code>@Transactional</code>, <code>@Cacheable</code>, usw.). <code>Enhancer.isEnhanced()</code> gibt true für CGLIB-generierte Unterklassen zurück. Dies geschieht <em>vor</em> der Converter-Suche, damit der korrekte Entitäts-Converter ausgewählt wird.</li>
+
+  <li><strong>Converter-Suche (Zeile ~61):</strong>
+    <pre>Converter converter = converterLookup.lookupConverterForType(targetClass);</pre>
+    Findet den passenden XStream-Converter für die echte (nicht-proxierte) Entitätsklasse.</li>
+
+  <li><strong>Hibernate-Proxy-Entpackung (Zeile ~62):</strong>
+    <pre>Object realItem = HibernateProxyHelper.get(item);</pre>
+    Verwendet <a href="706.html">HibernateProxyHelper</a>, um Hibernate-Lazy-Loading-Proxies zu entpacken. Nach diesem Schritt ist <code>realItem</code> die tatsächliche Entitätsinstanz ohne Proxy-Wrapper.</li>
+
+  <li><strong>Schnellpfad für unveränderliche Werttypen (Zeilen ~64-66):</strong>
+    <pre>if (classMapper.isImmutableValueType(realItem.getClass())) {
+    converter.marshal(item, writer, this);
+}</pre>
+    Zeichenketten, Ganzzahlen, Datumsangaben, Aufzählungen und andere unveränderliche Typen werden direkt ohne ID-Verfolgung marshalliert. Dies vermeidet, dass das Referenzwörterbuch mit Werten überfrachtet wird, die niemals zirkuläre Referenzen bilden können.</li>
+
+  <li><strong>Erkennung doppelter Referenzen (Zeilen ~67-70):</strong>
+    <pre>Object idOfExistingReference = references.lookupId(realItem);
+if (idOfExistingReference != null) {
+    writer.addAttribute("reference", idOfExistingReference.toString());
+    return;
+}</pre>
+    Überprüft das <code>ObjectIdDictionary</code>, ob <code>realItem</code> bereits serialisiert wurde. Wenn ja, wird ein <code>reference</code>-Attribut geschrieben (z.B. <code>reference="3"</code>), das auf die frühere Serialisierung durch ihre generierte ID verweist. Dies ist der Mechanismus, der Endlosschleifen in bidirektionalen Assoziationen verhindert – wenn XStream von einem Kind zurück zu einem Elternteil navigiert, findet es das Elternteil bereits im Wörterbuch und gibt eine Referenz aus, anstatt es erneut zu serialisieren.</li>
+
+  <li><strong>Erstmalige Serialisierung (Zeilen ~71-81):</strong>
+    <pre>String newId = idGenerator.next(realItem);
+writer.addAttribute("id", newId);
+references.associateId(realItem, newId);
+converter.marshal(realItem, writer, this);</pre>
+    Generiert eine neue eindeutige ID, speichert sie im Referenzwörterbuch, schreibt sie als <code>id</code>-Attribut auf das XML-Element und delegiert dann an den Converter für die vollständige Serialisierung. Das Element ist nun registriert, sodass zukünftige Begegnungen Schritt 5 auslösen.</li>
+</ol>
+
+<h3>ObjectIdDictionary</h3>
+<p>XStreams <code>ObjectIdDictionary</code> ist eine identitätsbasierte Map (verwendet <code>System.identityHashCode()</code> und <code>==</code>-Vergleich, nicht <code>.equals()</code>). Dies ist entscheidend, da JPA-Entitäten <code>equals()</code> oft basierend auf der Datenbank-ID implementieren, die bei transienten Entitäten null sein kann. Die identitätsbasierte Verfolgung stellt sicher, dass jede Objektinstanz unabhängig von ihrer <code>equals()</code>-Implementierung eindeutig verfolgt wird.</p>
+
+<div class="warn"><strong>Hinweis zur Hibernate-Proxy-Identität:</strong> Wenn zwei verschiedene Hibernate-Proxy-Instanzen dieselbe zugrunde liegende Entität umschließen (möglich, wenn die Entität über verschiedene Sitzungen oder Assoziationen geladen wird), würde das <code>ObjectIdDictionary</code> sie als unterschiedliche Objekte betrachten (unterschiedliche Identitäts-Hashes), selbst nach <code>HibernateProxyHelper.get()</code>. Dies kann dazu führen, dass dieselbe Datenbankzeile zweimal mit unterschiedlichen generierten IDs serialisiert wird. Dies ist eine bekannte Einschränkung der identitätsbasierten Verfolgung – die Alternative (wertbasierte Verfolgung unter Verwendung von Datenbank-IDs) würde eine spezielle Behandlung für transiente Entitäten erfordern.</div>
+
+<h2>Integrationspunkte</h2>
+<ul>
+  <li><strong>Erstellt von:</strong> Der <a href="709.html">ProxyIdRefMarshallingStrategy</a>, der <code>createMarshallingContext()</code> überschreibt, um diesen Marshaller anstelle des standardmäßigen <code>ReferenceByIdMarshaller</code> zu instanziieren.</li>
+  <li><strong>Alternative zu:</strong> <a href="707.html">HibernateProxyXPathMarshaller</a> — dieser verwendet ID/IDREF-Attribute, während der andere XPath-Ausdrücke verwendet. Beide Ansätze sind gültig; die Wahl hängt davon ab, welche <code>MarshallingStrategy</code> konfiguriert ist.</li>
+  <li><strong>Abhängigkeiten:</strong> <a href="706.html">HibernateProxyHelper</a> zum Entpacken von Hibernate-Proxies. Verwendet das Spring Framework <code>Enhancer</code> zur CGLIB-Proxy-Erkennung (Kompilierabhängigkeit von <code>spring-core</code>).</li>
+</ul>
+
+<h2>Designentscheidungen & Fallstricke</h2>
+<ul>
+  <li><strong>Spring CGLIB-Abhängigkeit:</strong> Der Import von <code>org.springframework.cglib.proxy.Enhancer</code> erzeugt eine harte Abhängigkeit vom Spring Framework, was akzeptabel ist, da ProjectForge eine Spring-Anwendung ist. Diese Klasse würde jedoch außerhalb eines Spring-Kontexts ohne Änderungen nicht funktionieren.</li>
+  <li><strong>Schnellpfad für unveränderliche Typen:</strong> Die Prüfung <code>classMapper.isImmutableValueType()</code> ist eine wichtige Optimierung. Ohne sie würde jedem Zeichenkettenliteral, jeder Ganzzahl und jedem Datum im Entitätsgraphen eine ID zugewiesen und zum Referenzwörterbuch hinzugefügt, was die Speichernutzung und XML-Ausgabe massiv aufbläht.</li>
+  <li><strong>Debug-Logging:</strong> Die SLF4J-Debug-Anweisung protokolliert jede marshallierte Objektklasse. In der Produktion sollte dies auf TRACE-Ebene erfolgen, um Log-Spam bei großen Entitätsgraphen-Exporten zu vermeiden.</li>
+  <li><strong>ID-Kollisionspotenzial:</strong> <code>SequenceGenerator(1)</code> erzeugt IDs innerhalb eines einzelnen Marshalling-Kontexts. Wenn zwei separate <code>ProxyIdRefMarshaller</code>-Instanzen unterschiedliche Objektgraphen innerhalb desselben XML-Dokuments serialisieren (unwahrscheinlich, aber theoretisch möglich mit XStreams <code>MarshallingContext</code>-Verschachtelung), könnten IDs kollidieren. Dies ist kein praktisches Problem, da jeder Marshalling-Kontext seine eigene Marshaller-Instanz verwendet.</li>
+  <li><strong>Überschattung von classMapper:</strong> Sowohl diese Klasse als auch die Superklasse haben ein <code>mapper</code>-Feld. Der Zwei-Argumente-Konstruktor setzt <code>this.classMapper</code>, aber der Drei-Argumente-Konstruktor setzt beide. Der Code verwendet durchgängig <code>this.classMapper</code> für die lokal gespeicherte Referenz, um Verwechslungen mit dem geerbten Feld zu vermeiden.</li>
+</ul>
+
+<h2>Git-Verlauf</h2>
+<div class="hist"><pre>868d6abb7 2025 -> 2026
+63081666f Quellcode-Dateiköpfe: 2024 -> 2025.
+b6092df09 Copyright 2023 -> 2024
+ab45d51fa Copyright 2001-2022 -> 2001-2023.
+5f7ef41b8 Copyright 2021 -> 2022
+ceb63e8a1 Quellcode-Kopfzeile: (C) 2001-2021.
+7c79f1922 Copyright des Quellkopfs -> 2020.
+32f634b88 Optimiere Imports
+000ca723d Entferne sinnlose boolesche Ausdrücke (business)
+dd5ca38ac Copyright aller Java-Dateiköpfe aktualisiert oder erstellt.
+a954d7f7d Änderungen aus dem Java 9 Branch
+a5bbdca6a Ändere Logger zu slf4j
+9ebb88522 Erstes Commit</pre></div>
+</body>
+</html>

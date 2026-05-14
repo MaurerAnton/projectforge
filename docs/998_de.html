@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="de">
+<head><meta charset="UTF-8"><title>#998: KostCache.kt [DE]</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:2em;color:#444}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}</style></head>
+<body>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← Dateiindex</a> · <a href="997.html">← Vorherige</a> · <a href="999.html">Nächste →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/kotlin/org/projectforge/business/fibu/kost/KostCache.kt" target="_blank" title="Quellcode auf GitHub anzeigen">📄 Quelle</a></div>
+<h1>#998: <code>KostCache.kt</code></h1>
+<div class="meta"><code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/kost/KostCache.kt</code> Typ: Cache-Komponente · Zweck: In-Memory-Cache für Kost1-, Kost2- und Kost2Art-Entitäten · Quelle: projectforge-business/src/main/kotlin/org/projectforge/business/fibu/kost/KostCache.kt <span style="color:#888">361 Zeilen · 249 Code · 77 Kommentare · 35 leer</span></div>
+<div class="c">Zentrale Caching-Komponente für alle Kostenstellendaten (<code>Kost1DO</code>, <code>Kost2DO</code>, <code>Kost2ArtDO</code>). Erweitert <code>AbstractCache</code>, um das ProjectForge-Caching-Framework zu nutzen. Verwaltet synchronisierte Hash-Maps für schnelle Suche nach ID und numerischen Komponenten, wodurch wiederholte JPA-Abfragen für häufig verwendete Kostenstellendaten vermieden werden.</div>
+<h2>Cache-Struktur</h2>
+<table>
+<tr><th>Map</th><th>Schlüssel</th><th>Wert</th><th>Beschreibung</th></tr>
+<tr><td><code>kost1Map</code></td><td><code>Long</code> (Kost1DO.id)</td><td><code>Kost1DO</code></td><td>Synchronisierte veränderbare Map; bei Einfügen/Ändern aktualisiert</td></tr>
+<tr><td><code>kost2Map</code></td><td><code>Long</code> (Kost2DO.id)</td><td><code>Kost2DO</code></td><td>Synchronisierte veränderbare Map; bei Einfügen/Ändern aktualisiert</td></tr>
+<tr><td><code>kost2ArtMap</code></td><td><code>Long</code> (Kost2ArtDO.id)</td><td><code>Kost2ArtDO</code></td><td>Nach Aktualisierung schreibgeschützt, wird bei vollständiger Aktualisierung ersetzt</td></tr>
+<tr><td><code>allKost2Arts</code></td><td>—</td><td><code>List&lt;Kost2Art&gt;</code></td><td>Wrapper-Liste für Berichte (Kost2ArtImpl)</td></tr>
+</table>
+<h2>Wichtige Methoden</h2>
+<table>
+<tr><th>Methode</th><th>Beschreibung</th></tr>
+<tr><td><code>getKost2(id)</code></td><td>Kost2 nach ID aus dem Cache abrufen (primäre Suche)</td></tr>
+<tr><td><code>getKost2IfNotInitialized(kost2)</code></td><td>Bei Lazy-Proxy aus dem Cache neu laden, um Lazy-Loading N+1 zu vermeiden</td></tr>
+<tr><td><code>getKost2(str)</code></td><td>Kost2 nach formatierter Zeichenkette abrufen (parst "5.123.45.67")</td></tr>
+<tr><td><code>getKost2(nk, b, tb, art)</code></td><td>Kost2 nach einzelnen numerischen Komponenten abrufen</td></tr>
+<tr><td><code>getActiveKost2(nk, b, tb)</code></td><td>Cache-Kost2 nach Präfix und Aktivitätsstatus filtern</td></tr>
+<tr><td><code>getKost1(id)</code> / <code>getKost1(str)</code></td><td>Analoge Kost1-Suchen</td></tr>
+<tr><td><code>findKost1(obj)</code> / <code>findKost2(obj)</code></td><td>Polymorphe Suche nach Kost1DO, String oder Number</td></tr>
+<tr><td><code>getKost2Art(id)</code></td><td>Kostenart nach 2-stelliger ID abrufen</td></tr>
+<tr><td><code>getKost2ArtsForProjekt(projektId)</code></td><td>Kostenarten, die in den Kost2-Einträgen eines Projekts verwendet werden</td></tr>
+<tr><td><code>getAllKost2ArtsForProjekt(projektId)</code></td><td>Alle Kostenarten, markiert, ob das Projekt sie bereits verwendet</td></tr>
+<tr><td><code>getKost2ForProjekt(projektId)</code></td><td>Alle Kost2-Einträge für ein bestimmtes Projekt</td></tr>
+</table>
+<h2>Aktualisierungsmechanismus</h2>
+<p>Die Methode <code>refresh()</code> wird von der Infrastruktur von <code>AbstractCache</code> aufgerufen (über <code>checkRefresh()</code>, das zu Beginn jeder öffentlichen Methode aufgerufen wird). Die Aktualisierung lädt alle Kost1-, Kost2- und Kost2Art-Datensätze in einer einzigen schreibgeschützten isolierten Transaktion:</p>
+<ol>
+<li>Lädt alle <code>Kost1DO</code>- und <code>Kost2DO</code>-Entitäten in veränderbare Maps</li>
+<li>Prüft, ob nicht gelöschte Kost2-Einträge vorhanden sind (Flag <code>kost2EntriesExists</code>)</li>
+<li>Baut die Liste <code>allKost2Arts</code> neu auf, die als <code>Kost2ArtImpl</code> für Berichte verpackt wird</li>
+</ol>
+<h2>Cache-Invalidierung</h2>
+<ul>
+<li>Nach jedem Einfügen/Ändern von Kost2: <code>Kost2Dao.afterInsertOrModify</code> → <code>KostCache.updateKost2(kost2)</code></li>
+<li>Nach jedem Einfügen/Ändern von Kost1: <code>KostCache.updateKost1(kost1)</code></li>
+<li>Nach jeder Änderung von Kunde: Cache abgelaufen (registrierter Listener in <code>@PostConstruct</code>)</li>
+</ul>
+<h2>Hibernate-Initialisierungsschutz</h2>
+<p>Die Methoden <code>get*IfNotInitialized()</code> verhindern ein kritisches Leistungsproblem: Wenn außerhalb einer Transaktion auf einen Hibernate-Lazy-Proxy zugegriffen wird, löst dies N+1-Abfragen aus. Diese Methoden verwenden <code>HibernateUtils.isFullyInitialized()</code>, um Proxys zu erkennen und stattdessen aus dem Cache neu zu laden. Dieser Schutz wird auf Kost1DO, Kost2DO und Kost2ArtDO angewendet.</p>
+<h2>Thread-Sicherheit</h2>
+<ul>
+<li><code>kost1Map</code> und <code>kost2Map</code>: Veränderbar, synchronisierter Zugriff über <code>synchronized(kost2Map)</code>-Blöcke</li>
+<li><code>kost2ArtMap</code> und <code>allKost2Arts</code>: Werden bei Aktualisierung atomar ersetzt (nach Zuweisung schreibgeschützt)</li>
+</ul>
+<h2>Quellcode (gekürzt)</h2>
+<pre>@Component
+class KostCache : AbstractCache() {
+    @Autowired private lateinit var persistenceService: PfPersistenceService
+    @Autowired private lateinit var kundeDao: KundeDao
+
+    private lateinit var kost1Map: MutableMap&lt;Long, Kost1DO&gt;
+    private lateinit var kost2Map: MutableMap&lt;Long, Kost2DO&gt;
+    private lateinit var kost2ArtMap: Map&lt;Long, Kost2ArtDO&gt;
+
+    fun getKost2(id: Long?): Kost2DO? {
+        id ?: return null
+        checkRefresh()
+        synchronized(kost2Map) { return kost2Map[id] }
+    }
+
+    override fun refresh() {
+        persistenceService.runIsolatedReadOnly { context ->
+            this.kost1Map = persistenceService
+                .executeQuery("from Kost1DO t", Kost1DO::class.java)
+                .filter { it.id != null }
+                .associateBy { it.id!! }.toMutableMap()
+            this.kost2Map = persistenceService
+                .executeQuery("from Kost2DO t", Kost2DO::class.java)
+                .filter { it.id != null }
+                .associateBy { it.id!! }.toMutableMap()
+            // ... updateKost2Arts()
+        }
+    }
+    companion object { lateinit var instance: KostCache }
+}</pre>
+<h2>Git-Verlauf</h2>
+<div class="hist"><pre>868d6abb7 2025 -> 2026
+8239a53ee Kost2: Virtuelle Status-Vererbung von ProjektDO
+581988c45 WIP: Parsing of creditor invoices.
+6a32032d6 Hibernate.isInitialized -> HibernateUtils.isFullyInitialized
+63081666f Source file headers: 2024-> 2025.
+db2599ab8 History in orderbook, invoices and projects.
+50c3b7b46 Migration (all tests OK).
+b3782c8a8 Migration stuff...
+4942c854d Migration stuff...
+d394f410f Migration (all tests OK).
+f928d12b1 Migration (all tests OK).
+2e9839891 Migration stuff...
+ba2479571 Migration stuff...
+b3293f0cc PersistenceService: stats handling improved.
+85b4e1175 PfPersistenceService: query -> executeQuery.
+b095e6f7d Big change of Transaction handling.
+4c04cfd65 MAJOR-CHANGE! Integer id's to Long id's. (file created)</pre></div>
+</body>
+</html>

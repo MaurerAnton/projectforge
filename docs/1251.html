@@ -1,39 +1,42 @@
-<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>1251</title>
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>#1251: DBQueryBuilder.kt</title>
 <style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:2em;color:#444}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}</style></head>
-<body><div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="1250.html">← Prev</a> · <a href="1252.html">Next →</a></div>
-<h1>1251: <code>HistoryLoadContext.kt</code></h1>
-<div class="meta">Service/Context Class, projectforge-business/.../persistence/history/HistoryLoadContext.kt</div>
-<div class="c">Thread-safe mutable context used during history entry loading and conversion. Stores raw history entries, loaded entities, and entry-attribute mappings; provides iteration state (current entry/attr) for converters and display formatters.</div>
+<body><div class="nav"><a href="https://maureranton.github.io/projectforge/">&#8592; Index</a> &#183; <a href="file-index.html">&#8592; File index</a> &#183; <a href="1250.html">&#8592; Prev</a> &#183; <a href="1252.html">Next &#8594;</a></div>
+<h1>#1251: <code>DBQueryBuilder.kt</code></h1>
+<div class="meta"><code>projectforge-business/src/main/kotlin/org/projectforge/framework/persistence/api/impl/DBQueryBuilder.kt</code> Query Orchestrator, projectforge-business/src/main/kotlin/org/projectforge/framework/persistence/api/impl/DBQueryBuilder.kt <span style="color:#888">162 lines · 98 code · 48 comments · 16 blank</span></div>
+<div class="c">Top-level query builder that routes between <code>DBQueryBuilderByCriteria</code> (JPA Criteria API) and <code>DBQueryBuilderByFullText</code> (Hibernate Search). Decides the query mode based on whether any <code>DBPredicate</code> lacks criteria support, then delegates filtering, ordering, and result iteration accordingly.</div>
 
-<h2>Architecture &amp; Role</h2>
-<p><code>HistoryLoadContext</code> serves as the central state-holder when history data is loaded from the database and transformed into human-/JSON-readable <code>DisplayHistoryEntry</code> objects. It is instantiated per load operation (not a singleton) and passed through the chain of history converters.</p>
-
-<h3>Key Inner Classes</h3>
-<table>
-<tr><th>Class</th><th>Purpose</th></tr>
-<tr><td><code>HistoryEntryMap</code></td><td>Pairs a raw <code>HistoryEntryDO</code> with its display counterpart and a mutable extension map for custom data.</td></tr>
-<tr><td><code>HistoryEntryAttrMap</code></td><td>Pairs a raw <code>HistoryEntryAttrDO</code> with its display counterpart and a mutable extension map.</td></tr>
-</table>
-
-<h3>State Management</h3>
-<p>The context maintains:</p>
+<h2>Architecture</h2>
+<h3>Constructor Dependencies</h3>
 <ul>
-<li><code>historyEntries</code> — merged list of <code>HistoryEntryDO</code>, deduplicated by <code>id</code></li>
-<li><code>loadedEntities</code> — entities (BaseDO) already fetched, used to avoid re-fetches</li>
-<li><code>historyEntryAttrMap</code> — per-attribute property maps keyed by attr ID (Long → HistoryEntryAttrMap)</li>
-<li>Current iteration state: <code>currentHistoryEntry</code>, <code>currentHistoryEntryAttr</code>, <code>currentDisplayHistoryEntry</code>, <code>currentDisplayHistoryEntryAttr</code></li>
-<li>References to <code>UserGroupCache</code>, <code>HistoryValueService</code>, and the owning <code>BaseDao</code></li>
+<li><strong>baseDao</strong> <code>BaseDao&lt;O&gt;</code> — entity DAO providing DO class</li>
+<li><strong>entityManager</strong> — JPA EntityManager</li>
+<li><strong>queryFilter</strong> <code>QueryFilter</code> — filter with join definitions</li>
+<li><strong>dbFilter</strong> <code>DBFilter</code> — predicate and sort configuration</li>
 </ul>
 
-<h3>Delegation Methods</h3>
-<p>Delegates value resolution to <code>historyValueService</code>: <code>getObjectValue()</code> resolves string-encoded values to typed objects; <code>getClass()</code> resolves class names to <code>Class&lt;?&gt;</code>. User resolution delegates to <code>UserGroupCache</code> via <code>getUser(id)</code>.</p>
+<h3>Query Modes</h3>
+<table>
+<tr><th>Mode</th><th>Description</th></tr>
+<tr><td><code>FULLTEXT</code></td><td>Hibernate Search full-text query (default when predicates lack criteria support)</td></tr>
+<tr><td><code>MULTI_FIELD_FULLTEXT_QUERY</code></td><td>Query string (e.g. "+name:sch* +kassel..."), not yet implemented</td></tr>
+<tr><td><code>CRITERIA</code></td><td>JPA Criteria API query</td></tr>
+</table>
 
-<h2>Git History</h2><div class="hist"><pre>868d6abb7 2025 -> 2026
-b7861b2ff Addresses: forced deletion fixed (after mgc migration): sipgate-contacts and history entries / attrs.
+<h3>Predicate Routing</h3>
+<p>In <code>init</code>, predicates are classified into <code>criteriaPredicates</code>, <code>fullTextPredicates</code>, or <code>resultPredicates</code> (post-query in-memory filtering). A predicate is routed to the result set if it supports neither criteria nor full-text search. Logging via <code>KotlinLogging</code> reports ignored predicates.</p>
+
+<h3>Key Methods</h3>
+<table>
+<tr><th>Method</th><th>Description</th></tr>
+<tr><td><code>result(): DBResultIterator&lt;O&gt;</code></td><td>Returns either a full-text or criteria result iterator</td></tr>
+<tr><td><code>addOrder(sortProperty)</code></td><td>Adds sorting, delegated to the active sub-builder; max 3 sort properties</td></tr>
+</table>
+
+<h2>Git History</h2><div class="hist"><pre>
+868d6abb7 2025 -> 2026
 63081666f Source file headers: 2024-> 2025.
-bbc198d03 Migration stuff in progress... (all tests of all packages: OK).
-9e3c523c7 Migration stuff in progress... (all tests of all packages: OK).
-c97135a57 Migration stuff in progress...
-f408da8a8 Migration stuff in progress... (all tests of all packages: OK).
+313bed1ec Merge remote-tracking branch 'origin/master' into mgc-remove
+314408ee0 Migration stuff in progress... (all tests of all packages: OK).
+4000abf4e Migration stuff in progress...
 </pre></div>
 </body></html>

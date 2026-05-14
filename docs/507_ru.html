@@ -1,0 +1,145 @@
+<!DOCTYPE html><html lang="ru"><head><meta charset="utf-8"><title>#507: LdapSlaveLoginHandler.java [RU]</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:2em;color:#444}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.lang{font-size:.85em;color:#888;float:right}.lang a{color:#888;text-decoration:none;padding:0 .3em}.lang a.active{color:#0366d6;font-weight:600;text-decoration:underline}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}</style></head>
+<body><div class="lang"><a href="507.html">EN</a> · <a href="507_de.html">DE</a> · <a href="507_ru.html" class="active">RU</a> · <a href="507_fr.html">FR</a> · <a href="507_es.html">ES</a></div>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Индекс</a> · <a href="file-index.html">← Индекс файлов</a> · <a href="141.html">← Назад</a> · <a href="1328.html">Вперёд →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/java/org/projectforge/business/ldap/LdapSlaveLoginHandler.java" target="_blank" title="Просмотреть исходный код на GitHub">📄 исходник</a></div>
+<h1>#507: <code>LdapSlaveLoginHandler.java</code></h1>
+<div class="meta"><code>projectforge-business/src/main/java/org/projectforge/business/ldap/LdapSlaveLoginHandler.java</code> Тип: Java · Роль: Интеграция LDAP · Источник: projectforge-business/src/main/java/org/projectforge/business/ldap/LdapSlaveLoginHandler.java <span style="color:#888">355 строк · 238 кода · 97 комментариев · 20 пустых</span></div>
+<div class="c">Файл исходного кода <code>projectforge-business/src/main/java/org/projectforge/business/ldap/LdapSlaveLoginHandler.java</code>, содержащий Java-код для уровня интеграции LDAP.</div>
+<h2>Структура кода</h2>
+<p>Пакет: <code>org.projectforge.business.ldap</code></p>
+<p>Классы: <code>LdapSlaveLoginHandler</code></p>
+<p>Перечисления: <code>Mode</code></p>
+<p>Расширяет: <code>LdapLoginHandler</code></p>
+<p>Методы (12): <code>initialize</code>, <code>checkLogin</code>, <code>getAllGroups</code>, <code>getAllUsers</code>, <code>getUser</code>, <code>isPasswordChangeSupported</code>, <code>isWlanPasswordChangeSupported</code>, <code>afterUserGroupCacheRefresh</code>, <code>run</code>, <code>isRefreshInProgress</code>, <code>updateLdap</code>, <code>call</code></p>
+<p>Поля (3): <code>userGroupCache</code>, <code>mode</code>, <code>refreshInProgress</code></p>
+<p>Импорты: 15 пакетов</p>
+<h2>Исходный код (сокращённый)</h2>
+<pre>
+package org.projectforge.business.ldap;
+
+import org.apache.commons.lang3.StringUtils;
+import org.projectforge.business.login.LoginDefaultHandler;
+import org.projectforge.business.login.LoginHandler;
+import org.projectforge.business.login.LoginResult;
+import org.projectforge.business.login.LoginResultStatus;
+import org.projectforge.business.user.UserGroupCache;
+import org.projectforge.framework.persistence.api.EntityCopyStatus;
+import org.projectforge.framework.persistence.user.entities.GroupDO;
+import org.projectforge.framework.persistence.user.entities.PFUserDO;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
+
+import javax.naming.NameNotFoundException;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.List;
+
+/**
+ * Этот обработчик входа LDAP действует как подчинённый LDAP, то есть LDAP будет доступен в режиме только для чтения.
+ * Доступны 3 режима: простой, пользователи и пользователи-группы.
+ * &lt;h4&gt;Простой режим&lt;/h4&gt; Простой режим предполагается, если в config.xml не указан managerUser для LDAP.
+ * &lt;ul&gt;
+ * &lt;li&gt;Простой означает, что проверяются только имя пользователя и пароль; все остальные настройки пользователя,
+ * такие как назначенные группы, имя пользователя и т.д., управляются ProjectForge.&lt;/li&gt;
+ * &lt;li&gt;Для доступа к пользователям или группам LDAP не требуется пользователь LDAP; проверяются только имя входа
+ * и пароль пользователя путём попытки аутентификации!&lt;/li&gt;
+ * &lt;li&gt;Если пользователь деактивирован в LDAP, он может неограниченно работать с ProjectForge, пока использует
+ * метод stay-logged-in! (Если это неприемлемо, используйте обычный режим пользователя.)&lt;/li&gt;
+ * &lt;li&gt;Для локальных пользователей любые настройки LDAP игнорируются.&lt;/li&gt;
+ * &lt;/ul&gt;
+ * &lt;h4&gt;Обычный режим пользователей&lt;/h4&gt; Обычный режим пользователей предполагается, если в config.xml указан
+ * managerUser для LDAP.
+ * &lt;ul&gt;
+ * &lt;li&gt;Обычный означает, что проверяются имя пользователя и пароль, а все остальные настройки пользователя,
+ * такие как имя пользователя и т.д., считываются указанным менеджером LDAP.&lt;/li&gt;
+ * &lt;li&gt;Если пользователь удалён в LDAP, он будет помечен как удалённый также в базе данных ProjectForge.
+ * Любой вход после синхронизации запрещён (функция stay-logged-in также не работает для удалённых пользователей).&lt;/li&gt;
+ * &lt;li&gt;Для локальных пользователей любые настройки LDAP игнорируются.&lt;/li&gt;
+ * &lt;li&gt;Все известные поля пользователя LDAP синхронизируются (имя, фамилия, email и т.д.).&lt;/li&gt;
+ * &lt;/ul&gt;
+ * &lt;h4&gt;Режим пользователи-группы&lt;/h4&gt; Пока не поддерживается. Группы синхронизироваться не будут.
+ *
+ * @author Kai Reinhard (k.reinhard@micromata.de)
+ */
+@Service
+public class LdapSlaveLoginHandler extends LdapLoginHandler {
+  private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(LdapSlaveLoginHandler.class);
+
+  @Autowired
+  PFUserDOConverter pfUserDOConverter;
+
+  @Autowired
+  private UserGroupCache userGroupCache;
+
+  enum Mode {
+    SIMPLE, USERS, USER_GROUPS
+  }
+
+  private Mode mode;
+
+  private boolean refreshInProgress;
+
+  /**
+   * Только для тестовых случаев.
+   *
+   * @param mode
+   */
+  void setMode(final Mode mode) {
+    this.mode = mode;
+  }
+
+  /**
+   * @see org.projectforge.business.ldap.LdapLoginHandler#initialize()
+   */
+  @Override
+  public void initialize() {
+    super.initialize();
+    if (StringUtils.isBlank(ldapConfig.getManagerUser())) {
+      mode = Mode.SIMPLE;
+    } else if (StringUtils.isNotBlank(ldapConfig.getGroupBase())) {
+      mode = Mode.USERS;// Mode.USER_GROUPS;
+      log.warn(&quot;Группы пока не поддерживаются этим обработчиком LDAP.&quot;);
+    } else {
+      mode = Mode.USERS;
+    }
+    switch (mode) {
+      case SIMPLE:
+        log.info(&quot;Обработчик входа подчинённого LDAP работает в режиме &#x27;простой&#x27;.&quot;);
+        break;
+      case USERS:
+        log.info(&quot;Обработчик входа подчинённого LDAP работает в режиме &#x27;пользователи&#x27;.&quot;);
+        break;
+      case USER_GROUPS:
+        log.info(&quot;Обработчик входа подчинённого LDAP работает в режиме &#x27;пользователи_группы&#x27;.&quot;);
+        break;
+    }
+  }
+
+  /**
+   * Использует стандартную реализацию {@link LoginDefaultHandler#checkLogin(String, char[])} для локальных
+   * пользователей. Для всех остальных пользователей проверяется аутентификация LDAP. Если аутентификация LDAP
+   * не удалась, возвращается {@link LoginResultStatus#FAILED}. В случае успеха возвращается
+   * {@link LoginResultStatus#SUCCESS} с настройками пользователя из базы данных ProjectForge. Если пользователь
+   * ещё не существует в базе данных ProjectForge, он будет создан после и затем возвращён.
+   *
+   * @see LoginHandler#checkLogin(String, char[])
+   */
+  @Override
+  public LoginResult checkLogin(final String username, final char[] password) {
+    PFUserDO user = userService.getInternalByUsername(username);
+    if (user != null &amp;&amp; user.getLocalUser()) {
+      return loginDefaultHandler.checkLogin(username, password);
+    }
+    final LoginResult loginResult = new LoginResult();
+    final String organizationalUnits = ldapConfig.getUserBase();
+    final LdapUser ldapUser = ldapUserDao.authenticate(username, password, organizationalUnits);
+    if (ldapUser == null) {
+      log.info(&quot;Вход пользователя не удался: &quot; + username);
+// ... (сокращено, всего 333 строки)</pre>
+
+<h2>История Git</h2><div class="hist"><pre>868d6abb7 2025 -&gt; 2026
+63081666f Заголовки файлов исходного кода: 2024-&gt; 2025.
+3c42485eb Миграция в процессе... (все тесты всех пакетов: OK).
+1b50060c3 BaseDao: переименовано: get -&gt; find, save -&gt; insert, getList -&gt; select, load -&gt; select
+87aaf6a5a Миграция в процессе... BaseDao рефакторинг (ещё не завершён) внутренние* методы переименованы.</pre></div>
+</body></html>

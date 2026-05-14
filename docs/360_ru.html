@@ -1,0 +1,292 @@
+<!DOCTYPE html><html lang="ru"><head><meta charset="utf-8"><title>360: DeltaSetCalculator.java [RU]</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:1.5em;color:#444;font-size:1em}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.lang{font-size:.85em;color:#888;float:right}.lang a{color:#888;text-decoration:none;padding:0 .3em}.lang a.active{color:#0366d6;font-weight:600;text-decoration:underline}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}pre.diff{background:#fff;font-size:.82em;max-height:300px;overflow-y:auto}</style></head>
+<body><div class="lang"><a href="360.html">EN</a> · <a href="360_de.html">DE</a> · <a href="360_ru.html" class="active">RU</a> · <a href="360_fr.html">FR</a> · <a href="360_es.html">ES</a></div>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Индекс</a> · <a href="file-index.html">← Индекс файлов</a> · <a href="583.html">← Предыдущий</a> · <a href="1381.html">Следующий →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/java/de/micromata/hibernate/history/delta/DeltaSetCalculator.java" target="_blank" title="Просмотреть исходный код на GitHub">📄 исходный код</a></div>
+<h1>#360: <code>DeltaSetCalculator.java</code></h1>
+<div class="meta"><code>projectforge-business/src/main/java/de/micromata/hibernate/history/delta/DeltaSetCalculator.java</code> Java-класс, <code>projectforge-business/src/main/java/de/micromata/hibernate/history/delta/DeltaSetCalculator.java</code> <span style="color:#888">378 строк · 271 код · 81 комментарий · 26 пустых</span></div>
+<div class="c"><strong>Назначение:</strong> Исходный файл: hibernate/history/delta/DeltaSetCalculator.java. DeltaSetCalculator.java является частью приложения для управления проектами с открытым исходным кодом ProjectForge.</div>
+<h2>Исходный код (первые 100 строк)</h2>
+<pre>/////////////////////////////////////////////////////////////////////////////
+//
+// Project ProjectForge Community Edition
+//         www.projectforge.org
+//
+// Copyright (C) 2001-2026 Micromata GmbH, Germany (www.micromata.com)
+//
+// ProjectForge распространяется по двойной лицензии.
+//
+// Данная версия для сообщества является бесплатным программным обеспечением; вы можете распространять её и/или
+// изменять её в соответствии с условиями Стандартной общественной лицензии GNU (GNU General Public License) в том виде,
+// в котором она опубликована Фондом свободного программного обеспечения; версия 3 Лицензии.
+//
+// Данная версия для сообщества распространяется в надежде, что она будет полезной,
+// но БЕЗ КАКИХ-ЛИБО ГАРАНТИЙ; даже без подразумеваемых гарантий
+// КОММЕРЧЕСКОЙ ЦЕННОСТИ или ПРИГОДНОСТИ ДЛЯ ОПРЕДЕЛЁННОЙ ЦЕЛИ. См. Стандартную общественную лицензию GNU
+// для получения более подробной информации.
+//
+// Вы должны были получить копию Стандартной общественной лицензии GNU вместе
+// с этой программой; если нет, см. http://www.gnu.org/licenses/.
+//
+/////////////////////////////////////////////////////////////////////////////
+
+package de.micromata.hibernate.history.delta;
+
+import org.projectforge.common.PropertyUtils;
+import org.hibernate.Hibernate;
+import org.hibernate.HibernateException;
+import org.hibernate.SessionFactory;
+import org.hibernate.collection.spi.PersistentCollection;
+import org.hibernate.engine.spi.SessionFactoryImplementor;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import java.beans.BeanInfo;
+import java.beans.Introspector;
+import java.beans.PropertyDescriptor;
+import java.io.Serializable;
+import java.math.BigDecimal;
+import java.sql.Time;
+import java.sql.Timestamp;
+import java.util.*;
+
+/**
+ * Устаревший код, используемый для XML-персистентности БД.
+ *
+ * @author Wolfgang Jung (w.jung@micromata.de)
+ */
+public class DeltaSetCalculator {
+    private static final Logger log = LoggerFactory.getLogger(DeltaSetCalculator.class);
+
+    private DeltaSetCalculator() {
+        // ничего не делает
+    }
+
+    /*
+     * Расчёт, специфичный для Hibernate. Использует значения, переданные в Hibernate Interceptor.onFlushDirty(), для выполнения
+     * расчёта.
+     *
+     * @param propertyNames Массив строк со всеми именами свойств, переданными в метод onFlushDirty. @param
+     * previousState Массив объектов, представляющий предыдущее состояние свойств, указанных в массиве propertyNames. @param
+     * currentState Массив объектов, представляющий текущее состояние свойств, указанных в массиве propertyNames. @return DeltaSet, представляющий изменения, обнаруженные в состояниях свойств.
+     */
+    public static DeltaSet calculateDeltaSet(SessionFactory sf, Set&lt;String&gt; validPropertyNames,
+                                             Set&lt;String&gt; invalidPropertyNames,
+                                             Serializable entityId, Object entity, String[] propertyNames, Object[] previousState, Object[] currentState) {
+        if (previousState == null) {
+            previousState = new Object[currentState.length];
+        }
+        if (propertyNames == null || currentState == null) {
+            throw new IllegalArgumentException("Все три массива, переданные для вычисления набора изменений, должны быть не равны null");
+        }
+        if (propertyNames.length != previousState.length &amp;&amp; previousState.length != currentState.length) {
+            throw new IllegalArgumentException("Все три массива, переданные для вычисления набора изменений, должны быть одинаковой длины");
+        }
+
+        DeltaSet deltaSet = new DeltaSet();
+        deltaSet.setEntity(entity.getClass());
+        deltaSet.setId(entityId);
+        try {
+            checkProperties(entity, sf, validPropertyNames, invalidPropertyNames, propertyNames, previousState, currentState,
+                    deltaSet);
+        } catch (Throwable t) {
+            log.error("Ошибка при определении набора изменений", t);
+        } finally {
+            log.debug("Определение набора изменений завершено");
+        }
+        return deltaSet;
+    }
+
+    /**
+     * @param propertyNames
+     * @param previousState
+     * @param currentState
+     * @param deltaSet
+     */
+    private static void checkProperties(Object entity, SessionFactory sf, Set&lt;String&gt; validPropertyNames,
+                                        Set&lt;String&gt; invalidPropertyNames,
+                                        String[] propertyNames, Object[] previousState, Object[] currentState, DeltaSet deltaSet) {</pre>
+<h2>История Git</h2>
+<div class="hist">
+<pre>868d6abb7 2025 -> 2026
+63081666f Заголовки исходных файлов: 2024-> 2025.
+5f9bbfbd3 Исправление опечаток в каталоге projectforge-business
+a33f8f203 Работа по миграции в процессе... (все тесты всех пакетов: OK).
+c1d14ecdb Работа по миграции в процессе...</pre>
+<h3>868d6abb7</h3><div class="c"><strong>2025 -> 2026</strong><pre class="diff">868d6abb75cd191a892911ac8e45058932cf9074
+diff --git a/projectforge-business/src/main/java/de/micromata/hibernate/history/delta/DeltaSetCalculator.java b/projectforge-business/src/main/java/de/micromata/hibernate/history/delta/DeltaSetCalculator.java
+index 69c69bd30..92e57b247 100644
+--- a/projectforge-business/src/main/java/de/micromata/hibernate/history/delta/DeltaSetCalculator.java
++++ b/projectforge-business/src/main/java/de/micromata/hibernate/history/delta/DeltaSetCalculator.java
+@@ -3,7 +3,7 @@
+ // Project ProjectForge Community Edition
+ //         www.projectforge.org
+ //
+-// Copyright (C) 2001-2025 Micromata GmbH, Germany (www.micromata.com)
++// Copyright (C) 2001-2026 Micromata GmbH, Germany (www.micromata.com)
+ //
+ // ProjectForge is dual-licensed.
+ //</pre></div><h3>63081666f</h3><div class="c"><strong>Заголовки исходных файлов: 2024-> 2025.</strong><pre class="diff">63081666f620fb87315f01b817e560e0b2f6a33a
+diff --git a/projectforge-business/src/main/java/de/micromata/hibernate/history/delta/DeltaSetCalculator.java b/projectforge-business/src/main/java/de/micromata/hibernate/history/delta/DeltaSetCalculator.java
+index c2d16521a..69c69bd30 100644
+--- a/projectforge-business/src/main/java/de/micromata/hibernate/history/delta/DeltaSetCalculator.java
++++ b/projectforge-business/src/main/java/de/micromata/hibernate/history/delta/DeltaSetCalculator.java
+@@ -3,7 +3,7 @@
+ // Project ProjectForge Community Edition
+ //         www.projectforge.org
+ //
+-// Copyright (C) 2001-2024 Micromata GmbH, Germany (www.micromata.com)
++// Copyright (C) 2001-2025 Micromata GmbH, Germany (www.micromata.com)
+ //
+ // ProjectForge is dual-licensed.
+ //</pre></div><h3>5f9bbfbd3</h3><div class="c"><strong>Исправление опечаток в каталоге projectforge-business</strong><pre class="diff">5f9bbfbd372a85f39c89de392a8565c5370a95cb
+diff --git a/projectforge-business/src/main/java/de/micromata/hibernate/history/delta/DeltaSetCalculator.java b/projectforge-business/src/main/java/de/micromata/hibernate/history/delta/DeltaSetCalculator.java
+index 89634fe29..c2d16521a 100644
+--- a/projectforge-business/src/main/java/de/micromata/hibernate/history/delta/DeltaSetCalculator.java
++++ b/projectforge-business/src/main/java/de/micromata/hibernate/history/delta/DeltaSetCalculator.java
+@@ -125,7 +125,7 @@ public class DeltaSetCalculator {
+ 
+             // Try to determine the property type from either currentState or,
+             // previousState... Side-note: if both are null, we cannot determine
+-            // the propertyType, but thats OK as no change has occurred (null==null)
++            // the propertyType, but that's OK as no change has occurred (null==null)
+             if (!isCurrentNull) {
+                 propertyType = propertyCurrentState.getClass();
+             } else if (!wasPreviousNull) {
+@@ -148,7 +148,7 @@ public class DeltaSetCalculator {
+     }
+ 
+     /**
+-     * General use DeltaSet caluclator.
++     * General use DeltaSet calculator.
+      */
+     public static DeltaSet calculateDeltaSet(Object entity, SessionFactory sf, Serializable entityId, Class&lt;?&gt; entityType,
+                                              Object obj1,
+@@ -370,7 +370,7 @@ public class DeltaSetCalculator {
+         }
+       }
+     } catch (Exception ex) {
+-      log.error("Exception occured:" + ex, ex);
++      log.error("Exception occurred:" + ex, ex);
+     }*/
+ 
+         return obj1.equals(obj2);</pre></div><h3>a33f8f203</h3><div class="c"><strong>Работа по миграции в процессе... (все тесты всех пакетов: OK).</strong><pre class="diff">a33f8f203ba809d731307e4785e8ad761ab4bfc0
+diff --git a/projectforge-business/src/main/java/de/micromata/hibernate/history/delta/DeltaSetCalculator.java b/projectforge-business/src/main/java/de/micromata/hibernate/history/delta/DeltaSetCalculator.java
+index 2d4f6b1ae..89634fe29 100644
+--- a/projectforge-business/src/main/java/de/micromata/hibernate/history/delta/DeltaSetCalculator.java
++++ b/projectforge-business/src/main/java/de/micromata/hibernate/history/delta/DeltaSetCalculator.java
+@@ -23,15 +23,12 @@
+ 
+ package de.micromata.hibernate.history.delta;
+ 
+-import org.apache.commons.beanutils.PropertyUtils;
++import org.projectforge.common.PropertyUtils;
+ import org.hibernate.Hibernate;
+ import org.hibernate.HibernateException;
+-import org.hibernate.QueryException;
+ import org.hibernate.SessionFactory;
+ import org.hibernate.collection.spi.PersistentCollection;
+ import org.hibernate.engine.spi.SessionFactoryImplementor;
+-import org.hibernate.metadata.ClassMetadata;
+-import org.hibernate.type.CollectionType;
+ import org.slf4j.Logger;
+ import org.slf4j.LoggerFactory;
+ 
+@@ -50,185 +47,185 @@ import java.util.*;
+  * @author Wolfgang Jung (w.jung@micromata.de)
+  */
+ public class DeltaSetCalculator {
+-  private static final Logger log = LoggerFactory.getLogger(DeltaSetCalculator.class);
++    private static final Logger log = LoggerFactory.getLogger(DeltaSetCalculator.class);
+ 
+-  private DeltaSetCalculator() {
+-    // do nothing
+-  }
+-
+-  /*
+-   * A hibernate-specific calculation. Uses the values passed to the Hibernate Interceptor.onFlushDirty() to perform the
+-   * calculation.
+-   *
+-   * @param propertyNames A string array of all the property names passed in to the obFlushDirty method. @param
+-   * previousState The Object array representing the previous state of the properties named in the propertyNames
+-   * array. @param currentState The Object array representing the current state of the properties named in the
+-   * propertyNames array. @return The DeltaSet representing the changes encountered in the property states.
+-   */
+-  public static DeltaSet calculateDeltaSet(SessionFactory sf, Set&lt;String&gt; validPropertyNames,
+-                                           Set&lt;String&gt; invalidPropertyNames,
+-                                           Serializable entityId, Object entity, String[] propertyNames, Object[] previousState, Object[] currentState) {
+-    if (previousState == null) {
+-      previousState = new Object[currentState.length];
+-    }
+-    if (propertyNames == null || currentState == null) {
+-      throw new IllegalArgumentException("All three arrays passed to calculate a delta-set must be non-null");
+-    }
+-    if (propertyNames.length != previousState.length &amp;&amp; previousState.length != currentState.length) {
+-      throw new IllegalArgumentException("All three arrays passed to calculate a delta-set must be of the same length");
++    private DeltaSetCalculator() {
++        // ничего не делает
+     }
+ 
+-    DeltaSet deltaSet = new DeltaSet();
+-    deltaSet.setEntity(entity.getClass());
+-    deltaSet.setId(entityId);</pre></div><h3>c1d14ecdb</h3><div class="c"><strong>Работа по миграции в процессе...</strong><pre class="diff">c1d14ecdb144fed4ddd60af928fa1c76c5074f62
+diff --git a/projectforge-business/src/main/java/de/micromata/hibernate/history/delta/DeltaSetCalculator.java b/projectforge-business/src/main/java/de/micromata/hibernate/history/delta/DeltaSetCalculator.java
+index 34ffe9af3..2d4f6b1ae 100644
+--- a/projectforge-business/src/main/java/de/micromata/hibernate/history/delta/DeltaSetCalculator.java
++++ b/projectforge-business/src/main/java/de/micromata/hibernate/history/delta/DeltaSetCalculator.java
+@@ -203,11 +203,11 @@ public class DeltaSetCalculator {
+       } else if (propertyType.isArray()) {
+         log.debug("Encountered property is an array type");
+         delta = getArrayDelta(sf, propertyName, propertyType, oldValue, newValue, delta);
+-      } else if (sf.getClassMetadata(propertyType) != null) {
++      /*} else if (sf.getClassMetadata(propertyType) != null) {
+         log.debug("Encountered property is an association type");
+         if (!areEqual(oldValue, newValue, sf)) {
+           delta = new AssociationPropertyDelta(sf, propertyName, propertyType, oldValue, newValue);
+-        }
++        }*/
+       } else {
+         log.debug("Property was a simple property");
+         if (!areEqual(oldValue, newValue, sf)) {
+@@ -229,15 +229,15 @@ public class DeltaSetCalculator {
+     if (element == null) {
+       return null;
+     }
+-    try {
++/*    try {
+       ClassMetadata classMetadata = factory.getClassMetadata(element.getClass());
+       if (classMetadata != null) {
+-        return classMetadata.getIdentifier(element/* , EntityMode.POJO */);
++        return classMetadata.getIdentifier(element/* , EntityMode.POJO * /);
+       }
+     } catch (HibernateException ex) {
+       log.error("Exception encountered " + ex, ex);
+       return null;
+-    }
++    }*/
+     return element;
+   }
+ 
+@@ -301,7 +301,7 @@ public class DeltaSetCalculator {
+       }
+     }
+ 
+-    if (Hibernate.isInitialized(oldCollectionValue) &amp;&amp; Hibernate.isInitialized(newCollectionValue)) {
++   /* if (Hibernate.isInitialized(oldCollectionValue) &amp;&amp; Hibernate.isInitialized(newCollectionValue)) {
+       CollectionPropertyDelta collectionDelta = null;
+       Class returnedClass = Object.class;
+       try {
+@@ -327,7 +327,8 @@ public class DeltaSetCalculator {
+     } else {
+       log.debug("One (or both) of a collection property was not previously initialized; have to skip");
+     }
+-    return delta;
++    return delta;*/
++    return null;
+   }
+ 
+   public static boolean areEqual(Object obj1, Object obj2, SessionFactory sf) {
+@@ -360,20 +361,20 @@ public class DeltaSetCalculator {
+    * @return
+    */</pre></div>
+</div>
+</body></html>

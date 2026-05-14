@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>#705 [DE]</title>
+<style>
+body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}
+h1{border-bottom:2px solid #333;padding-bottom:.3em}
+h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}
+h3{margin-top:2em;color:#444}
+a{color:#0366d6}
+.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}
+.nav{font-size:.9em;color:#888;margin-bottom:1em}
+.meta{font-size:.9em;margin:1em 0;color:#555}
+code{background:#f0f0f0;padding:0 .2em;font-size:.93em}
+pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}
+table{border-collapse:collapse;width:100%;margin:1em 0}
+th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}
+th{background:#f5f5f5;font-weight:600}
+.hist{font-size:.85em;color:#555}
+.warn{background:#fff3cd;border-left:3px solid #ffc107;padding:.5em 1em;margin:1em 0}
+.tip{background:#d4edda;border-left:3px solid #28a745;padding:.5em 1em;margin:1em 0}
+</style>
+</head>
+<body>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← Datei-Index</a> · <a href="704.html">← Zurück</a> · <a href="706.html">Weiter →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/java/org/projectforge/framework/persistence/xstream/HibernateCollectionsMapper.java" target="_blank" title="Quellcode auf GitHub ansehen">📄 Quelle</a></div>
+<h1>#705: <code>HibernateCollectionsMapper.java</code></h1>
+<div class="meta"><code>projectforge-business/src/main/java/org/projectforge/framework/persistence/xstream/HibernateCollectionsMapper.java</code> XStream-Mapper — ersetzt Hibernate-Collection-Typnamen im XML-Output durch JDK-Äquivalente, <code>projectforge-business/src/main/java/org/projectforge/framework/persistence/xstream/HibernateCollectionsMapper.java</code> <span style="color:#888">114 Zeilen · 49 Code · 51 Kommentare · 14 leer</span></div>
+<div class="c">Erweitert XStreams <code>XmlFriendlyMapper</code>, um Typ-zu-Name- und Klasse-zu-Name-Abfragen während der Serialisierung abzufangen. Wenn XStream einen Klassennamen als XML-Element oder -Attribut schreiben muss, ersetzt dieser Mapper Hibernate-spezifische Collection-Klassen (<code>PersistentList</code>, <code>PersistentSet</code> usw.) durch ihre Standard-JDK-Entsprechungen (<code>ArrayList</code>, <code>HashSet</code> usw.). Dadurch wird sichergestellt, dass das generierte XML lesbare, framework-unabhängige Typnamen enthält. Dies geschieht auf der <em>Namenszuordnungsebene</em> – der <a href="702.html">HibernateCollectionConverter</a> kümmert sich um die eigentliche <em>Daten</em>-Konvertierung der Collection.</div>
+
+<h2>Architektur</h2>
+
+<h3>Klassenhierarchie</h3>
+<p><code>HibernateCollectionsMapper</code> erweitert <code>com.thoughtworks.xstream.mapper.XmlFriendlyMapper</code>, welches wiederum <code>MapperWrapper</code> erweitert. Die XStream-Mapper-Kette folgt dem Decorator-Entwurfsmuster – jeder Mapper umschließt einen anderen Mapper, und Aufrufe werden durch die Kette weitergeleitet. Dieser Mapper fängt drei spezifische Methoden ab, um Hibernate→JDK-Collection-Klassensubstitutionen anzuwenden.</p>
+
+<h3>Zuordnungstabellen</h3>
+<p>Die Klasse verwendet drei parallele Arrays, die identisch indiziert sind:</p>
+<table>
+<tr><th>Index</th><th>Hibernate-Klasse (<code>hbClasses</code>)</th><th>Hibernate-Name (<code>hbClassNames</code>)</th><th>JDK-Ersatz (<code>jdkClasses</code>/<code>jdkClassNames</code>)</th></tr>
+<tr><td>0</td><td><code>PersistentList</code></td><td><code>org.hibernate.collection.spi.PersistentList</code></td><td><code>java.util.ArrayList</code></td></tr>
+<tr><td>1</td><td><code>PersistentSet</code></td><td><code>org.hibernate.collection.spi.PersistentSet</code></td><td><code>java.util.HashSet</code></td></tr>
+<tr><td>2</td><td><code>PersistentMap</code></td><td><code>org.hibernate.collection.spi.PersistentMap</code></td><td><code>java.util.HashMap</code></td></tr>
+<tr><td>3</td><td><code>PersistentSortedSet</code></td><td><code>org.hibernate.collection.spi.PersistentSortedSet</code></td><td><code>java.util.TreeSet</code></td></tr>
+<tr><td>4</td><td><code>PersistentSortedMap</code></td><td><code>org.hibernate.collection.spi.PersistentSortedMap</code></td><td><code>java.util.TreeMap</code></td></tr>
+</table>
+
+<h3>Überschriebene Methoden</h3>
+<table>
+<tr><th>Methode</th><th>Eingabe</th><th>Aktion</th></tr>
+<tr><td><code>mapNameToXML(String javaName)</code></td><td>Vollqualifizierter Java-Klassenname</td><td>Wendet Zeichenkettenersetzung via <code>replaceClasses(String)</code> an, delegiert dann an die Superklasse für XML-freundliche Kodierung (z. B. Ersetzen von <code>$</code> in inneren Klassennamen).</td></tr>
+<tr><td><code>serializedClass(Class type)</code></td><td><code>Class</code>-Objekt</td><td>Wendet Klassenersetzung via <code>replaceClasses(Class)</code> an, delegiert dann an die Superklasse.</td></tr>
+<tr><td><code>serializedMember(Class type, String fieldName)</code></td><td>Deklarierende Klasse + Feldname</td><td>Wendet Klassenersetzung auf <code>type</code> an, bevor an die Superklasse delegiert wird, um sicherzustellen, dass Felddeklarationen innerhalb von Hibernate-Collections mit JDK-Typkontext serialisiert werden.</td></tr>
+</table>
+
+<h3>Richtung</h3>
+<div class="warn">Dieser Mapper ist <strong>schreibgeschützt</strong> (Serialisierungs-/Deflatierungsrichtung). Er implementiert keine umgekehrte Zuordnung für <code>realClass()</code> oder Deserialisierung. Die Quelle stellt explizit fest: „Dieser Mapper kümmert sich nur um das Schreiben in das XML (Deflatieren), nicht umgekehrt (Inflieren), da keine Notwendigkeit besteht.“ Wenn XML deserialisiert wird, erstellt XStream standardmäßige JDK-Collections, und die Hibernate-ORM-Schicht verpackt sie in <code>PersistentCollection</code>-Unterklassen, wenn die Entität später einer Session zugeordnet wird.</div>
+
+<h2>Integrationspunkte</h2>
+<ul>
+  <li>Umschließt die XStream-Mapper-Kette – instanziiert mit einem <code>Mapper</code>-Delegaten (dem zugrunde liegenden Mapper, den es dekoriert).</li>
+  <li>Arbeitet zusammen mit <a href="702.html">HibernateCollectionConverter</a>: Der Mapper kümmert sich darum, <em>welcher</em> Typname im XML erscheint, der Konverter darum, <em>wie</em> die Daten geschrieben werden.</li>
+  <li>Wird in der XStream-Konfiguration zusammen mit <a href="704.html">HibernateMapper</a> verwendet (der überlappende, aber umfassendere Zuordnungslogik besitzt).</li>
+</ul>
+
+<h2>Entwurfsentscheidungen & Fallstricke</h2>
+<ul>
+  <li><strong>XmlFriendlyMapper-Superklasse:</strong> Die Erweiterung von <code>XmlFriendlyMapper</code> (anstelle von einfachem <code>MapperWrapper</code>) stellt sicher, dass das Ergebnis nach der Klassennamensersetzung noch XML-sicher ist (z. B. werden <code>$</code>-Zeichen aus inneren Klassennamen kodiert).</li>
+  <li><strong>Parallele-Arrays-Muster:</strong> Die Zuordnung verwendet drei parallele Arrays, die zur Klasseninitialisierungszeit fest codiert sind. Dies ist leistungsfähig (O(n)-linearer Scan von 5 Elementen), aber zerbrechlich – falls Hibernate neue <code>PersistentCollection</code>-Untertypen hinzufügt, ignoriert dieser Mapper sie stillschweigend. Vergleiche mit <a href="704.html">HibernateMapper</a>, der eine <code>Map</code> für lesbarere und erweiterbare Registrierung verwendet.</li>
+  <li><strong>Redundanz mit HibernateMapper:</strong> Sowohl <code>HibernateCollectionsMapper</code> als auch <code>HibernateMapper</code> führen eine Substitution von Collection-Klassennamen durch. <code>HibernateMapper</code> (der <code>defaultImplementationOf()</code> und <code>serializedClass()</code> verwendet) ist der modernere Ansatz und enthält <code>PersistentBag</code> (den dieser Mapper auslässt). In der Praxis sollte nur einer aktiv sein, um Doppelzuordnungen zu vermeiden.</li>
+  <li><strong>Keine <code>PersistentBag</code>-Unterstützung:</strong> Beachten Sie, dass <code>PersistentBag</code> (Hibernates Standard-Collection für untypisierte <code>List</code>-Felder) in den Arrays dieses Mappers fehlt. Es ist in <a href="704.html">HibernateMapper</a> vorhanden.</li>
+  <li><strong>Urheberschaft:</strong> Ursprünglich verfasst von Costin Leau.</li>
+</ul>
+
+<h2>Git-Verlauf</h2>
+<div class="hist"><pre>868d6abb7 2025 -> 2026
+63081666f Quellcode-Dateiköpfe: 2024 -> 2025.
+c1d14ecdb Migration stuff in progress...
+b6092df09 Copyright 2023 -> 2024
+ab45d51fa Copyright 2001-2022 -> 2001-2023.
+5f7ef41b8 Copyright 2021 -> 2022
+ceb63e8a1 Quellcode-Kopfzeile: (C) 2001-2021.
+7c79f1922 Copyright des Quellcode-Kopfes -> 2020.
+32f634b88 Optimize imports
+dd5ca38ac CopyRight aller Java-Dateiköpfe aktualisiert oder erstellt.
+9ebb88522 Initial commit</pre></div>
+</body>
+</html>

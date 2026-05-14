@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<title>#898: AuftragsCacheService.kt [DE]</title>
+<style>
+body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}
+h1{border-bottom:2px solid #333;padding-bottom:.3em}
+h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}
+h3{margin-top:2em;color:#444}
+a{color:#0366d6}
+.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}
+.nav{font-size:.9em;color:#888;margin-bottom:1em}
+.meta{font-size:.9em;margin:1em 0;color:#555}
+code{background:#f0f0f0;padding:0 .2em;font-size:.93em}
+pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}
+table{border-collapse:collapse;width:100%;margin:1em 0}
+th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}
+th{background:#f5f5f5;font-weight:600}
+.hist{font-size:.85em;color:#555}
+</style>
+</head>
+<body>
+
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← Dateiindex</a> · <a href="897.html">← Vorherige</a> · <a href="899.html">Nächste →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/kotlin/org/projectforge/business/fibu/AuftragsCacheService.kt" target="_blank" title="Quelle auf GitHub anzeigen">📄 Quelle</a></div>
+
+<h1>#898: <code>AuftragsCacheService.kt</code></h1>
+
+<div class="meta"><code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/AuftragsCacheService.kt</code> 
+  <strong>Typ:</strong> Spring Service &middot;
+  <strong>Zweck:</strong> Schnelle, tuple-basierte Datenbankabfragen für Auftragsdaten &middot;
+  <strong>Paket:</strong> <code>org.projectforge.business.fibu</code><br>
+  <strong>Quellpfad:</strong> <code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/AuftragsCacheService.kt</code>
+ <span style="color:#888">167 Zeilen · 135 Code · 25 Kommentare · 7 leer</span></div>
+
+<div class="c">
+  <strong>Zweck:</strong> Bietet leistungsstarken, schreibgeschützten Datenbankzugriff für Aufträge (<code>AuftragDO</code>), Auftragspositionen (<code>AuftragsPositionDO</code>) und Zahlungspläne (<code>PaymentScheduleDO</code>) unter Verwendung nativer JPQL-Tupelabfragen. Vermeidet vollständige Entity-Hydrierung und Lazy-Loading-Overhead, indem nur die für die Listendarstellung und Cache-Befüllung benötigten Spalten ausgewählt werden.
+</div>
+
+<h2>Architektur &amp; Design</h2>
+
+<h3>Service-Deklaration</h3>
+<p>Die Klasse ist mit <code>@Service</code> annotiert und verwendet <code>PfPersistenceService</code> über <code>@Autowired</code>. Alle Methoden nutzen <code>runIsolatedReadOnly</code>, um Abfragen in einem frischen Persistenzkontext auszuführen und eine Verschmutzung des Sitzungs-Caches des Aufrufers zu verhindern.</p>
+
+<table>
+  <tr><th>Abhängigkeit</th><th>Typ</th><th>Rolle</th></tr>
+  <tr><td><code>PfPersistenceService</code></td><td>Framework</td><td>Stellt isolierte, schreibgeschützte JPA-Kontexte für schnelle Tupelabfragen bereit</td></tr>
+</table>
+
+<h3>Methoden</h3>
+
+<h4><code>selectAuftragsList(): List&lt;AuftragDO&gt;</code></h4>
+<p>Gibt alle Aufträge (einschließlich gelöschter) mit einem kuratierten Spaltensatz zurück. Bildet jedes <code>Tuple</code> auf ein teilweise befülltes <code>AuftragDO</code> unter Verwendung der <code>TupleUtils</code>-Getter-Helfer ab. Fremdschlüssel (<code>kundeId</code>, <code>projektId</code>, <code>contactPersonId</code>) werden über <code>em.getReference()</code> aufgelöst, um zusätzliche Abfragen zu vermeiden – Hibernate gibt einen Lazy-Proxy zurück, ohne die Datenbank zu treffen.</p>
+
+<h4><code>selectNonDeletedAuftragsPositions(): List&lt;AuftragsPositionDO&gt;</code></h4>
+<p>Gibt nicht gelöschte Auftragspositionen zurück. Ähnliches Tupel-Mapping-Muster mit einer zusätzlichen Leistungsoptimierung: <code>bemerkung</code> (Kommentar) wird über <code>abbreviate(30)</code> auf 30 Zeichen gekürzt, was den Speicherverbrauch für Listenansichten reduziert. Die Aufgabenreferenz (<code>taskId</code>) erstellt ein stub <code>TaskDO</code> mit nur gesetzter ID.</p>
+
+<h4><code>selectNonDeletedPaymentSchedules(): List&lt;PaymentScheduleDO&gt;</code></h4>
+<p>Gibt nicht gelöschte Zahlungspläne zurück und erstellt stub <code>AuftragDO</code>-Objekte (nur ID) für den Fremdschlüsselverweis <code>auftragId</code>.</p>
+
+<h3>Abfragedefinitionen (Begleitobjekt)</h3>
+<p>Drei JPQL-Abfragen sind als <code>private val</code>-Konstanten im Begleitobjekt definiert, unter Verwendung von <code>${AuftragDO::class.simpleName}</code>-Interpolation für typsichere Entity-Referenzen:</p>
+
+<table>
+  <tr><th>Konstante</th><th>Ziel-Entity</th><th>Filter</th></tr>
+  <tr><td><code>SELECT_ORDERS</code></td><td><code>AuftragDO</code></td><td>Keine (alle Datensätze, einschließlich gelöschter)</td></tr>
+  <tr><td><code>SELECT_POSITIONS</code></td><td><code>AuftragsPositionDO</code></td><td><code>WHERE deleted = false</code></td></tr>
+  <tr><td><code>SELECT_PAYMENTS_SCHEDULES</code></td><td><code>PaymentScheduleDO</code></td><td><code>WHERE deleted = false</code></td></tr>
+</table>
+
+<h3>Leistungsstrategie</h3>
+<ul>
+  <li>Tupelabfragen wählen nur die benötigten Spalten aus; es werden keine vollständigen Entity-Graphen geladen.</li>
+  <li><code>em.getReference()</code> erstellt Lazy-Proxys für FK-Assoziationen und vermeidet JOINs.</li>
+  <li><code>runIsolatedReadOnly</code> stellt sicher, dass jeder Aufruf einen sauberen Persistenzkontext hat und verhindert Interferenzen mit der aktiven Transaktion des Aufrufers.</li>
+  <li>Der <code>abbreviate(30)</code>-Aufruf auf <code>bemerkung</code> minimiert den Heap-Druck für große Kommentarfelder während der Listendarstellung.</li>
+</ul>
+
+<h2>Verwandte Klassen</h2>
+<ul>
+  <li><strong>Verwendet von:</strong> <code>AuftragsCache</code> – nutzt diese Tupelergebnisse zum Aufbau des In-Memory-Auftragsbuch-Caches</li>
+  <li><strong>Verwendet:</strong> <code>TupleUtils</code> – typsichere Tupel-Spaltenzugriffe (<code>getLong</code>, <code>getString</code>, <code>getBigDecimal</code>, usw.)</li>
+  <li><strong>Verwendet:</strong> <code>PfPersistenceService</code> – Framework-Persistenzabstraktion</li>
+</ul>
+
+<h2>Git-Verlauf</h2>
+<div class="hist"><pre>
+868d6abb7 2025 -> 2026
+49b1d6b8d Prognose und Auftragsbuch: Prognosetyp für Aufträge/Positionen hinzugefügt (aktueller Monat oder Folgemonat)
+7163b8c4e WIP: Auftragsbuch-Snapshots, ForecastExport korrigiert (Kunden- und Projektname fehlten)
+63081666f Quelltextdatei-Header: 2024 -> 2025.
+ae2c04ee0 Migration in Arbeit... (alle Tests aller Pakete: OK).
+89ea9a532 Migration in Arbeit... (alle Tests aller Pakete: OK).
+</pre></div>
+
+</body>
+</html>

@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>#754: XmlField [DE]</title>
+<style>
+  body { font-family: system-ui, sans-serif; max-width: 960px; margin: 2em auto; padding: 0 1em; background: #fafafa; color: #222; line-height: 1.6; }
+  h1 { border-bottom: 2px solid #333; padding-bottom: 0.3em; }
+  h2 { margin-top: 2.5em; border-bottom: 1px solid #ddd; padding-bottom: 0.2em; color: #333; }
+  h3 { margin-top: 2em; color: #444; }
+  a { color: #0366d6; }
+  .c { border-left: 3px solid #ddd; padding: .5em 1em; margin: 1em 0; background: #fff; }
+  .nav { font-size: .9em; color: #888; margin-bottom: 1em; }
+  .lang { font-size: .85em; color: #888; float: right; }
+  .lang a { color: #888; text-decoration: none; padding: 0 .3em; }
+  .lang a.active { color: #0366d6; font-weight: 600; text-decoration: underline; }
+  .meta { font-size: .9em; margin: 1em 0; color: #555; }
+  code { background: #f0f0f0; padding: 0 .2em; font-size: .93em; }
+  pre { background: #f5f5f5; padding: .8em 1em; border: 1px solid #ddd; border-radius: 4px; overflow-x: auto; font-size: .88em; line-height: 1.4; }
+  table { border-collapse: collapse; width: 100%; margin: 1em 0; }
+  th, td { border: 1px solid #ddd; padding: .5em .8em; text-align: left; font-size: .9em; }
+  th { background: #f5f5f5; font-weight: 600; }
+  .hist { font-size: .85em; color: #555; }
+</style>
+</head>
+<body>
+<div class="lang"><a href="752.html">EN</a> · <a href="752_de.html" class="active">DE</a> · <a href="752_ru.html">RU</a> · <a href="752_fr.html">FR</a> · <a href="752_es.html">ES</a></div>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← Dateiindex</a> · <a href="753.html">← Vorherige</a> · <a href="755.html">Nächste →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/java/org/projectforge/framework/xmlstream/XmlField.java" target="_blank" title="Quelltext auf GitHub ansehen">📄 Quelle</a></div>
+
+<h1>#754: <code>XmlField.java</code></h1>
+<div class="meta"><code>projectforge-business/src/main/java/org/projectforge/framework/xmlstream/XmlField.java</code> <strong>Java-Annotation</strong> — zentrale Feld-Annotation des XmlStream-Frameworks. 92 Zeilen. @Target(FIELD), @Retention(RUNTIME). Quelle: <code>projectforge-business/src/main/java/org/projectforge/framework/xmlstream/XmlField.java</code> <span style="color:#888">92 Zeilen · 17 Code · 63 Kommentare · 12 leer</span></div>
+
+<div class="c">
+<strong>Zweck:</strong> Die zentrale Annotation des XmlStream-Frameworks — entspricht JAXBs <code>@XmlElement</code>, <code>@XmlAttribute</code>, XStreams <code>@XStreamAlias</code> und <code>@XStreamAsAttribute</code>, alles in einer Annotation vereint. Markiert ein Java-Feld als serialisierbar nach XML und steuert genau, <em>wie</em> es geschrieben wird. Angewendet auf Feldebene (<code>@Target(FIELD)</code>) und zur Laufzeit über Reflektion verfügbar (<code>@Retention(RUNTIME)</code>) — so entdecken <code>XmlObjectWriter</code> und <code>XmlObjectReader</code> serialisierbare Felder.
+</div>
+
+<h2>8 Annotation-Attribute</h2>
+
+<div class="c">
+<h3><code>alias()</code> — XML-Element-/Attributname</h3>
+<p>Überschreibt den Feldnamen während der Serialisierung. Ohne Alias: <code>private String firstName</code> → Tag <code>&lt;firstName&gt;</code>. Mit Alias: <code>@XmlField(alias="first-name")</code> → Tag <code>&lt;first-name&gt;</code>. Nützlich, wenn das XML-Format einem externen Schema entsprechen muss oder wenn ein Java-Feldname mit einem reservierten XML-Wort kollidiert.</p>
+
+<h3><code>asAttribute()</code> und <code>asElement()</code> — Attribut vs. Element</h3>
+<p>Steuert, ob der Wert als XML-Attribut (kompakt) oder als Element (strukturiert) serialisiert wird:</p>
+<pre>&lt;!-- Als Attribut: --&gt;
+&lt;user id="42" name="John"/&gt;
+
+&lt;!-- Als Element: --&gt;
+&lt;user&gt;&lt;id&gt;42&lt;/id&gt;&lt;name&gt;John&lt;/name&gt;&lt;/user&gt;</pre>
+<p>Wichtige Nuance aus dem Javadoc: <em>"asAttribute=false hat keine Wirkung (bitte stattdessen asElement=true verwenden)"</em> und umgekehrt. Das bedeutet, <code>false</code> ist keine Verneinung — es bedeutet "Standard belassen", was durch globale Einstellungen in <code>XmlObjectWriter.asAttributeAsDefault()</code> überschrieben werden kann. Um eine Attribut-Serialisierung <em>sicherzustellen</em>, verwenden Sie <code>asAttribute=true</code>. Um ein Element sicherzustellen, verwenden Sie <code>asElement=true</code>.</p>
+
+<h3><code>defaultDoubleValue</code> / <code>defaultIntValue</code> / <code>defaultStringValue</code> / <code>defaultBooleanValue</code> — XML-Kompression</h3>
+<p>Wenn der Feldwert dem deklarierten Standard entspricht, wird er NICHT nach XML serialisiert. Dies ist ein Kompressionsmechanismus: Typische Standardwerte belegen keinen Platz in der Ausgabe. Während der Deserialisierung erhalten fehlende Tags den Standardwert. Die magischen Zahlen aus <code>XmlConstants</code> (<a href="751.html">#751</a>) dienen als "nicht gesetzt"-Sentinel für int- und String-Standardwerte. Für boolean ist der Standard <code>false</code> (der häufigste Wert). Für double ist der Standard <code>NaN</code> ("nicht gesetzt").</p>
+
+<h3><code>asCDATA()</code> — Schutz von Sonderzeichen</h3>
+<p>Wenn <code>true</code>, wird der String-Wert in einen XML-<code>&lt;![CDATA[...]]&gt;</code>-Block eingeschlossen. Erforderlich für Felder, die <code>&lt;</code>, <code>&gt;</code>, <code>&amp;</code>-Zeichen enthalten können — z. B. HTML in Beschreibungsfeldern oder SQL in Logs. Ohne CDATA müssten diese Zeichen als <code>&amp;lt;</code>, <code>&amp;gt;</code>, <code>&amp;amp;</code> maskiert werden, was das XML unlesbar macht.</p>
+</div>
+
+<h2>Laufzeitnutzung</h2>
+
+<div class="c">
+<ol>
+<li><code>XmlObjectWriter</code> durchläuft während der Serialisierung alle Felder eines Objekts per Reflektion</li>
+<li>Für jedes Feld wird auf <code>@XmlField</code> (und das Fehlen von <code>@XmlOmitField</code>) geprüft</li>
+<li>Wenn vorhanden, werden die Parameter ausgelesen: Alias (Tag-Name), asAttribute (Format), default* (Skip-Logik), asCDATA (Format)</li>
+<li>Ruft den entsprechenden <code>Converter</code> auf, um den Feldwert in einen String umzuwandeln</li>
+<li><code>XmlObjectReader</code> macht das Gegenteil: Liest Tag/Attribut aus XML, findet das passende Feld anhand des Namens oder Alias, ruft Converter für die Rückumwandlung auf</li>
+</ol>
+</div>
+
+<h2>Vergleich mit XStream und JAXB</h2>
+
+<table>
+<tr><th>Funktion</th><th>XmlField</th><th>XStream</th><th>JAXB</th></tr>
+<tr><td>Feld-Alias</td><td><code>alias="name"</code></td><td><code>@XStreamAlias("name")</code></td><td><code>@XmlElement(name="name")</code></td></tr>
+<tr><td>Attribut vs. Element</td><td><code>asAttribute=true</code></td><td><code>@XStreamAsAttribute</code></td><td><code>@XmlAttribute</code></td></tr>
+<tr><td>Feldausschluss</td><td><code>@XmlOmitField</code></td><td><code>@XStreamOmitField</code></td><td><code>@XmlTransient</code></td></tr>
+<tr><td>Standardwert</td><td><code>defaultIntValue=0</code></td><td>❌ keiner</td><td>❌ keiner</td></tr>
+<tr><td>CDATA</td><td><code>asCDATA=true</code></td><td>❌ keiner</td><td>❌ keiner</td></tr>
+<tr><td>Format-Versionierung</td><td>✅ über XmlObject</td><td>❌ keiner</td><td>❌ keiner</td></tr>
+</table>
+
+<div class="c">
+XmlField + XmlStream bieten mehr Kontrolle über das XML-Format als XStream, erfordern jedoch manuelle Annotation. XStream "funktioniert einfach" ohne Annotationen, erzeugt aber weniger kontrolliertes XML. Die Wahl von XmlStream für den Datenexport wurde speziell durch die Notwendigkeit von Formatkontrolle und Versionierung bestimmt.
+</div>
+
+<h2>Git-Verlauf</h2>
+<div class="hist">
+<pre>868d6abb7 2025 → 2026 (Aktualisierung des Copyright-Jahres)
+63081666f Quelldatei-Header: 2024→2025
+b6092df09 Copyright 2023 → 2024
+ab45d51fa Copyright 2001-2022 → 2001-2023
+5f7ef41b8 Copyright 2021 → 2022
+cd27dd997 Paket xstream → xmlstream (umbenannt, um Verwechslung mit der XStream-Bibliothek zu vermeiden)
+ceb63e8a1 Quellcode-Header: (C) 2001-2021
+7c79f1922 Copyright des Quell-Headers → 2020
+32f634b88 Importe optimiert
+dd5ca38ac Copyright aller Java-Datei-Header aktualisiert oder erstellt
+9ebb88522 Erster Commit</pre>
+</div>
+
+<div class="c">
+Die Annotation-Attribute sind seit dem ersten Commit stabil. Nur Copyright-Header, Import-Optimierung (<code>32f634b88</code>) und die Paketumbenennung haben diese Datei berührt. Das auskommentierte Attribut <code>implementationClass()</code> deutet darauf hin, dass der Autor ein Interface-zu-Implementierungs-Mapping auf Feldebene in Betracht gezogen hat, sich aber dafür entschied, es stattdessen in <code>XmlObjectReader.addImplementationMapping()</code> zu behandeln.
+</div>
+
+</body>
+</html>

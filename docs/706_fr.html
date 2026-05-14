@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>#706 [FR]</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:2em;color:#444}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}.warn{background:#fff3cd;border-left:3px solid #ffc107;padding:.5em 1em;margin:1em 0}.tip{background:#d4edda;border-left:3px solid #28a745;padding:.5em 1em;margin:1em 0}</style>
+</head>
+<body>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← Index des fichiers</a> · <a href="705.html">← Précédent</a> · <a href="707.html">Suivant →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/java/org/projectforge/framework/persistence/xstream/HibernateMapper.java" target="_blank" title="Voir la source sur GitHub">📄 source</a></div>
+<h1>#706 : <code>HibernateMapper.java</code></h1>
+<div class="meta"><code>projectforge-business/src/main/java/org/projectforge/framework/persistence/xstream/HibernateMapper.java</code> Mapper XStream — mappeur complet de types de collections Hibernate et résolveur de classes proxy, <code>projectforge-business/src/main/java/org/projectforge/framework/persistence/xstream/HibernateMapper.java</code> <span style="color:#888">95 lignes · 46 code · 35 commentaires · 14 vides</span></div>
+<div class="c">Étend le <code>MapperWrapper</code> de XStream (patron Décorateur) pour servir de mappeur central pour toute sérialisation XStream compatible Hibernate. Il remplit deux fonctions critiques : (1) substituer les classes d'implémentation de collection internes d'Hibernate par leurs équivalents JDK standard lors de la détermination des implémentations par défaut pendant le marshalling/unmarshalling, et (2) détecter les instances <code>HibernateProxy</code> en vérifiant les interfaces implémentées et en résolvant leurs vrais noms de superclasse pour le nommage des éléments XML. C'est le plus complet des composants XStream pour Hibernate — il gère <code>PersistentBag</code> (que l'ancien <a href="703.html">HibernateCollectionsMapper</a> omet) et détecte également les wrappers <code>HibernateProxy</code> ignorés par <a href="703.html">HibernateCollectionsMapper</a>.</div>
+
+<h2>Architecture</h2>
+
+<h3>Hiérarchie des classes</h3>
+<p><code>HibernateMapper</code> étend <code>com.thoughtworks.xstream.mapper.MapperWrapper</code>, la classe de base pour les décorateurs de mappeur XStream. Deux constructeurs acceptent soit un délégué <code>MapperWrapper</code> soit un <code>Mapper</code> simple et appellent <code>init()</code> pour remplir la carte de substitution des collections.</p>
+
+<h3>Table de mappage des collections</h3>
+<p>La méthode <code>init()</code> remplit une <code>Map&lt;Class&lt;?&gt;, Class&lt;?&gt;&gt;</code> avec six correspondances Hibernate→JDK :</p>
+<table>
+<tr><th>Collection persistante Hibernate</th><th>Remplacement JDK</th></tr>
+<tr><td><code>PersistentBag</code></td><td><code>ArrayList</code></td></tr>
+<tr><td><code>PersistentList</code></td><td><code>ArrayList</code></td></tr>
+<tr><td><code>PersistentMap</code></td><td><code>HashMap</code></td></tr>
+<tr><td><code>PersistentSet</code></td><td><code>HashSet</code></td></tr>
+<tr><td><code>PersistentSortedMap</code></td><td><code>TreeMap</code></td></tr>
+<tr><td><code>PersistentSortedSet</code></td><td><code>TreeSet</code></td></tr>
+</table>
+<div class="tip">Contrairement à <a href="703.html">HibernateCollectionsMapper</a>, ce mappeur inclut <code>PersistentBag</code> — la collection Hibernate par défaut pour les champs <code>List</code> non indexés déclarés sans <code>@OrderColumn</code>. C'est le type de collection le plus courant dans les entités ProjectForge et son absence dans l'ancien mappeur constitue une lacune notable.</div>
+
+<h3>Méthodes redéfinies</h3>
+
+<h4>defaultImplementationOf(Class clazz)</h4>
+<p>Appelée par XStream lorsqu'il doit instancier une classe concrète pour une interface ou un type abstrait (par exemple, lors de la désérialisation d'un champ <code>List</code>, XStream demande quelle implémentation créer). Si la classe demandée se trouve dans la <code>collectionMap</code>, le remplacement JDK est renvoyé. Cela garantit que le XML désérialisé produit des objets <code>ArrayList</code>/<code>HashSet</code> simples plutôt que des implémentations spécifiques à Hibernate qui seraient inutilisables sans session Hibernate.</p>
+
+<h4>serializedClass(Class clazz)</h4>
+<p>Appelée par XStream pour déterminer le nom de classe à écrire dans le XML. Cette méthode effectue une vérification en deux étapes :</p>
+<ol>
+  <li><strong>Détection HibernateProxy :</strong> Parcourt <code>clazz.getInterfaces()</code> à la recherche de <code>HibernateProxy.class</code>. Si trouvé, renvoie <code>clazz.getSuperclass().getName()</code> — le vrai nom de la classe d'entité. Cela garantit que <code>&lt;org.projectforge.business.user.UserDO&gt;</code> apparaît dans le XML plutôt que <code>&lt;org.projectforge.business.user.UserDO_$$_jvstXXX&gt;</code> (le nom de proxy généré par Javassist).</li>
+  <li><strong>Substitution de collection :</strong> Si la classe se trouve dans la <code>collectionMap</code>, renvoie le nom complet du remplacement JDK.</li>
+  <li><strong>Repli :</strong> Délègue au mappeur encapsulé via <code>super.serializedClass(clazz)</code>.</li>
+</ol>
+
+<h2>Points d'intégration</h2>
+<ul>
+  <li>Encapsule le mappeur XStream de base lors de la construction des instances XStream pour l'export XML. Appliqué une fois lors de l'initialisation de <code>XStream</code>.</li>
+  <li>Fonctionne avec <a href="705.html">HibernateProxyConverter</a> pour la gestion des proxies : le mappeur corrige le <em>nom de classe</em> écrit dans le XML, tandis que le convertisseur corrige les <em>données d'instance</em> marshallées.</li>
+  <li>Complète <a href="702.html">HibernateCollectionConverter</a> : le mappeur gère la résolution de type, le convertisseur gère le marshalling des valeurs.</li>
+  <li><code>HibernateMapper</code> et <code>HibernateCollectionsMapper</code> (<a href="703.html">#703</a>) ne doivent pas être actifs simultanément — ils effectueraient une double substitution et causeraient des problèmes. <code>HibernateMapper</code> est l'implémentation préférée, plus complète.</li>
+  <li>Utilisé par l'infrastructure d'import/export XML incluant <a href="710.html">XStreamMarshallingStrategy</a>.</li>
+</ul>
+
+<h2>Décisions de conception & pièges</h2>
+<ul>
+  <li><strong>Détection de proxy via vérification d'interface :</strong> Parcourir <code>getInterfaces()</code> pour trouver <code>HibernateProxy</code> est quelque peu fragile — cela suppose que le proxy Javassist/CGLIB implémente <code>HibernateProxy</code> comme l'une de ses interfaces. Dans Hibernate 5.x moderne, c'est fiable, mais d'autres frameworks de proxy (comme les proxies <code>@Transactional</code> de Spring) peuvent ne pas implémenter cette interface. Le code contient des lignes de débogage <code>System.err.println</code> commentées suggérant un débogage itératif.</li>
+  <li><strong>Nom de superclasse pour les proxies :</strong> Appeler <code>clazz.getSuperclass().getName()</code> fonctionne car les proxies Hibernate sont générés comme sous-classes de la classe d'entité (ex. <code>UserDO_$$_jvstXXX extends UserDO</code>). C'est correct pour le <em>nom</em> de la classe mais ne gère pas le cas où la chaîne de proxy est plus profonde (proxies CGLIB imbriqués).</li>
+  <li><strong>Substitution basée sur une carte :</strong> Utiliser une <code>HashMap</code> pour <code>collectionMap</code> est plus propre et plus maintenable que les tableaux parallèles dans <a href="703.html">HibernateCollectionsMapper</a>. Ajouter de nouvelles correspondances est une modification d'une ligne dans <code>init()</code>.</li>
+  <li><strong>Surcharges de constructeurs :</strong> Deux constructeurs acceptant à la fois <code>MapperWrapper</code> et <code>Mapper</code> simple suggèrent que cette classe a évolué au fil du temps et doit s'intégrer à différents points de la chaîne de décorateurs de mappeurs.</li>
+  <li><strong>Attribution :</strong> Initialement écrit par Costin Leau, comme la plupart de la couche de pont XStream+Hibernate dans ce package.</li>
+</ul>
+
+<h2>Historique Git</h2><div class="hist"><pre>868d6abb7 2025 -> 2026
+63081666f En-têtes de fichiers source : 2024 -> 2025.
+c1d14ecdb Migration en cours...
+b6092df09 Copyright 2023 -> 2024
+ab45d51fa Copyright 2001-2022 -> 2001-2023.
+5f7ef41b8 Copyright 2021 -> 2022
+ceb63e8a1 En-tête de code source : (C) 2001-2021.
+7c79f1922 Copyright de l'en-tête source -> 2020.
+73a9755df Plus de nettoyage de code
+32f634b88 Optimisation des imports
+dd5ca38ac Copyright de tous les en-têtes de fichiers Java mis à jour ou créés.
+9ebb88522 Commit initial</pre></div>
+</body>
+</html>

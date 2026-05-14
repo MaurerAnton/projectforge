@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>#894 [ES]</title>
+<style>
+body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}
+h1{border-bottom:2px solid #333;padding-bottom:.3em}
+h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}
+h3{margin-top:2em;color:#444}
+a{color:#0366d6}
+.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}
+.nav{font-size:.9em;color:#888;margin-bottom:1em}
+.meta{font-size:.9em;margin:1em 0;color:#555}
+code{background:#f0f0f0;padding:0 .2em;font-size:.93em}
+pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}
+table{border-collapse:collapse;width:100%;margin:1em 0}
+th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}
+th{background:#f5f5f5;font-weight:600}
+.hist{font-size:.85em;color:#555}
+</style>
+</head>
+<body>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Índice</a> · <a href="file-index.html">← Índice de archivos</a> · <a href="893.html">← Anterior</a> · <a href="895.html">Siguiente →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/kotlin/org/projectforge/business/fibu/AuftragFilter.kt" target="_blank" title="Ver fuente en GitHub">📄 fuente</a></div>
+
+<h1>#894: <code>AuftragFilter.kt</code></h1>
+
+<div class="meta"><code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/AuftragFilter.kt</code> 
+<p><strong>Tipo:</strong> Clase de filtro de búsqueda</p>
+<p><strong>Paquete:</strong> <code>org.projectforge.business.fibu</code></p>
+<p><strong>Ruta completa:</strong> <code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/AuftragFilter.kt</code></p>
+ <span style="color:#888">201 líneas · 135 código · 45 comentarios · 21 en blanco</span></div>
+
+<div class="c">
+<p>Filtro de búsqueda principal para el libro de pedidos (<em>Auftragsbuch</em>). Extiende <code>BaseSearchFilter</code>, implementa <code>Serializable</code> y <code>SearchFilterWithPeriodOfPerformance</code>. Soporta el filtrado de pedidos por asignación de usuario, rangos de fechas, período de ejecución, estado del pedido, tipo de posición (<code>AuftragsPositionsArt</code>), tipo de pago de posición, estado de facturación y pertenencia a proyecto. Se utiliza tanto por el DAO del backend para consultas a la base de datos como por el frontend para el filtrado programático de resultados mediante <code>match()</code>.</p>
+</div>
+
+<h2>Definición de la clase</h2>
+<pre>@XStreamAlias("AuftragFilter")
+class AuftragFilter @JvmOverloads constructor(filter: BaseSearchFilter? = null) : BaseSearchFilter(filter),
+    Serializable, SearchFilterWithPeriodOfPerformance</pre>
+
+<h2>Propiedades del filtro</h2>
+<table>
+<tr><th>Propiedad</th><th>Tipo</th><th>Valor por defecto</th><th>Descripción</th></tr>
+<tr><td><code>user</code></td><td><code>PFUserDO?</code></td><td>null</td><td>Filtrar por usuario asignado (gerente de proyecto, jefe de negocio, gerente de ventas o persona de contacto)</td></tr>
+<tr><td><code>startDate</code></td><td><code>LocalDate?</code></td><td>null</td><td>Filtrar por fecha de creación (desde)</td></tr>
+<tr><td><code>endDate</code></td><td><code>LocalDate?</code></td><td>null</td><td>Filtrar por fecha de creación (hasta)</td></tr>
+<tr><td><code>periodOfPerformanceStartDate</code></td><td><code>LocalDate?</code></td><td>null</td><td>Límite inferior del período de ejecución</td></tr>
+<tr><td><code>periodOfPerformanceEndDate</code></td><td><code>LocalDate?</code></td><td>null</td><td>Límite superior del período de ejecución</td></tr>
+<tr><td><code>auftragsStatuses</code></td><td><code>MutableList&lt;AuftragsStatus&gt;</code></td><td>vacía</td><td>Filtrar por valores de estado del pedido/posición</td></tr>
+<tr><td><code>auftragsPositionsArten</code></td><td><code>ArrayList&lt;AuftragsPositionsArt&gt;</code></td><td>vacía</td><td>Filtrar por categorías de tipo de posición</td></tr>
+<tr><td><code>auftragFakturiertFilterStatus</code></td><td><code>AuftragFakturiertFilterStatus?</code></td><td>TODOS</td><td>Filtrar por estado de facturación (TODOS / POR_FACTURAR / FACTURADO / NO_FACTURADO)</td></tr>
+<tr><td><code>auftragsPositionsPaymentType</code></td><td><code>AuftragsPositionsPaymentType?</code></td><td>null</td><td>Filtrar por tipo de pago de posición (null = todos)</td></tr>
+<tr><td><code>projectList</code></td><td><code>Collection&lt;ProjektDO&gt;?</code></td><td>null</td><td>Filtrar por pertenencia a proyecto</td></tr>
+</table>
+
+<h2>Métodos de coincidencia (filtrado programático)</h2>
+
+<h3><code>match(auftrag): Boolean</code></h3>
+<p>Comprueba si un pedido pasa todos los filtros activos. Evalúa en orden:</p>
+<ol>
+<li><code>matchUser</code> — asignación de usuario</li>
+<li>Rango de fecha de creación (<code>erfassungsDatum</code> contra <code>startDate</code>/<code>endDate</code>)</li>
+<li>Superposición del período de ejecución</li>
+<li><code>matchProjectList</code> — pertenencia a proyecto</li>
+<li><code>matchAuftragsStatus</code> — coincidencia de estado</li>
+<li><code>matchAuftragsPositionsArten</code> — coincidencia de tipo de posición</li>
+</ol>
+<p>Cortocircuitos: devuelve <code>false</code> inmediatamente en el primer criterio que no coincida.</p>
+
+<h3><code>matchUser(auftrag): Boolean</code></h3>
+<p>Devuelve <code>true</code> si el <code>user</code> del filtro es null, o si el ID del usuario coincide con alguno de: <code>projectManager.id</code>, <code>headOfBusinessManager.id</code>, <code>contactPerson.id</code> o <code>salesManager.id</code>.</p>
+
+<h3><code>matchProjectList(auftrag): Boolean</code></h3>
+<p>Devuelve <code>true</code> si <code>projectList</code> es null o está vacía, o si el <code>projekt.id</code> del pedido se encuentra en la lista.</p>
+
+<h3><code>matchAuftragsStatus(auftrag): Boolean</code></h3>
+<p>Devuelve <code>true</code> si <code>auftragsStatuses</code> está vacía, o si el <code>status</code> del pedido coincide, o si el estado de alguna posición no eliminada coincide.</p>
+
+<h3><code>matchAuftragsPositionsArten(auftrag): Boolean</code></h3>
+<p>Devuelve <code>true</code> si <code>auftragsPositionsArten</code> está vacía, o si alguna posición no eliminada tiene un <code>art</code> coincidente.</p>
+
+<h2>Filtrado por estado de facturación</h2>
+<p><code>filterFakturiert(list): List&lt;AuftragDO&gt;</code> — Filtra una lista de resultados por estado de facturación usando <code>AuftragsCache</code>:</p>
+<table>
+<tr><th>Estado</th><th>Condición</th></tr>
+<tr><td><code>TODOS</code> o null</td><td>Sin filtrado</td></tr>
+<tr><td><code>POR_FACTURAR</code></td><td><code>orderInfo.toBeInvoiced == true</code></td></tr>
+<tr><td><code>FACTURADO</code></td><td><code>orderInfo.isVollstaendigFakturiert == true</code></td></tr>
+<tr><td><code>NO_FACTURADO</code></td><td><code>orderInfo.notYetInvoicedSum > BigDecimal.ZERO</code></td></tr>
+</table>
+
+<h2>Restablecer</h2>
+<p><code>reset()</code> limpia todos los campos del filtro y devuelve <code>this</code> para encadenamiento fluido.</p>
+
+<h2>Historial de Git</h2>
+<div class="hist"><pre>868d6abb7 2025 -> 2026
+26f08992e WIP: previsión de pedidos y capturas instantáneas.
+7b32b554a WIP: Previsión de pedidos... AuftragFilter refactorizado.
+63081666f Encabezados de archivos fuente: 2024 -> 2025.
+9c633d4ce AuftragDao/AuftragFilter: corregido por-facturar y totalmente facturado.
+9aff90908 Migración en progreso...
+3f25c773a Migración en progreso...
+67ce75fe9 Migración en progreso...
+fba4da3f5 ForecastExport ahora utilizable para scripts. Añadido AuftragFilter.projectList...
+b6092df09 Copyright 2023 -> 2024
+ab45d51fa Copyright 2001-2022 -> 2001-2023.
+9a65e1bc0 AuftragDO: estadísticas refactorizadas (aún no facturado, por facturar, facturado, etc.)
+013c514bd AuftragsCache para un rendimiento mucho mejor de la vista de lista del libro de pedidos.
+9ec78f80a AuftragDO/AuftragFilter: ignorar posiciones eliminadas y calendarios de pago para pedidos por facturar.
+5f7ef41b8 Copyright 2021 -> 2022
+ceb63e8a1 Encabezado de código fuente: (C) 2001-2021.
+d89920003 Añadido filtro "por facturar" del libro de pedidos.
+78b436d9e Reemplazar instancias de java.util.date y java.sql.Date con java.time.LocalDate
+7c79f1922 Copyright del encabezado fuente -> 2020.
+b0a4e8463 ordenar
+9448cfc6e AuftragDao: JPA
+706ed61a0 AuftragDao -> JPA
+bf525ef55 AuftragFilter.java -> Kotlin</pre></div>
+</body>
+</html>

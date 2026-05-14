@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="es"><head><meta charset="utf-8"><title>#2590: index.jsx [ES]</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:2em;color:#444}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.lang{font-size:.85em;color:#888;float:right}.lang a{color:#888;text-decoration:none;padding:0 .3em}.lang a.active{color:#0366d6;font-weight:600;text-decoration:underline}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}</style></head>
+<body><div class="lang"><a href="2590.html">EN</a> · <a href="2590_de.html">DE</a> · <a href="2590_ru.html">RU</a> · <a href="2590_fr.html">FR</a> · <a href="2590_es.html" class="active">ES</a></div>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Índice</a> · <a href="file-index.html">← Índice de archivos</a> · <a href="60.html">← Anterior</a> · <a href="1502.html">Siguiente →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-webapp/src/components/base/dynamicLayout/components/select/task/index.jsx" target="_blank" title="Ver fuente en GitHub">📄 fuente</a></div>
+<h1>#2590: <code>index.jsx</code></h1>
+<div class="meta"><code>projectforge-webapp/src/components/base/dynamicLayout/components/select/task/index.jsx</code> Tipo: JavaScript/React · Rol: Tarea · Fuente: projectforge-webapp/src/components/base/dynamicLayout/components/select/task/index.jsx <span style="color:#888">215 líneas · 189 código · 5 comentarios · 21 en blanco</span></div>
+<div class="c">Componente React de selección/desplegable para elegir entidades con carga asíncrona y autocompletado.</div>
+<h2>Estructura del código</h2>
+<p>Hooks utilizados: <code>Context</code>, <code>State</code>, <code>State</code>, <code>State</code>, <code>State</code>, <code>Ref</code>, <code>ClickOutsideHandler</code>, <code>Effect</code>, <code>Effect</code>, <code>Memo</code></p>
+<p>Importaciones de: <code>../../../../../../containers/panel/favorite/FavoritesPanel</code>, <code>../../../../../../containers/panel/task/TaskTreePanel</code>, <code>../../../../../../utilities/hooks</code>, <code>../../../../../../utilities/rest</code>, <code>../../../../../design</code>, <code>../../../../../design/input/Input.module.scss</code>, <code>../../../context</code>, <code>./TaskPath</code>, <code>./TaskSelect.module.scss</code>, <code>@fortawesome/free-solid-svg-icons</code>, <code>@fortawesome/react-fontawesome</code>, <code>prop-types</code>, <code>react</code>, <code>reactstrap</code></p>
+<p>Tiene PropTypes para: <code>DynamicTaskSelect</code></p>
+<p>Utiliza Módulos CSS para el estilo.</p>
+<h2>Código fuente (resumido)</h2>
+<pre>import { faBarsStaggered, faChevronDown } from &#x27;@fortawesome/free-solid-svg-icons&#x27;;
+import { FontAwesomeIcon } from &#x27;@fortawesome/react-fontawesome&#x27;;
+import PropTypes from &#x27;prop-types&#x27;;
+import React from &#x27;react&#x27;;
+import { UncontrolledTooltip } from &#x27;reactstrap&#x27;;
+import FavoritesPanel from &#x27;../../../../../../containers/panel/favorite/FavoritesPanel&#x27;;
+import TaskTreePanel from &#x27;../../../../../../containers/panel/task/TaskTreePanel&#x27;;
+import { useClickOutsideHandler } from &#x27;../../../../../../utilities/hooks&#x27;;
+import { getServiceURL, handleHTTPErrors } from &#x27;../../../../../../utilities/rest&#x27;;
+import { Button, Collapse } from &#x27;../../../../../design&#x27;;
+import inputStyle from &#x27;../../../../../design/input/Input.module.scss&#x27;;
+import { DynamicLayoutContext } from &#x27;../../../context&#x27;;
+import TaskPath from &#x27;./TaskPath&#x27;;
+import taskStyle from &#x27;./TaskSelect.module.scss&#x27;;
+
+function DynamicTaskSelect(
+    {
+        id,
+        label,
+        onKost2Changed,
+        showRootForAdmins = false,
+    },
+) {
+    const {
+        setData, ui, variables, setVariables,
+    } = React.useContext(DynamicLayoutContext);
+
+    const [panelVisible, setPanelVisible] = React.useState(false);
+    const [modalHighlight, setModalHighlight] = React.useState(undefined);
+    const [task, setStateTask] = React.useState(undefined);
+    const [favorites, setFavorites] = React.useState(undefined);
+    const panelRef = React.useRef(null);
+
+    // Manejo de eventos del ratón
+    useClickOutsideHandler(panelRef, () =&gt; setPanelVisible(false), panelVisible);
+
+    const fetchFavorites = (action, params = {}, callback = setFavorites) =&gt; fetch(
+        getServiceURL(`task/favorites/${action}`, params),
+        {
+            method: &#x27;GET&#x27;,
+            credentials: &#x27;include&#x27;,
+            headers: {
+                Accept: &#x27;application/json&#x27;,
+            },
+        },
+    )
+        .then(handleHTTPErrors)
+        .then((response) =&gt; response.json())
+        .then(callback)
+        .catch((error) =&gt; alert(`Error interno: ${error}`));
+
+    // Carga inicial
+    React.useEffect(() =&gt; {
+        fetchFavorites(&#x27;list&#x27;);
+    }, []);
+
+    React.useEffect(() =&gt; {
+        if (variables.task) {
+            setStateTask(variables.task);
+        }
+    }, [setStateTask, variables]);
+
+    return React.useMemo(() =&gt; {
+        const setTask = (taskId, selectedTask) =&gt; {
+            if (selectedTask) {
+                setPanelVisible(false);
+            }
+
+            if (!taskId) {
+                setStateTask(undefined);
+                setData({ [id]: undefined });
+
+                // Emitir el manejador onKost2Changed si está definido.
+                if (onKost2Changed) {
+                    onKost2Changed();
+                }
+
+                setModalHighlight(undefined);
+
+                return;
+            }
+
+            fetch(
+                getServiceURL(`task/info/${taskId}`),
+                {
+                    method: &#x27;GET&#x27;,
+                    credentials: &#x27;include&#x27;,
+                    headers: {
+                        Accept: &#x27;application/json&#x27;,
+                    },
+                },
+            )
+                .then(handleHTTPErrors)
+                .then((response) =&gt; response.json())
+                .then((json) =&gt; {
+                    setStateTask(json);
+
+                    if (json) {
+                        setData({ [id]: { id: json.id } });
+                        setVariables({
+                            ...variables,
+                            task: json,
+                        });
+                        if (onKost2Changed) {
+                            onKost2Changed(json.kost2List);
+                        }
+
+                        setStateTask(json);
+                    }
+                });
+        };
+
+        const handleFavoriteCreate = (name) =&gt; {
+            if (task) {
+                fetchFavorites(&#x27;create&#x27;, {
+                    name,
+                    taskId: task.id,
+                });
+            }
+        };
+// ... (truncado, total 214 líneas)</pre>
+
+<h2>Historial de Git</h2><div class="hist"><pre>3685edd6c actualización a react 18 wip
+a0c602b8c Edición de hoja de tiempos: tooltip para estrella de tarea favorita añadido.
+06a8f9eaa Más funciones en el nuevo calendario (actualizar, enlace a lista de calendarios, tooltips, ...)
+03060e7ba Edición de hoja de tiempos: actualizar barra de consumo después de cambiar la tarea seleccionada.
+38329872e Favoritos mejorados (tooltips añadidos, iconos mejorados, ...)</pre></div>
+</body></html>

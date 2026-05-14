@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>#636 [DE]</title>
+<style>
+body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}
+h1{border-bottom:2px solid #333}
+a{color:#0366d6}
+.meta{font-size:.9em;margin:1em 0}
+.nav{font-size:.9em;color:#888;margin-bottom:1em}
+.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}
+code{background:#f0f0f0;padding:0 .2em}
+</style>
+</head>
+<body>
+
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← Datei-Index</a> · <a href="635.html">← Vorherige</a> · <a href="637.html">Nächste →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/java/org/projectforge/database/DatabaseSupport.java" target="_blank" title="Quelltext auf GitHub ansehen">📄 Quelltext</a></div>
+
+<h1>#636: <code>DatabaseSupport.java</code></h1>
+<div class="meta"><code>projectforge-business/src/main/java/org/projectforge/database/DatabaseSupport.java</code> <strong>Zeilen:</strong> 101 · <strong>Autor:</strong> Kai Reinhard · <strong>Typ:</strong> Java-Singleton — Paket <code>org.projectforge.database</code> <span style="color:#888">101 Zeilen · 47 Code · 42 Kommentare · 12 leer</span></div>
+
+<div class="c"><p><strong>Abstraktionsschicht für Datenbank-Dialekte.</strong> Singleton (statisches <code>getInstance()</code> + <code>setInstance()</code> — wird beim Anwendungsstart gesetzt). Enthält den erkannten <code>DatabaseDialect</code> (PostgreSQL oder HSQL) und bietet dialektspezifische Optimierungen. 101 Zeilen.</p>
+
+<p><strong>Konstruktor:</strong> <code>DatabaseSupport(DatabaseDialect dialect)</code> — protokolliert den erkannten Dialekt auf INFO-Ebene: <em>"Setze Datenbank-Dialekt auf: PostgreSQL"</em>. Der Dialekt wird von <code>ConfigurationService</code> anhand der JDBC-URL beim Start ermittelt.</p>
+
+<p><strong>Schlüsselmethode — <code>getIntervalInSeconds(fromProperty, toProperty)</code>:</strong> Dies ist die leistungskritische Methode. Zur Berechnung der Dauer (z. B. Zeiterfassung <code>stopTime - startTime</code>) wird, anstatt alle Zeilen nach Java zu laden und Differenzen im Speicher zu berechnen (<code>O(n)</code> Speicher + CPU), eine <strong>datenbankseitige SUM in SQL</strong> erzeugt:</p>
+<pre>PostgreSQL: "SUM(EXTRACT(EPOCH FROM toProperty) - EXTRACT(EPOCH FROM fromProperty))"</pre>
+<p>Dies gibt die Gesamtsekunden als einzelnes Datenbank-Aggregat zurück — <code>O(1)</code> Ergebnisgröße unabhängig von der Zeilenanzahl. Kritisch für Installationen mit vielen Zeiterfassungseinträgen. Die auskommentierte Alternative <code>EXTRACT(EPOCH FROM SUM(to - from))</code> wurde erwogen, aber die Berechnung pro Zeile wurde aus Genauigkeitsgründen gewählt.</p>
+<p><strong>Fallback:</strong> Wenn die Datenbank nicht PostgreSQL ist (also HSQL für Tests), wird <code>null</code> zurückgegeben. Der Aufrufer muss dann alle Zeilen abrufen und die Summe in Java berechnen. Eine <strong>einmalige Warnung</strong> wird protokolliert (gesichert durch <code>static boolean errorMessageShown</code>), die den Entwickler kontaktiert, falls die Installation &gt;10.000 Zeiterfassungseinträge hat — die Java-seitige Aggregation wird bei großen Datenmengen langsam.</p>
+
+<p><strong><code>getShutdownDatabaseStatement()</code>:</strong> Wird von <code>WicketApplication</code> beim Herunterfahren aufgerufen. Für HSQL (eingebettete Testdatenbank) wird <code>"SHUTDOWN COMPACT"</code> zurückgegeben — schließt die eingebettete Datenbank sicher und kompaktiert die Datendatei. Für PostgreSQL wird <code>null</code> zurückgegeben — der Verbindungspool kümmert sich um das Herunterfahren.</p>
+
+<p><strong>Entwurfshinweis:</strong> Dies ist die <strong>einzige</strong> Stelle im Codebestand, an der datenbankspezifisches SQL erzeugt wird. Alle anderen SQL-Abfragen werden von Hibernate/HQL generiert, das datenbankunabhängig ist. Diese Klasse existiert speziell für die Intervalloptimierung, die HQL nicht portabel ausdrücken kann.</p></div>
+
+</body>
+</html>

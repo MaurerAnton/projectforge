@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>#889: AbstractRechnungsStatistik.kt [RU]</title>
+<style>
+body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}
+h1{border-bottom:2px solid #333;padding-bottom:.3em}
+h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}
+h3{margin-top:2em;color:#444}
+a{color:#0366d6}
+.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}
+.nav{font-size:.9em;color:#888;margin-bottom:1em}
+.meta{font-size:.9em;margin:1em 0;color:#555}
+code{background:#f0f0f0;padding:0 .2em;font-size:.93em}
+pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}
+table{border-collapse:collapse;width:100%;margin:1em 0}
+th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}
+th{background:#f5f5f5;font-weight:600}
+.hist{font-size:.85em;color:#555}
+</style>
+</head>
+<body>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Индекс</a> · <a href="file-index.html">← Индекс файлов</a> · <a href="888.html">← Предыдущий</a> · <a href="890.html">Следующий →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/kotlin/org/projectforge/business/fibu/AbstractRechnungsStatistik.kt" target="_blank" title="Просмотреть исходный код на GitHub">📄 исходный код</a></div>
+
+<h1>#889: <code>AbstractRechnungsStatistik.kt</code></h1>
+
+<div class="meta"><code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/AbstractRechnungsStatistik.kt</code> 
+<p><strong>Тип:</strong> Абстрактный обобщённый класс (<code>Serializable</code>)</p>
+<p><strong>Пакет:</strong> <code>org.projectforge.business.fibu</code></p>
+<p><strong>Полный путь:</strong> <code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/AbstractRechnungsStatistik.kt</code></p>
+ <span style="color:#888">223 строки · 148 кода · 53 комментария · 22 пустых</span></div>
+
+<div class="c">
+<p>Абстрактный калькулятор статистики для счетов. Агрегирует финансовые показатели по набору счетов (исходящих или входящих): валовая сумма (<code>brutto</code>), нетто (<code>netto</code>), с учётом скидки за наличный расчёт (<code>bruttoMitSkonto</code>), оплачено (<code>gezahlt</code>), открыто (<code>offen</code>), просрочено (<code>ueberfaellig</code>) и суммы скидок (<code>skonto</code>). Также отслеживает средние сроки оплаты и предоставляет вывод в формате Markdown для отображения в Wicket UI. Поддерживает мультивалютную конвертацию с отслеживанием предупреждений.</p>
+</div>
+
+<h2>Параметр типа</h2>
+<p><code>T : AbstractRechnungDO?</code> — Конкретный тип счёта (например, <code>RechnungDO</code> или <code>EingangsrechnungDO</code>).</p>
+
+<h2>Агрегированные свойства</h2>
+<table>
+<tr><th>Свойство</th><th>Тип</th><th>Описание</th></tr>
+<tr><td><code>brutto</code></td><td><code>BigDecimal</code></td><td>Общая валовая сумма по всем счетам</td></tr>
+<tr><td><code>netto</code></td><td><code>BigDecimal</code></td><td>Общая сумма нетто</td></tr>
+<tr><td><code>bruttoMitSkonto</code></td><td><code>BigDecimal</code></td><td>Общая валовая сумма с применённой скидкой</td></tr>
+<tr><td><code>gezahlt</code></td><td><code>BigDecimal</code></td><td>Общая оплаченная сумма</td></tr>
+<tr><td><code>offen</code></td><td><code>BigDecimal</code></td><td>Общая сумма к оплате (ещё не оплачена)</td></tr>
+<tr><td><code>ueberfaellig</code></td><td><code>BigDecimal</code></td><td>Общая просроченная сумма</td></tr>
+<tr><td><code>skonto</code></td><td><code>BigDecimal</code></td><td>Принятая недостача (скидки, предоставленные клиентом)</td></tr>
+<tr><td><code>counter</code></td><td><code>Int</code></td><td>Общее количество учтённых счетов</td></tr>
+<tr><td><code>counterBezahlt</code></td><td><code>Int</code></td><td>Количество полностью оплаченных счетов</td></tr>
+</table>
+
+<h2>Основной метод: <code>add(rechnung: T)</code></h2>
+<p>Основная точка входа. Для каждого добавленного счёта:</p>
+<ol>
+<li>Извлекает кэшированную информацию о счете через <code>rechnungCache.getRechnungInfo(rechnung)</code></li>
+<li>Конвертирует все суммы в валюту системы с помощью <code>currencyConversionService.convert()</code></li>
+<li>Если конвертация валюты для какого-либо счёта не удалась, накапливается предупреждение в <code>currencyConversionWarnings</code>, и используется исходная (неконвертированная) сумма в качестве запасного варианта</li>
+<li>Накапливает валовую сумму, нетто, валовую сумму со скидкой, а также оплаченные/открытые/просроченные суммы</li>
+<li>Вычисляет скидку за наличный расчёт (<code>skonto</code>), когда оплаченная сумма меньше валовой</li>
+<li>Отслеживает средние сроки оплаты: договорные (<code>zahlungsZielSum</code>) и фактические (<code>tatsaechlichesZahlungsZiel</code>)</li>
+<li>Определяет просроченные счета через <code>rechnungInfo.isUeberfaellig</code></li>
+</ol>
+
+<h2>Конвертация валюты</h2>
+<p>Приватный метод <code>convertToSystemCurrency()</code> обрабатывает мультивалютные сценарии:</p>
+<ul>
+<li>Пропускает конвертацию, если исходная и целевая валюты совпадают (без учёта регистра)</li>
+<li>Использует <code>useFallbackToOldestRate = true</code> для исторических счетов, для которых может не существовать точного обменного курса</li>
+<li>Формирует предупреждающие сообщения для отображения в формате: <code>"invoiceRef (дата): USD → EUR"</code></li>
+<li>Использует исходную сумму в качестве запасного варианта, когда конвертация недоступна</li>
+</ul>
+
+<h2>Вычисляемые свойства</h2>
+<table>
+<tr><th>Свойство</th><th>Тип</th><th>Описание</th></tr>
+<tr><td><code>zahlungszielAverage</code></td><td><code>Int</code></td><td>Средний договорной срок оплаты в днях</td></tr>
+<tr><td><code>tatsaechlichesZahlungzielAverage</code></td><td><code>Int</code></td><td>Средневзвешенная фактическая продолжительность оплаты в днях</td></tr>
+<tr><td><code>asMarkdown</code></td><td><code>String</code></td><td>Таблица Markdown со всеми финансовыми показателями, с цветовой индикацией для открытых (синий) и просроченных (красный) сумм</td></tr>
+<tr><td><code>hasCurrencyConversionWarnings</code></td><td><code>Boolean</code></td><td>True, если произошли какие-либо сбои конвертации валюты</td></tr>
+<tr><td><code>currencyConversionWarningsList</code></td><td><code>List&lt;String&gt;</code></td><td>Список предупреждающих сообщений для отображения в Wicket</td></tr>
+</ul>
+
+<h2>Зависимости объекта-компаньона</h2>
+<p>Объект-компаньон содержит ссылки на сервисы с <code>lateinit</code>, которые должны быть установлены извне перед использованием:</p>
+<ul>
+<li><code>rechnungCache: RechnungCache</code> — предоставляет <code>RechnungInfo</code> для каждого счёта</li>
+<li><code>currencyConversionService: CurrencyConversionService</code> — обрабатывает мультивалютную конвертацию сумм</li>
+<li><code>configurationService: ConfigurationService</code> — предоставляет валюту системы по умолчанию</li>
+</ul>
+
+<h2>История Git</h2>
+<div class="hist"><pre>868d6abb7 2025 -> 2026
+472fbc977 WIP: конвертация валют с Claude Code.
+8c2bf04f0 WIP: конвертация валют с Claude Code.
+6be9c2b84 WIP: конвертация валют с Claude Code.
+63081666f Заголовки исходных файлов: 2024-> 2025.
+b47c21af6 Рефакторинг кэширования и расчётов со счетами (ещё не завершено)
+ccb7ca64d Работа над миграцией в процессе...
+b6092df09 Авторское право 2023 -> 2024
+ab45d51fa Авторское право 2001-2022 -> 2001-2023.
+09b3f0df7 WIP: Jobmonitor. ListStatisticsSupport -> MarkdownBuilder
+0b835b27e Поддержка статистики или другой информации о наборе результатов на странице списка.
+a286007ee Массовое обновление счетов кредиторов: реализована обработка скидок.
+832934b14 WIP: массовое обновление</pre></div>
+</body>
+</html>

@@ -1,18 +1,57 @@
-<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>#645</title>
-<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333}a{color:#0366d6}.meta{font-size:.9em;margin:1em 0}.nav{font-size:.9em;color:#888;margin-bottom:1em}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}code{background:#f0f0f0;padding:0 .2em}</style></head>
-<body><div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="644.html">← Prev</a> · <a href="646.html">Next →</a></div>
-<h1>#645: <code>MyExcelExporter.java</code></h1>
-<div class="meta"><strong>Lines:</strong> 102 · <strong>Type:</strong> Java — extends <code>ExcelExporter</code> · <strong>Most extended export class</strong></div>
-<div class="c"><p><strong>ProjectForge-specific extension of <code>ExcelExporter</code> — the most reused base class in the export system.</strong> 102 lines. Almost every Excel exporter in the project extends either this class directly, or <a href="641.html">DOListExcelExporter</a> which extends this. Adds: date formatting based on <code>@PropertyInfo</code> annotations, custom content provider creation, and a naming convention ("My" prefix = "my version" — a common naming pattern in older ProjectForge Java code).</p>
-<p><strong>Constructor:</strong> <code>MyExcelExporter(String filename)</code> — passes the filename to <code>ExcelExporter</code> (<a href="384.html">#384</a>). The filename includes extension (typically <code>.xls</code> despite XSSF format).</p>
-<p><strong><code>addSheet(String sheetTitle)</code> — sheet creation with custom provider:</strong> Creates an anonymous <code>MyXlsContentProvider</code> subclass with a no-op <code>getCustomizedCellFormat()</code> override (returns <code>null</code> = no custom formatting). This is the default content provider for simple DO-based exports. Subclasses can override to provide per-cell customization (e.g. negative numbers in red, bold totals rows).</p>
-<p><strong>Key method — <code>putFieldFormat(ContentProvider, Field, PropertyInfo, ExportColumn)</code>:</strong> This is the <strong>date formatting engine</strong> for Excel exports. Examines the <code>PropertyInfo.type()</code> annotation on each DO field and applies the appropriate Excel date format:</p><table>
-<tr><td><code>PropertyType.DATE</code></td><td>Width 10, date format (e.g. "DD.MM.YYYY")</td></tr>
-<tr><td><code>PropertyType.DATE_TIME</code></td><td>Width 10, date+time to minutes (e.g. "DD.MM.YYYY HH:MM")</td></tr>
-<tr><td><code>PropertyType.DATE_TIME_SECONDS</code></td><td>Width 16, with seconds</td></tr>
-<tr><td><code>PropertyType.DATE_TIME_MILLIS</code></td><td>Width 18, with milliseconds</td></tr>
-<tr><td><code>PropertyType.UNSPECIFIED</code></td><td>Falls back to Java type:<ul><li><code>java.sql.Date</code> → DATE format, width 10</li><li><code>java.util.Date</code> → DATE_TIME_MINUTES, width 16</li><li>Other types → delegates to <code>super.putFieldFormat()</code></li></ul></td></tr>
-</table>
-<p>For all other property types (STRING, CURRENCY, BOOLEAN, etc.), delegates to the parent class. This method is called once per DO field during export setup — it configures the Excel cell format before any data is written.</p>
-<p><strong>Design pattern:</strong> This is the <strong>Template Method</strong> pattern in <code>ExcelExporter</code> — <code>putFieldFormat()</code> is called during export initialization for each field, and subclasses override it to customize formatting. The chain is: <code>ExcelExporter</code> → <code>MyExcelExporter</code> (adds date formats) → <code>DOListExcelExporter</code> (adds auto-filter + "deleted" column width) → specific exporters (custom column widths, formula columns, chart embedding).</p></div>
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>#645: ExportZipFile.java</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:2em;color:#444}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.lang{font-size:.85em;color:#888;float:right}.lang a{color:#888;text-decoration:none;padding:0 .3em}.lang a.active{color:#0366d6;font-weight:600;text-decoration:underline}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}</style></head>
+<body><div class="lang"><a href="645.html" class="active">EN</a> · <a href="645_de.html">DE</a> · <a href="645_ru.html">RU</a> · <a href="645_fr.html">FR</a> · <a href="645_es.html">ES</a></div>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="425.html">← Prev</a> · <a href="289.html">Next →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/java/org/projectforge/export/ExportZipFile.java" target="_blank" title="View source on GitHub">📄 source</a></div>
+<h1>#645: <code>ExportZipFile.java</code></h1>
+<div class="meta"><code>projectforge-business/src/main/java/org/projectforge/export/ExportZipFile.java</code> Type: Java · Role: Export Utility · Source: projectforge-business/src/main/java/org/projectforge/export/ExportZipFile.java <span style="color:#888">59 lines · 19 code · 34 comments · 6 blank</span></div>
+<div class="c">Excel/CSV export utility for ZipFile data. Configures column headers (i18n), field formatters (currency, date), and populates rows from data collections.</div>
+<h2>Code Structure</h2>
+<p>Package: <code>org.projectforge.export</code></p>
+<p>Classes: <code>ExportZipFile</code></p>
+<p>Methods (2): <code>getFilename</code>, <code>getExportObject</code></p>
+<p>Fields (2): <code>filename</code>, <code>exportObject</code></p>
+<h2>Source Code (abridged)</h2>
+<pre>
+package org.projectforge.export;
+
+/**
+ * Represents an export object including the desired filename.
+ * 
+ * @author Kai Reinhard (k.reinhard@micromata.de)
+ * 
+ */
+public class ExportZipFile
+{
+  private final String filename;
+
+  private final Object exportObject;
+
+  public ExportZipFile(final String filename, final Object exportObject)
+  {
+    this.filename = filename;
+    this.exportObject = exportObject;
+  }
+
+  /**
+   * @return the filename
+   */
+  public String getFilename()
+  {
+    return filename;
+  }
+
+  /**
+   * @return the exportObject
+   */
+  public Object getExportObject()
+  {
+    return exportObject;
+  }
+}</pre>
+
+<h2>Git History</h2><div class="hist"><pre>868d6abb7 2025 -&gt; 2026
+63081666f Source file headers: 2024-&gt; 2025.
+b6092df09 Copyright 2023 -&gt; 2024
+ab45d51fa Copyright 2001-2022 -&gt; 2001-2023.
+5f7ef41b8 Copyright 2021 -&gt; 2022</pre></div>
 </body></html>

@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>#1135: UserXmlPreferencesMigrationDao.kt [DE]</title>
+<style>
+body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}
+h1{border-bottom:2px solid #333;padding-bottom:.3em}
+h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}
+h3{margin-top:2em;color:#444}
+a{color:#0366d6}
+.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}
+.nav{font-size:.9em;color:#888;margin-bottom:1em}
+.lang{font-size:.85em;color:#888;float:right}
+.lang a{color:#888;text-decoration:none;padding:0 .3em}
+.lang a.active{color:#0366d6;font-weight:600;text-decoration:underline}
+.meta{font-size:.9em;margin:1em 0;color:#555}
+code{background:#f0f0f0;padding:0 .2em;font-size:.93em}
+pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}
+table{border-collapse:collapse;width:100%;margin:1em 0}
+th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}
+th{background:#f5f5f5;font-weight:600}
+.hist{font-size:.85em;color:#555}
+</style>
+</head>
+<body>
+<div class="lang"><a href="1135.html">EN</a> · <a href="1135_de.html" class="active">DE</a> · <a href="1135_ru.html">RU</a> · <a href="1135_fr.html">FR</a> · <a href="1135_es.html">ES</a></div>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← Dateiindex</a> · <a href="2833.html">← Vorherige</a> · <a href="375.html">Nächste →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/kotlin/org/projectforge/business/user/UserXmlPreferencesMigrationDao.kt" target="_blank" title="Quellcode auf GitHub anzeigen">📄 Quelle</a></div>
+<h1>#1135: <code>UserXmlPreferencesMigrationDao.kt</code></h1>
+<div class="meta"><code>projectforge-business/src/main/kotlin/org/projectforge/business/user/UserXmlPreferencesMigrationDao.kt</code> Typ: Kotlin · Rolle: Datenzugriffsobjekt · Quelle: projectforge-business/src/main/kotlin/org/projectforge/business/user/UserXmlPreferencesMigrationDao.kt <span style="color:#888">149 Zeilen · 89 Code · 47 Kommentare · 13 leer</span></div>
+<div class="c">Datenzugriffsobjekt für UserXmlPreferencesMigration-Entitäten. Erweitert BaseDao, um CRUD-Operationen, Hibernate-Search-Abfragen und Datenzugriff auf Geschäftslogikebene bereitzustellen.</div>
+<h2>Codestruktur</h2>
+<p>Annotationen: <code>param</code>, <code>micromata</code>, <code>Service</code>, <code>author</code>, <code>Autowired</code></p>
+<p>Klassen: <code>UserXmlPreferencesMigrationDao</code></p>
+<p>Funktionen (5): <code>migrateAllUserPrefs</code>, <code>migrate</code>, <code>deleteOldKeys</code>, <code>migrateUserPrefs</code>, <code>migrate</code></p>
+<p>Eigenschaften (11): <code>accessChecker</code>, <code>userGroupCache</code>, <code>userXmlPreferencesDao</code>, <code>userXmlPreferencesCache</code>, <code>persistenceService</code>, <code>list</code>, <code>versionNumber</code>, <code>numberOfUpdatedEntries</code>, <code>userId</code>, <code>user</code>, <code>data</code></p>
+<p>Importe: 8 Pakete</p>
+<p>Paket: <code>org.projectforge.business.user</code></p>
+<h2>Quellcode (gekürzt)</h2>
+<pre>
+package org.projectforge.business.user
+
+import org.apache.commons.lang3.Validate
+import org.projectforge.business.user.UserXmlPreferencesDO.Companion.getCurrentVersion
+import org.projectforge.framework.access.AccessChecker
+import org.projectforge.framework.persistence.jpa.PfPersistenceService
+import org.slf4j.Logger
+import org.slf4j.LoggerFactory
+import org.springframework.beans.factory.annotation.Autowired
+import org.springframework.stereotype.Service
+
+/**
+ * Speichert alle persistenten Benutzerobjekte wie Filtereinstellungen, persönliche Einstellungen und persistiert sie in der Datenbank.
+ *
+ * @author Kai Reinhard (k.reinhard@micromata.de)
+ */
+@Service
+open class UserXmlPreferencesMigrationDao {
+    @Autowired
+    private lateinit var accessChecker: AccessChecker
+
+    @Autowired
+    private lateinit var userGroupCache: UserGroupCache
+
+    @Autowired
+    private lateinit var userXmlPreferencesDao: UserXmlPreferencesDao
+
+    @Autowired
+    private lateinit var userXmlPreferencesCache: UserXmlPreferencesCache
+
+    @Autowired
+    private lateinit var persistenceService: PfPersistenceService
+
+    open fun migrateAllUserPrefs(): String {
+        accessChecker.checkIsLoggedInUserMemberOfAdminGroup()
+        val buf = StringBuilder()
+        val list = persistenceService.executeQuery(
+            &quot;from ${UserXmlPreferencesDO::class.java.simpleName} t order by user.id, key&quot;,
+            UserXmlPreferencesDO::class.java,
+        )
+        var versionNumber = Int.MAX_VALUE
+        for (userPrefs in list) {
+            buf.append(migrateUserPrefs(userPrefs))
+            if (userPrefs.version &lt; versionNumber) {
+                versionNumber = userPrefs.version
+            }
+        }
+        migrate(versionNumber)
+        userXmlPreferencesCache.refresh()
+        return buf.toString()
+    }
+
+    /**
+     * Hier können Sie Update- oder Delete-Anweisungen für alle Benutzer-XML-Pref-Einträge einfügen (z. B. alle Einträge mit einem
+     * ungenutzten Schlüssel löschen).
+     *
+     * @param version Versionsnummer des ältesten Eintrags.
+     */
+    protected fun migrate(version: Int) {
+        if (version &lt; 4) {
+            // deleteOldKeys(&quot;org.projectforge.web.humanresources.HRViewForm:Filter&quot;);
+            // deleteOldKeys(&quot;org.projectforge.web.fibu.AuftragListAction:Filter&quot;);
+            // deleteOldKeys(&quot;OLD-VERSION-1.1&quot;);
+            // hibernateTemplate.flush();
+        }
+    }
+
+    /**
+     * Nicht unterstützte oder ungenutzte Schlüssel sollten gelöscht werden. Diese Methode löscht alle Einträge mit dem angegebenen Schlüssel.
+     *
+     * @param key Schlüssel der zu löschenden Einträge.
+     */
+    protected fun deleteOldKeys(key: String) {
+        val numberOfUpdatedEntries = persistenceService.runInTransaction { context -&gt;
+            context.executeUpdate(&quot;delete from ${UserXmlPreferencesDO::class.java.simpleName} where key = &#x27;$key&#x27;&quot;)
+        }
+        log.info(&quot;$numberOfUpdatedEntries &#x27;$key&#x27; Einträge gelöscht.&quot;)
+    }
+
+    protected fun migrateUserPrefs(userPrefs: UserXmlPreferencesDO): String {
+        val userId = userPrefs.user?.id ?: return &quot;&quot;
+        val buf = StringBuilder()
+        buf.append(&quot;Prüfe Benutzereinstellungen für Benutzer &#x27;&quot;)
+        val user = userGroupCache.getUser(userId)
+        if (user != null) {
+            buf.append(user.username)
+        } else {
+            buf.append(userId)
+        }
+        buf.append(&quot;&#x27;: &quot;).append(userPrefs.identifier).append(&quot; ... &quot;)
+        if (userPrefs.version &gt;= getCurrentVersion()) {
+            buf.append(&quot;Version &quot;).append(userPrefs.version).append(&quot; (aktuell)\n&quot;)
+            return buf.toString()
+        }
+        migrate(userPrefs)
+        val data = userXmlPreferencesDao.deserialize(userPrefs)
+        buf.append(&quot;Version &quot;)
+        buf.append(userPrefs.version)
+        if (data != null || &quot;&lt;null/&gt;&quot; == userPrefs.serializedValue) {
+            buf.append(&quot; OK &quot;)
+        } else {
+            buf.append(&quot; ***nicht wiederverwendbar*** &quot;)
+        }
+        buf.append(&quot;\n&quot;)
+        if (data == null) {
+            return buf.toString()
+        }
+        return buf.toString()
+    }
+
+    companion object {
+        private val log: Logger = LoggerFactory
+            .getLogger(UserXmlPreferencesMigrationDao::class.java)
+
+        /**
+         * Behebt inkompatible Versionen von Benutzereinstellungen vor der Deserialisierung.
+         *
+         * @param userPrefs
+         */
+// ... (gekürzt, insgesamt 127 Zeilen)</pre>
+
+<h2>Git-Verlauf</h2>
+<div class="hist"><pre>868d6abb7 2025 -> 2026
+63081666f Quellcode-Dateiköpfe: 2024 -> 2025.
+4d58829cc UserPrefCache und UserXmlPreferencesCache umgestaltet.
+85b4e1175 PfPersistenceService und PfPersistenceContext: query umbenannt in executeQuery.
+108ecf629 !!!!! Große Änderung der Transaktionsverwaltung: Verwendet PfPersistenceContext so weit wie möglich wieder (noch nicht abgeschlossen). Tests laufen noch nicht. read-only-Transaktionen in PfPersistenceService entfernt, Schreiboperationen von PfPersistenceService entfernt.</pre></div>
+</body>
+</html>

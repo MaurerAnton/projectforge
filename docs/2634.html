@@ -1,10 +1,288 @@
-<!DOCTYPE html>
-<html lang="en"><head><meta charset="utf-8"><title>File #2634: ValidationManager.jsx</title>
-<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333}a{color:#0366d6}.meta{background:#f0f0f0;border-radius:6px;padding:1em;margin:1em 0;font-size:.9em}.commentary{margin:.8em 0;background:#fff;padding:.5em 1em;border-radius:6px;border-left:4px solid #ddd;line-height:1.7}table{border-collapse:collapse;width:100%;margin:.8em 0;font-size:.9em}th,td{border:1px solid #ddd;padding:.4em .6em}th{background:#f0f0f0}code{background:#e8e8e8;border-radius:3px;padding:.1em .3em;font-size:.9em}.nav{font-size:.9em;color:#888;margin-bottom:1em}.history{background:#fffbe6;border-radius:6px;padding:1em;margin:1em 0;font-size:.9em;border-left:4px solid #ffc107}</style></head>
-<body><div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="2633.html">← Prev</a> · <a href="2635.html">Next →</a></div>
-<h1>File #2634: <code>ValidationManager.jsx</code></h1>
-<div class="meta"><p><strong>Path:</strong> <code>projectforge-webapp/src/components/design/input/ValidationManager.jsx</code> · <strong>Type:</strong> Other file</p><p><strong>Source:</strong> <a href="https://github.com/micromata/projectforge/blob/develop/projectforge-webapp/src/components/design/input/ValidationManager.jsx">GitHub</a></p></div>
-<div class="history"><table><tr><th>Commit</th><th>Message</th></tr><tr><td><code>9ebb88522</code></td><td>2016-07-18 Initial commit</td></tr></table></div>
-<div class="commentary"><p>Part of the ProjectForge Wicket web application. Located at <code>projectforge-webapp/src/components/design/input/ValidationManager.jsx</code>. Project resource file.</p></div>
-<div class="nav" style="margin-top:2em"><a href="2633.html">← #2633</a> · <a href="2635.html">#2635 →</a></div>
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>2634: EditableMultiValueLabel.jsx</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:1.5em;color:#444;font-size:1em}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.lang{font-size:.85em;color:#888;float:right}.lang a{color:#888;text-decoration:none;padding:0 .3em}.lang a.active{color:#0366d6;font-weight:600;text-decoration:underline}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}pre.diff{background:#fff;font-size:.82em;max-height:300px;overflow-y:auto}</style></head>
+<body><div class="lang"><a href="2634.html" class="active">EN</a> · <a href="2634_de.html">DE</a> · <a href="2634_ru.html">RU</a> · <a href="2634_fr.html">FR</a> · <a href="2634_es.html">ES</a></div>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="3107.html">← Prev</a> · <a href="235.html">Next →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-webapp/src/components/design/EditableMultiValueLabel.jsx" target="_blank" title="View source on GitHub">📄 source</a></div>
+<h1>#2634: <code>EditableMultiValueLabel.jsx</code></h1>
+<div class="meta"><code>projectforge-webapp/src/components/design/EditableMultiValueLabel.jsx</code> React component, <code>projectforge-webapp/src/components/design/EditableMultiValueLabel.jsx</code> <span style="color:#888">179 lines · 155 code · 8 comments · 16 blank</span></div>
+<div class="c"><strong>Purpose:</strong> React webapp: EditableMultiValueLabel.jsx. EditableMultiValueLabel.jsx is part of the ProjectForge open-source project management application.</div>
+<h2>Source (first 100 lines)</h2>
+<pre>/* eslint-disable no-alert */
+import PropTypes from 'prop-types';
+import React from 'react';
+import { components } from 'react-select';
+import { Button } from '.';
+import { CalendarContext } from '../../containers/page/calendar/CalendarContext';
+import CalendarStyler from '../../containers/panel/calendar/CalendarStyler';
+import { useClickOutsideHandler } from '../../utilities/hooks';
+import { getServiceURL, handleHTTPErrors } from '../../utilities/rest';
+import Popper from './popper';
+
+function EditableMultiValueLabel({
+    data,
+    selectProps,
+    ...props
+}) {
+    const initialValue = selectProps.values[data.id] || '';
+
+    const { saveUpdateResponseInState } = React.useContext(CalendarContext);
+
+    const [isOpen, setIsOpen] = React.useState(data.isNew);
+
+    const popperRef = React.useRef(null);
+
+    // Close Popper when clicking outside
+    useClickOutsideHandler(popperRef, setIsOpen, isOpen);
+
+    let popperContent;
+    let { label } = data;
+    const { translations } = data;
+
+    // disable eslint because variable is provided by react-select and can't be changed.
+    /* eslint-disable-next-line no-underscore-dangle */
+    if (!data.__isNew__) {
+        label = `${label}${(initialValue &amp;&amp; typeof initialValue === 'string') ? `: ${initialValue}` : ''}`;
+    }
+
+    // Function to set value in react-select
+    const submitValue = () =&gt; {
+        if (data.filterType === 'COLOR_PICKER' &amp;&amp; data.id &amp;&amp; data.bgColor) {
+            fetch(getServiceURL('calendar/changeStyle', {
+                calendarId: data.id,
+                bgColor: data.bgColor,
+            }), {
+                method: 'GET',
+                credentials: 'include',
+            })
+                .then(handleHTTPErrors)
+                .then((response) =&gt; response.json())
+                .then(saveUpdateResponseInState)
+                .catch((error) =&gt; alert(`Internal error: ${error}`));
+        }
+
+        setIsOpen(false);
+        selectProps.setMultiValue(data.id, initialValue);
+    };
+
+    const cancelValue = () =&gt; {
+        setIsOpen(false);
+    };
+
+    // Handle Different Types of Filters
+    switch (data.filterType) {
+        case 'COLOR_PICKER':
+            popperContent = (
+                &lt;CalendarStyler calendar={data} submit={submitValue} translations={translations} /&gt;
+            );
+            break;
+        // Case for plain searchString without filterType
+        case undefined:
+            return (
+                &lt;components.MultiValueLabel data={data} selectProps={selectProps} {...props} /&gt;
+            );
+        // Fallback for not implemented filterType
+        default:
+            popperContent = `${data.filterType} is not implemented yet.`;
+    }
+
+    const selectHandler = {
+        onClick: (event) =&gt; event.stopPropagation(),
+        onMouseDown: (event) =&gt; event.stopPropagation(),
+        onKeyDown: (event) =&gt; {
+            event.stopPropagation();
+
+            switch (event.key) {
+                case 'Escape':
+                    setIsOpen(false);
+                    break;
+                case 'Enter':
+                    submitValue();
+                    break;
+                default:
+            }
+        },
+    };
+
+    const backgroundColor = data?.style?.bgColor || '#eee';
+    return (
+        &lt;Popper
+            direction="right"</pre>
+<h2>Git History</h2>
+<div class="hist">
+<pre>958c2f0ff jsx: eslint warnings fixed.
+00e4a77ac Calendar: colors of timesheets, stats and vacations are now customizable.
+47f59c586 New calendar: Layout of colors
+2bde479b1 uneffective event.nativeEvent.stopPropagations removed.
+402c65acd fix editable multi value label onClick event</pre>
+<h3>958c2f0ff</h3><div class="c"><strong>jsx: eslint warnings fixed.</strong><pre class="diff">958c2f0ffdbafd65326fe7baa539a54fb8f2f4fb
+diff --git a/projectforge-webapp/src/components/design/EditableMultiValueLabel.jsx b/projectforge-webapp/src/components/design/EditableMultiValueLabel.jsx
+index 1458fe6f6..65b6e2a4c 100644
+--- a/projectforge-webapp/src/components/design/EditableMultiValueLabel.jsx
++++ b/projectforge-webapp/src/components/design/EditableMultiValueLabel.jsx
+@@ -1,6 +1,4 @@
+ /* eslint-disable no-alert */
+-import { faCheck } from '@fortawesome/free-solid-svg-icons';
+-import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+ import PropTypes from 'prop-types';
+ import React from 'react';
+ import { components } from 'react-select';</pre></div><h3>00e4a77ac</h3><div class="c"><strong>Calendar: colors of timesheets, stats and vacations are now customizable.</strong><pre class="diff">00e4a77ac762dc9ca9291adfc8894697c6dbd133
+diff --git a/projectforge-webapp/src/components/design/EditableMultiValueLabel.jsx b/projectforge-webapp/src/components/design/EditableMultiValueLabel.jsx
+index 4b30c6051..1458fe6f6 100644
+--- a/projectforge-webapp/src/components/design/EditableMultiValueLabel.jsx
++++ b/projectforge-webapp/src/components/design/EditableMultiValueLabel.jsx
+@@ -57,6 +57,10 @@ function EditableMultiValueLabel({
+         selectProps.setMultiValue(data.id, initialValue);
+     };
+ 
++    const cancelValue = () =&gt; {
++        setIsOpen(false);
++    };
++
+     // Handle Different Types of Filters
+     switch (data.filterType) {
+         case 'COLOR_PICKER':
+@@ -140,9 +144,15 @@ function EditableMultiValueLabel({
+                 }}
+             &gt;
+                 {popperContent}
+-                &lt;Button color="success" block onClick={submitValue}&gt;
+-                    &lt;FontAwesomeIcon icon={faCheck} /&gt;
+-                &lt;/Button&gt;
++                &lt;div style={{ float: 'right' }}&gt;
++                    &lt;Button color="danger" outline onClick={cancelValue}&gt;
++                        {translations.cancel}
++                    &lt;/Button&gt;
++                    {' '}
++                    &lt;Button color="primary" outline onClick={submitValue}&gt;
++                        {translations.save}
++                    &lt;/Button&gt;
++                &lt;/div&gt;
+             &lt;/div&gt;
+         &lt;/Popper&gt;
+     );
+@@ -157,7 +167,10 @@ EditableMultiValueLabel.propTypes = {
+         style: PropTypes.shape(),
+         isNew: PropTypes.bool,
+         __isNew__: PropTypes.bool,
+-        translations: PropTypes.shape({}),
++        translations: PropTypes.shape({
++            cancel: PropTypes.string.isRequired,
++            save: PropTypes.string.isRequired,
++        }),
+     }).isRequired,
+     selectProps: PropTypes.shape({
+         setMultiValue: PropTypes.func,</pre></div><h3>47f59c586</h3><div class="c"><strong>New calendar: Layout of colors</strong><pre class="diff">47f59c5866974b0b328ea08331816f7ef4fda4f9
+diff --git a/projectforge-webapp/src/components/design/EditableMultiValueLabel.jsx b/projectforge-webapp/src/components/design/EditableMultiValueLabel.jsx
+index 05148da3f..4b30c6051 100644
+--- a/projectforge-webapp/src/components/design/EditableMultiValueLabel.jsx
++++ b/projectforge-webapp/src/components/design/EditableMultiValueLabel.jsx
+@@ -29,6 +29,7 @@ function EditableMultiValueLabel({
+ 
+     let popperContent;
+     let { label } = data;
++    const { translations } = data;
+ 
+     // disable eslint because variable is provided by react-select and can't be changed.
+     /* eslint-disable-next-line no-underscore-dangle */
+@@ -60,7 +61,7 @@ function EditableMultiValueLabel({
+     switch (data.filterType) {
+         case 'COLOR_PICKER':
+             popperContent = (
+-                &lt;CalendarStyler calendar={data} submit={submitValue} /&gt;
++                &lt;CalendarStyler calendar={data} submit={submitValue} translations={translations} /&gt;
+             );
+             break;
+         // Case for plain searchString without filterType
+@@ -91,6 +92,7 @@ function EditableMultiValueLabel({
+         },
+     };
+ 
++    const backgroundColor = data?.style?.bgColor || '#eee';
+     return (
+         &lt;Popper
+             direction="right"
+@@ -108,7 +110,24 @@ function EditableMultiValueLabel({
+                         selectProps={selectProps}
+                         {...props}
+                     &gt;
+-                        {label}
++                        &lt;div style={{ display: 'flex' }}&gt;
++                            &lt;span
++                                className="dot"
++                                style={{
++                                    backgroundColor,
++                                    borderRadius: 10,
++                                    borderStyle: 'solid',
++                                    borderWidth: '1px',
++                                    borderColor: '#777',
++                                    content: '" "',
++                                    display: 'block',
++                                    marginRight: 8,
++                                    height: 15,
++                                    width: 15,
++                                }}
++                            /&gt;
++                            {label}
++                        &lt;/div&gt;
+                     &lt;/components.MultiValueLabel&gt;
+                 &lt;/div&gt;
+             )}
+@@ -135,8 +154,10 @@ EditableMultiValueLabel.propTypes = {
+         filterType: PropTypes.string,
+         label: PropTypes.string,
+         bgColor: PropTypes.string,</pre></div><h3>2bde479b1</h3><div class="c"><strong>uneffective event.nativeEvent.stopPropagations removed.</strong><pre class="diff">2bde479b161dab138b5176edbdb85f61bcca2652
+diff --git a/projectforge-webapp/src/components/design/EditableMultiValueLabel.jsx b/projectforge-webapp/src/components/design/EditableMultiValueLabel.jsx
+index dc6e306bc..05148da3f 100644
+--- a/projectforge-webapp/src/components/design/EditableMultiValueLabel.jsx
++++ b/projectforge-webapp/src/components/design/EditableMultiValueLabel.jsx
+@@ -98,10 +98,7 @@ function EditableMultiValueLabel({
+             {...selectHandler}
+             target={(
+                 &lt;div
+-                    onClick={(event) =&gt; {
+-                        setIsOpen(!isOpen);
+-                        event.nativeEvent.stopPropagation();
+-                    }}
++                    onClick={() =&gt; setIsOpen(!isOpen)}
+                     role="button"
+                     tabIndex={-1}
+                     onKeyPress={() =&gt; undefined}</pre></div><h3>402c65acd</h3><div class="c"><strong>fix editable multi value label onClick event</strong><pre class="diff">402c65acdf55cf28a703d3846831dcc0e6006f0d
+diff --git a/projectforge-webapp/src/components/design/EditableMultiValueLabel.jsx b/projectforge-webapp/src/components/design/EditableMultiValueLabel.jsx
+index c64240019..dc6e306bc 100644
+--- a/projectforge-webapp/src/components/design/EditableMultiValueLabel.jsx
++++ b/projectforge-webapp/src/components/design/EditableMultiValueLabel.jsx
+@@ -11,7 +11,11 @@ import { useClickOutsideHandler } from '../../utilities/hooks';
+ import { getServiceURL, handleHTTPErrors } from '../../utilities/rest';
+ import Popper from './popper';
+ 
+-function EditableMultiValueLabel({ data, selectProps, ...props }) {
++function EditableMultiValueLabel({
++    data,
++    selectProps,
++    ...props
++}) {
+     const initialValue = selectProps.values[data.id] || '';
+ 
+     const { saveUpdateResponseInState } = React.useContext(CalendarContext);
+@@ -94,7 +98,10 @@ function EditableMultiValueLabel({ data, selectProps, ...props }) {
+             {...selectHandler}
+             target={(
+                 &lt;div
+-                    onClick={() =&gt; setIsOpen(!isOpen)}
++                    onClick={(event) =&gt; {
++                        setIsOpen(!isOpen);
++                        event.nativeEvent.stopPropagation();
++                    }}
+                     role="button"
+                     tabIndex={-1}
+                     onKeyPress={() =&gt; undefined}
+@@ -136,7 +143,7 @@ EditableMultiValueLabel.propTypes = {
+     }).isRequired,
+     selectProps: PropTypes.shape({
+         setMultiValue: PropTypes.func,
+-        values: PropTypes.shape({ }),
++        values: PropTypes.shape({}),
+     }).isRequired,
+ };
+ </pre></div>
+</div>
 </body></html>

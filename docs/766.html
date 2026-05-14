@@ -1,5 +1,183 @@
-<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>#766</title><style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333}a{color:#0366d6}.nav{font-size:.9em;color:#888;margin-bottom:1em}.meta{font-size:.9em;margin:1em 0}.c{border-left:3px solid #ddd;padding:1em;margin:1em 0;background:#fff}code{background:#f0f0f0;padding:0 .2em}</style></head>
-<body><div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="765.html">← Prev</a> · <a href="767.html">Next →</a></div>
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>766: DateConverter.java</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:1.5em;color:#444;font-size:1em}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.lang{font-size:.85em;color:#888;float:right}.lang a{color:#888;text-decoration:none;padding:0 .3em}.lang a.active{color:#0366d6;font-weight:600;text-decoration:underline}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}pre.diff{background:#fff;font-size:.82em;max-height:300px;overflow-y:auto}</style></head>
+<body><div class="lang"><a href="766.html" class="active">EN</a> · <a href="766_de.html">DE</a> · <a href="766_ru.html">RU</a> · <a href="766_fr.html">FR</a> · <a href="766_es.html">ES</a></div>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="3141.html">← Prev</a> · <a href="325.html">Next →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/java/org/projectforge/framework/xmlstream/converter/DateConverter.java" target="_blank" title="View source on GitHub">📄 source</a></div>
 <h1>#766: <code>DateConverter.java</code></h1>
-<div class="meta"><strong>Converter:</strong> java.util.Date ↔ String (ISO 8601). Использует <a href="758.html">XmlObjectWriter</a>'s формат даты с timezone из <a href="751.html">ProjectForgeRootElement</a>. При парсинге пробует несколько форматов: ISO 8601, немецкий, американский.</div>
+<div class="meta"><code>projectforge-business/src/main/java/org/projectforge/framework/xmlstream/converter/DateConverter.java</code> Java class, <code>projectforge-business/src/main/java/org/projectforge/framework/xmlstream/converter/DateConverter.java</code> <span style="color:#888">121 lines · 76 code · 31 comments · 14 blank</span></div>
+<div class="c"><strong>Purpose:</strong> Source file: framework/xmlstream/converter/DateConverter.java. DateConverter.java is part of the ProjectForge open-source project management application.</div>
+<h2>Source (first 100 lines)</h2>
+<pre>/////////////////////////////////////////////////////////////////////////////
+//
+// Project ProjectForge Community Edition
+//         www.projectforge.org
+//
+// Copyright (C) 2001-2026 Micromata GmbH, Germany (www.micromata.com)
+//
+// ProjectForge is dual-licensed.
+//
+// This community edition is free software; you can redistribute it and/or
+// modify it under the terms of the GNU General Public License as published
+// by the Free Software Foundation; version 3 of the License.
+//
+// This community edition is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General
+// Public License for more details.
+//
+// You should have received a copy of the GNU General Public License along
+// with this program; if not, see http://www.gnu.org/licenses/.
+//
+/////////////////////////////////////////////////////////////////////////////
+
+package org.projectforge.framework.xmlstream.converter;
+
+import org.apache.commons.lang3.StringUtils;
+import org.projectforge.framework.persistence.user.api.ThreadLocalUserContext;
+import org.projectforge.framework.xmlstream.XmlConstants;
+
+import java.text.DateFormat;
+import java.text.ParseException;
+import java.text.SimpleDateFormat;
+import java.util.Date;
+import java.util.TimeZone;
+
+public class DateConverter extends AbstractValueConverter&lt;Date&gt;
+{
+  private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(DateConverter.class);
+
+  protected static final String FORMAT_ISO_DATE = "yyyy-MM-dd";
+
+  protected static final String FORMAT_ISO_TIMESTAMP_MINUTES = "yyyy-MM-dd HH:mm";
+
+  protected static final String FORMAT_ISO_TIMESTAMP_SECONDS = "yyyy-MM-dd HH:mm:ss";
+
+  protected static final String FORMAT_ISO_TIMESTAMP_MILLIS = "yyyy-MM-dd HH:mm:ss.S";
+
+  private TimeZone timeZone;
+
+  public DateConverter()
+  {
+  }
+
+  /**
+   * Use the given time zone instead of the time zone of the logged in user (or, if not given the default time zone of the system).
+   * @param timeZone
+   */
+  public DateConverter(final TimeZone timeZone)
+  {
+    this.timeZone = timeZone;
+  }
+
+  @Override
+  public String toString(Object obj)
+  {
+    if (obj == null) {
+      return null;
+    }
+    return String.valueOf(((Date) obj).getTime());
+  }
+
+  @Override
+  public Date fromString(String str)
+  {
+    if (StringUtils.isEmpty(str) || XmlConstants.NULL_IDENTIFIER.equals(str)) {
+      return null;
+    }
+    String format = null;
+    if (str.indexOf('-') &gt; 0) {
+      final int length = str.length();
+      if (length == FORMAT_ISO_DATE.length()) {
+        format = FORMAT_ISO_DATE;
+      } else if (length == FORMAT_ISO_TIMESTAMP_MINUTES.length()) {
+        format = FORMAT_ISO_TIMESTAMP_MINUTES;
+      } else if (length == FORMAT_ISO_TIMESTAMP_SECONDS.length()) {
+        format = FORMAT_ISO_TIMESTAMP_SECONDS;
+      } else if (length == FORMAT_ISO_TIMESTAMP_MILLIS.length()) {
+        format = FORMAT_ISO_TIMESTAMP_MILLIS;
+      }
+    }
+    if (format != null) {
+      final DateFormat dateFormat = new SimpleDateFormat(format);
+      dateFormat.setTimeZone(getTimeZone());
+      try {
+        return dateFormat.parse(str);
+      } catch (ParseException ex) {
+        log.warn("Can't parse date string '" + str + "'.");
+        return null;
+      }
+    }</pre>
+<h2>Git History</h2>
+<div class="hist">
+<pre>868d6abb7 2025 -> 2026
+2b601ac08 Deprecated code fixed.
+63081666f Source file headers: 2024-> 2025.
+67805f2fc ThreadLocalUserContext.user -> ThreadLocalUserContext.loggedInUser (renamed for avoiding mis-understandings in code).
+b6092df09 Copyright 2023 -> 2024</pre>
+<h3>868d6abb7</h3><div class="c"><strong>2025 -> 2026</strong><pre class="diff">868d6abb75cd191a892911ac8e45058932cf9074
+diff --git a/projectforge-business/src/main/java/org/projectforge/framework/xmlstream/converter/DateConverter.java b/projectforge-business/src/main/java/org/projectforge/framework/xmlstream/converter/DateConverter.java
+index e9fa9f1fe..e42287d44 100644
+--- a/projectforge-business/src/main/java/org/projectforge/framework/xmlstream/converter/DateConverter.java
++++ b/projectforge-business/src/main/java/org/projectforge/framework/xmlstream/converter/DateConverter.java
+@@ -3,7 +3,7 @@
+ // Project ProjectForge Community Edition
+ //         www.projectforge.org
+ //
+-// Copyright (C) 2001-2025 Micromata GmbH, Germany (www.micromata.com)
++// Copyright (C) 2001-2026 Micromata GmbH, Germany (www.micromata.com)
+ //
+ // ProjectForge is dual-licensed.
+ //</pre></div><h3>2b601ac08</h3><div class="c"><strong>Deprecated code fixed.</strong><pre class="diff">2b601ac08b7728d78801afd3f4ec52d6c9a0938f
+diff --git a/projectforge-business/src/main/java/org/projectforge/framework/xmlstream/converter/DateConverter.java b/projectforge-business/src/main/java/org/projectforge/framework/xmlstream/converter/DateConverter.java
+index aa59bdf93..e9fa9f1fe 100644
+--- a/projectforge-business/src/main/java/org/projectforge/framework/xmlstream/converter/DateConverter.java
++++ b/projectforge-business/src/main/java/org/projectforge/framework/xmlstream/converter/DateConverter.java
+@@ -99,7 +99,7 @@ public class DateConverter extends AbstractValueConverter&lt;Date&gt;
+       }
+     }
+     try {
+-      final long timeInMillis = new Long(str);
++      final long timeInMillis = Long.valueOf(str);
+       return new Date(timeInMillis);
+     } catch (final NumberFormatException ex) {
+       log.warn("Can't convert value '" + str + "' to time in millis (long value).");</pre></div><h3>63081666f</h3><div class="c"><strong>Source file headers: 2024-> 2025.</strong><pre class="diff">63081666f620fb87315f01b817e560e0b2f6a33a
+diff --git a/projectforge-business/src/main/java/org/projectforge/framework/xmlstream/converter/DateConverter.java b/projectforge-business/src/main/java/org/projectforge/framework/xmlstream/converter/DateConverter.java
+index 1e59e7024..aa59bdf93 100644
+--- a/projectforge-business/src/main/java/org/projectforge/framework/xmlstream/converter/DateConverter.java
++++ b/projectforge-business/src/main/java/org/projectforge/framework/xmlstream/converter/DateConverter.java
+@@ -3,7 +3,7 @@
+ // Project ProjectForge Community Edition
+ //         www.projectforge.org
+ //
+-// Copyright (C) 2001-2024 Micromata GmbH, Germany (www.micromata.com)
++// Copyright (C) 2001-2025 Micromata GmbH, Germany (www.micromata.com)
+ //
+ // ProjectForge is dual-licensed.
+ //</pre></div><h3>67805f2fc</h3><div class="c"><strong>ThreadLocalUserContext.user -> ThreadLocalUserContext.loggedInUser (renamed for avoiding mis-understandings in code).</strong><pre class="diff">67805f2fc1f3e6a6393accb4a757a8f4049b001c
+diff --git a/projectforge-business/src/main/java/org/projectforge/framework/xmlstream/converter/DateConverter.java b/projectforge-business/src/main/java/org/projectforge/framework/xmlstream/converter/DateConverter.java
+index 6fb63c2a5..1e59e7024 100644
+--- a/projectforge-business/src/main/java/org/projectforge/framework/xmlstream/converter/DateConverter.java
++++ b/projectforge-business/src/main/java/org/projectforge/framework/xmlstream/converter/DateConverter.java
+@@ -109,7 +109,7 @@ public class DateConverter extends AbstractValueConverter&lt;Date&gt;
+ 
+   /**
+    * The time zone of this object (if given) or the time zone of the user if found in the ThreadLocalUserContext, otherwise {@link TimeZone#getDefault()}.
+-   * @see ThreadLocalUserContext#getUser()
++   * @see ThreadLocalUserContext#getLoggedInUser()
+    * @see ThreadLocalUserContext#getTimeZone()
+    */
+   protected TimeZone getTimeZone() {</pre></div><h3>b6092df09</h3><div class="c"><strong>Copyright 2023 -> 2024</strong><pre class="diff">b6092df0927c4a3b161e888445f31dcab57493f2
+diff --git a/projectforge-business/src/main/java/org/projectforge/framework/xmlstream/converter/DateConverter.java b/projectforge-business/src/main/java/org/projectforge/framework/xmlstream/converter/DateConverter.java
+index a0ff0e244..6fb63c2a5 100644
+--- a/projectforge-business/src/main/java/org/projectforge/framework/xmlstream/converter/DateConverter.java
++++ b/projectforge-business/src/main/java/org/projectforge/framework/xmlstream/converter/DateConverter.java
+@@ -3,7 +3,7 @@
+ // Project ProjectForge Community Edition
+ //         www.projectforge.org
+ //
+-// Copyright (C) 2001-2023 Micromata GmbH, Germany (www.micromata.com)
++// Copyright (C) 2001-2024 Micromata GmbH, Germany (www.micromata.com)
+ //
+ // ProjectForge is dual-licensed.
+ //</pre></div>
+</div>
 </body></html>

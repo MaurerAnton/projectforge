@@ -1,0 +1,95 @@
+Here's the HTML translated to Spanish, with `lang="es"`, the title updated with `[ES]`, and all tags preserved:
+
+```html
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>#890: AuftragAndRechnungDaoHelper.kt [ES]</title>
+<style>
+body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}
+h1{border-bottom:2px solid #333;padding-bottom:.3em}
+h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}
+h3{margin-top:2em;color:#444}
+a{color:#0366d6}
+.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}
+.nav{font-size:.9em;color:#888;margin-bottom:1em}
+.meta{font-size:.9em;margin:1em 0;color:#555}
+code{background:#f0f0f0;padding:0 .2em;font-size:.93em}
+pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}
+table{border-collapse:collapse;width:100%;margin:1em 0}
+th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}
+th{background:#f5f5f5;font-weight:600}
+.hist{font-size:.85em;color:#555}
+</style>
+</head>
+<body>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Índice</a> · <a href="file-index.html">← Índice de archivos</a> · <a href="889.html">← Anterior</a> · <a href="891.html">Siguiente →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/kotlin/org/projectforge/business/fibu/AuftragAndRechnungDaoHelper.kt" target="_blank" title="Ver fuente en GitHub">📄 fuente</a></div>
+
+<h1>#890: <code>AuftragAndRechnungDaoHelper.kt</code></h1>
+
+<div class="meta"><code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/AuftragAndRechnungDaoHelper.kt</code> 
+<p><strong>Tipo:</strong> Objeto de utilidad (objeto <code>object</code> de Kotlin)</p>
+<p><strong>Paquete:</strong> <code>org.projectforge.business.fibu</code></p>
+<p><strong>Ruta completa:</strong> <code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/AuftragAndRechnungDaoHelper.kt</code></p>
+ <span style="color:#888">129 líneas · 98 código · 23 comentarios · 8 en blanco</span></div>
+
+<div class="c">
+<p>Objeto de utilidad compartido que proporciona constructores de criterios de filtro de base de datos y lógica de validación utilizados tanto por <code>AuftragDao</code> (pedidos) como por <code>RechnungDao</code> (facturas). Centraliza patrones comunes como el filtrado por período de ejecución, la construcción de consultas con rangos de fechas y la validación al guardar facturas (cálculo de vencimiento, consistencia entre fecha de pago y monto).</p>
+</div>
+
+<h2>Métodos públicos</h2>
+
+<h3><code>createCriterionForPeriodOfPerformance(myFilter)</code></h3>
+<p><strong>Retorna:</strong> <code>Optional&lt;DBPredicate&gt;</code></p>
+<p>Construye un predicado para filtrar por superposición de períodos de ejecución. Utiliza los campos <code>periodOfPerformanceStartDate</code> y <code>periodOfPerformanceEndDate</code> del filtro. La lógica verifica rangos de fechas superpuestos:</p>
+<ul>
+<li>Ambas fechas presentes → <code>popEnd >= startDate AND popBegin <= endDate</code></li>
+<li>Solo fecha de inicio → <code>popEnd >= startDate</code></li>
+<li>Solo fecha de fin → <code>popBegin <= endDate</code></li>
+<li>Ninguna → vacío</li>
+</ul>
+
+<h3><code>createQueryFilterWithDateRestriction(myFilter)</code></h3>
+<p><strong>Retorna:</strong> <code>QueryFilter</code></p>
+<p>Crea un <code>QueryFilter</code> a partir de un <code>RechnungFilter</code>, añadiendo restricciones de rango de fechas sobre el campo <code>"datum"</code> (fecha de factura). Soporta fecha desde, fecha hasta, o ambos rangos usando los operadores <code>between</code>, <code>ge</code> y <code>le</code>.</p>
+
+<h3><code>onSaveOrModify(rechnung)</code></h3>
+<p><strong>Parámetro:</strong> <code>AbstractRechnungDO</code></p>
+<p>Método de validación principal llamado antes de persistir cualquier factura. Delega en tres ayudantes privados:</p>
+<ul>
+<li><code>checkAndCalculateFaelligkeit()</code> — Calcula automáticamente <code>faelligkeit</code> (fecha de vencimiento) a partir de <code>rechnungsDatum + zahlungsZielInTagen</code>, pero solo si la fecha de vencimiento es nula y el plazo de pago está definido</li>
+<li><code>checkAndCalculateDiscountMaturity()</code> — Calcula automáticamente <code>discountMaturity</code> a partir de <code>rechnungsDatum + discountZahlungsZielInTagen</code>, solo cuando el porcentaje de descuento no es nulo/cero y el vencimiento del descuento es nulo</li>
+<li><code>validateBezahlDatumAndZahlBetrag()</code> — Asegura consistencia mutua: si <code>bezahlDatum</code> está definido, <code>zahlBetrag</code> debe estar definido (y no ser cero), y viceversa. Lanza <code>UserException</code> con claves i18n específicas en caso de violaciones</li>
+</ul>
+
+<h2>Notas de diseño</h2>
+<ul>
+<li>Todos los métodos son <code>@JvmStatic</code> para interoperabilidad fluida con Java</li>
+<li>Utiliza la interfaz <code>SearchFilterWithPeriodOfPerformance</code> para manejo polimórfico de filtros</li>
+<li>Las fechas de vencimiento se calculan usando <code>PFDateTime</code> (para fecha de vencimiento) y <code>PFDay</code> (para vencimiento de descuento)</li>
+<li>El vencimiento del descuento solo se calcula cuando <code>discountPercent</code> no es cero; si es cero, no se establece ningún vencimiento de descuento</li>
+</ul>
+
+<h2>Historial de Git</h2>
+<div class="hist"><pre>868d6abb7 2025 -> 2026
+f4540acfa WIP: Importación de facturas de acreedores
+63081666f Encabezados de archivos fuente: 2024 -> 2025.
+cec9dd314 Facturas: discountMaturity corregido
+b6092df09 Copyright 2023 -> 2024
+ab45d51fa Copyright 2001-2022 -> 2001-2023.
+5f7ef41b8 Copyright 2021 -> 2022
+a7fceb731 Algunas advertencias del compilador corregidas.
+db3b02da7 UserException movido del paquete business al common
+ceb63e8a1 Encabezado de código fuente: (C) 2001-2021.
+a0232cdba Advertencias de código.
+b209e00ba PFDay.from -> from, fromOrNow, fromOrNull, PFDateTime.from -> from, fromOrNow, fromOrNull
+611b20d4e WIP: java.sql.Date -> LocalDate.
+7c1c48782 Reemplazando más instancias de java.sql.Date con java.time.LocalDate
+78b436d9e Reemplazar instancias de java.util.date y java.sql.Date con java.time.LocalDate
+7c79f1922 Copyright del encabezado fuente -> 2020.
+a1c287b49 La semana del año ahora es globalmente la misma (independiente de la configuración regional del usuario)
+61b23c3fd Métodos de DateHelper eliminados (reemplazados por PFDay/PFDateTime).</pre></div>
+</body>
+</html>

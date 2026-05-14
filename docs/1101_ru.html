@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>#1101 [RU]</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:2em;color:#444}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}</style>
+</head>
+<body>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Индекс</a> · <a href="file-index.html">← Индекс файлов</a> · <a href="1100.html">← Назад</a> · <a href="1102.html">Вперёд →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/kotlin/org/projectforge/business/timesheet/TimesheetDao.kt" target="_blank" title="Просмотреть исходный код на GitHub">📄 исходник</a></div>
+<h1>#1101: <code>TimesheetDao.kt</code></h1>
+<div class="meta"><code>projectforge-business/src/main/kotlin/org/projectforge/business/timesheet/TimesheetDao.kt</code> DAO / Управление табелями, projectforge-business/src/main/kotlin/org/projectforge/business/timesheet/TimesheetDao.kt <span style="color:#888">784 строки · 596 кода · 143 комментария · 45 пустых</span></div>
+<div class="c">Основной DAO для управления табелями, расширяющий BaseDao. Реализует комплексный контроль доступа: собственные табели vs чужие табели (финансовая группа имеет полный доступ), руководители проектов/HR/контроллинг могут просматривать, но со скрытым описанием/местоположением (<code>HIDDEN_FIELD_MARKER</code>). <code>checkTimesheetProtection()</code> проверяет ограничение protectTimesheetsUntil на родительских задачах (предотвращает бронирование до даты заморозки). <code>checkTaskBookable()</code> обеспечивает соблюдение 4 правил: задача/предки не закрыты/не удалены, нет статуса TREE_CLOSED, нет ONLY_LEAFS на родительских задачах с дочерними, нет позиций заказа в дочерних задачах. <code>onInsertOrModify()</code> проверяет: миллисекунды/секунды должны быть 0, минуты кратны 5, минимальная длительность 60 с, максимум 14 ч, обнаружение пересечений по времени (через <code>hasTimeOverlap()</code> в транзакции), проверка kost2 (должен быть в списке kost2 задачи). <code>validateTimeSavingsByAI()</code> гарантирует, что единица измерения установлена при указании экономии, процент ограничен 99%. <code>prepareHibernateSearch()</code> повторно инициализирует ленивые ссылки на пользователя/задачу для индексации. Поддерживает настраиваемые теги, автозаполнение местоположения, автозаполнение ссылок и запросы по диапазону лет.</div>
+<h2>История Git</h2>
+<div class="hist"><pre>868d6abb7 2025 -> 2026
+bb1e156b1 Claude Code: DynamicButton отключён во время isFetching, TimesheetDao предотвращает коллизии табелей при множественных событиях кнопки.
+3c439391c Timesheet: исправлено отображение последних записей (kost2, проект и заказчик). Timesheet: ai unit предустанавливается из последней записи. Timesheet-Excel-Export: добавлена AI-экономия.
+6a32032d6 Hibernate.isInitialized(obj) -> HibernateUtils.isFullyInitialized(obj). Некоторые ленивые объекты, например, колонок ManyToOne, загружены не полностью, но Hibernate.isInitialized() возвращает true.
+9fc09ddd4 Исправление ошибки: автозаполнение для местоположений в табелях снова работает.
+1449f4859 WIP: экономия времени с помощью AI в табелях, добавлен конфигурационный параметр для заметки.
+cbffabd60 WIP: экономия времени с помощью AI
+63081666f Заголовки исходных файлов: 2024 -> 2025.
+53b501ab6 Исправлены примеры скриптов. TimesheetDO.getDuration() -> TimesheetDO.duration.
+5989b32fd BaseDao: рефакторинг механизма onChangeListener.
+1b50060c3 BaseDao: переименовано: get -> find, save -> insert, getList -> select, load -> select
+87aaf6a5a Миграция в процессе... BaseDao рефакторизован (ещё не завершено), переименованы внутренние методы*.
+3aeda5ef5 Большое изменение: все save|update|...InTrans переименованы (InTrans удалён). PfPesistenceContext как параметр больше не нужен (используется ThreadLocal). (все тесты всех пакетов: OK).
+e66d5f5f7 Миграция в процессе... TaskTree -> Kotlin и теперь работает в изолированном менеджере сущностей
+67805f2fc ThreadLocalUserContext.user -> ThreadLocalUserContext.loggedInUser (переименовано для избежания недопонимания в коде).
+85b4e1175 PfPersistenceService и PfPersistenceContext: query переименован в executeQuery.
+b095e6f7d !!!!! Большое изменение обработки транзакций: повторное использование PfPersistenceContext насколько это возможно (ещё не завершено). Тесты пока не запускаются.
+4c04cfd65 MAJOR-CHANGE! Миграция целочисленных id на Long id (включая внешние ключи и т.д.)
+09effe8bb BaseDao.hasUpdateAccess и hasDeleteAccess теперь принимают null dbObj.
+2863b30b9 Миграция в процессе...
+5bafe7941 @Repository -> @Service. @Transactional-аннотации удалены.
+ee7b7fe15 Миграция в процессе...
+0d183e5df Миграция в процессе...
+9d8b94352 Миграция в процессе...
+c25b14e78 Миграция в процессе...
+67ce75fe9 Миграция в процессе...
+e33c8b9c2 Миграция в процессе...
+06828f490 Миграция в процессе...
+b6092df09 Авторское право 2023 -> 2024
+ab45d51fa Авторское право 2001-2022 -> 2001-2023.
+73b0be50b org.apache.commons.collections -> org.apache.commons.collections4
+38bec971a ThreadLocal -> Kotlin
+267283973 PROJECTFORGE-3730: Отображение сообщения валидации для страниц со списком, если результирующий список был усечён из-за максимального количества строк в QueryFilter.
+765e7f1af TimesheetDao.massUpdate удалён (больше не нужен).
+512ffa420 Конфигурационный параметр: timesheetTag реализован.
+fcc633dff Массовое обновление табелей теперь поддерживает обновление поля reference.
+5f7ef41b8 Авторское право 2021 -> 2022
+0ab100d21 Конфигурация рефакторизована (GlobalConfiguration больше не нужен). Экспорт SEPA теперь должен удалять непечатаемые символы.
+c0f2b9de0 Функциональность Tenants удалена везде (не тестировалось).
+db3b02da7 UserException перемещён из бизнес-пакета в общий (затронут AccesssException). UserException теперь будет возвращаться как Toast для REST-клиентов по умолчанию. FileSizeChecker WIP.
+8c53b07de Ничего существенного.
+d875be4d4 TimesheetDao: Java - Kotlin (!!!! Побочные эффекты могут возникнуть во всём проекте!!!!)</pre></div>
+</body>
+</html>

@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="es"><head><meta charset="utf-8"><title>#825: AddressImageCache — Caché de imágenes de direcciones [ES]</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:2em;color:#444}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.lang{font-size:.85em;color:#888;float:right}.lang a{color:#888;text-decoration:none;padding:0 .3em}.lang a.active{color:#0366d6;font-weight:600;text-decoration:underline}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}</style></head>
+<body><div class="lang"><a href="825.html">EN</a> · <a href="825_de.html">DE</a> · <a href="825_ru.html">RU</a> · <a href="825_fr.html">FR</a> · <a href="825_es.html" class="active">ES</a></div>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Índice</a> · <a href="file-index.html">← Índice de archivos</a> · <a href="824.html">← Anterior</a> · <a href="826.html">Siguiente →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/kotlin/org/projectforge/business/address/AddressImageCache.kt" target="_blank" title="Ver fuente en GitHub">📄 fuente</a></div>
+<h1>#825: <code>AddressImageCache.kt</code></h1>
+<div class="meta"><code>projectforge-business/src/main/kotlin/org/projectforge/business/address/AddressImageCache.kt</code> @Component — Caché a nivel de aplicación, <code>projectforge-business/src/main/kotlin/org/projectforge/business/address/AddressImageCache.kt</code> <span style="color:#888">102 líneas · 54 código · 38 comentarios · 10 en blanco</span></div>
+<div class="c">Caché en memoria que asigna IDs de direcciones a metadatos de <code>AddressImageDO</code> (excluyendo datos binarios de imagen). Proporciona una búsqueda rápida para saber si una dirección tiene una imagen y cuál es su tipo.</div>
+
+<h2>Arquitectura</h2>
+<p><code>AddressImageCache</code> extiende <code>AbstractCache</code>, la clase base de ProjectForge para cachés actualizables. El framework llama a <code>refresh()</code> periódicamente o bajo demanda, sincronizado para evitar modificaciones concurrentes.</p>
+
+<h3>Modelo de datos</h3>
+<p>El caché almacena un <code>Map&lt;Long, AddressImageDO&gt;</code> donde cada valor es un <code>AddressImageDO</code> ligero que contiene solo:</p>
+<ul>
+  <li><code>lastUpdate</code> — Marca de tiempo de modificación para comprobaciones de frescura del caché.</li>
+  <li><code>imageType</code> — El formato de imagen (<code>ImageType.PNG</code> por defecto).</li>
+</ul>
+<p><strong>Los datos binarios están excluidos</strong> — no se cargan los arreglos de bytes de <code>preview</code> ni de <code>image</code>. Esto mantiene el caché eficiente en memoria mientras sigue respondiendo instantáneamente a la pregunta "¿la dirección X tiene una imagen?".</p>
+
+<h3>Estrategia de actualización</h3>
+<p><code>refresh()</code> se ejecuta dentro de un contexto de persistencia aislado de solo lectura (para límites de transacción limpios). Utiliza una consulta JPQL seleccionando <code>addressId</code>, <code>lastUpdate</code> e <code>imageType</code> como una proyección <code>Tuple</code>, reconstruyendo todo el mapa de forma atómica para evitar problemas de lectura concurrente.</p>
+
+<h3>Uso</h3>
+<p><code>getImage(addressId)</code> es la única API pública. Llama a <code>checkRefresh()</code> (heredado de <code>AbstractCache</code>) para garantizar la frescura antes de buscar en el mapa. Un retorno nulo significa que no existe ninguna imagen para esa dirección.</p>
+
+<h3>Acceso singleton</h3>
+<p>El objeto complementario contiene un <code>lateinit var instance</code> establecido en <code>@PostConstruct</code>, permitiendo el acceso estático desde código que no puede usar inyección de Spring.</p>
+
+<h2>Historial de Git</h2><div class="hist"><pre>868d6abb7 2025 -> 2026
+63081666f Encabezados de archivos fuente: 2024 -> 2025.
+943947aaa Direcciones: soporte de gif y jpeg
+0ceceb28f Todas las actualizaciones de caché ahora se ejecutan en transacciones aisladas
+5989b32fd BaseDao: mecanismo de onChangeLister refactorizado.
+1b50060c3 BaseDao: renombrado: get -> find, save -> insert, getList -> select, load -> select</pre></div>
+</body></html>

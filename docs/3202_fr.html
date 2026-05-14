@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head><meta charset="utf-8"><title>#3202: ErrorPage.java [FR]</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333}h2{margin-top:2em;border-bottom:1px solid #ddd}h3{margin-top:1.5em;color:#333}a{color:#0366d6}.meta{background:#f0f0f0;border-radius:6px;padding:1em;margin:1em 0;font-size:.9em}.code-block{background:#1e1e1e;color:#d4d4d4;border-radius:4px;padding:.8em 1em;margin:.5em 0;overflow-x:auto;font-family:Consolas,monospace;font-size:.82em;line-height:1.5;white-space:pre-wrap}.commentary{margin:.8em 0;background:#fff;padding:.5em 1em;border-radius:6px;border-left:4px solid #ddd;line-height:1.7}table{border-collapse:collapse;width:100%;margin:.8em 0;font-size:.9em}th,td{border:1px solid #ddd;padding:.4em .6em}th{background:#f0f0f0}code{background:#e8e8e8;border-radius:3px;padding:.1em .3em;font-size:.9em}.nav{font-size:.9em;color:#888;margin-bottom:1em}.history{background:#fffbe6;border-radius:6px;padding:1em;margin:1em 0;font-size:.9em;border-left:4px solid #ffc107}.arch{background:#e8f4fd;border-radius:6px;padding:1em;margin:1em 0;font-size:.9em;border-left:4px solid #2196f3}.warn{background:#fff3cd;border-radius:6px;padding:1em;margin:1em 0;font-size:.9em;border-left:4px solid #ffc107}</style></head>
+<body><div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← Index des fichiers</a> · <a href="3201.html">← Précédent</a> · <a href="3203.html">Suivant →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-wicket/src/main/java/org/projectforge/web/wicket/ErrorPage.java" target="_blank" title="Voir le code source sur GitHub">📄 source</a></div>
+<h1>#3202: <code>ErrorPage.java</code></h1>
+<div class="meta"><code>projectforge-wicket/src/main/java/org/projectforge/web/wicket/ErrorPage.java</code> <p><strong>Chemin :</strong> <code>projectforge-wicket/src/main/java/org/projectforge/web/wicket/ErrorPage.java</code> · <strong>Lignes :</strong> 268 · <strong>Étend :</strong> <code>AbstractSecuredPage</code> · <strong>Auteur :</strong> Kai Reinhard</p><p><strong>Objectif :</strong> LA page d'erreur globale — intercepte TOUTE exception non gérée dans l'application web Wicket. Classe les exceptions en 6 catégories, journalise avec des numéros de message uniques (<code>System.currentTimeMillis()</code>), affiche des messages traduits et conviviaux, propose éventuellement un formulaire de retour pour que les utilisateurs soumettent des rapports d'erreur, et envoie de manière proactive un e-mail à l'équipe de support pour les erreurs critiques. C'est ici que l'œuf de Pâques Pac-Man est lié.</p><p><strong>Source :</strong> <a href="https://github.com/micromata/projectforge/blob/develop/projectforge-wicket/src/main/java/org/projectforge/web/wicket/ErrorPage.java">GitHub</a></p> <span style="color:#888">268 lignes · 199 lignes de code · 48 commentaires · 21 lignes vides</span></div>
+<div class="history"><table><tr><th>Commit</th><th>Message</th></tr><tr><td><code>9ebb88522</code></td><td>2016-07-18 Commit initial</td></tr></table><p>Code original de Kai Reinhard. A survécu à la migration Wicket→React — toujours actif dans le module Wicket.</p></div>
+
+<h2>Le classifieur d'exceptions en 6 catégories — lignes 88-116</h2>
+<div class="code-block"><pre>public static String getExceptionMessage(AbstractSecuredBasePage securedPage,
+                                         ProjectForgeException exception, boolean doLog) {
+  if (exception instanceof UserException) {           // Catégorie 1 : erreurs utilisateur
+    return securedPage.translateParams(ex.getI18nKey(), ex.getMsgParams(), ex.getParams());
+  } else if (exception instanceof InternalErrorException) { // Catégorie 2 : erreurs internes
+    return securedPage.translateParams(ex.getI18nKey(), ex.getMsgParams(), ex.getParams());
+  } else if (exception instanceof AccessException) {  // Catégorie 3 : accès refusé
+    return securedPage.translateParams(ex.getI18nKey(), ex.getMessageArgs(), ex.getParams());
+  }
+  throw new UnsupportedOperationException("...ajoutez ici une ProjectForgeException inconnue !", exception);
+}</pre></div>
+<div class="commentary"><p>Trois types d'exceptions spécifiques à ProjectForge, chacun traité avec une traduction i18n. La différence clé entre eux :</p><table><tr><th>Exception</th><th>Ce que voit l'utilisateur</th><th>Niveau de journalisation</th><th>Paramètres</th></tr><tr><td><code>UserException</code></td><td>Message traduit à partir de la clé i18n + paramètres du message</td><td>INFO (si doLog)</td><td><code>getMsgParams()</code> — paramètres destinés à l'utilisateur</td></tr><tr><td><code>InternalErrorException</code></td><td>Identique à UserException — message traduit</td><td>INFO (si doLog)</td><td><code>getMsgParams()</code> — paramètres internes</td></tr><tr><td><code>AccessException</code></td><td>"Accès refusé" localisé avec paramètres</td><td>INFO (si doLog)</td><td><code>getParams()</code> / <code>getMessageArgs()</code> — paramètres d'accès</td></tr></table><p><strong>L'UnsupportedOperationException à la ligne 115 est un crash délibéré :</strong> Si une sous-classe inconnue de <code>ProjectForgeException</code> atteint ce point, le développeur a oublié d'ajouter un gestionnaire. Le commentaire <em>"Pour le développeur : veuillez ajouter ici une ProjectForgeException inconnue !"</em> est une conception auto-documentée — le crash force le développeur à gérer explicitement les nouveaux types d'exceptions, plutôt que de passer silencieusement avec un message d'erreur générique.</p><p><strong>Filtrage de la pile d'appels :</strong> <code>ONLY4NAMESPACE = "org.projectforge"</code> (ligne 65) limite les traces de pile aux packages ProjectForge uniquement. Cela maintient les journaux propres — pas de dizaines de trames Spring/Hibernate/Tomcat encombrant les rapports d'erreur. <code>ExceptionHelper.getFilteredStackTrace(ex, ONLY4NAMESPACE)</code> supprime tout ce qui est en dehors de <code>org.projectforge</code>.</p></div>
+
+<h2>Le constructeur — 4 chemins d'exception, 81 lignes de routage d'erreur (lignes 118-199)</h2>
+<div class="code-block"><pre>public ErrorPage(final Throwable throwable) {
+  // Par défaut : afficher une erreur générique avec formulaire de retour
+  errorMessage = getString("errorpage.unknownError");
+  showFeedback = true;
+  
+  if (throwable != null) {
+    rootCause = ExceptionHelper.getRootCause(throwable);
+    
+    // CHEMIN A : ProjectForgeException — message traduit
+    if (rootCause instanceof ProjectForgeException) {
+      errorMessage = getExceptionMessage(this, (ProjectForgeException) rootCause, true);
+    
+    // CHEMIN B : ServletException — journalisation + message "contactez l'équipe de développement"
+    } else if (throwable instanceof ServletException) {
+      messageNumber = String.valueOf(System.currentTimeMillis());
+      log.error("Message #" + messageNumber + " : " + throwable.getMessage(), throwable);
+      errorMessage = getLocalizedMessage(UserException.I18N_KEY_PLEASE_CONTACT_DEVELOPER_TEAM, messageNumber);
+    
+    // CHEMIN C : PageExpiredException — expiration de session (pas de formulaire de retour)
+    } else if (throwable instanceof PageExpiredException) {
+      showFeedback = false;  // Ne pas demander de retour à l'utilisateur en cas d'expiration
+      errorMessage = getString("message.wicket.pageExpired");
+    
+    // CHEMIN D : Tout le reste — "contactez l'équipe de développement" générique
+    } else {
+      messageNumber = String.valueOf(System.currentTimeMillis());
+      log.error("Message #" + messageNumber + " : " + throwable.getMessage(), throwable);
+      errorMessage = getLocalizedMessage(UserException.I18N_KEY_PLEASE_CONTACT_DEVELOPER_TEAM, messageNumber);
+    }
+  }
+}</pre></div>
+<div class="commentary"><p><strong>CHEMIN A — Exceptions ProjectForge (lignes 130-131) :</strong> Le chemin heureux pour les erreurs connues. La cause racine est extraite via <code>ExceptionHelper.getRootCause()</code> (supprime les wrappers ServletException/Spring), et le message est traduit via i18n. L'utilisateur voit un message utile dans sa langue.</p><p><strong>CHEMIN B — ServletException (lignes 132-138) :</strong> Erreurs au niveau du conteneur (échecs de la chaîne de filtres Tomcat, erreurs d'analyse des requêtes). Obtient un <code>messageNumber</code> — <code>System.currentTimeMillis()</code> sous forme de chaîne. C'est l'ID d'erreur unique affiché à l'utilisateur comme <em>"Veuillez contacter l'équipe de développement avec le message #1712345678901"</em>. Le numéro est un horodatage, afin que le support puisse le corréler avec les journaux du serveur.</p><p><strong>CHEMIN C — PageExpiredException (lignes 139-143) :</strong> La session Wicket de l'utilisateur a expiré. <code>showFeedback = false</code> — pas de formulaire de retour, car l'utilisateur n'a pas rencontré de bogue, il a simplement attendu trop longtemps. Le titre est défini sur "Message" (ligne 143) au lieu du "Erreur" par défaut.</p><p><strong>CHEMIN D — Tout le reste (lignes 144-148) :</strong> Exceptions inconnues (NullPointerException, exceptions Hibernate, etc.). Même traitement que ServletException — numéro de message + "contactez l'équipe de développement".</p></div>
+
+<h2>Signalement proactif des erreurs — envoyer un e-mail à l'équipe de support (lignes 201-223)</h2>
+<div class="code-block"><pre>private void sendProactiveMessageToSupportTeam() {
+  if (configService.getPfSupportMailAddress() != null && configService.isSendMailConfigured()) {
+    SendFeedbackData errorData = new SendFeedbackData();
+    errorData.setSender(sendMail.getMailFromStandardEmailSender());
+    errorData.setReceiver(configService.getPfSupportMailAddress());
+    errorData.setSubject("Erreur survenue : #" + messageNumber + " sur " + domainService.getDomain());
+    errorData.setDescription(
+      "Erreur survenue à : " + dateString + "(" + timeZone + ")" +
+      " avec le numéro : #" + messageNumber +
+      " de l'utilisateur : " + sender +
+      " Trace de la pile d'exception : \n" + rootCauseStackTrace);
+    sendFeedback.send(errorData);
+  }
+}</pre></div>
+<div class="commentary"><p><strong>C'est le système de surveillance proactive.</strong> Lorsqu'une erreur critique se produit ET que l'e-mail de support est configuré, le système envoie automatiquement un e-mail contenant :</p><ul><li>Le numéro de message unique (horodatage)</li><li>Le domaine où l'erreur s'est produite</li><li>La date/heure avec le fuseau horaire</li><li>L'utilisateur qui a rencontré l'erreur</li><li>La trace de pile complète de la cause racine</li></ul><p>Il s'agit essentiellement d'un système de surveillance des erreurs intégré, sans avoir besoin de Sentry, Datadog ou ELK. Pour les déploiements auto-hébergés, c'est le principal moyen pour les administrateurs de prendre connaissance des erreurs de production. L'e-mail est envoyé à <code>configService.getPfSupportMailAddress()</code> — configuré dans <code>projectforge.properties</code>.</p></div>
+
+<h2>Formulaire de retour utilisateur — rapports de bogues participatifs (lignes 150-178)</h2>
+<div class="commentary"><p>Lorsque <code>showFeedback = true</code> ET qu'un numéro de message a été généré ET qu'un e-mail de destinataire est configuré, la page affiche un <code>ErrorForm</code> (composant de formulaire Wicket) qui permet aux utilisateurs de soumettre des rapports d'erreur. Données pré-remplies :</p><table><tr><th>Champ</th><th>Valeur</th></tr><tr><td>Destinataire</td><td>Depuis <code>ConfigurationParam.FEEDBACK_E_MAIL</code></td></tr><tr><td>Numéro de message</td><td>L'ID <code>System.currentTimeMillis()</code></td></tr><tr><td>Message</td><td><code>throwable.getMessage()</code> — le message court de l'exception</td></tr><tr><td>Trace de pile</td><td>Trace de pile complète via <code>ExceptionHelper.printStackTrace()</code></td></tr><tr><td>Expéditeur</td><td>Nom complet de l'utilisateur actuellement connecté</td></tr><tr><td>Sujet</td><td><code>"ProjectForge-Error #" + messageNumber + " de " + sender</code></td></tr><tr><td>Cause racine</td><td>Message de la cause racine + sa trace de pile</td></tr></table><p>La méthode <code>sendFeedback()</code> (lignes 229-246) gère la soumission : appelle <code>SendFeedback.send()</code>, redirige vers <code>MessagePage</code> avec un message de succès/échec. En cas d'échec, affiche <code>"mail.error.exception"</code> avec <code>setWarning(true)</code>.</p></div>
+
+<h2>Suppression d'exceptions — quand rester silencieux (lignes 180-198)</h2>
+<div class="code-block"><pre>if (throwable == null ||
+    throwable instanceof ComponentNotFoundException ||
+    throwable instanceof ConnectException) {
+  // SILENCIEUX — ce ne sont pas des bogues, ce sont des événements de cycle de vie attendus
+} else if (rootCause instanceof UserException) {
+  // SILENCIEUX — déjà présenté à l'utilisateur
+} else if (GlobalExceptionRegistry.sendMailToDevelopers(throwable)) {
+  sendProactiveMessageToSupportTeam();  // Envoyer un e-mail uniquement pour les vrais bogues
+}</pre></div>
+<div class="commentary"><p><strong>Trois catégories d'exceptions sont délibérément supprimées</strong> — aucun e-mail n'est envoyé, aucune notification proactive :</p><table><tr><th>Exception</th><th>Pourquoi supprimée</th></tr><tr><td><code>null</code> throwable</td><td>ErrorPage appelée sans exception — depuis <code>CallAllPagesTest</code> (commentaire lignes 188-189). La suite de tests navigue directement vers ErrorPage pour vérifier son rendu.</td></tr><tr><td><code>ComponentNotFoundException</code></td><td>Cycle de vie normal de Wicket. Lorsqu'un utilisateur navigue dans AddressListPage, les composants image sont supprimés par le framework — Wicket lance ceci en essayant de trouver un composant déjà nettoyé. Ce n'est pas un bogue.</td></tr><tr><td><code>ConnectException</code></td><td>Le navigateur de l'utilisateur s'est déconnecté. Se produit lorsque l'utilisateur clique ailleurs pendant une requête de longue durée — au moment où la réponse est prête, le navigateur est parti. Ce n'est pas un bogue.</td></tr></table><p><strong>Bloc statique <code>GlobalExceptionRegistry</code> (lignes 67-70) :</strong> Pré-enregistre <code>StalePageException</code> et <code>ComponentNotFoundException</code> avec des descriptions lisibles par l'humain ("Page Wicket plus disponible"). La vérification <code>sendMailToDevelopers()</code> à la ligne 196 consulte ce registre — seules les exceptions NON enregistrées comme "connues/attendues" déclenchent des e-mails proactifs.</p></div>
+
+<h2>Redéfinitions Wicket — identité de la page</h2>
+<div class="code-block"><pre>@Override public boolean isVersioned() { return false; }    // Ne jamais stocker les versions de page
+@Override public boolean isErrorPage() { return true; }     // Dire à Wicket que CECI est une page d'erreur</pre></div>
+<div class="commentary"><p><strong><code>isVersioned() = false</code> (ligne 257) :</strong> Normalement, Wicket versionne les pages — stocke des copies anciennes pour que le bouton de retour du navigateur fonctionne. Pour les pages d'erreur, le versionnage est désactivé car : (1) les pages d'erreur sont transitoires — vous ne devriez pas revenir en arrière vers une erreur, (2) le versionnage stocke l'objet exception dans la session, ce qui pourrait fuir la mémoire ou contenir des données sensibles, (3) les pages d'erreur doivent toujours afficher un contenu frais lors d'une revisite.</p><p><strong><code>isErrorPage() = true</code> (ligne 265) :</strong> Indique à la chaîne de gestion des exceptions de Wicket que CETTE page est la page d'erreur — empêche la récursion infinie si la page d'erreur elle-même lève une exception (Wicket afficherait alors sa propre page d'erreur de secours).</p></div>
+
+<h2>Où Pac-Man s'intègre</h2>
+<div class="commentary"><p>L'œuf de Pâques Pac-Man (#3780) est lié DEPUIS cette page d'erreur. Le modèle HTML (<code>ErrorPage.html</code>, 24 lignes) montre la structure : un div alert-danger pour le message d'erreur, un FeedbackPanel pour les rapports utilisateur, et un formulaire avec des boutons d'action. Le bouton "Jouer à Pac-Man" serait rendu comme l'un des boutons d'action du formulaire — transformant une erreur 500 en invitation à jouer. C'est le moment où la frustration devient amusante.</p></div>
+<div class="nav" style="margin-top:2em"><a href="3259.html">← #3259</a> · <a href="3261.html">#3261 →</a></div>
+</body></html>

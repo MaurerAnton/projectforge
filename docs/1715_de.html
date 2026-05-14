@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>#1715: UserTest.kt [DE]</title>
+<style>
+body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}
+h1{border-bottom:2px solid #333;padding-bottom:.3em}
+h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}
+h3{margin-top:2em;color:#444}
+a{color:#0366d6}
+.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}
+.nav{font-size:.9em;color:#888;margin-bottom:1em}
+.lang{font-size:.85em;color:#888;float:right}
+.lang a{color:#888;text-decoration:none;padding:0 .3em}
+.lang a.active{color:#0366d6;font-weight:600;text-decoration:underline}
+.meta{font-size:.9em;margin:1em 0;color:#555}
+code{background:#f0f0f0;padding:0 .2em;font-size:.93em}
+pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}
+table{border-collapse:collapse;width:100%;margin:1em 0}
+th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}
+th{background:#f5f5f5;font-weight:600}
+.hist{font-size:.85em;color:#555}
+</style>
+</head>
+<body>
+<div class="lang"><a href="1715.html">EN</a> · <a href="1715_de.html" class="active">DE</a> · <a href="1715_ru.html">RU</a> · <a href="1715_fr.html">FR</a> · <a href="1715_es.html">ES</a></div>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← Dateiindex</a> · <a href="3009.html">← Vorherige</a> · <a href="1488.html">Nächste →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/test/kotlin/org/projectforge/business/user/UserTest.kt" target="_blank" title="Quelle auf GitHub anzeigen">📄 Quelle</a></div>
+<h1>#1715: <code>UserTest.kt</code></h1>
+<div class="meta"><code>projectforge-business/src/test/kotlin/org/projectforge/business/user/UserTest.kt</code> Typ: Kotlin · Rolle: Test · Quelle: projectforge-business/src/test/kotlin/org/projectforge/business/user/UserTest.kt <span style="color:#888">273 Zeilen · 216 Code · 25 Kommentare · 32 leer</span></div>
+<div class="c">Komponenten-/Integrationstest für User. Validiert die Korrektheit des entsprechenden Produktionsklassenverhaltens.</div>
+<h2>Codestruktur</h2>
+<p>Annotationen: <code>Test</code>, <code>Autowired</code></p>
+<p>Klassen: <code>UserTest</code></p>
+<p>Supertyp(en): <code>AbstractTestBase</code></p>
+<p>Funktionen (8): <code>afterAll</code>, <code>testUserDO</code>, <code>testGetUserDisplayname</code>, <code>testSaveAndUpdate</code>, <code>testPasswordHandling</code>, <code>testPasswordQuality</code>, <code>testUniqueUsernameDO</code>, <code>createTestUser</code></p>
+<p>Eigenschaften (28): <code>groupService</code>, <code>configurationDao</code>, <code>passwordQualityService</code>, <code>userGroupCache</code>, <code>userPasswordDao</code>, <code>user</code>, <code>user1</code>, <code>groupnames</code>, <code>group</code>, <code>admin</code>, <code>user</code>, <code>user</code>, <code>id</code>, <code>user</code>, <code>id</code>, <code>passwordObj</code>, <code>minPwLenEntry</code>, <code>passwordQualityMessages</code>, <code>user</code>, <code>userId1</code>, <code>userId2</code>, <code>dbUser</code>, <code>user</code>, <code>STRONGOLDPW</code>, <code>MESSAGE_KEY_PASSWORD_MIN_LENGTH_ERROR</code>...</p>
+<p>Importe: 11 Pakete</p>
+<p>Paket: <code>org.projectforge.business.user</code></p>
+<h2>Quellcode (gekürzt)</h2>
+<pre>
+package org.projectforge.business.user
+
+import org.junit.jupiter.api.Assertions
+import org.junit.jupiter.api.Test
+import org.projectforge.business.group.service.GroupService
+import org.projectforge.business.password.PasswordQualityService
+import org.projectforge.framework.configuration.ConfigurationDao
+import org.projectforge.framework.configuration.ConfigurationParam
+import org.projectforge.framework.i18n.I18nKeyAndParams
+import org.projectforge.framework.persistence.user.entities.PFUserDO
+import org.projectforge.business.test.AbstractTestBase
+import org.springframework.beans.factory.annotation.Autowired
+import java.io.Serializable
+
+class UserTest : AbstractTestBase() {
+    @Autowired
+    private lateinit var groupService: GroupService
+
+    @Autowired
+    private lateinit var configurationDao: ConfigurationDao
+
+    @Autowired
+    private lateinit var passwordQualityService: PasswordQualityService
+
+    @Autowired
+    private lateinit var userGroupCache: UserGroupCache
+
+    @Autowired
+    private lateinit var userPasswordDao: UserPasswordDao
+
+    override fun afterAll() {
+        recreateDataBase()
+    }
+
+    @Test
+    fun testUserDO() {
+        logon(TEST_ADMIN_USER)
+        val user = userService.getInternalByUsername(TEST_ADMIN_USER)
+        Assertions.assertEquals(user.username, TEST_ADMIN_USER)
+        val user1 = getUser(&quot;user1&quot;)
+        val groupnames = groupService.getGroupnames(user1.id)
+        Assertions.assertEquals(&quot;group1; group2&quot;, groupnames, &quot;Gruppennamen&quot;)
+        Assertions.assertEquals(true, userGroupCache.isUserMemberOfGroup(user1.id, getGroupId(&quot;group1&quot;)))
+        Assertions.assertEquals(false, userGroupCache.isUserMemberOfGroup(user1.id, getGroupId(&quot;group3&quot;)))
+        val group = groupService.getGroup(getGroupId(&quot;group1&quot;))
+        Assertions.assertEquals(&quot;group1&quot;, group.name)
+        val admin = getUser(ADMIN)
+        Assertions.assertEquals(true, userGroupCache.isUserMemberOfAdminGroup(admin.id), &quot;Administrator&quot;)
+        Assertions.assertEquals(false, userGroupCache.isUserMemberOfAdminGroup(user1.id), &quot;Kein Administrator&quot;)
+    }
+
+    @Test
+    fun testGetUserDisplayname() {
+        val user = PFUserDO()
+        user.username = &quot;hurzel&quot;
+        Assertions.assertEquals(&quot;hurzel&quot;, user.userDisplayName, &quot;getUserDisplayname&quot;)
+        user.lastname = &quot;Reinhard&quot;
+        Assertions.assertEquals(&quot;Reinhard&quot;, user.getFullname(), &quot;getFullname&quot;)
+        Assertions.assertEquals(&quot;Reinhard (hurzel)&quot;, user.userDisplayName, &quot;getUserDisplayname&quot;)
+        user.firstname = &quot;Kai&quot;
+        Assertions.assertEquals(&quot;Kai Reinhard&quot;, user.getFullname(), &quot;getFullname&quot;)
+        Assertions.assertEquals(&quot;Kai Reinhard (hurzel)&quot;, user.userDisplayName, &quot;getUserDisplayname&quot;)
+    }
+
+    @Test
+    fun testSaveAndUpdate() {
+        logon(TEST_ADMIN_USER)
+        var user = PFUserDO()
+        user.username = &quot;UserTest&quot;
+        user.description = &quot;Beschreibung&quot;
+        val id: Serializable = userService.insert(user, false)
+        user = userService.find(id, false)
+        Assertions.assertEquals(&quot;UserTest&quot;, user.username)
+        Assertions.assertEquals(&quot;Beschreibung&quot;, user.description)
+        user.description = &quot;Beschreibung\ntest&quot;
+        userService.update(user)
+        user = userService.find(id, false)
+        Assertions.assertEquals(&quot;Beschreibung\ntest&quot;, user.description)
+        userService.update(user)
+        user = userService.find(id, false)
+    }
+
+    @Test
+    fun testPasswordHandling() {
+        val user = PFUserDO()
+        user.username = &quot;UserTest-Passwörter&quot;
+        user.description = &quot;Beschreibung&quot;
+        val id = userService.insert(user, false)
+        userPasswordDao.encryptAndSavePassword(id, &quot;geheim&quot;.toCharArray(), false)
+        val passwordObj = userPasswordDao.internalGetByUserId(id)
+        Assertions.assertNotNull(passwordObj!!.passwordHash) // Nicht SHA, sollte ignoriert werden.
+        Assertions.assertTrue(passwordObj.passwordHash!!.startsWith(&quot;SHA{&quot;))
+    }
+
+    /**
+     * Testet die Passwortqualität.
+     */
+    @Test
+    fun testPasswordQuality() {
+        val minPwLenEntry = configurationDao.getEntry(ConfigurationParam.MIN_PASSWORD_LENGTH)!!
+        minPwLenEntry.longValue = 10
+        configurationDao.update(minPwLenEntry, checkAccess = false)
+        var passwordQualityMessages = passwordQualityService.checkPasswordQuality(STRONGOLDPW, null)
+        Assertions.assertTrue(
+            passwordQualityMessages.contains(
+                I18nKeyAndParams(
+                    MESSAGE_KEY_PASSWORD_MIN_LENGTH_ERROR, 10
+                )
+            ),
+            &quot;Leeres Passwort nicht erlaubt.&quot;
+        )
+
+        passwordQualityMessages = passwordQualityService.checkPasswordQuality(STRONGOLDPW, &quot;&quot;.toCharArray())
+        Assertions.assertTrue(
+            passwordQualityMessages.contains(
+                I18nKeyAndParams(
+                    MESSAGE_KEY_PASSWORD_MIN_LENGTH_ERROR, 10
+                )
+            ),
+// ... (gekürzt, insgesamt 251 Zeilen)</pre>
+
+<h2>Git-Verlauf</h2><div class="hist"><pre>868d6abb7 2025 -> 2026
+63081666f Quelltextdatei-Header: 2024 -> 2025.
+176cb32d7 WIP: Gradle
+f09327286 Migration in Arbeit... (alle Tests aller Pakete: OK).
+3c42485eb Migration in Arbeit... (alle Tests aller Pakete: OK).</pre></div>
+</body>
+</html>

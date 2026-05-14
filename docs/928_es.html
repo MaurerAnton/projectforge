@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>#928: EmployeeScriptingService.kt [ES]</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:2em;color:#444}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}</style>
+</head>
+<body>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Índice</a> · <a href="file-index.html">← Índice de archivos</a> · <a href="927.html">← Anterior</a> · <a href="929.html">Siguiente →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/kotlin/org/projectforge/business/fibu/EmployeeScriptingService.kt" target="_blank" title="Ver fuente en GitHub">📄 fuente</a></div>
+<h1>#928: <code>EmployeeScriptingService.kt</code></h1>
+<div class="meta"><code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/EmployeeScriptingService.kt</code> Tipo: Servicio Proxy de Scripting · Propósito: Envoltorio de solo lectura alrededor de EmployeeService para acceso desde scripts Groovy/Kotlin · Ruta: <code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/EmployeeScriptingService.kt</code> <span style="color:#888">198 líneas · 66 código · 117 comentarios · 15 en blanco</span></div>
+<div class="c">Proxy de scripting que envuelve <code>EmployeeService</code> proporcionando acceso de <strong>solo lectura</strong> a la lógica de negocio de empleados para scripts Groovy/Kotlin. Disponible en scripts como: <code>employeeService</code>. Expone búsquedas de atributos dependientes del tiempo, verificaciones de estado activo, búsqueda de empleados y generación de informes mensuales. Esta es la interfaz de scripting más nueva y preferida en comparación con <code>EmployeeScriptingDao</code>.</div>
+
+<h2>Arquitectura y Diseño</h2>
+
+<h3>Patrón de Delegación</h3>
+<p>Cada método delega directamente a la instancia subyacente de <code>EmployeeService</code> (inyectada por constructor como <code>__employeeService</code>). El proxy sigue el mismo patrón que <code>ScriptingDao</code> pero envuelve un servicio en lugar de un DAO — proporcionando lógica de negocio en lugar de solo acceso a entidades.</p>
+
+<h3>Métodos Expuestos</h3>
+<table>
+<tr><th>Método</th><th>Llamada al Servicio Subyacente</th><th>Propósito</th></tr>
+<tr><td><code>getWeeklyWorkingHours(employee)</code></td><td><code>EmployeeService.getWeeklyWorkingHours(employee)</code></td><td>Horas semanales vigentes hoy</td></tr>
+<tr><td><code>getWeeklyWorkingHours(employee, validAtDate, checkAccess)</code></td><td><code>EmployeeService.getWeeklyWorkingHours(employee, validAtDate, checkAccess)</code></td><td>Horas semanales en fecha histórica — CRÍTICO para scripts que necesitan datos históricos</td></tr>
+<tr><td><code>getAnnualLeaveDays(employee)</code></td><td><code>EmployeeService.getAnnualLeaveDays(employee)</code></td><td>Días de vacaciones anuales vigentes hoy</td></tr>
+<tr><td><code>getAnnualLeaveDays(employee, validAtDate, checkAccess)</code></td><td><code>EmployeeService.getAnnualLeaveDays(employee, validAtDate, checkAccess)</code></td><td>Días de vacaciones anuales en fecha histórica</td></tr>
+<tr><td><code>isEmployeeActive(employee, showRecentlyLeavers)</code></td><td><code>EmployeeService.isEmployeeActive()</code></td><td>Verificación de estado activo</td></tr>
+<tr><td><code>getEmployeeStatus(employee, checkAccess)</code></td><td><code>EmployeeService.getEmployeeStatus()</code></td><td>Enum <code>EmployeeStatus</code> actual</td></tr>
+<tr><td><code>selectAllActive(checkAccess, showRecentLeft)</code></td><td><code>EmployeeService.selectAllActive()</code></td><td>Todos los empleados activos</td></tr>
+<tr><td><code>findByUserId(userId)</code></td><td><code>EmployeeService.findByUserId()</code></td><td>Búsqueda por ID de usuario</td></tr>
+<tr><td><code>findByStaffnumber(staffnumber)</code></td><td><code>EmployeeService.findByStaffnumber()</code></td><td>Búsqueda por número de empleado (sobrecargas Int y String)</td></tr>
+<tr><td><code>selectAllValidSinceAttrs(employee, type, deleted, checkAccess)</code></td><td><code>EmployeeService.selectAllValidSinceAttrs()</code></td><td>Todos los atributos dependientes del tiempo con filtrado opcional</td></tr>
+<tr><td><code>getReportOfMonth(year, month, user)</code></td><td><code>EmployeeService.getReportOfMonth()</code></td><td>Informe mensual de empleados con datos agregados de hoja de tiempos</td></tr>
+</table>
+
+<h3>Justificación del Diseño</h3>
+<p>Los scripts necesitan acceso a lógica de negocio como "obtener horas semanales para empleado en fecha X" o "¿está este empleado activo?" — no solo CRUD. Este proxy expone únicamente métodos de solo lectura. Los scripts nunca deben mutar datos a través de esta interfaz; las mutaciones se realizan a través de DAOs de scripting dedicados.</p>
+
+<h2>Historial de Git</h2>
+<div class="hist"><pre>8d821622d EmployeeScriptingService.getReportOfMonth
+b589ea0c1 EmployeeScriptingService.kt: selectAllValidSinceAttrs añadido.
+10d4e0aad Añadir EmployeeScriptingService para acceso a datos de empleados desde scripts</pre></div>
+</body>
+</html>

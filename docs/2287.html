@@ -1,134 +1,25 @@
-<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>#2287</title>
-<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}.hist{font-size:.85em;color:#555}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}</style></head>
-<body><div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="2286.html">← Prev</a> · <a href="2288.html">Next →</a></div>
-<h1>#2287: <code>MyScriptPagesRest.kt</code></h1>
-<div class="meta">REST Controller, <code>projectforge-rest/src/main/kotlin/org/projectforge/rest/scripting/MyScriptPagesRest.kt</code> (117 lines)</div>
-<div class="c">Source file: MyScriptPagesRest.kt - rest controller in ProjectForge REST module.</div>
-<h2>Source Code</h2><pre>/////////////////////////////////////////////////////////////////////////////
-//
-// Project ProjectForge Community Edition
-//         www.projectforge.org
-//
-// Copyright (C) 2001-2026 Micromata GmbH, Germany (www.micromata.com)
-//
-// ProjectForge is dual-licensed.
-//
-// This community edition is free software; you can redistribute it and/or
-// modify it under the terms of the GNU General Public License as published
-// by the Free Software Foundation; version 3 of the License.
-//
-// This community edition is distributed in the hope that it will be useful,
-// but WITHOUT ANY WARRANTY; without even the implied warranty of
-// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General
-// Public License for more details.
-//
-// You should have received a copy of the GNU General Public License along
-// with this program; if not, see http://www.gnu.org/licenses/.
-//
-/////////////////////////////////////////////////////////////////////////////
-
-package org.projectforge.rest.scripting
-
-import mu.KotlinLogging
-import org.projectforge.business.scripting.MyScriptDao
-import org.projectforge.business.scripting.ScriptDO
-import org.projectforge.framework.jcr.AttachmentsDaoAccessChecker
-import org.projectforge.framework.jcr.AttachmentsService
-import org.projectforge.framework.persistence.api.MagicFilter
-import org.projectforge.jcr.FileSizeStandardChecker
-import org.projectforge.rest.config.Rest
-import org.projectforge.rest.core.AbstractDTOPagesRest
-import org.projectforge.rest.core.PagesResolver
-import org.projectforge.rest.dto.Script
-import org.projectforge.ui.UILayout
-import org.projectforge.ui.UITable
-import org.projectforge.ui.UITableColumn
-import org.springframework.beans.factory.annotation.Autowired
-import org.springframework.web.bind.annotation.RequestMapping
-import org.springframework.web.bind.annotation.RestController
-import jakarta.annotation.PostConstruct
-import jakarta.servlet.http.HttpServletRequest
-
-private val log = KotlinLogging.logger {}
-
-/**
- * These script pages are usable by all users. They have only access to some script list and their execution, if the
- * are allowed by the script configuration.
- * @see ScriptDO.executableByUserIds
- * @see ScriptDO.executableByGroupIds
- */
-@RestController
-@RequestMapping("${Rest.URL}/myscript")
-class MyScriptPagesRest : AbstractDTOPagesRest&lt;ScriptDO, Script, MyScriptDao&gt;(
-  baseDaoClazz = MyScriptDao::class.java,
-  i18nKeyPrefix = "scripting.myScript"
-) {
-  @Autowired
-  private lateinit var scriptPagesRest: ScriptPagesRest
-
-  @PostConstruct
-  private fun postConstruct() {
-    val maxFileSize = attachmentsService.maxDefaultFileSize.toBytes()
-    val maxFileSizeSpringProperty = AttachmentsService.MAX_DEFAULT_FILE_SIZE_SPRING_PROPERTY
-
-    this.jcrPath =  scriptPagesRest.jcrPath
-    this.attachmentsAccessChecker = AttachmentsDaoAccessChecker(
-      baseDao, jcrPath, null, FileSizeStandardChecker(maxFileSize, maxFileSizeSpringProperty)
-    )
-  }
-
-  override fun newBaseDO(request: HttpServletRequest?): ScriptDO {
-    val script = ScriptDO()
-    script.type = ScriptDO.ScriptType.KOTLIN
-    return script
-  }
-
-  override fun transformForDB(dto: Script): ScriptDO {
-    return ScriptDO() // Not needed, no modifications will be done in the data base.
-  }
-
-  override fun transformFromDB(obj: ScriptDO, editMode: Boolean): Script {
-    val script = Script()
-    script.filename = obj.filename
-    script.copyFrom(obj)
-    return script
-  }
-
-  /**
-   * Don't show include scripts, because the user can't do anything with it.
-   */
-  override fun filterList(resultSet: MutableList&lt;ScriptDO&gt;, filter: MagicFilter): List&lt;ScriptDO&gt; {
-    return resultSet.filter { !it.deleted &amp;&amp; it.type != ScriptDO.ScriptType.INCLUDE }
-  }
-
-  /**
-   * LAYOUT List page
-   */
-  override fun createListLayout(request: HttpServletRequest, layout: UILayout, magicFilter: MagicFilter, userAccess: UILayout.UserAccess) {
-    layout.add(UITable.createUIResultSetTable()
-          .add(lc, "name", "description")
-          .add(UITableColumn("parameterNames", title = "scripting.script.parameter", sortable = false))
-          .add(UITableColumn("type", title = "scripting.script.type"))
-          .add(lc, "lastUpdate")
-      )
-    layout.userAccess.insert = false
-  }
-
-  /**
-   * @return the execution page.
-   */
-  override fun getStandardEditPage(): String {
-    return "${PagesResolver.getDynamicPageUrl(MyScriptExecutePageRest::class.java)}:id"
-  }
-}</pre>
-<h2>Git History</h2><div class="hist"><pre>868d6abb7 2025 -&gt; 2026
-63081666f Source file headers: 2024-&gt; 2025.
-06828f490 Migration stuff in progress...
-77bade6df javax.* -&gt; jakarta.*
-b6092df09 Copyright 2023 -&gt; 2024
-ab45d51fa Copyright 2001-2022 -&gt; 2001-2023.
-44dcb895b AbstractPagesRest.createListLayout(...) refactored.
-4a8ee9d9c WIP: AG-Grid, multi-selection
-d6e38e608 WIP: AG-Grid, mass-update
-f95349ec6 WIP: Scripting: UIEditor supports now height as param.</pre></div>
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="utf-8"><title>#2287: PollInfoPageRest.kt</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333}a{color:#0366d6}.meta{background:#f0f0f0;border-radius:6px;padding:1em;margin:1em 0;font-size:.9em}.commentary{margin:.8em 0;background:#fff;padding:.5em 1em;border-radius:6px;border-left:4px solid #ddd;line-height:1.7}table{border-collapse:collapse;width:100%;margin:.8em 0;font-size:.9em}th,td{border:1px solid #ddd;padding:.4em .6em}th{background:#f0f0f0}code{background:#e8e8e8;border-radius:3px;padding:.1em .3em;font-size:.9em}.nav{font-size:.9em;color:#888;margin-bottom:1em}.history{background:#fffbe6;border-radius:6px;padding:1em;margin:1em 0;font-size:.9em;border-left:4px solid #ffc107}</style></head>
+<body><div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="2286.html">← Prev</a> · <a href="2288.html">Next →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-rest/src/main/kotlin/org/projectforge/rest/poll/PollInfoPageRest.kt" target="_blank" title="View source on GitHub">📄 source</a></div>
+<h1>#2287: <code>PollInfoPageRest.kt</code></h1>
+<div class="meta"><code>projectforge-rest/src/main/kotlin/org/projectforge/rest/poll/PollInfoPageRest.kt</code> <p><strong>Path:</strong> <code>projectforge-rest/src/main/kotlin/org/projectforge/rest/poll/PollInfoPageRest.kt</code> · <strong>Type:</strong> Kotlin class</p><p><strong>Purpose:</strong> Part of the ProjectForge poll module.</p><p><strong>Source:</strong> <a href="https://github.com/micromata/projectforge/blob/develop/projectforge-rest/src/main/kotlin/org/projectforge/rest/poll/PollInfoPageRest.kt">GitHub</a></p> <span style="color:#888">125 lines total</span></div>
+<div class="history"><table><tr><th>Commit</th><th>Date</th><th>Message</th></tr><tr><td><code>868d6abb</code></td><td></td><td>2025 -&amp;gt; 2026</td></tr>
+<tr><td><code>63081666</code></td><td></td><td>Source file headers: 2024-&amp;gt; 2025.</td></tr>
+<tr><td><code>e4fac10b</code></td><td></td><td>fix non critical i18n keys</td></tr>
+<tr><td><code>157139f0</code></td><td></td><td>Multiple changes for poll function</td></tr>
+<tr><td><code>38e376a2</code></td><td></td><td>Merge commit 'f8c97b8b3d20fa403a197a5c4b4b5ca3c3bc825d' into mgc-remove</td></tr>
+<tr><td><code>bd1cdd13</code></td><td></td><td>i18n key not translated fixes and AddressViewPageRest.kt removed from the commit</td></tr>
+<tr><td><code>77bade6d</code></td><td></td><td>javax.* -&amp;gt; jakarta.*</td></tr>
+<tr><td><code>b2e9145a</code></td><td></td><td>Excel Export with Annotations, New Poll Design, Email for FAU and Attendes, Custom Email Field in Po</td></tr>
+<tr><td><code>9ef69659</code></td><td></td><td>Bug Fixes AZUPF-55,56,30,52,62</td></tr>
+<tr><td><code>b6092df0</code></td><td></td><td>Copyright 2023 -&amp;gt; 2024</td></tr>
+</table></div>
+<h2>What it does</h2>
+<div class="commentary"><p>REST controller extending <code>AbstractDynamicPageRest()</code>. Package: <code>org.projectforge.rest.poll</code>. Patterns: REST controller, request mapping, dynamic page REST.</p></div>
+<h2>Key takeaways</h2>
+<div class="commentary"><ul><li><strong>10 commits</strong> (sample): <code>868d6abb</code>: 2025 -&amp;gt; 2026; <code>63081666</code>: Source file headers: 2024-&amp;gt; 2025.; <code>e4fac10b</code>: fix non critical i18n keys.</li>
+<li><strong>REST endpoint:</strong> Returns SDUI <code>UILayout</code> responses consumed by the React frontend via the dynamic page framework.</li></ul></div>
+<div class="nav" style="margin-top:2em"><a href="2286.html">← Prev</a> · <a href="2288.html">Next →</a></div>
 </body></html>

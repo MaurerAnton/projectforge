@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>#909: CurrencyConversionCache.kt [FR]</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:2em;color:#444}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}</style>
+</head>
+<body>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← Index des fichiers</a> · <a href="908.html">← Précédent</a> · <a href="910.html">Suivant →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/kotlin/org/projectforge/business/fibu/CurrencyConversionCache.kt" target="_blank" title="Voir la source sur GitHub">📄 source</a></div>
+
+<h1>#909: <code>CurrencyConversionCache.kt</code></h1>
+
+<div class="meta"><code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/CurrencyConversionCache.kt</code> 
+  <strong>Type :</strong> Composant Spring (cache)<br>
+  <strong>Paquetage :</strong> <code>org.projectforge.business.fibu</code><br>
+  <strong>Chemin :</strong> <code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/CurrencyConversionCache.kt</code><br>
+  <strong>Auteur :</strong> Kai Reinhard (k.reinhard@micromata.de)
+ <span style="color:#888">268 lignes · 143 code · 97 commentaires · 28 vides</span></div>
+
+<div class="c">
+  <p>Un cache en mémoire pour les <strong>paires de devises</strong> et leurs <strong>taux de conversion</strong>. Étend <code>AbstractCache</code>, implémentant le modèle de mise en cache de ProjectForge avec rafraîchissement paresseux. Agit également comme un <code>BaseDOModifiedListener</code> pour <code>CurrencyPairDO</code> afin d'invalider le cache lors des insertions/mises à jour. Fournit une recherche bidirectionnelle des taux avec calcul automatique du taux inverse.</p>
+</div>
+
+<h2>Architecture</h2>
+
+<h3>Héritage et interfaces</h3>
+<ul>
+  <li><strong>AbstractCache</strong> — fournit <code>checkRefresh()</code>/<code>refresh()</code>/<code>setExpired()</code></li>
+  <li><strong>BaseDOModifiedListener&lt;CurrencyPairDO&gt;</strong> — invalide le cache lorsque les paires de devises changent</li>
+</ul>
+
+<h3>Structures de données internes</h3>
+<table>
+  <tr><th>Champ</th><th>Type</th><th>Objectif</th></tr>
+  <tr><td><code>currencyPairMap</code></td><td><code>Map&lt;Long, CurrencyPairDO&gt;</code></td><td>Recherche principale par clé primaire de la base de données</td></tr>
+  <tr><td><code>currencyPairLookupMap</code></td><td><code>Map&lt;Pair&lt;String,String&gt;, Long&gt;</code></td><td>Recherche rapide par (source, cible) → identifiant de la paire</td></tr>
+</table>
+
+<h3>Stratégie de rafraîchissement</h3>
+<p>La méthode <code>refresh()</code> s'exécute dans une transaction en lecture seule via <code>persistenceService.runIsolatedReadOnly()</code>. Elle charge toutes les entrées <code>CurrencyPairDO</code> non supprimées et tous leurs taux non supprimés (triés par <code>validFrom</code> DESC). Les taux sont regroupés par identifiant de paire de devises et assignés à la liste transitoire <code>rates</code> de la paire.</p>
+
+<h3>Recherche de taux inverse</h3>
+<p><code>findCurrencyPairForConversion(source, target)</code> essaie d'abord une recherche directe (ex. EUR→USD). Si elle échoue, elle essaie la direction inverse (USD→EUR) et retourne un <code>CurrencyPairLookup</code> avec <code>useInverseRate=true</code>, signalant à l'appelant d'utiliser <code>1/taux</code>.</p>
+
+<h3>Repli sur le taux le plus ancien</h3>
+<p><code>findActiveRate()</code> avec <code>useFallbackToOldestRate=true</code> enregistrera un avertissement et retournera le taux le plus ancien disponible lorsqu'aucun taux n'est valide pour la date demandée. Ce comportement est explicitement documenté comme potentiellement non conforme pour la comptabilité financière.</p>
+
+<h2>Classe de données : CurrencyPairLookup</h2>
+<table>
+  <tr><th>Propriété</th><th>Type</th><th>Description</th></tr>
+  <tr><td><code>pair</code></td><td><code>CurrencyPairDO</code></td><td>La paire de devises correspondante</td></tr>
+  <tr><td><code>useInverseRate</code></td><td><code>Boolean</code></td><td>Si <code>true</code>, l'appelant doit appliquer <code>1/tauxDeConversion</code></td></tr>
+</table>
+
+<h2>Méthodes clés</h2>
+<table>
+  <tr><th>Méthode</th><th>Description</th></tr>
+  <tr><td><code>getCurrencyPair(id)</code></td><td>Récupère une paire de devises par sa clé primaire</td></tr>
+  <tr><td><code>findCurrencyPair(src, tgt)</code></td><td>Recherche directe par codes de devise source et cible</td></tr>
+  <tr><td><code>findCurrencyPairForConversion(src, tgt)</code></td><td>Recherche bidirectionnelle avec prise en charge du taux inverse</td></tr>
+  <tr><td><code>getConversionRate(pairId, date)</code></td><td>Trouve le taux actif pour une paire à une date donnée (optionnellement inverse)</td></tr>
+  <tr><td><code>getActiveRateDate(pairId, date)</code></td><td>Retourne le <code>validFrom</code> du taux actif</td></tr>
+  <tr><td><code>getRates(pairId)</code></td><td>Retourne tous les taux pour une paire de devises</td></tr>
+</table>
+
+<h2>Cycle de vie</h2>
+<ol>
+  <li><code>@PostConstruct</code> : s'enregistre auprès de <code>currencyPairDao</code> comme écouteur et stocke le singleton dans l'objet compagnon.</li>
+  <li>Lors du premier accès au cache via une méthode publique, <code>checkRefresh()</code> déclenche <code>refresh()</code>.</li>
+  <li>Lorsqu'un <code>CurrencyPairDO</code> est modifié, <code>afterInsertOrModify()</code> appelle <code>setExpired()</code>.</li>
+  <li>Toutes les opérations au niveau des taux (dans <code>CurrencyConversionServiceSupport</code>) appellent également <code>cache.setExpired()</code> directement.</li>
+</ol>
+
+<h2>Historique Git</h2>
+<div class="hist"><pre>
+868d6abb7 2025 -> 2026
+f4a839e3a CurrencyConversion : Afficher la date des taux actifs dans la vue liste.
+472fbc977 WIP : conversion de devises avec Claude Code.
+8c2bf04f0 WIP : conversion de devises avec Claude Code.
+abdac2e1b WIP : conversion de devises avec Claude Code.
+e1323795d WIP : conversion de devises avec Claude Code.
+357ebee61 WIP : conversion de devises avec Claude Code.
+</pre></div>
+
+</body>
+</html>

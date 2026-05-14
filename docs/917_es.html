@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>#917: EingangsrechnungDao.kt [ES]</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:2em;color:#444}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}</style>
+</head>
+<body>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Índice</a> · <a href="file-index.html">← Índice de archivos</a> · <a href="916.html">← Anterior</a> · <a href="918.html">Siguiente →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/kotlin/org/projectforge/business/fibu/EingangsrechnungDao.kt" target="_blank" title="Ver fuente en GitHub">📄 fuente</a></div>
+
+<h1>#917: <code>EingangsrechnungDao.kt</code></h1>
+
+<div class="meta"><code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/EingangsrechnungDao.kt</code> 
+  <strong>Tipo:</strong> DAO (Objeto de Acceso a Datos) / Servicio Spring<br>
+  <strong>Paquete:</strong> <code>org.projectforge.business.fibu</code><br>
+  <strong>Ruta:</strong> <code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/EingangsrechnungDao.kt</code><br>
+  <strong>Autor:</strong> Kai Reinhard (k.reinhard@micromata.de)
+ <span style="color:#888">270 líneas · 185 código · 52 comentarios · 33 en blanco</span></div>
+
+<div class="c">
+  <p>DAO para <strong>EingangsrechnungDO</strong> (facturas entrantes). Extiende <code>BaseDao&lt;EingangsrechnungDO&gt;</code> proporcionando CRUD, listado filtrado, fusión de historial y filtrado por estado de pago. Colabora con <code>EingangsrechnungCache</code> para consultas de alto rendimiento del estado de pago y con <code>CurrencyConversionService</code> para estadísticas en múltiples monedas.</p>
+</div>
+
+<h2>Arquitectura</h2>
+
+<h3>Herencia</h3>
+<ul>
+  <li><strong>BaseDao&lt;EingangsrechnungDO&gt;</strong> — DAO estándar con filtrado, ordenación, historial y comprobaciones de acceso</li>
+</ul>
+
+<h3>Dependencias</h3>
+<table>
+  <tr><th>Dependencia</th><th>Rol</th></tr>
+  <tr><td><code>EingangsrechnungCache</code></td><td>Búsqueda en caché del estado de pago mediante <code>RechnungJdbcService</code></td></tr>
+  <tr><td><code>KontoDao</code></td><td>Establece la cuenta (Konto) en los registros de facturas entrantes</td></tr>
+  <tr><td><code>CurrencyConversionService</code></td><td>Conversión de moneda para estadísticas</td></tr>
+  <tr><td><code>ConfigurationService</code></td><td>Moneda predeterminada del sistema para estadísticas</td></tr>
+</table>
+
+<h3>Control de Acceso</h3>
+<p>Protegido por <code>UserRightId.FIBU_EINGANGSRECHNUNGEN</code>, establecido en <code>init</code>.</p>
+
+<h2>Métodos Clave</h2>
+
+<h3>Rango de Años</h3>
+<p>La propiedad <code>years</code> ejecuta una consulta nombrada <code>EingangsrechnungDO.SELECT_MIN_MAX_DATE</code> (seleccionando <code>min(datum)</code> y <code>max(datum)</code>) y convierte el resultado en un <code>IntArray</code> mediante <code>getYearsByTupleOfLocalDate()</code>.</p>
+
+<h3>Estadísticas</h3>
+<p><code>buildStatistik(list)</code> crea un acumulador <code>EingangsrechnungsStatistik</code> y añade cada factura al mismo. Antes de procesar, inicializa los servicios estáticos <code>currencyConversionService</code> y <code>configurationService</code> en la clase base compartida <code>AbstractRechnungsStatistik</code> (patrón de inyección de dependencias mediante objeto complementario).</p>
+
+<h3>Asignación de Cuenta</h3>
+<p><code>setKonto(eingangsrechnung, kontoId)</code> busca el <code>KontoDO</code> mediante <code>kontoDao.findOrLoad()</code> y lo asigna. Si <code>kontoId</code> es nulo, la cuenta se establece como nula.</p>
+
+<h3>Listado Filtrado (<code>select</code>)</h3>
+<p>Envuelve el filtro en un <code>EingangsrechnungListFilter</code> si es necesario. Crea un <code>QueryFilter</code> con restricciones de fecha y filtros de tipo de pago. Ordena por <code>datum DESC</code>, luego por <code>kreditor DESC</code>. Después de la consulta, aplica un <strong>post-filtrado del estado de pago</strong> basado en <code>RechnungInfo</code> de la caché:</p>
+<ul>
+  <li><code>isShowUnbezahlt</code> — filtrar a facturas impagadas</li>
+  <li><code>isShowBezahlt</code> — filtrar a facturas pagadas</li>
+  <li><code>isShowUeberFaellig</code> — filtrar a facturas vencidas</li>
+</ul>
+
+<h3>Ganchos del Ciclo de Vida</h3>
+<table>
+  <tr><th>Gancho</th><th>Comportamiento</th></tr>
+  <tr><td><code>afterLoad(obj)</code></td><td>Establece <code>obj.info</code> desde la caché mediante <code>rechnungCache.ensureRechnungInfo(obj)</code></td></tr>
+  <tr><td><code>onInsertOrModify(obj, opType)</code></td><td>Delega en <code>AuftragAndRechnungDaoHelper.onSaveOrModify()</code>; escala <code>zahlBetrag</code> a 2 decimales; llama a <code>recalculate()</code>; asegura que exista al menos una posición (lanza <code>UserException</code> si está vacío); elimina posiciones vacías al final; escribe el estado de la UI en XML.</td></tr>
+  <tr><td><code>afterInsertOrModify(obj, opType)</code></td><td>Llama a <code>rechnungCache.update(obj)</code> para actualizar la caché</td></tr>
+</table>
+
+<h3>Fusión de Historial</h3>
+<p><code>addOwnHistoryEntries()</code> itera sobre todas las posiciones y sus asignaciones de coste (<code>KostZuweisungDO</code>), fusionando el historial de cada hijo en el contexto padre. <code>getHistoryPropertyPrefix()</code> proporciona prefijos contextuales: números de posición y <code>"kost #N"</code> para asignaciones de coste.</p>
+
+<h3>Consultas Adicionales</h3>
+<table>
+  <tr><th>Método</th><th>Descripción</th></tr>
+  <tr><td><code>findNewestByKreditor(kreditor)</code></td><td>Encuentra la factura no eliminada más reciente (por <code>created</code> descendente) para un acreedor dado</td></tr>
+  <tr><td><code>getByDateRange(from, until)</code></td><td>Encuentra todas las facturas no eliminadas en un rango de fechas, ordenadas por fecha y acreedor. Se utiliza para la conciliación de importaciones.</td></tr>
+  <tr><td><code>contains(idSet, entry)</code></td><td>Comprueba si algún id de posición está en el conjunto dado (para selección masiva)</td></tr>
+</table>
+
+<h3>Campos de Búsqueda Adicionales</h3>
+<p>Incluye <code>"positionen.text"</code> en las consultas de búsqueda, permitiendo la búsqueda de texto completo en las líneas de detalle de las facturas.</p>
+
+<h3>DOs de Búsqueda de Historial Adicionales</h3>
+<p>Incluye <code>EingangsrechnungsPositionDO</code> para búsquedas de historial entre entidades.</p>
+
+<h3>Autocompletado</h3>
+<p>Habilitado para <code>"kreditor"</code> (nombre del acreedor).</p>
+
+<h2>Historial Git</h2>
+<div class="hist"><pre>
+868d6abb7 2025 -> 2026
+6be9c2b84 WIP: conversión de moneda con Claude Code.
+363d3b836 WIP: Importación de facturas de acreedores.
+63081666f Encabezados de archivos fuente: 2024 -> 2025.
+db2599ab8 Historial en libro de pedidos, facturas entrantes/salientes y proyectos.
+18bf92219 WIP: Manejo de entradas de historial. VisitorBookDao.
+b71b5073d Migración en curso... (todas las pruebas de todos los paquetes: OK).
+bbc198d03 Migración en curso... (todas las pruebas de todos los paquetes: OK).
+ba2479571 Migración en curso...
+b47c21af6 Refactorización de caché y cálculos con facturas (aún no terminado)
+9e3c523c7 Migración en curso... (todas las pruebas de todos los paquetes: OK).
+c97135a57 Migración en curso...
+d18c899b5 Refactorización de entradas de historial, FlatDisplayHistoryEntries y DisplayHistoryEntries...
+b79a1edca Migración en curso... (todas las pruebas de todos los paquetes: OK).
+d67bce18b Migración en curso...
+</pre></div>
+
+</body>
+</html>

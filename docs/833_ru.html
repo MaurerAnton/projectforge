@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>#833: AddressbookDao.kt [RU]</title>
+<style>
+body { font-family: system-ui, sans-serif; max-width: 960px; margin: 2em auto; padding: 0 1em; background: #fafafa; color: #222; line-height: 1.6; }
+h1 { border-bottom: 2px solid #333; padding-bottom: 0.3em; }
+h2 { margin-top: 2.5em; border-bottom: 1px solid #ddd; padding-bottom: 0.2em; color: #333; }
+h3 { margin-top: 2em; color: #444; }
+a { color: #0366d6; }
+.c { border-left: 3px solid #ddd; padding: .5em 1em; margin: 1em 0; background: #fff; }
+.nav { font-size: .9em; color: #888; margin-bottom: 1em; }
+.meta { font-size: .9em; margin: 1em 0; color: #555; }
+code { background: #f0f0f0; padding: 0 .2em; font-size: .93em; }
+pre { background: #f5f5f5; padding: .8em 1em; border: 1px solid #ddd; border-radius: 4px; overflow-x: auto; font-size: .88em; line-height: 1.4; }
+table { border-collapse: collapse; width: 100%; margin: 1em 0; }
+th, td { border: 1px solid #ddd; padding: .5em .8em; text-align: left; font-size: .9em; }
+th { background: #f5f5f5; font-weight: 600; }
+.hist { font-size: .85em; color: #555; }
+</style>
+</head>
+<body>
+
+<div class="nav">
+  <a href="https://maureranton.github.io/projectforge/">← Индекс</a> ·
+  <a href="file-index.html">← Индекс файлов</a> ·
+  <a href="832.html">← Предыдущий</a> ·
+  <a href="834.html">Следующий →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/kotlin/org/projectforge/business/address/AddressbookDao.kt" target="_blank" title="Просмотреть исходный код на GitHub">📄 исходный код</a></div>
+
+<h1>#833: <code>AddressbookDao.kt</code></h1>
+
+<div class="meta"><code>projectforge-business/src/main/kotlin/org/projectforge/business/address/AddressbookDao.kt</code> 
+  <strong>Тип:</strong> Объект доступа к данным (DAO) — сервис, управляемый Spring<br>
+  <strong>Назначение:</strong> Уровень сохранения и контроля доступа для сущностей адресной книги<br>
+  <strong>Расположение:</strong> <code>projectforge-business/src/main/kotlin/org/projectforge/business/address/AddressbookDao.kt</code>
+ <span style="color:#888">174 строки · 120 кода · 38 комментариев · 16 пустых</span></div>
+
+<div class="c">
+  <strong>Краткое описание:</strong> <code>AddressbookDao</code> — это основной объект доступа к данным для сущностей <code>AddressbookDO</code>. Он расширяет <code>BaseDao</code>, наследуя стандартные CRUD-операции (сохранение, обновление, удаление, поиск, getList, markAsDeleted, undelete), и переопределяет <code>select()</code> для обеспечения фильтрации контроля доступа для каждого пользователя через <code>AddressbookRight</code>. Он аннотирован как синглтон Spring <code>@Service</code> и является одним из старейших файлов в кодовой базе, присутствующим с самого первого коммита.
+</div>
+
+<h2>Архитектура и положение в системе</h2>
+
+<h3>Иерархия классов</h3>
+<p><code>AddressbookDao</code> расширяет <code>BaseDao&lt;AddressbookDO&gt;</code>, который сам является обобщённым Hibernate DAO, предоставляющим:</p>
+<ul>
+  <li><code>save(obj)</code> / <code>update(obj)</code> — сохранение или слияние сущности</li>
+  <li><code>delete(obj)</code> / <code>markAsDeleted(obj)</code> — жёсткое или мягкое удаление</li>
+  <li><code>select(filter)</code> — запросы отфильтрованных списков (переопределён здесь)</li>
+  <li><code>find(id)</code> / <code>getList(filter)</code> — одиночное получение и списки с пагинацией</li>
+  <li><code>undelete(obj)</code> — восстановление мягко удалённой сущности</li>
+</ul>
+
+<h3>Интеграция контроля доступа</h3>
+<p>DAO участвует в системе управления правами ProjectForge двумя способами:</p>
+<table>
+  <tr><th>Механизм</th><th>Описание</th></tr>
+  <tr>
+    <td><code>UserRightId.MISC_ADDRESSBOOK</code></td>
+    <td>Устанавливается в блоке <code>init</code>. Это право проверяется <code>BaseDao</code> перед любой изменяющей операцией (сохранение, обновление, удаление и т.д.), чтобы убедиться, что вызывающий обладает разрешением <em>MISC_ADDRESSBOOK</em>.</td>
+  </tr>
+  <tr>
+    <td><code>AddressbookRight</code></td>
+    <td>Используется внутри переопределённого метода <code>select()</code>. Строит HQL-запрос, который присоединяет таблицы прав пользователей/групп и ограничивает результаты адресными книгами, которые текущий пользователь может читать, на основе правил владения и группового доступа, унаследованных от <code>BaseUserGroupRightsDO</code>.</td>
+  </tr>
+</table>
+
+<h3>Зависимости</h3>
+<table>
+  <tr><th>Зависимость</th><th>Роль</th></tr>
+  <tr><td><code>UserDao</code></td><td>Autowired; используется <code>setOwner()</code> для разрешения <code>PFUserDO</code> по его числовому ID перед назначением его владельцем адресной книги.</td></tr>
+  <tr><td><code>HistoryFormatUtils</code></td><td>Autowired; предоставляет вспомогательные функции форматирования для записей аудита (истории), вероятно, используется через <code>BaseDao</code> при записи изменений.</td></tr>
+</table>
+
+<h3>Ключевые методы</h3>
+
+<h4><code>setOwner(ab: AddressbookDO, userId: Long)</code></h4>
+<p>Разрешает <code>PFUserDO</code> через <code>UserDao</code> и назначает его полю <code>owner</code> адресной книги. Это удобный метод, который централизует шаблон поиска владельца, используемый контроллерами пользовательского интерфейса.</p>
+
+<h4><code>override fun select(filter: BaseSearchFilter): List&lt;AddressbookDO&gt;</code></h4>
+<p>Переопределяет базовую реализацию, чтобы привести обобщённый фильтр к <code>AddressbookFilter</code> и включить фильтрацию на основе <code>AddressbookRight</code>. Сгенерированный HQL добавляет предложения JOIN к таблицам прав, чтобы возвращались только адресные книги, видимые текущему пользователю (по владению, членству в группе или явным разрешениям доступа). Пользователи без <code>MISC_ADDRESSBOOK</code> могут увидеть пустой список.</p>
+
+<h4><code>override fun newInstance(): AddressbookDO</code></h4>
+<p>Фабричный метод, требуемый обобщённой инфраструктурой DAO; возвращает простой новый <code>AddressbookDO()</code>.</p>
+
+<h4><code>override val additionalSearchFields: Array&lt;String&gt;</code></h4>
+<p>Возвращает <code>ADDITIONAL_SEARCH_FIELDS</code>, константный массив, перечисляющий свойства сущности, которые должны быть включены в полнотекстовые / Hibernate Search запросы помимо полей по умолчанию, унаследованных от <code>BaseDO</code>.</p>
+
+<h2>История Git</h2>
+<div class="hist">
+  <table>
+    <tr><th>Коммит</th><th>Описание</th></tr>
+    <tr><td><code>868d6abb7</code></td><td>Обновление года авторских прав: 2025 → 2026</td></tr>
+    <tr><td><code>63081666f</code></td><td>Заголовки исходных файлов: 2024 → 2025</td></tr>
+    <tr><td><code>4c04cfd65</code></td><td>MAJOR: Миграция целочисленных ID на Long ID (изменены все ключи на основе <code>Integer</code> на <code>Long</code>)</td></tr>
+    <tr><td><code>b6092df09</code></td><td>Авторские права 2023 → 2024</td></tr>
+    <tr><td><code>ab45d51fa</code></td><td>Авторские права 2001-2022 → 2001-2023</td></tr>
+    <tr><td><code>5f7ef41b8</code></td><td>Авторские права 2021 → 2022</td></tr>
+    <tr><td><code>ceb63e8a1</code></td><td>Заголовок исходного кода: (C) 2001-2021</td></tr>
+    <tr><td><code>7c79f1922</code></td><td>Авторские права в заголовке исходного кода → 2020</td></tr>
+    <tr><td><code>dd5ca38ac</code></td><td>Обновлены или созданы авторские права во всех заголовках java-файлов</td></tr>
+    <tr><td><code>2d86a8cd6</code></td><td>PROJECTFORGE-2306: Рефакторинг для сохранения проверки доступа при обновлении (обеспечено соблюдение проверок <code>UserRightId</code> на каждом пути записи)</td></tr>
+    <tr><td><code>9ebb88522</code></td><td>Первый коммит — один из оригинальных файлов из начального импорта проекта</td></tr>
+  </table>
+</div>
+
+<h2>Обоснование дизайна</h2>
+
+<h3>Почему отдельный класс DAO?</h3>
+<p>ProjectForge следует стандартному шаблону «один DAO на сущность». Каждая бизнес-сущность получает свой собственный DAO, чтобы сквозные аспекты (контроль доступа, аудит, полнотекстовое индексирование) могли быть настроены для каждой сущности. Обобщённый <code>BaseDao</code> обрабатывает шаблонный CRUD, а подкласс для конкретной сущности внедряет специфичные для сущности правила — здесь это логика доступа к адресной книге.</p>
+
+<h3>Почему переопределён <code>select()</code>, а не используются аннотации Spring Security?</h3>
+<p>ProjectForge предшествует широкому внедрению Spring Security и использует собственный уровень управления правами, построенный на HQL JOIN. Переопределение <code>select()</code> позволяет встраивать проверки доступа непосредственно в запрос к базе данных, избегая проблемы N+1, которая возникла бы при загрузке всех строк и последующей фильтрации в коде приложения. Этот подход также позволяет фильтру объединять предикаты контроля доступа с критериями поиска, предоставленными пользователем, в одном HQL-выражении.</p>
+
+<h3>Почему используется класс <code>AddressbookRight</code> вместо встроенного HQL?</h3>
+<p>Класс <code>AddressbookRight</code> инкапсулирует модель разрешений пользователей/групп, определённую <code>BaseUserGroupRightsDO</code>. Делегируя отдельному классу, ту же логику доступа можно повторно использовать в отчётах, экспорте и REST-конечных точках без дублирования шаблона с несколькими JOIN. Это также упрощает тестирование модели доступа изолированно.</p>
+
+<h3>Почему <code>@Service</code> вместо <code>@Repository</code>?</h3>
+<p>Хотя стереотип Spring <code>@Repository</code> типичен для DAO, ProjectForge использует <code>@Service</code> во всём своём DAO-слое. Вероятно, это отражает соглашение, установленное до того, как функция трансляции исключений <code>@Repository</code> была широко принята, или осознанный выбор рассматривать DAO как транзакционные сервисные компоненты. Функциональная разница незначительна, поскольку оба являются синглтонами, управляемыми Spring.</p>
+
+<h3>Долговечность</h3>
+<p>Этот файл находится в кодовой базе с самого первого коммита (<code>9ebb88522</code>) и пережил все крупные рефакторинги — миграцию с Integer на Long, множественные обновления авторских прав и рефакторинг проверки доступа PROJECTFORGE-2306 — что свидетельствует о стабильности абстракции DAO.</p>
+
+</body>
+</html>

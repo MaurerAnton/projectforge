@@ -1,5 +1,85 @@
-<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>#413</title><style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333}a{color:#0366d6}.meta{font-size:.9em;margin:1em 0}.nav{font-size:.9em;color:#888;margin-bottom:1em}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}</style></head>
-<body><div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="412.html">← Prev</a> · <a href="414.html">Next →</a></div>
-<h1>#413: <code>KontoStatus.java</code></h1>
-<div class="meta"><strong>Java enum</strong> — account status. Values: <code>ACTIVE</code>, <code>INACTIVE</code>, <code>CLOSED</code>. Controls whether a general ledger account can be used in new postings — closed/inactive accounts are hidden from dropdowns but retained for historical data. I18n keys under <code>fibu.konto.status.*</code>.</div>
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>#413: KontoDao.java</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:2em;color:#444}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.lang{font-size:.85em;color:#888;float:right}.lang a{color:#888;text-decoration:none;padding:0 .3em}.lang a.active{color:#0366d6;font-weight:600;text-decoration:underline}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}</style></head>
+<body><div class="lang"><a href="413.html" class="active">EN</a> · <a href="413_de.html">DE</a> · <a href="413_ru.html">RU</a> · <a href="413_fr.html">FR</a> · <a href="413_es.html">ES</a></div>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="580.html">← Prev</a> · <a href="1047.html">Next →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/java/org/projectforge/business/fibu/KontoDao.java" target="_blank" title="View source on GitHub">📄 source</a></div>
+<h1>#413: <code>KontoDao.java</code></h1>
+<div class="meta"><code>projectforge-business/src/main/java/org/projectforge/business/fibu/KontoDao.java</code> Type: Java · Role: Data Access Object · Source: projectforge-business/src/main/java/org/projectforge/business/fibu/KontoDao.java <span style="color:#888">85 lines · 49 code · 26 comments · 10 blank</span></div>
+<div class="c">Data Access Object for Konto entities. Extends BaseDao to provide CRUD operations, Hibernate Search queries, and business-logic-level data access.</div>
+<h2>Code Structure</h2>
+<p>Package: <code>org.projectforge.business.fibu</code></p>
+<p>Classes: <code>KontoDao</code></p>
+<p>Extends: <code>BaseDao</code></p>
+<p>Methods (5): <code>afterInsertOrModify</code>, <code>getKonto</code>, <code>newInstance</code>, <code>getKontoCache</code>, <code>onInsertOrModify</code></p>
+<p>Fields (2): <code>USER_RIGHT_ID</code>, <code>kontoCache</code></p>
+<p>Imports: 8 packages</p>
+<h2>Source Code (abridged)</h2>
+<pre>
+package org.projectforge.business.fibu;
+
+import kotlin.Pair;
+import org.jetbrains.annotations.NotNull;
+import org.projectforge.business.user.UserRightId;
+import org.projectforge.common.i18n.UserException;
+import org.projectforge.framework.access.OperationType;
+import org.projectforge.framework.persistence.api.BaseDao;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
+
+@Service
+public class KontoDao extends BaseDao&lt;KontoDO&gt; {
+    public static final UserRightId USER_RIGHT_ID = UserRightId.FIBU_ACCOUNTS;
+
+    @Autowired
+    private KontoCache kontoCache;
+
+    public KontoDao() {
+        super(KontoDO.class);
+        userRightId = USER_RIGHT_ID;
+    }
+
+    @Override
+    public void afterInsertOrModify(@NotNull final KontoDO obj, final OperationType operationType) {
+        getKontoCache().refresh();
+    }
+
+    public KontoDO getKonto(final Integer kontonummer) {
+        if (kontonummer == null) {
+            return null;
+        }
+        return persistenceService.selectNamedSingleResult(
+                KontoDO.FIND_BY_NUMMER,
+                KontoDO.class,
+                new Pair&lt;&gt;(&quot;nummer&quot;, kontonummer));
+    }
+
+    @NotNull
+    @Override
+    public KontoDO newInstance() {
+        return new KontoDO();
+    }
+
+    /**
+     * @return the kontoCache
+     */
+    public KontoCache getKontoCache() {
+        return kontoCache;
+    }
+
+    @Override
+    public void onInsertOrModify(final KontoDO obj, final OperationType operationType) {
+        if (obj.getNummer() != null &amp;&amp; obj.getNummer() &gt; 0) {
+            KontoDO existingAccount = getKonto(obj.getNummer());
+            //Insert case
+            if (existingAccount != null &amp;&amp; (obj.getId() == null || !obj.getId().equals(existingAccount.getId()))) {
+                throw new UserException(&quot;fibu.konto.validate.duplicate&quot;);
+            }
+        }
+    }
+}</pre>
+
+<h2>Git History</h2><div class="hist"><pre>868d6abb7 2025 -&gt; 2026
+63081666f Source file headers: 2024-&gt; 2025.
+5989b32fd BaseDao: mechanism of onChangeLister refactored.
+1b50060c3 BaseDao: renamed: get -&gt; find, save -&gt; insert, getList -&gt; select, load -&gt; select
+3aeda5ef5 Big change: all save|update|...InTrans renamed (InTrans removed). PfPesistenceContext as param not needed anymore (ThreadLocal is used instead). (all tests of all packages: OK).</pre></div>
 </body></html>

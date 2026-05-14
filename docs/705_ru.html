@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>#705 [RU]</title>
+<style>
+body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}
+h1{border-bottom:2px solid #333;padding-bottom:.3em}
+h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}
+h3{margin-top:2em;color:#444}
+a{color:#0366d6}
+.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}
+.nav{font-size:.9em;color:#888;margin-bottom:1em}
+.meta{font-size:.9em;margin:1em 0;color:#555}
+code{background:#f0f0f0;padding:0 .2em;font-size:.93em}
+pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}
+table{border-collapse:collapse;width:100%;margin:1em 0}
+th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}
+th{background:#f5f5f5;font-weight:600}
+.hist{font-size:.85em;color:#555}
+.warn{background:#fff3cd;border-left:3px solid #ffc107;padding:.5em 1em;margin:1em 0}
+.tip{background:#d4edda;border-left:3px solid #28a745;padding:.5em 1em;margin:1em 0}
+</style>
+</head>
+<body>
+
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Индекс</a> · <a href="file-index.html">← Индекс файлов</a> · <a href="704.html">← Назад</a> · <a href="706.html">Вперёд →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/java/org/projectforge/framework/persistence/xstream/HibernateCollectionsMapper.java" target="_blank" title="Просмотреть исходник на GitHub">📄 исходник</a></div>
+
+<h1>#705: <code>HibernateCollectionsMapper.java</code></h1>
+
+<div class="meta"><code>projectforge-business/src/main/java/org/projectforge/framework/persistence/xstream/HibernateCollectionsMapper.java</code> XStream mapper — заменяет имена типов коллекций Hibernate на эквиваленты JDK в XML-выводе, <code>projectforge-business/src/main/java/org/projectforge/framework/persistence/xstream/HibernateCollectionsMapper.java</code> <span style="color:#888">114 строк · 49 кода · 51 комментарий · 14 пустых</span></div>
+
+<div class="c">Расширяет <code>XmlFriendlyMapper</code> от XStream для перехвата поисков «тип→имя» и «класс→имя» во время сериализации. Когда XStream необходимо записать имя класса как XML-элемент или атрибут, этот mapper подставляет специфичные для Hibernate классы коллекций (<code>PersistentList</code>, <code>PersistentSet</code> и т.д.) их стандартными аналогами JDK (<code>ArrayList</code>, <code>HashSet</code> и т.д.). Это гарантирует, что генерируемый XML содержит читаемые, не зависящие от фреймворка имена типов. Работает на уровне <em>сопоставления имён</em> — <a href="702.html">HibernateCollectionConverter</a> занимается непосредственным преобразованием <em>данных</em> коллекции.</div>
+
+<h2>Архитектура</h2>
+
+<h3>Иерархия классов</h3>
+<p><code>HibernateCollectionsMapper</code> расширяет <code>com.thoughtworks.xstream.mapper.XmlFriendlyMapper</code>, который, в свою очередь, расширяет <code>MapperWrapper</code>. Цепочка mapper'ов XStream следует шаблону «Декоратор» — каждый mapper оборачивает другой mapper, и вызовы передаются по цепочке. Этот mapper перехватывает три конкретных метода для применения подстановок коллекций Hibernate→JDK.</p>
+
+<h3>Таблицы сопоставления</h3>
+<p>Класс использует три параллельных массива с одинаковыми индексами:</p>
+<table>
+<tr><th>Индекс</th><th>Класс Hibernate (<code>hbClasses</code>)</th><th>Имя Hibernate (<code>hbClassNames</code>)</th><th>Замена JDK (<code>jdkClasses</code>/<code>jdkClassNames</code>)</th></tr>
+<tr><td>0</td><td><code>PersistentList</code></td><td><code>org.hibernate.collection.spi.PersistentList</code></td><td><code>java.util.ArrayList</code></td></tr>
+<tr><td>1</td><td><code>PersistentSet</code></td><td><code>org.hibernate.collection.spi.PersistentSet</code></td><td><code>java.util.HashSet</code></td></tr>
+<tr><td>2</td><td><code>PersistentMap</code></td><td><code>org.hibernate.collection.spi.PersistentMap</code></td><td><code>java.util.HashMap</code></td></tr>
+<tr><td>3</td><td><code>PersistentSortedSet</code></td><td><code>org.hibernate.collection.spi.PersistentSortedSet</code></td><td><code>java.util.TreeSet</code></td></tr>
+<tr><td>4</td><td><code>PersistentSortedMap</code></td><td><code>org.hibernate.collection.spi.PersistentSortedMap</code></td><td><code>java.util.TreeMap</code></td></tr>
+</table>
+
+<h3>Переопределённые методы</h3>
+<table>
+<tr><th>Метод</th><th>Входные данные</th><th>Действие</th></tr>
+<tr><td><code>mapNameToXML(String javaName)</code></td><td>Полное имя Java-класса</td><td>Применяет замену строк через <code>replaceClasses(String)</code>, затем делегирует суперклассу для XML-дружественного кодирования (например, замена <code>$</code> в именах внутренних классов).</td></tr>
+<tr><td><code>serializedClass(Class type)</code></td><td>Объект <code>Class</code></td><td>Применяет замену класса через <code>replaceClasses(Class)</code>, затем делегирует суперклассу.</td></tr>
+<tr><td><code>serializedMember(Class type, String fieldName)</code></td><td>Объявляющий класс + имя поля</td><td>Применяет замену класса к <code>type</code> перед делегированием суперклассу, гарантируя, что объявления полей внутри коллекций Hibernate сериализуются с контекстом типа JDK.</td></tr>
+</table>
+
+<h3>Направленность</h3>
+<div class="warn">Этот mapper является <strong>только для записи</strong> (направление сериализации/сжатия). Он не реализует обратное сопоставление для <code>realClass()</code> или десериализацию. В исходнике явно указано: «Этот mapper заботится только о записи в XML (сжатие), но не наоборот (разжатие), поскольку в этом нет необходимости». Когда XML десериализуется, XStream создаёт стандартные коллекции JDK, а ORM-слой Hibernate оборачивает их в подклассы <code>PersistentCollection</code> после повторного присоединения сущности к сессии.</div>
+
+<h2>Точки интеграции</h2>
+<ul>
+  <li>Оборачивает цепочку mapper'ов XStream — создаётся с делегатом <code>Mapper</code> (нижележащий mapper, который он декорирует).</li>
+  <li>Работает совместно с <a href="702.html">HibernateCollectionConverter</a>: mapper управляет <em>тем, какое</em> имя типа появляется в XML, а converter — <em>тем, как</em> записываются данные.</li>
+  <li>Используется в конфигурации XStream вместе с <a href="704.html">HibernateMapper</a> (который имеет пересекающуюся, но более полную логику сопоставления).</li>
+</ul>
+
+<h2>Проектные решения и особенности</h2>
+<ul>
+  <li><strong>Суперкласс XmlFriendlyMapper:</strong> Расширение <code>XmlFriendlyMapper</code> (а не простого <code>MapperWrapper</code>) гарантирует, что после замены имени класса результат остаётся XML-безопасным (например, символы <code>$</code> из имён внутренних классов кодируются).</li>
+  <li><strong>Шаблон параллельных массивов:</strong> Сопоставление использует три параллельных массива, жёстко заданных при инициализации класса. Это производительно (линейный проход O(n) по 5 элементам), но хрупко — если Hibernate добавит новые подтипы <code>PersistentCollection</code>, этот mapper молча их проигнорирует. Сравните с <a href="704.html">HibernateMapper</a>, который использует <code>Map</code> для более читаемой и расширяемой регистрации.</li>
+  <li><strong>Избыточность с HibernateMapper:</strong> И <code>HibernateCollectionsMapper</code>, и <code>HibernateMapper</code> выполняют подстановку имён классов коллекций. <code>HibernateMapper</code> (использующий <code>defaultImplementationOf()</code> и <code>serializedClass()</code>) является более современным подходом и включает <code>PersistentBag</code> (который этот mapper пропускает). На практике должен быть активен только один из них, чтобы избежать двойного сопоставления.</li>
+  <li><strong>Отсутствие поддержки <code>PersistentBag</code>:</strong> Обратите внимание, что <code>PersistentBag</code> (коллекция Hibernate по умолчанию для нетипизированных полей <code>List</code>) отсутствует в массивах этого mapper'а. Он присутствует в <a href="704.html">HibernateMapper</a>.</li>
+  <li><strong>Авторство:</strong> Изначально написан Костином Леу (Costin Leau).</li>
+</ul>
+
+<h2>История Git</h2>
+<div class="hist"><pre>868d6abb7 2025 -> 2026
+63081666f Заголовки исходных файлов: 2024 -> 2025.
+c1d14ecdb Работа по миграции в процессе...
+b6092df09 Авторские права 2023 -> 2024
+ab45d51fa Авторские права 2001-2022 -> 2001-2023.
+5f7ef41b8 Авторские права 2021 -> 2022
+ceb63e8a1 Заголовок исходного кода: (C) 2001-2021.
+7c79f1922 Авторские права в заголовке исходника -> 2020.
+32f634b88 Оптимизация импортов
+dd5ca38ac Авторские права всех заголовков Java-файлов обновлены или созданы.
+9ebb88522 Первоначальный коммит</pre></div>
+
+</body>
+</html>

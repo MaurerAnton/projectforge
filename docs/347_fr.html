@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="fr"><head><meta charset="utf-8"><title>#347: SourceFileCheckerTest.kt [FR]</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:2em;color:#444}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.lang{font-size:.85em;color:#888;float:right}.lang a{color:#888;text-decoration:none;padding:0 .3em}.lang a.active{color:#0366d6;font-weight:600;text-decoration:underline}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}</style></head>
+<body><div class="lang"><a href="347.html">EN</a> · <a href="347_de.html">DE</a> · <a href="347_ru.html">RU</a> · <a href="347_fr.html" class="active">FR</a> · <a href="347_es.html">ES</a></div>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← Index des fichiers</a> · <a href="318.html">← Précédent</a> · <a href="2710.html">Suivant →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-application/src/test/kotlin/org/projectforge/development/SourceFileCheckerTest.kt" target="_blank" title="Voir la source sur GitHub">📄 source</a></div>
+<h1>#347: <code>SourceFileCheckerTest.kt</code></h1>
+<div class="meta"><code>projectforge-application/src/test/kotlin/org/projectforge/development/SourceFileCheckerTest.kt</code> Type : Kotlin · Rôle : Test · Source : projectforge-application/src/test/kotlin/org/projectforge/development/SourceFileCheckerTest.kt <span style="color:#888">82 lignes · 43 code · 34 commentaires · 5 vides</span></div>
+<div class="c">Test unitaire/d'intégration pour SourceFileChecker. Valide l'exactitude du comportement de la classe de production correspondante.</div>
+<h2>Structure du code</h2>
+<p>Annotations : <code>author</code>, <code>Test</code>, <code>Throws</code></p>
+<p>Classes : <code>SourceFileCheckerTest</code>, <code>should</code></p>
+<p>Fonctions (1) : <code>checkLoggerDeclarations</code></p>
+<p>Propriétés (2) : <code>loggerRegex</code>, <code>supportedExtensions</code></p>
+<p>Importations : 6 paquetages</p>
+<p>Paquetage : <code>org.projectforge.development</code></p>
+<h2>Code source (abrégé)</h2>
+<pre>
+package org.projectforge.development
+
+import org.junit.jupiter.api.Assertions
+import org.junit.jupiter.api.Test
+import org.slf4j.LoggerFactory
+import java.io.File
+import java.io.IOException
+import java.nio.charset.StandardCharsets
+
+/**
+ * Différentes vérifications des fichiers source.
+ * @author Kai Reinhard
+ */
+class SourceFileCheckerTest {
+    /**
+     * Vérifie tous les sources Kotlin et Java pour une déclaration correcte de LoggerFactory.getLogger(SourceFileCheckerTest::class.java). Si une
+     * déclaration Logger diffère du nom du fichier source, le test échoue.
+     * Exemple : Foo.java : private final Logger log = LoggerFactory.getLogger(Bar.class); // Bar.class devrait être Foo.class.
+     */
+    @Test
+    @Throws(IOException::class)
+    fun checkLoggerDeclarations() {
+        var baseDir = File(System.getProperty(&quot;user.dir&quot;))
+        if (!baseDir.exists() || !baseDir.isDirectory) return
+        if (baseDir.name == &quot;projectforge-common&quot;) {
+            // Vérifie le répertoire parent pour vérifier aussi tous les autres modules ProjectForge.
+            baseDir = baseDir.parentFile
+        }
+        log.info(&quot;Vérification du répertoire &#x27;${baseDir.absolutePath}...&quot;)
+        var processedKotlinFiles = 0
+        var processedJavaFiles = 0
+        val errorFiles = mutableListOf&lt;String&gt;()
+        baseDir.walkTopDown().filter { supportedExtensions.contains(it.extension) }.forEach { file -&gt;
+            if (file.extension == &quot;kt&quot;) {
+                ++processedKotlinFiles
+            } else {
+                ++processedJavaFiles
+            }
+            val content = file.readText(StandardCharsets.UTF_8)
+            val matchResult = loggerRegex.find(content)
+            val loggerClass = matchResult?.groups?.get(1)?.value?.trim()
+            if (loggerClass != null &amp;&amp; file.nameWithoutExtension != loggerClass) {
+                errorFiles.add(file.path)
+                log.warn(&quot;$file déclare une classe logger étrangère : &#x27;$loggerClass&#x27;&quot;)
+            }
+        }
+        log.info(&quot;Vérifié $processedKotlinFiles fichiers Kotlin et $processedJavaFiles fichiers Java source pour la déclaration Logger.&quot;)
+        Assertions.assertTrue( errorFiles.isEmpty(), &quot;Fichiers source avec des classes logger non concordantes trouvés : ${errorFiles.joinToString { it }}&quot;)
+    }
+
+    companion object {
+        private val loggerRegex = &quot;&quot;&quot;LoggerFactory\s*.\s*getLogger\s*\(\s*(.*)\s*(\.class|:{2}class)&quot;&quot;&quot;.toRegex()
+        private val supportedExtensions = arrayOf(&quot;kt&quot;, &quot;java&quot;)
+
+        // Kotlin :
+        private val log = LoggerFactory.getLogger(SourceFileCheckerTest::class.java)
+        // Java : private static final Logger log = LoggerFactory.getLogger(SourceFileCheckerTest.class);
+    }
+}</pre>
+
+<h2>Historique Git</h2><div class="hist"><pre>868d6abb7 2025 -> 2026
+63081666f En-têtes des fichiers source : 2024 -> 2025.
+b6092df09 Copyright 2023 -> 2024
+ab45d51fa Copyright 2001-2022 -> 2001-2023.
+5e563fb80 EnsureSourceHeadersAndI18nMain appelle maintenant SourceFileHeadersMain, SortAndCheckI18nPropertiesMain et I18nKeysUsage(create). Appeler ce main avant chaque publication.</pre></div>
+</body></html>

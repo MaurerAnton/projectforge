@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>#932: EmployeeValidSinceAttrDO.kt [RU]</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:2em;color:#444}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}</style>
+</head>
+<body>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Индекс</a> · <a href="file-index.html">← Индекс файлов</a> · <a href="931.html">← Предыдущий</a> · <a href="933.html">Следующий →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/kotlin/org/projectforge/business/fibu/EmployeeValidSinceAttrDO.kt" target="_blank" title="Просмотреть исходный код на GitHub">📄 исходный код</a></div>
+<h1>#932: <code>EmployeeValidSinceAttrDO.kt</code></h1>
+<div class="meta"><code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/EmployeeValidSinceAttrDO.kt</code> Тип: JPA-сущность (объект данных) · Назначение: Зависящие от времени (период действия) атрибуты для сотрудников — статус, ежегодный отпуск, недельные часы · Путь: <code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/EmployeeValidSinceAttrDO.kt</code> <span style="color:#888">186 строк · 133 кода · 33 комментария · 20 пустых</span></div>
+<div class="c">Представляет одно значение атрибута сотрудника, зависящее от времени, которое становится действительным с определённой даты. Поддерживает три типа: <code>STATUS</code>, <code>ANNUAL_LEAVE</code> и <code>WEEKLY_HOURS</code>. Соответствует таблице <code>t_fibu_employee_valid_since_attr</code> с составным уникальным ограничением на <code>(employee_fk, type, valid_since)</code>. Реализует <code>CandHHistoryEntryICustomizer</code> для типизированного отображения истории и <code>WithHistory</code> для автоматического отслеживания истории.</div>
+
+<h2>Архитектура и дизайн</h2>
+
+<h3>Полиморфизм типов через строковое значение</h3>
+<p>Вместо использования отдельных таблиц или столбцов для каждого типа атрибута, эта сущность использует один столбец <code>value</code> (строка) с дискриминатором <code>type</code>. Временные свойства обеспечивают типобезопасный доступ:</p>
+<ul>
+<li><strong><code>annualLeave</code></strong> — Геттер/сеттер, проверяющий <code>type == ANNUAL_LEAVE</code> и преобразующий в/из <code>BigDecimal</code>.</li>
+<li><strong><code>weeklyWorkingHours</code></strong> — Геттер/сеттер, проверяющий <code>type == WEEKLY_HOURS</code> и преобразующий в/из <code>BigDecimal</code>.</li>
+<li><strong><code>status</code></strong> — Геттер/сеттер, проверяющий <code>type == STATUS</code> и преобразующий через <code>EmployeeStatus.safeValueOf()</code>.</li>
+</ul>
+<p>Все временные аксессоры аннотированы <code>@CandHIgnore</code> и <code>@JsonIgnore</code> — они не являются частью постоянной или сериализованной модели.</p>
+
+<h3>JPA-отображение</h3>
+<table>
+<tr><th>Поле</th><th>Столбец БД</th><th>Тип</th><th>Примечания</th></tr>
+<tr><td><code>id</code></td><td><code>pk</code></td><td><code>Long (SEQUENCE)</code></td><td>Первичный ключ, генерируемый через <code>hibernate_sequence</code>.</td></tr>
+<tr><td><code>employee</code></td><td><code>employee_fk</code></td><td><code>EmployeeDO (ManyToOne, LAZY)</code></td><td>Не может быть null. Использует <code>@JsonIdentityReference(alwaysAsId=true)</code>.</td></tr>
+<tr><td><code>type</code></td><td><code>type</code></td><td><code>EmployeeValidSinceAttrType? (STRING, макс. 30)</code></td><td>Дискриминатор: STATUS, ANNUAL_LEAVE или WEEKLY_HOURS.</td></tr>
+<tr><td><code>validSince</code></td><td><code>valid_since</code></td><td><code>LocalDate</code></td><td>Не может быть null. Дата, с которой этот атрибут вступает в силу.</td></tr>
+<tr><td><code>value</code></td><td><code>value</code></td><td><code>String (макс. 255)</code></td><td>Значение, зависящее от типа, хранящееся в виде строки (BigDecimal или имя перечисления).</td></tr>
+<tr><td><code>comment</code></td><td><code>comment</code></td><td><code>String (LENGTH_TEXT)</code></td><td>Необязательный текстовый комментарий.</td></tr>
+</table>
+
+<h3>Именованные запросы</h3>
+<ul>
+<li><code>EmployeeValidSinceAttr_FindByTypeAndDate</code> — <code>from EmployeeValidSinceAttrDO where employee.id=:employeeId and type=:type and validSince=:validSince</code></li>
+<li><code>EmployeeValidSinceAttr_FindOtherByTypeAndDate</code> — То же, но с <code>and id!=:id</code> (для проверки обновления, исключая текущую запись).</li>
+</ul>
+
+<h3>Семантика копирования</h3>
+<p><code>copyFrom(other)</code> копирует только <code>validSince</code>, <code>value</code> и <code>comment</code>. Примечательно, что <strong>тип, id и сотрудник НЕ копируются</strong> — это связано с тем, что копирование используется для шаблона повторного использования удалённой записи, когда существующая запись того же типа обновляется новыми значениями.</p>
+
+<h3>Интеграция с историей</h3>
+<p>Реализует <code>CandHHistoryEntryICustomizer</code>:</p>
+<ul>
+<li>Метод <code>customize(historyEntry)</code> находит атрибут <code>"value"</code> в истории и устанавливает его <code>propertyTypeClass</code> на основе дискриминатора <code>type</code>:
+  <ul>
+    <li><code>ANNUAL_LEAVE</code> → <code>BigDecimal::class</code></li>
+    <li><code>WEEKLY_HOURS</code> → <code>BigDecimal::class</code></li>
+    <li><code>STATUS</code> → <code>EmployeeStatus::class</code></li>
+  </ul>
+</li>
+</ul>
+<p>Это гарантирует, что записи истории отображают поле <code>value</code> с правильным форматированием типа (например, "5.00" для BigDecimal, i18n-метка для перечисления), а не в виде сырых строк.</p>
+
+<h3>Обоснование дизайна</h3>
+<p>Шаблон "периода действия" (также называемый "атрибуты со временем") позволяет атрибутам сотрудника изменяться со временем, сохраняя полную историю. Например:</p>
+<ul>
+<li>Ежегодный отпуск сотрудника может измениться с 24 до 30 дней, начиная с 2025-01-01.</li>
+<li>Его недельные часы могут измениться с 40 до 32, начиная с 2023-06-01.</li>
+<li>Его статус может измениться с Aushilfe на Festangestellter, начиная с 2024-03-01.</li>
+</ul>
+<p>Все изменения отслеживаются как отдельные записи с датами <code>validSince</code>. <code>EmployeeCache</code> и <code>EmployeeServiceSupport</code> определяют текущее значение, находя последнюю запись, чья дата <code>validSince</code> не превышает сегодняшнюю.</p>
+
+<h2>История Git</h2>
+<div class="hist"><pre>868d6abb7 2025 -> 2026
+feb661d79 Сотрудник: отображение истории для временных атрибутов
+63cc65ae0 Материалы Flyway, временные атрибуты сотрудника
+28efde264 Сотрудник: weeklyWorkingHours теперь как атрибут, зависящий от времени.
+63081666f Заголовки исходных файлов: 2024 -> 2025.
+0237d5eba Рефакторинг JSON-сериализации: введены IdOnlySerializer и IdsOnlySerializer.
+6aca64431 Миграция в процессе... (все тесты всех пакетов: ОК).
+4b9ffbee2 Миграция в процессе... (все тесты всех пакетов: ОК).
+e80642c81 Миграция в процессе... (все тесты всех пакетов: ОК).
+d6ad9ea38 Миграция в процессе...
+66ec668f6 Миграция в процессе...
+84e863624 Миграция в процессе... (все тесты всех пакетов: ОК).
+b79a1edca Миграция в процессе... (все тесты всех пакетов: ОК).
+d67bce18b Миграция в процессе...
+1faf30810 Миграция в процессе...
+c8f8ed935 Объявлены все сущности как FetchType.LAZY (было EAGER).
+4c04cfd65 КРУПНОЕ ИЗМЕНЕНИЕ! Миграция целочисленных id на Long id
+1be507bde Миграция в процессе...
+ee106100c Миграция временных атрибутов (сотрудники и книга посетителей)
+fdb15a1c1 Миграция в процессе...</pre></div>
+</body>
+</html>

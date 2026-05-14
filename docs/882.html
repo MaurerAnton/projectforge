@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>#882: AbstractRechnungsStatistik.kt</title>
+<title>#882</title>
 <style>
 body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}
 h1{border-bottom:2px solid #333;padding-bottom:.3em}
@@ -22,89 +22,268 @@ th{background:#f5f5f5;font-weight:600}
 </style>
 </head>
 <body>
-<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="881.html">← Prev</a> · <a href="883.html">Next →</a></div>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="881.html">← Prev</a> · <a href="883.html">Next →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/kotlin/org/projectforge/business/dvelop/ExtractPFTradingPartners.kt" target="_blank" title="View source on GitHub">📄 source</a></div>
 
-<h1>#882: <code>AbstractRechnungsStatistik.kt</code></h1>
+<h1>#882: <code>ExtractPFTradingPartners.kt</code></h1>
 
-<div class="meta">
-<p><strong>Type:</strong> Abstract generic class (<code>Serializable</code>)</p>
-<p><strong>Package:</strong> <code>org.projectforge.business.fibu</code></p>
-<p><strong>Full path:</strong> <code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/AbstractRechnungsStatistik.kt</code></p>
-</div>
+<div class="meta"><code>projectforge-business/src/main/kotlin/org/projectforge/business/dvelop/ExtractPFTradingPartners.kt</code> 
+<p><strong>Type:</strong> Spring <code>@Service</code> — Data extraction engine</p>
+<p><strong>Purpose:</strong> Extracts trading partners (vendors, customers) from ProjectForge's financial database tables and converts them into <code>TradingPartner</code> objects suitable for initial D-velop import.</p>
+<p><strong>Source path:</strong> <code>projectforge-business/src/main/kotlin/org/projectforge/business/dvelop/ExtractPFTradingPartners.kt</code></p>
+ <span style="color:#888">385 lines · 319 code · 38 comments · 28 blank</span></div>
 
 <div class="c">
-<p>Abstract statistics calculator for invoices. Aggregates financial metrics across a collection of invoices (outgoing or incoming): gross (<code>brutto</code>), net (<code>netto</code>), with cash discount (<code>bruttoMitSkonto</code>), paid (<code>gezahlt</code>), open (<code>offen</code>), overdue (<code>ueberfaellig</code>), and cash discount amounts (<code>skonto</code>). Also tracks payment term averages and provides Markdown-formatted output for Wicket UI display. Supports multi-currency conversion with warning tracking.</p>
+<p>Acts as the <strong>bridge</strong> between ProjectForge's legacy financial data (incoming invoices, outgoing invoices, and customer master data) and D-velop's trading partner model. It scans 5 years of invoice data, deduplicates entities across accounts, handles the "divers" (miscellaneous) account pattern, parses free-text billing addresses into structured fields, and classifies entities as VENDOR, CUSTOMER, or PARTNER. Also provides Excel export functionality for reconciliation.</p>
 </div>
 
-<h2>Type Parameter</h2>
-<p><code>T : AbstractRechnungDO?</code> — The concrete invoice type (e.g., <code>RechnungDO</code> or <code>EingangsrechnungDO</code>).</p>
+<h2>Architecture</h2>
 
-<h2>Aggregated Properties</h2>
+<h3>Inner Class: <code>Context</code></h3>
+<p>A mutable accumulator that collects extracted trading partners during the multi-phase extraction process:</p>
 <table>
-<tr><th>Property</th><th>Type</th><th>Description</th></tr>
-<tr><td><code>brutto</code></td><td><code>BigDecimal</code></td><td>Total gross sum across all invoices</td></tr>
-<tr><td><code>netto</code></td><td><code>BigDecimal</code></td><td>Total net sum</td></tr>
-<tr><td><code>bruttoMitSkonto</code></td><td><code>BigDecimal</code></td><td>Total gross with discount applied</td></tr>
-<tr><td><code>gezahlt</code></td><td><code>BigDecimal</code></td><td>Total amount paid</td></tr>
-<tr><td><code>offen</code></td><td><code>BigDecimal</code></td><td>Total outstanding (not yet paid)</td></tr>
-<tr><td><code>ueberfaellig</code></td><td><code>BigDecimal</code></td><td>Total overdue amount</td></tr>
-<tr><td><code>skonto</code></td><td><code>BigDecimal</code></td><td>Accepted shortfall (discounts granted by customer)</td></tr>
-<tr><td><code>counter</code></td><td><code>Int</code></td><td>Total number of invoices counted</td></tr>
-<tr><td><code>counterBezahlt</code></td><td><code>Int</code></td><td>Number of fully paid invoices</td></tr>
+<tr><th>Member</th><th>Description</th></tr>
+<tr><td><code>vendors</code></td><td><code>MutableList&lt;TradingPartner&gt;</code> — Creditor/vendor partners extracted from incoming invoices</td></tr>
+<tr><td><code>customers</code></td><td><code>MutableList&lt;TradingPartner&gt;</code> — Customer partners extracted from outgoing invoices + customer master</td></tr>
+<tr><td><code>sequence</code></td><td>Auto-incrementing counter starting at 7,000,000 for generating unique partner numbers</td></tr>
+<tr><td><code>allPartners</code></td><td>Combined, deduplicated, sorted list of all partners (vendors + customers)</td></tr>
+<tr><td><code>nextVal</code></td><td>Returns and increments the sequence counter</td></tr>
+<tr><td><code>getVendorByDatevKonto(konto)</code></td><td>Looks up a vendor by matching the konto number against <code>importCode</code></td></tr>
+<tr><td><code>cleanUp()</code></td><td>Clears the temporary <code>importCode</code> field if it matches the partner number (no longer needed post-migration)</td></tr>
 </table>
 
-<h2>Core Method: <code>add(rechnung: T)</code></h2>
-<p>The primary entry point. For each invoice added:</p>
+<h3>Extraction Phases</h3>
+
+<h4>Phase 1: <code>extractTradingVendors(invoices)</code></h4>
+<p>Processes <code>EingangsrechnungDO</code> (incoming/creditor invoices):</p>
+<ul>
+<li>Skips invoices without a <code>kreditor</code> name or <code>konto</code> assignment</li>
+<li><strong>"Divers" accounts:</strong> If the konto description contains "divers", each unique kreditor name gets a new synthetic partner number (from <code>nextVal</code>) because multiple creditors share the same account</li>
+<li><strong>Normal accounts:</strong> One partner per konto number; the <code>importCode</code> is set to the konto number for cross-reference during later phases</li>
+<li>All vendors get <code>datevKonto</code> set to the konto number and remarks prepended with account info</li>
+</ul>
+
+<h4>Phase 2: <code>extractTradingCustomersInvoices(invoices, context)</code></h4>
+<p>Processes <code>RechnungDO</code> (outgoing/customer invoices):</p>
+<ul>
+<li>If the invoice has a linked <code>kunde</code> (customer), delegates to <code>handleKunde()</code></li>
+<li>If no kunde but a konto exists, tries to match existing vendors (upgrading them to PARTNER) or creates new customer entries</li>
+<li>Skips "divers" accounts (no trading partner needed)</li>
+</ul>
+
+<h4>Phase 3: <code>extractTradingCustomers(customers, context)</code></h4>
+<p>Processes <code>KundeDO</code> (customer master data) for any customers not already captured via invoices. Calls <code>context.cleanUp()</code> at the end.</p>
+
+<h3>Core Deduplication Logic: <code>handleKunde()</code></h3>
+<p>The most complex method in this service. For each <code>KundeDO</code>:</p>
 <ol>
-<li>Retrieves cached invoice info via <code>rechnungCache.getRechnungInfo(rechnung)</code></li>
-<li>Converts all amounts to the system's configured currency using <code>currencyConversionService.convert()</code></li>
-<li>If currency conversion fails for any invoice, a warning message is accumulated in <code>currencyConversionWarnings</code> and the original (unconverted) amount is used as fallback</li>
-<li>Accumulates gross, net, gross-with-discount, and paid/open/overdue amounts</li>
-<li>Calculates cash discount (<code>skonto</code>) when paid amount is less than gross</li>
-<li>Tracks payment term averages: contractual (<code>zahlungsZielSum</code>) and actual (<code>tatsaechlichesZahlungsZiel</code>)</li>
-<li>Detects overdue invoices via <code>rechnungInfo.isUeberfaellig</code></li>
+<li>Checks if a customer with the same number already exists → skips creation, optionally filling in <code>datevKonto</code></li>
+<li>Checks if the konto matches an existing vendor → upgrades vendor to PARTNER, reassigns the customer number as the primary number</li>
+<li>Otherwise creates a new customer; active customers are those with <code>ACQUISITION</code> or <code>ACTIVE</code> status (or null)</li>
 </ol>
 
-<h2>Currency Conversion</h2>
-<p>The private <code>convertToSystemCurrency()</code> method handles multi-currency scenarios:</p>
-<ul>
-<li>Skips conversion if source and target currencies match (case-insensitive)</li>
-<li>Uses <code>useFallbackToOldestRate = true</code> for historical invoices where an exact exchange rate may not exist</li>
-<li>Builds warning messages for display in the format: <code>"invoiceRef (date): USD → EUR"</code></li>
-<li>Falls back to the original amount when conversion is unavailable</li>
-</ul>
+<h3>Address Parsing: <code>checkBillAddress()</code></h3>
+<p>Parses free-text billing addresses from invoice <code>customerAddress</code> strings using a bottom-up heuristic:</p>
+<ol>
+<li>Splits the address into non-blank lines</li>
+<li>Filters out leading lines matching known filler words ("Herr", "Frau", "Firma", "An", "Portal", "Klinikdienst")</li>
+<li>Last line: country or zip+city (tries <code>extractZipCodeCity()</code>)</li>
+<li>Second-to-last: street line</li>
+<li>Any remaining lines prepended to <code>billToAddressAdditional</code></li>
+</ol>
 
-<h2>Computed Properties</h2>
+<h3><code>extractZipCodeCity(line)</code></h3>
+<p>Uses a regex pattern <code>^[0-9 ]{5,10}</code> to extract a German-style 5+ digit postal code. Strips "D-" and "D " country prefixes. Returns <code>Pair&lt;String, String&gt;</code> of (zipCode, city) or null if no match.</p>
+
+<h3>Helper Methods</h3>
 <table>
-<tr><th>Property</th><th>Type</th><th>Description</th></tr>
-<tr><td><code>zahlungszielAverage</code></td><td><code>Int</code></td><td>Average contractual payment term in days</td></tr>
-<tr><td><code>tatsaechlichesZahlungzielAverage</code></td><td><code>Int</code></td><td>Weighted average actual payment duration in days</td></tr>
-<tr><td><code>asMarkdown</code></td><td><code>String</code></td><td>Markdown table with all financial metrics, colored for open (blue) and overdue (red) amounts</td></tr>
-<tr><td><code>hasCurrencyConversionWarnings</code></td><td><code>Boolean</code></td><td>True if any currency conversion failures occurred</td></tr>
-<tr><td><code>currencyConversionWarningsList</code></td><td><code>List&lt;String&gt;</code></td><td>List of warning messages for Wicket display</td></tr>
-</ul>
+<tr><th>Method</th><th>Description</th></tr>
+<tr><td><code>appendRemarks(partner, remarks)</code></td><td>Appends text to <code>partner.remarks</code> with newline separator</td></tr>
+<tr><td><code>prependRemarks(partner, konto)</code></td><td>Prepends DATEV-Konto info (number + description) to remarks</td></tr>
+<tr><td><code>checkIfGiven(vararg str)</code></td><td>Returns <code>true</code> if any string is non-blank</td></tr>
+<tr><td><code>lineEquals(line, vararg strs)</code></td><td>Case-insensitive trimmed comparison</td></tr>
+<tr><td><code>createVendor(number, kreditor, konto)</code></td><td>Factory for vendor TradingPartners</td></tr>
+<tr><td><code>createCustomer(...)</code></td><td>Factory for customer TradingPartners</td></tr>
+</table>
 
-<h2>Companion Object Dependencies</h2>
-<p>The companion object holds <code>lateinit</code> service references that must be set externally before use:</p>
+<h3>Excel Export: <code>extractTradingPartnersAsExcel()</code></h3>
+<p>Creates a two-sheet Excel workbook using <code>ExcelWorkbook</code>:</p>
 <ul>
-<li><code>rechnungCache: RechnungCache</code> — provides <code>RechnungInfo</code> for each invoice</li>
-<li><code>currencyConversionService: CurrencyConversionService</code> — handles multi-currency amount conversion</li>
-<li><code>configurationService: ConfigurationService</code> — provides the system default currency</li>
+<li><strong>Sheet 1:</strong> "D.velop TradingPartners" — the list passed as parameter</li>
+<li><strong>Sheet 2:</strong> "ProjectForge TradingPartners" — freshly extracted list from the database</li>
 </ul>
+<p>Columns include number, datevKonto, importCode, type, company, shortName, remarks, active, and all billing address fields. Enum values (<code>contactType</code>, <code>type</code>, <code>active</code>) are resolved to their <code>value</code> string representation.</p>
+
+<h3>Injected Dependencies</h3>
+<table>
+<tr><th>Dao</th><th>Purpose</th></tr>
+<tr><td><code>EingangsrechnungDao</code></td><td>Query incoming/creditor invoices</td></tr>
+<tr><td><code>KundeDao</code></td><td>Query customer master data</td></tr>
+<tr><td><code>RechnungDao</code></td><td>Query outgoing/customer invoices</td></tr>
+</table>
 
 <h2>Git History</h2>
 <div class="hist"><pre>868d6abb7 2025 -> 2026
-472fbc977 WIP: currency conversion with Claude Code.
-8c2bf04f0 WIP: currency conversion with Claude Code.
-6be9c2b84 WIP: currency conversion with Claude Code.
+78a38ca8f ExcelUtils.createFont and used by all font creating excel routines.
 63081666f Source file headers: 2024-> 2025.
-b47c21af6 Refactored caching and calculations with invoices (not yet finished)
-ccb7ca64d Migration stuff in progress...
+1b50060c3 BaseDao: renamed: get -> find, save -> insert, getList -> select, load -> select
+87aaf6a5a Migration stuff in progress... BaseDao refactored (not yet finished) internal* methods renamed.
+e33c8b9c2 Migration stuff in progress...
 b6092df09 Copyright 2023 -> 2024
-ab45d51fa Copyright 2001-2022 -> 2001-2023.
-09b3f0df7 WIP: Jobmonitor. ListStatisticsSupport -> MarkdownBuilder
-0b835b27e Support of statistics or other infos on result set on list page.
-a286007ee Mass update of creditor invoices: handling of discount implemented.
-832934b14 WIP: mass update</pre></div>
+b710c3267 WIP D.velop
+3ef41086d WIP D.velop
+be750e77e WIP D.velop
+5145a8199 WIP D.velop
+9ebb99c88 WIP D.velop
+cb2915283 WIP D.velop
+b46787d5f WIP D-velop
+2fe7d6f33 WIP D-velop
+975af1cd6 WIP D-velop
+1dee5f23f WIP D-velop
+3ec5c7354 WIP D-velop
+cb6d633f9 WIP D-velop
+eb005b878 WIP D-velop
+</pre></div>
+</body>
+</html>
+
+<style>
+body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}
+h1{border-bottom:2px solid #333;padding-bottom:.3em}
+h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}
+h3{margin-top:2em;color:#444}
+a{color:#0366d6}
+.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}
+.nav{font-size:.9em;color:#888;margin-bottom:1em}
+.meta{font-size:.9em;margin:1em 0;color:#555}
+code{background:#f0f0f0;padding:0 .2em;font-size:.93em}
+pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}
+table{border-collapse:collapse;width:100%;margin:1em 0}
+th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}
+th{background:#f5f5f5;font-weight:600}
+.hist{font-size:.85em;color:#555}
+</style>
+</head>
+<body>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="881.html">← Prev</a> · <a href="883.html">Next →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/kotlin/org/projectforge/business/dvelop/ExtractPFTradingPartners.kt" target="_blank" title="View source on GitHub">📄 source</a></div>
+
+<h1>#882: <code>ExtractPFTradingPartners.kt</code></h1>
+
+<div class="meta">
+<p><strong>Type:</strong> Spring <code>@Service</code> — Data extraction engine</p>
+<p><strong>Purpose:</strong> Extracts trading partners (vendors, customers) from ProjectForge's financial database tables and converts them into <code>TradingPartner</code> objects suitable for initial D-velop import.</p>
+<p><strong>Source path:</strong> <code>projectforge-business/src/main/kotlin/org/projectforge/business/dvelop/ExtractPFTradingPartners.kt</code></p>
+</div>
+
+<div class="c">
+<p>Acts as the <strong>bridge</strong> between ProjectForge's legacy financial data (incoming invoices, outgoing invoices, and customer master data) and D-velop's trading partner model. It scans 5 years of invoice data, deduplicates entities across accounts, handles the "divers" (miscellaneous) account pattern, parses free-text billing addresses into structured fields, and classifies entities as VENDOR, CUSTOMER, or PARTNER. Also provides Excel export functionality for reconciliation.</p>
+</div>
+
+<h2>Architecture</h2>
+
+<h3>Inner Class: <code>Context</code></h3>
+<p>A mutable accumulator that collects extracted trading partners during the multi-phase extraction process:</p>
+<table>
+<tr><th>Member</th><th>Description</th></tr>
+<tr><td><code>vendors</code></td><td><code>MutableList&lt;TradingPartner&gt;</code> — Creditor/vendor partners extracted from incoming invoices</td></tr>
+<tr><td><code>customers</code></td><td><code>MutableList&lt;TradingPartner&gt;</code> — Customer partners extracted from outgoing invoices + customer master</td></tr>
+<tr><td><code>sequence</code></td><td>Auto-incrementing counter starting at 7,000,000 for generating unique partner numbers</td></tr>
+<tr><td><code>allPartners</code></td><td>Combined, deduplicated, sorted list of all partners (vendors + customers)</td></tr>
+<tr><td><code>nextVal</code></td><td>Returns and increments the sequence counter</td></tr>
+<tr><td><code>getVendorByDatevKonto(konto)</code></td><td>Looks up a vendor by matching the konto number against <code>importCode</code></td></tr>
+<tr><td><code>cleanUp()</code></td><td>Clears the temporary <code>importCode</code> field if it matches the partner number (no longer needed post-migration)</td></tr>
+</table>
+
+<h3>Extraction Phases</h3>
+
+<h4>Phase 1: <code>extractTradingVendors(invoices)</code></h4>
+<p>Processes <code>EingangsrechnungDO</code> (incoming/creditor invoices):</p>
+<ul>
+<li>Skips invoices without a <code>kreditor</code> name or <code>konto</code> assignment</li>
+<li><strong>"Divers" accounts:</strong> If the konto description contains "divers", each unique kreditor name gets a new synthetic partner number (from <code>nextVal</code>) because multiple creditors share the same account</li>
+<li><strong>Normal accounts:</strong> One partner per konto number; the <code>importCode</code> is set to the konto number for cross-reference during later phases</li>
+<li>All vendors get <code>datevKonto</code> set to the konto number and remarks prepended with account info</li>
+</ul>
+
+<h4>Phase 2: <code>extractTradingCustomersInvoices(invoices, context)</code></h4>
+<p>Processes <code>RechnungDO</code> (outgoing/customer invoices):</p>
+<ul>
+<li>If the invoice has a linked <code>kunde</code> (customer), delegates to <code>handleKunde()</code></li>
+<li>If no kunde but a konto exists, tries to match existing vendors (upgrading them to PARTNER) or creates new customer entries</li>
+<li>Skips "divers" accounts (no trading partner needed)</li>
+</ul>
+
+<h4>Phase 3: <code>extractTradingCustomers(customers, context)</code></h4>
+<p>Processes <code>KundeDO</code> (customer master data) for any customers not already captured via invoices. Calls <code>context.cleanUp()</code> at the end.</p>
+
+<h3>Core Deduplication Logic: <code>handleKunde()</code></h3>
+<p>The most complex method in this service. For each <code>KundeDO</code>:</p>
+<ol>
+<li>Checks if a customer with the same number already exists → skips creation, optionally filling in <code>datevKonto</code></li>
+<li>Checks if the konto matches an existing vendor → upgrades vendor to PARTNER, reassigns the customer number as the primary number</li>
+<li>Otherwise creates a new customer; active customers are those with <code>ACQUISITION</code> or <code>ACTIVE</code> status (or null)</li>
+</ol>
+
+<h3>Address Parsing: <code>checkBillAddress()</code></h3>
+<p>Parses free-text billing addresses from invoice <code>customerAddress</code> strings using a bottom-up heuristic:</p>
+<ol>
+<li>Splits the address into non-blank lines</li>
+<li>Filters out leading lines matching known filler words ("Herr", "Frau", "Firma", "An", "Portal", "Klinikdienst")</li>
+<li>Last line: country or zip+city (tries <code>extractZipCodeCity()</code>)</li>
+<li>Second-to-last: street line</li>
+<li>Any remaining lines prepended to <code>billToAddressAdditional</code></li>
+</ol>
+
+<h3><code>extractZipCodeCity(line)</code></h3>
+<p>Uses a regex pattern <code>^[0-9 ]{5,10}</code> to extract a German-style 5+ digit postal code. Strips "D-" and "D " country prefixes. Returns <code>Pair&lt;String, String&gt;</code> of (zipCode, city) or null if no match.</p>
+
+<h3>Helper Methods</h3>
+<table>
+<tr><th>Method</th><th>Description</th></tr>
+<tr><td><code>appendRemarks(partner, remarks)</code></td><td>Appends text to <code>partner.remarks</code> with newline separator</td></tr>
+<tr><td><code>prependRemarks(partner, konto)</code></td><td>Prepends DATEV-Konto info (number + description) to remarks</td></tr>
+<tr><td><code>checkIfGiven(vararg str)</code></td><td>Returns <code>true</code> if any string is non-blank</td></tr>
+<tr><td><code>lineEquals(line, vararg strs)</code></td><td>Case-insensitive trimmed comparison</td></tr>
+<tr><td><code>createVendor(number, kreditor, konto)</code></td><td>Factory for vendor TradingPartners</td></tr>
+<tr><td><code>createCustomer(...)</code></td><td>Factory for customer TradingPartners</td></tr>
+</table>
+
+<h3>Excel Export: <code>extractTradingPartnersAsExcel()</code></h3>
+<p>Creates a two-sheet Excel workbook using <code>ExcelWorkbook</code>:</p>
+<ul>
+<li><strong>Sheet 1:</strong> "D.velop TradingPartners" — the list passed as parameter</li>
+<li><strong>Sheet 2:</strong> "ProjectForge TradingPartners" — freshly extracted list from the database</li>
+</ul>
+<p>Columns include number, datevKonto, importCode, type, company, shortName, remarks, active, and all billing address fields. Enum values (<code>contactType</code>, <code>type</code>, <code>active</code>) are resolved to their <code>value</code> string representation.</p>
+
+<h3>Injected Dependencies</h3>
+<table>
+<tr><th>Dao</th><th>Purpose</th></tr>
+<tr><td><code>EingangsrechnungDao</code></td><td>Query incoming/creditor invoices</td></tr>
+<tr><td><code>KundeDao</code></td><td>Query customer master data</td></tr>
+<tr><td><code>RechnungDao</code></td><td>Query outgoing/customer invoices</td></tr>
+</table>
+
+<h2>Git History</h2>
+<div class="hist"><pre>868d6abb7 2025 -> 2026
+78a38ca8f ExcelUtils.createFont and used by all font creating excel routines.
+63081666f Source file headers: 2024-> 2025.
+1b50060c3 BaseDao: renamed: get -> find, save -> insert, getList -> select, load -> select
+87aaf6a5a Migration stuff in progress... BaseDao refactored (not yet finished) internal* methods renamed.
+e33c8b9c2 Migration stuff in progress...
+b6092df09 Copyright 2023 -> 2024
+b710c3267 WIP D.velop
+3ef41086d WIP D.velop
+be750e77e WIP D.velop
+5145a8199 WIP D.velop
+9ebb99c88 WIP D.velop
+cb2915283 WIP D.velop
+b46787d5f WIP D-velop
+2fe7d6f33 WIP D-velop
+975af1cd6 WIP D-velop
+1dee5f23f WIP D-velop
+3ec5c7354 WIP D-velop
+cb6d633f9 WIP D-velop
+eb005b878 WIP D-velop
+</pre></div>
 </body>
 </html>

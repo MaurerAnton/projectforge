@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>#1231 [DE]</title>
+<style>
+body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}
+h1{border-bottom:2px solid #333;padding-bottom:.3em}
+h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}
+h3{margin-top:2em;color:#444}
+a{color:#0366d6}
+.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}
+.nav{font-size:.9em;color:#888;margin-bottom:1em}
+.meta{font-size:.9em;margin:1em 0;color:#555}
+code{background:#f0f0f0;padding:0 .2em;font-size:.93em}
+pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}
+table{border-collapse:collapse;width:100%;margin:1em 0}
+th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}
+th{background:#f5f5f5;font-weight:600}
+.hist{font-size:.85em;color:#555}
+</style>
+</head>
+<body>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← Dateiindex</a> · <a href="1230.html">← Vorherige</a> · <a href="1232.html">Nächste →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/kotlin/org/projectforge/framework/persistence/api/ExtendedBaseDO.kt" target="_blank" title="Quelltext auf GitHub ansehen">📄 Quelle</a></div>
+<h1>#1231: <code>ExtendedBaseDO.kt</code></h1>
+<div class="meta"><code>projectforge-business/src/main/kotlin/org/projectforge/framework/persistence/api/ExtendedBaseDO.kt</code> Schnittstelle — Persistenz-Basiseinheit, <code>projectforge-business/src/main/kotlin/org/projectforge/framework/persistence/api/ExtendedBaseDO.kt</code> <span style="color:#888">63 Zeilen · 18 Code · 36 Kommentare · 9 leer</span></div>
+<div class="c">Erweitert <code>BaseDO&lt;I&gt;</code> um Soft-Delete- und Audit-Zeitstempelunterstützung. Fügt <code>deleted</code> (von <code>MarkDeletableRecord</code>), <code>created</code>-Zeitstempel, <code>lastUpdate</code>-Zeitstempel sowie einen <code>recalculate()</code>-Hook für die Berechnung abgeleiteter/transienter Felder vor der Anzeige oder Indizierung hinzu.</div>
+
+<h2>Architektur</h2>
+
+<h3>Schnittstellenhierarchie</h3>
+<pre>Serializable
+  └── BaseDO&lt;I : Serializable&gt;
+        └── ExtendedBaseDO&lt;I : Serializable&gt;
+              (erweitert auch MarkDeletableRecord&lt;I&gt;)</pre>
+
+<h3>Vertragsfelder &amp; -methoden</h3>
+<table>
+<tr><th>Member</th><th>Typ</th><th>Beschreibung</th></tr>
+<tr><td><code>deleted</code></td><td><code>Boolean</code> (Überschreibung)</td><td>Soft-Delete-Flag. Wenn wahr, ist die Entität logisch gelöscht, verbleibt aber in der Datenbank. Von BaseDO überschrieben.</td></tr>
+<tr><td><code>created</code></td><td><code>Date?</code></td><td>Zeitstempel der ursprünglichen Erstellung. Wird automatisch über <code>setCreated()</code> gesetzt.</td></tr>
+<tr><td><code>lastUpdate</code></td><td><code>Date?</code></td><td>Zeitstempel der letzten Änderung. Wird von der Persistenzschicht bei jedem Schreibvorgang automatisch aktualisiert. Wird automatisch über <code>setLastUpdate()</code> gesetzt.</td></tr>
+<tr><td><code>recalculate()</code></td><td><code>Unit</code></td><td>Hook für Berechnungen vor der Anzeige/nach dem Laden. Wird für transiente Felder verwendet, die aus persistenten Feldern berechnet werden (z. B. vollständiger Name aus Vor- und Nachname).</td></tr>
+<tr><td><code>setCreated()</code></td><td><code>Unit</code></td><td>Hilfsmethode: Setzt <code>created</code> auf die aktuelle Zeit</td></tr>
+<tr><td><code>setLastUpdate()</code></td><td><code>Unit</code></td><td>Hilfsmethode: Setzt <code>lastUpdate</code> auf die aktuelle Zeit</td></tr>
+</table>
+
+<h3>Verwendungskontext</h3>
+<p>Die meisten Domänenentitäten in ProjectForge implementieren <code>ExtendedBaseDO</code> anstelle des rohen <code>BaseDO</code>. Die <code>BaseDao</code>-Infrastruktur stützt sich auf diese Felder für:</p>
+<ul>
+<li><strong>Soft-Delete-Filterung</strong>: Das <code>deleted</code>-Flag wird von <code>QueryFilter</code>, <code>MagicFilter</code> und allen Listenseiten überprüft</li>
+<li><strong>Historieverfolgung</strong>: <code>lastUpdate</code> wird von der Hibernate-Envers-Integration und der Historiensuche verwendet</li>
+<li><strong>Prüfpfade</strong>: <code>created</code> und Änderungszeitstempel werden in Bearbeitungsformularen von Entitäten angezeigt</li>
+<li><strong>Neuberechnung</strong>: <code>recalculate()</code> wird von DAOs aufgerufen, bevor Entitäten an die UI-Ebene zurückgegeben werden</li>
+</ul>
+
+<h3>Relevante Annotationen</h3>
+<p>Implementierende Klassen annotieren diese Felder typischerweise mit JPA-Annotationen:
+<code>@Basic</code>, <code>@Column</code> für die Datenbankzuordnung;
+<code>@PropertyInfo(i18nKey = "...")</code> für das UI-Eigenschaftssystem.</p>
+
+<h2>Git-Verlauf</h2>
+<div class="hist"><pre>868d6abb7 2025 -> 2026
+63081666f Quelltextdatei-Header: 2024 -> 2025.
+e33c8b9c2 Migration in Arbeit...
+06828f490 Migration in Arbeit...
+b6092df09 Copyright 2023 -> 2024
+ab45d51fa Copyright 2001-2022 -> 2001-2023.
+5f7ef41b8 Copyright 2021 -> 2022
+ceb63e8a1 Quelltextkopf: (C) 2001-2021.
+7c79f1922 Copyright des Quelltextheaders -> 2020.
+32f634b88 Importe optimieren
+dd5ca38ac Copyright aller Java-Datei-Header aktualisiert oder erstellt.
+9ebb88522 Erster Commit</pre></div>
+</body>
+</html>

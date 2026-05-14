@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>#2790: AbstractAjaxCallbackWithClientsideRevert.java [DE]</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:2em;color:#444}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.lang{font-size:.85em;color:#888;float:right}.lang a{color:#888;text-decoration:none;padding:0 .3em}.lang a.active{color:#0366d6;font-weight:600;text-decoration:underline}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}</style>
+</head>
+<body>
+<div class="lang"><a href="2790.html">EN</a> · <a href="2790_de.html" class="active">DE</a> · <a href="2790_ru.html">RU</a> · <a href="2790_fr.html">FR</a> · <a href="2790_es.html">ES</a></div>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← Datei-Index</a> · <a href="2789.html">← Vorherige</a> · <a href="2791.html">Nächste →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-wicket/src/main/java/net/ftlines/wicket/fullcalendar/callback/AbstractAjaxCallbackWithClientsideRevert.java" target="_blank" title="Quellcode auf GitHub ansehen">📄 Quelle</a></div>
+<h1>#2790: <code>AbstractAjaxCallbackWithClientsideRevert.java</code></h1>
+<div class="meta"><code>projectforge-wicket/src/main/java/net/ftlines/wicket/fullcalendar/callback/AbstractAjaxCallbackWithClientsideRevert.java</code> Abstraktes Wicket-Verhalten (FullCalendar Ajax mit Rückgängig) · <code>projectforge-wicket/src/main/java/net/ftlines/wicket/fullcalendar/callback/AbstractAjaxCallbackWithClientsideRevert.java</code> <span style="color:#888">82 Zeilen · 35 Code · 33 Kommentare · 14 leer</span></div>
+<div class="c">Ein abstraktes Ajax-Callback-Verhalten für FullCalendar-Interaktionen, die ein clientseitiges Rückgängigmachen bei Fehlschlag benötigen – insbesondere Drag-and-Drop- und Größenänderungsoperationen. Wenn ein Benutzer ein Kalenderereignis zieht oder in der Größe ändert, verschiebt/ändert FullCalendar das Ereignis sofort in der Benutzeroberfläche und sendet einen Ajax-Callback an den Server. Wenn der Server die Änderung ablehnt (z. B. aufgrund eines Terminkonflikts oder einer Verletzung von Geschäftsregeln), sendet dieses Verhalten ein Rückgängig-Skript an den Client, das das Ereignis an seine ursprüngliche Position zurücksetzt. Der Mechanismus verwendet eine Kombination aus Wicket-Ajax-Call-Listenern (onSuccess/onFailure) und einem jQuery-Datenattribut, um die Annahme-/Ablehnungsentscheidung des Servers an die clientseitige Rückgängig-Logik zu kommunizieren.</div>
+<h2>Architektur</h2>
+<h3>Zwei-Phasen-Commit-Protokoll</h3>
+<p>FullCalendar implementiert optimistische UI-Updates: Das Ereignis bewegt sich sofort beim Ziehen, und der Server kann es akzeptieren (nichts ändert sich) oder ablehnen (Ereignis kehrt zur ursprünglichen Position zurück). Diese Klasse implementiert die Serverseite dieses Protokolls:</p>
+<ol>
+<li>Bei einer Ajax-Anfrage wird <code>onEvent(AjaxRequestTarget)</code> aufgerufen – die Unterklasse implementiert die Geschäftslogik und gibt <code>true</code> (akzeptieren) oder <code>false</code> (ablehnen) zurück</li>
+<li>Das Ergebnis wird in einem jQuery-Datenattribut auf dem Dokument gespeichert: <code>$.data(document, '{uuid}', {boolean})</code></li>
+<li>Bei Ajax-Erfolg liest das Erfolgsskript das Datenattribut – bei false wird das Rückgängig-Skript ausgeführt (bereitgestellt durch die abstrakte Methode <code>getRevertScript()</code>)</li>
+<li>Bei Ajax-Fehlschlag (Netzwerkfehler, Serverausnahme) wird das Rückgängig-Skript immer ausgeführt</li>
+<li>Das Datenattribut wird nach der Auswertung bereinigt</li>
+</ol>
+<h3>UUID-basierter Zustandskanal</h3>
+<p>Eine zufällige UUID (mit dem Präfix <code>"u"</code>) identifiziert die Callback-Instanz. Diese UUID wird als jQuery-Datenschlüssel verwendet, um das boolesche Ergebnis zu speichern. Dies vermeidet globale Zustandskollisionen, wenn mehrere Kalenderinstanzen oder mehrere Callback-Typen auf derselben Seite vorhanden sind. Die UUID wird einmal im Feld-Initialisierer generiert und bleibt für die Lebensdauer des Verhaltens bestehen.</p>
+<h3>Integration der Ajax-Call-Listener</h3>
+<p><code>updateAjaxAttributes()</code> wird überschrieben, um zwei Listener hinzuzufügen:
+<ul>
+<li><code>onSuccess</code> – führt das Erfolgsskript aus, das bedingt das Rückgängigmachen auslöst</li>
+<li><code>onFailure</code> – führt das Rückgängig-Skript bedingungslos aus (Netzwerk-/Serverfehler machen immer rückgängig)</li>
+</ul>
+</p>
+<h3>Vertrag für Unterklassen</h3>
+<p>Konkrete Unterklassen müssen implementieren:
+<ul>
+<li><code>getRevertScript()</code> – gibt den FullCalendar-JavaScript-Ausdruck zurück, der das Ereignis in seinen ursprünglichen Zustand zurückversetzt (z. B. <code>$('#calendar').fullCalendarExt('revertEvent', eventId)</code>)</li>
+<li><code>onEvent(AjaxRequestTarget)</code> – die Geschäftslogik zum Akzeptieren/Ablehnen der Änderung</li>
+</ul>
+</p>
+<h2>Git-Verlauf</h2>
+<div class="hist"><table>
+<tr><th>Commit</th><th>Was geändert wurde</th></tr>
+<tr><td><code>868d6abb7</code> bis <code>ceb63e8a1</code></td><td>Sechs jährliche Copyright-Header-Updates. Das Zwei-Phasen-Commit-Protokoll und der UUID-basierte Zustandskanal sind stabil – der Mechanismus behandelt FullCalendars optimistisches Update-Muster korrekt und unterscheidet zwischen Ablehnungen aufgrund von Geschäftsregeln (Server gibt false zurück) und Infrastrukturfehlern (Ajax-Fehler löst bedingungsloses Rückgängigmachen aus).</td></tr>
+</table></div>
+</body>
+</html>

@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>#653: V7_0_0_6__MigrateEmployeeAndCarryVacationDays.java [RU]</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:2em;color:#444}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.lang{font-size:.85em;color:#888;float:right}.lang a{color:#888;text-decoration:none;padding:0 .3em}.lang a.active{color:#0366d6;font-weight:600;text-decoration:underline}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}</style>
+</head>
+<body>
+<div class="lang"><a href="653.html">EN</a> · <a href="653_de.html">DE</a> · <a href="653_ru.html" class="active">RU</a> · <a href="653_fr.html">FR</a> · <a href="653_es.html">ES</a></div>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Индекс</a> · <a href="file-index.html">← Индекс файлов</a> · <a href="192.html">← Предыдущий</a> · <a href="157.html">Следующий →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/java/org/projectforge/flyway/dbmigration/V7_0_0_6__MigrateEmployeeAndCarryVacationDays.java" target="_blank" title="Просмотреть исходник на GitHub">📄 исходник</a></div>
+<h1>#653: <code>V7_0_0_6__MigrateEmployeeAndCarryVacationDays.java</code></h1>
+<div class="meta"><code>projectforge-business/src/main/java/org/projectforge/flyway/dbmigration/V7_0_0_6__MigrateEmployeeAndCarryVacationDays.java</code> Тип: Java · Роль: Компонент · Источник: projectforge-business/src/main/java/org/projectforge/flyway/dbmigration/V7_0_0_6__MigrateEmployeeAndCarryVacationDays.java <span style="color:#888">157 строк · 115 кода · 29 комментариев · 13 пустых</span></div>
+<div class="c">Скрипт миграции базы данных Flyway. Часть версионной цепочки миграций, развивающей схему базы данных ProjectForge.</div>
+<h2>Структура кода</h2>
+<p>Пакет: <code>org.projectforge.flyway.dbmigration</code></p>
+<p>Классы: <code>V7_0_0_6__MigrateEmployeeAndCarryVacationDays</code></p>
+<p>Расширяет: <code>BaseJavaMigration</code></p>
+<p>Методы (4): <code>migrate</code>, <code>migrateEmployeesCarryVacationDays</code>, <code>migrateEmployeeTable</code>, <code>ensureMidnigt</code></p>
+<p>Поля (1): <code>log</code></p>
+<p>Импорты: 19 пакетов</p>
+<h2>Исходный код (сокращён)</h2>
+<pre>
+package org.projectforge.flyway.dbmigration;
+
+import org.flywaydb.core.api.migration.BaseJavaMigration;
+import org.flywaydb.core.api.migration.Context;
+import org.projectforge.framework.time.PFDateTimeUtils;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.core.simple.SimpleJdbcInsert;
+import org.springframework.jdbc.datasource.SingleConnectionDataSource;
+import org.springframework.jdbc.support.rowset.SqlRowSet;
+
+import javax.sql.DataSource;
+import java.math.BigDecimal;
+import java.sql.Timestamp;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.Year;
+import java.time.ZoneId;
+import java.util.Date;
+import java.util.HashMap;
+import java.util.Map;
+
+/**
+ * Начиная с версии ProjectForge 7, остаток отпускных дней будет храниться в новой таблице,
+ * а не как атрибут сотрудника (без информации о годе).
+ */
+public class V7_0_0_6__MigrateEmployeeAndCarryVacationDays extends BaseJavaMigration {
+  private static Logger log = LoggerFactory.getLogger(V7_0_0_6__MigrateEmployeeAndCarryVacationDays.class);
+
+  @Override
+  public void migrate(Context context) {
+    DataSource ds = new SingleConnectionDataSource(context.getConnection(), true);
+    migrateEmployeesCarryVacationDays(ds);
+    migrateEmployeeTable(ds);
+  }
+
+  private void migrateEmployeesCarryVacationDays(DataSource ds) {
+    log.info("Попытка перенести перенесённые отпускные дни сотрудников с предыдущего года, если эта функция используется.");
+    JdbcTemplate jdbc = new JdbcTemplate(ds);
+
+    // После установки версии 7 (snapshot) cronjob для ежегодного обновления остатка отпускных дней
+    // завершался ошибкой из-за бага в EmployeeAttrDO.parent (Kotlin-NPE).
+    // Получаем год установки:
+    int release7InstalledOnYear = Year.now().getValue();
+    try {
+      Timestamp release7InstalledOn = jdbc.queryForObject("select installed_on from t_flyway_schema_version where version='7.0.0'", Timestamp.class);
+      release7InstalledOnYear = LocalDateTime.ofInstant(release7InstalledOn.toInstant(), PFDateTimeUtils.ZONE_UTC).getYear();
+    } catch (Exception ex) {
+      // OK, база данных, похоже, пуста.
+    }
+
+    SqlRowSet rs = jdbc.queryForRowSet("select p.modifiedat as modifiedat,p.value as value,e.pk as pk,e.tenant_id as tenant from t_fibu_employee_attr as p inner join t_fibu_employee as e on p.parent=e.pk where propertyname = 'previousyearleave' order by pk");
+    int counter = 0;
+    Date now = new Date();
+    SimpleJdbcInsert simpleJdbcInsert = new SimpleJdbcInsert(ds).withTableName("t_employee_vacation_remaining");
+    while (rs.next()) {
+      ++counter;
+      Timestamp modifiedat = rs.getTimestamp("modifiedat");
+      Integer employeeId = rs.getInt("pk");
+      Integer tenantId = rs.getInt("tenant");
+      BigDecimal value = rs.getBigDecimal("value");
+      int year = LocalDateTime.ofInstant(modifiedat.toInstant(), ZoneId.of("UTC")).getYear();
+      if (year > release7InstalledOnYear) {
+        year = release7InstalledOnYear; // Отпуска были изменены, но атрибут 'previousyearleave' не относится к текущему году.
+      }
+      Map<String, Object> parameters = new HashMap<String, Object>();
+      parameters.put("pk", counter);
+      parameters.put("deleted", false);
+      parameters.put("created", now);
+      parameters.put("last_update", now);
+      parameters.put("tenant_id", tenantId);
+      parameters.put("employee_id", employeeId);
+      parameters.put("year", year);
+      parameters.put("carry_vacation_days_from_previous_year", value);
+      simpleJdbcInsert.execute(parameters);
+    }
+    if (counter > 0) {
+      log.info("Количество успешно перенесённых записей: " + counter);
+    } else {
+      log.info("Записей об отпусках для переноса не найдено (OK, если функция отпусков не использовалась).");
+    }
+  }
+
+  private void migrateEmployeeTable(DataSource ds) {
+    JdbcTemplate jdbc = new JdbcTemplate(ds);
+    String defaultTimeZoneString = null;
+    try {
+      defaultTimeZoneString = jdbc.queryForObject("select stringvalue from t_configuration where parameter = 'timezone'", String.class);
+    } catch (Exception ex) {
+      // OK, база данных, похоже, пуста.
+    }
+    ZoneId zoneId;
+    if (defaultTimeZoneString == null) {
+      zoneId = ZoneId.systemDefault();
+    } else {
+      zoneId = ZoneId.of(defaultTimeZoneString);
+      int counter = 0;
+      log.info("Миграция полей с метками времени таблицы сотрудников.");
+      SqlRowSet rs = jdbc.queryForRowSet("select pk, eintritt, austritt, birthday from t_fibu_employee");
+      while (rs.next()) {
+        ++counter;
+        Integer pk = rs.getInt("pk");
+        Timestamp eintrittOrig = rs.getTimestamp("eintritt");
+        Timestamp austrittOrg = rs.getTimestamp("austritt");
+        Timestamp birtdayOrig = rs.getTimestamp("birthday");
+
+        LocalDate birthday = ensureMidnigt(birtdayOrig, ZoneId.of("UTC")); // Дни рождения хранились в UTC
+        LocalDate eintritt = ensureMidnigt(eintrittOrig, zoneId);
+        LocalDate austritt = ensureMidnigt(austrittOrg, zoneId);
+
+        jdbc.update("update t_fibu_employee set birthday=?, eintritt=?, austritt=? where pk=?", birthday, eintritt, austritt, pk);
+      }
+      if (counter > 0) {
+        log.info("Количество успешно перенесённых сотрудников: " + counter);
+      } else {
+        log.info("Записей сотрудников для переноса не найдено (OK, если сотрудники не используются).");
+      }
+    }
+  }
+
+// ... (сокращено, всего 134 строки)</pre>
+
+<h2>История Git</h2><div class="hist"><pre>868d6abb7 2025 → 2026
+63081666f Заголовки исходных файлов: 2024 → 2025.
+b6092df09 Авторские права 2023 → 2024
+ab45d51fa Авторские права 2001-2022 → 2001-2023.
+5f7ef41b8 Авторские права 2021 → 2022</pre></div>
+</body>
+</html>

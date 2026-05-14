@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>#309: SpringSecurityConfig.kt [ES]</title>
+<style>
+body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}
+h1{border-bottom:2px solid #333;padding-bottom:.3em}
+h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}
+h3{margin-top:2em;color:#444}
+a{color:#0366d6}
+.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}
+.nav{font-size:.9em;color:#888;margin-bottom:1em}
+.lang{font-size:.85em;color:#888;float:right}
+.lang a{color:#888;text-decoration:none;padding:0 .3em}
+.lang a.active{color:#0366d6;font-weight:600;text-decoration:underline}
+.meta{font-size:.9em;margin:1em 0;color:#555}
+code{background:#f0f0f0;padding:0 .2em;font-size:.93em}
+pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}
+table{border-collapse:collapse;width:100%;margin:1em 0}
+th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}
+th{background:#f5f5f5;font-weight:600}
+.hist{font-size:.85em;color:#555}
+</style>
+</head>
+<body>
+<div class="lang"><a href="309.html">EN</a> · <a href="309_de.html">DE</a> · <a href="309_ru.html">RU</a> · <a href="309_fr.html">FR</a> · <a href="309_es.html" class="active">ES</a></div>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Índice</a> · <a href="file-index.html">← Índice de archivos</a> · <a href="index.html">← Anterior</a> · <a href="318.html">Siguiente →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-application/src/main/kotlin/org/projectforge/security/SpringSecurityConfig.kt" target="_blank" title="Ver fuente en GitHub">📄 fuente</a></div>
+<h1>#309: <code>SpringSecurityConfig.kt</code></h1>
+<div class="meta"><code>projectforge-application/src/main/kotlin/org/projectforge/security/SpringSecurityConfig.kt</code> Tipo: Kotlin · Rol: Seguridad · Fuente: projectforge-application/src/main/kotlin/org/projectforge/security/SpringSecurityConfig.kt <span style="color:#888">93 líneas · 57 código · 29 comentarios · 7 en blanco</span></div>
+<div class="c">Archivo de código fuente en <code>projectforge-application/src/main/kotlin/org/projectforge/security/SpringSecurityConfig.kt</code> que contiene código Kotlin para la capa de Seguridad.</div>
+<h2>Estructura del código</h2>
+<p>Anotaciones: <code>Bean</code>, <code>Configuration</code>, <code>Throws</code>, <code>Override</code></p>
+<p>Clases: <code>SpringSecurityConfig</code></p>
+<p>Beans de Spring: <code>allowWebDavMethodsFirewall</code>, <code>passwordEncoder</code></p>
+<p>Funciones (4): <code>securityFilterChain</code>, <code>allowWebDavMethodsFirewall</code>, <code>userDetailsService</code>, <code>passwordEncoder</code></p>
+<p>Propiedades (2): <code>firewall</code>, <code>manager</code></p>
+<p>Importaciones: 13 paquetes</p>
+<p>Paquete: <code>org.projectforge.security</code></p>
+<h2>Código fuente (resumido)</h2>
+<pre>
+package org.projectforge.security
+
+import org.projectforge.framework.utils.NumberHelper
+import org.springframework.context.annotation.Bean
+import org.springframework.context.annotation.Configuration
+import org.springframework.security.config.Customizer
+import org.springframework.security.config.annotation.web.builders.HttpSecurity
+import org.springframework.security.core.userdetails.User
+import org.springframework.security.core.userdetails.UserDetailsService
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder
+import org.springframework.security.crypto.password.PasswordEncoder
+import org.springframework.security.provisioning.InMemoryUserDetailsManager
+import org.springframework.security.web.SecurityFilterChain
+import org.springframework.security.web.firewall.HttpFirewall
+import org.springframework.security.web.firewall.StrictHttpFirewall
+
+
+@Configuration
+open class SpringSecurityConfig {
+    @Bean
+    @Throws(Exception::class)
+    open fun securityFilterChain(http: HttpSecurity, firewall: HttpFirewall): SecurityFilterChain {
+        http
+            .authorizeHttpRequests(Customizer { authorize -&gt;
+                authorize
+                    .anyRequest().permitAll()
+            } // Permitir todas las solicitudes sin autenticación
+            )
+            .csrf({ csrf -&gt; csrf.disable() }) // CSRF lo gestiona PF.
+        // Configurar el firewall para permitir métodos WebDAV:
+        http.setSharedObject(HttpFirewall::class.java, firewall)
+        return http.build()
+    }
+
+    @Bean
+    open fun allowWebDavMethodsFirewall(): HttpFirewall {
+        val firewall = StrictHttpFirewall()
+        // Permitir explícitamente métodos HTTP para WebDAV
+        firewall.setAllowedHttpMethods(
+            listOf(
+                &quot;GET&quot;, &quot;POST&quot;, &quot;PUT&quot;, &quot;DELETE&quot;, &quot;OPTIONS&quot;, &quot;HEAD&quot;,
+                &quot;PROPFIND&quot;, &quot;REPORT&quot;, //&quot;PROPPATCH&quot;, &quot;MKCOL&quot;, &quot;COPY&quot;, &quot;MOVE&quot;,
+                //&quot;LOCK&quot;, &quot;UNLOCK&quot;, &quot;REPORT&quot;
+            )
+        )
+        return firewall
+    }
+
+    @Bean
+    @Override
+    open fun userDetailsService(): UserDetailsService {
+        /**
+         * La contraseña se genera aleatoriamente y no se almacena en la base de datos.
+         * Los usuarios no son compatibles; una contraseña aleatoria es mejor que una predeterminada, por si acaso.
+         */
+        val manager = InMemoryUserDetailsManager();
+        manager.createUser(
+            User.withUsername(&quot;usuario&quot;)
+                .password(passwordEncoder().encode(NumberHelper.getSecureRandomAlphanumeric(20)))
+                .roles(&quot;USER&quot;)
+                .build()
+        );
+        return manager;
+    }
+
+    @Bean
+    open fun passwordEncoder(): PasswordEncoder {
+        return BCryptPasswordEncoder();
+    }
+}</pre>
+
+<h2>Historial de Git</h2><div class="hist"><pre>868d6abb7 2025 -&gt; 2026
+63081666f Encabezados de archivos fuente: 2024-&gt; 2025.
+953455ae5 WIP: Carddav
+7f2c255ae WIP: CardDav
+921638f43 WIP</pre></div>
+</body>
+</html>

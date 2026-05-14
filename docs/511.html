@@ -1,5 +1,142 @@
-<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>#511</title><style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333}a{color:#0366d6}.meta{font-size:.9em;margin:1em 0}.nav{font-size:.9em;color:#888;margin-bottom:1em}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}</style></head>
-<body><div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="510.html">← Prev</a> · <a href="512.html">Next →</a></div>
-<h1>#511: <code>PFUserDOConverter.java</code></h1>
-<div class="meta"><strong>Java converter</strong> — PFUserDO → LDAP attributes. Converts ProjectForge user to <code>LdapUserValues</code>: maps <code>username</code> → <code>uid</code>, <code>firstName + lastName</code> → <code>cn</code>, <code>email</code> → <code>mail</code>, <code>passwordHash</code> → <code>userPassword</code> (with <code>{SSHA}</code> prefix). Handles the full user-to-LDAP attribute mapping including POSIX and Samba fields from user settings.</div>
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>#511: LdapUtils.java</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:2em;color:#444}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.lang{font-size:.85em;color:#888;float:right}.lang a{color:#888;text-decoration:none;padding:0 .3em}.lang a.active{color:#0366d6;font-weight:600;text-decoration:underline}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}</style></head>
+<body><div class="lang"><a href="511.html" class="active">EN</a> · <a href="511_de.html">DE</a> · <a href="511_ru.html">RU</a> · <a href="511_fr.html">FR</a> · <a href="511_es.html">ES</a></div>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="411.html">← Prev</a> · <a href="2651.html">Next →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/java/org/projectforge/business/ldap/LdapUtils.java" target="_blank" title="View source on GitHub">📄 source</a></div>
+<h1>#511: <code>LdapUtils.java</code></h1>
+<div class="meta"><code>projectforge-business/src/main/java/org/projectforge/business/ldap/LdapUtils.java</code> Type: Java · Role: LDAP Integration · Source: projectforge-business/src/main/java/org/projectforge/business/ldap/LdapUtils.java <span style="color:#888">334 lines · 262 code · 48 comments · 24 blank</span></div>
+<div class="c">Static utility methods for Ldap. Collection of pure functions with no side effects, providing common helper operations.</div>
+<h2>Code Structure</h2>
+<p>Package: <code>org.projectforge.business.ldap</code></p>
+<p>Classes: <code>LdapUtils</code></p>
+<p>Methods (17): <code>encodeForLDAP</code>, <code>encodeForLDAP</code>, <code>escapeCommonName</code>, <code>getOu</code>, <code>getOu</code>, <code>buildOu</code>, <code>buildOu</code>, <code>appendOu</code>, <code>getOrganizationalUnit</code>, <code>getOrganizationalUnit</code>, <code>getAttributeValue</code>, <code>getAttributeStringValue</code>, <code>getAttributeIntegerValue</code>, <code>putAttribute</code>, <code>splitMultipleAttribute</code>, <code>getMissedObjectClasses</code>, <code>addEntry</code></p>
+<p>Fields (1): <code>ATTRIBUTE_SEPARATOR_CHAR</code></p>
+<p>Imports: 8 packages</p>
+<h2>Source Code (abridged)</h2>
+<pre>
+package org.projectforge.business.ldap;
+
+import org.apache.commons.lang3.StringUtils;
+import org.projectforge.common.StringHelper;
+
+import javax.naming.NamingEnumeration;
+import javax.naming.NamingException;
+import javax.naming.directory.Attribute;
+import javax.naming.directory.Attributes;
+import java.util.ArrayList;
+import java.util.List;
+
+/**
+ * @author Kai Reinhard (k.reinhard@micromata.de)
+ */
+public class LdapUtils
+{
+  private static final String ATTRIBUTE_SEPARATOR_CHAR = &quot;,&quot;;
+
+  // https://github.com/ESAPI/esapi-java-legacy/blob/develop/src/main/java/org/owasp/esapi/reference/DefaultEncoder.java
+  public static String encodeForLDAP(String input) {
+    return encodeForLDAP(input, true);
+  }
+
+  /**
+   * &#x27;\&#x27; -&gt; &quot;\5c&quot;, &#x27;(&#x27; -&gt; &quot;\\28&quot;, &#x27;)&#x27; -&gt; &quot;\\29&quot;, &#x27;\0&#x27; -&gt; &quot;\00&quot;
+   * If encodeWildcads == true: &#x27;*&#x27; -&gt; &quot;\2a&quot;
+   * @param input
+   * @param encodeWildcards Default ist true
+   * @return encode input string.
+   * https://github.com/ESAPI/esapi-java-legacy/blob/develop/src/main/java/org/owasp/esapi/reference/DefaultEncoder.java
+   */
+  public static String encodeForLDAP(String input, boolean encodeWildcards) {
+    if (input == null) {
+      return null;
+    }
+    StringBuilder sb = new StringBuilder();
+    for (int i = 0; i &lt; input.length(); i++) {
+      char c = input.charAt(i);
+
+      switch (c) {
+        case &#x27;\\&#x27;:
+          sb.append(&quot;\\5c&quot;);
+          break;
+        case &#x27;*&#x27;:
+          if (encodeWildcards) {
+            sb.append(&quot;\\2a&quot;);
+          } else {
+            sb.append(c);
+          }
+
+          break;
+        case &#x27;(&#x27;:
+          sb.append(&quot;\\28&quot;);
+          break;
+        case &#x27;)&#x27;:
+          sb.append(&quot;\\29&quot;);
+          break;
+        case &#x27;\0&#x27;:
+          sb.append(&quot;\\00&quot;);
+          break;
+        default:
+          sb.append(c);
+      }
+    }
+    return sb.toString();
+  }
+
+  /**
+   * Escapes the following characters: , (comma), = (equals), + (plus), &lt; (less than), &gt; (greater than), # (number sign), ; (semicolon), \
+   * (backslash), and &quot; (quotation mark).
+   * @param name
+   * @return null if name is null otherwise the string name with escaped special characters.
+   */
+  public static String escapeCommonName(final String name)
+  {
+    if (name == null) {
+      return null;
+    }
+    final StringBuilder buf = new StringBuilder(name.length() + 5);
+    for (int i = 0; i &lt; name.length(); i++) {
+      final char ch = name.charAt(i);
+      if (&quot;,=+&lt;&gt;#;\\\&quot;&quot;.indexOf(ch) &gt;= 0) {
+        buf.append(&quot;\\&quot;);
+      }
+      buf.append(ch);
+    }
+    return buf.toString();
+  }
+
+  public static String getOu(final String... organizationalUnits)
+  {
+    if (organizationalUnits == null) {
+      return &quot;&quot;;
+    }
+    if (organizationalUnits.length == 1 &amp;&amp; organizationalUnits[0] != null &amp;&amp; organizationalUnits[0].startsWith(&quot;ou=&quot;)) {
+      // organizationalUnit is already in the form ou=...,ou=.... Nothing to be done.
+      return organizationalUnits[0];
+    }
+    final StringBuilder buf = new StringBuilder();
+    buildOu(buf, null, organizationalUnits);
+    return buf.toString();
+  }
+
+  public static String getOu(final String ou, final String[] organizationalUnits)
+  {
+    final StringBuilder buf = new StringBuilder();
+    buildOu(buf, ou, organizationalUnits);
+    return buf.toString();
+  }
+
+  public static void buildOu(final StringBuilder buf, final String ou, final String[] organizationalUnits)
+  {
+    if (ou == null &amp;&amp; organizationalUnits == null) {
+      return;
+    }
+    boolean first = true;
+    if (ou != null) {
+      first = false;
+// ... (truncated, total 312 lines)</pre>
+
+<h2>Git History</h2><div class="hist"><pre>868d6abb7 2025 -&gt; 2026
+63081666f Source file headers: 2024-&gt; 2025.
+a72903e36 *.java, *.kt: StringBuffer -&gt; StringBuilder.
+b6092df09 Copyright 2023 -&gt; 2024
+ab45d51fa Copyright 2001-2022 -&gt; 2001-2023.</pre></div>
 </body></html>

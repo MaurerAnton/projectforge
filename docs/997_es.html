@@ -1,0 +1,80 @@
+Here's the complete HTML translated to Spanish, with `lang="es"`, the language switcher set to ES, and `[ES]` added to the title.
+
+```html
+<!DOCTYPE html>
+<html lang="es">
+<head><meta charset="UTF-8"><title>#997: Kost2Dao.kt [ES]</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:2em;color:#444}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}</style></head>
+<body>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Índice</a> · <a href="file-index.html">← Índice de archivos</a> · <a href="996.html">← Anterior</a> · <a href="998.html">Siguiente →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/kotlin/org/projectforge/business/fibu/kost/Kost2Dao.kt" target="_blank" title="Ver fuente en GitHub">📄 fuente</a></div>
+<h1>#997: <code>Kost2Dao.kt</code></h1>
+<div class="meta"><code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/kost/Kost2Dao.kt</code> Tipo: DAO / Servicio · Propósito: Acceso a datos para entidades de centro de coste Kost2 · Fuente: projectforge-business/src/main/kotlin/org/projectforge/business/fibu/kost/Kost2Dao.kt <span style="color:#888">218 líneas · 149 código · 47 comentarios · 22 en blanco</span></div>
+<div class="c">Spring <code>@Service</code> que gestiona operaciones de persistencia para entidades <code>Kost2DO</code>. Extiende <code>BaseDao</code> para proporcionar lógica CRUD, búsqueda y validación. Maneja vinculación de proyectos, asignación de tipos de coste, cumplimiento de unicidad y actualizaciones de caché posteriores al guardado.</div>
+<h2>Métodos clave</h2>
+<table>
+<tr><th>Método</th><th>Descripción</th></tr>
+<tr><td><code>setProjekt(kost2, projektId)</code></td><td>Vincula un Kost2 a un Projekt y copia su nummernkreis/bereich/teilbereich</td></tr>
+<tr><td><code>setKost2Art(kost2, kost2ArtId)</code></td><td>Establece el Kost2Art (tipo de coste) en una entrada Kost2</td></tr>
+<tr><td><code>getKost2(kostString)</code></td><td>Busca Kost2 por cadena formateada (ej. "5.123.45.67")</td></tr>
+<tr><td><code>getKost2(nk, b, tb, art)</code></td><td>Busca Kost2 por componentes numéricos individuales</td></tr>
+<tr><td><code>getActiveKost2(nk, b, tb)</code></td><td>Devuelve entradas Kost2 activas para un prefijo de 6 dígitos dado</td></tr>
+<tr><td><code>getActiveKost2(projekt)</code></td><td>Conveniencia: entradas Kost2 activas para un proyecto</td></tr>
+</table>
+<h2>Arquitectura de selección/filtrado</h2>
+<p>La sobreescritura de <code>select(filter)</code> realiza una consulta en dos fases:</p>
+<ol>
+<li><strong>Consulta a base de datos:</strong> Usa <code>QueryFilter</code> con un join en <code>kost2Art</code>, ordenado por todos los componentes numéricos</li>
+<li><strong>Filtrado en memoria:</strong> Filtra por <code>effectiveKostentraegerStatus</code> (que puede heredar el estado ENDED del proyecto vinculado). Soporta: ACTIVE, NONACTIVE, ENDED, NOT_ENDED y ALL</li>
+</ol>
+<h2>Validación (onInsertOrModify)</h2>
+<ul>
+<li>Si un <code>Projekt</code> está vinculado, verifica que el nummernkreis/bereich/teilbereich del Kost2 coincida con los componentes del ID del proyecto</li>
+<li>Nummmernkreis 4 o 5 requiere una asignación de proyecto</li>
+<li>Comprueba entradas Kost2 duplicadas (colisión de clave de negocio) usando consultas nombradas</li>
+</ul>
+<h2>Dependencias</h2>
+<ul>
+<li><code>ProjektDao</code> — para búsqueda y validación de proyectos</li>
+<li><code>Kost2ArtDao</code> — para asignación de tipo de coste</li>
+<li><code>KostCache</code> — actualizado mediante <code>afterInsertOrModify</code> después de cada guardado</li>
+<li>Derecho de acceso: <code>UserRightId.FIBU_COST_UNIT</code></li>
+</ul>
+<h2>Código fuente (resumido)</h2>
+<pre>@Service
+open class Kost2Dao : BaseDao&lt;Kost2DO&gt;(Kost2DO::class.java) {
+    @Autowired private lateinit var projektDao: ProjektDao
+    @Autowired private lateinit var kost2ArtDao: Kost2ArtDao
+    @Autowired private lateinit var kostCache: KostCache
+
+    override fun select(filter: BaseSearchFilter): List&lt;Kost2DO&gt; {
+        val myFilter = if (filter is KostFilter) filter else KostFilter(filter)
+        val queryFilter = QueryFilter(myFilter).apply { createJoin("kost2Art") }
+        val allKost2 = select(queryFilter)
+        return when {
+            myFilter.isActive -> allKost2.filter {
+                it.effectiveKostentraegerStatus == ACTIVE || it.effectiveKostentraegerStatus == null
+            }
+            myFilter.isNonActive -> allKost2.filter { it.effectiveKostentraegerStatus == NONACTIVE }
+            myFilter.isEnded -> allKost2.filter { it.effectiveKostentraegerStatus == ENDED }
+            myFilter.isNotEnded -> allKost2.filter { it.effectiveKostentraegerStatus != ENDED }
+            else -> allKost2
+        }
+    }
+}</pre>
+<h2>Historial de Git</h2>
+<div class="hist"><pre>868d6abb7 2025 -> 2026
+8239a53ee Kost2: Implementada herencia virtual de estado desde ProjektDO
+63081666f Encabezados de archivos fuente: 2024 -> 2025.
+770891c57 Bugfix CandH:CollectionHandler
+d394f410f Cosas de migración (todas las pruebas OK).
+d67bce18b Cosas de migración en progreso...
+5989b32fd BaseDao: onChangeLister refactorizado.
+1b50060c3 BaseDao: get->find, save->insert, getList->select, load->select
+3aeda5ef5 Cambio grande: InTrans eliminado, PfPersistenceContext como ThreadLocal.
+85b4e1175 PfPersistenceService: query -> executeQuery.
+b095e6f7d Cambio grande en el manejo de transacciones.
+4c04cfd65 ¡CAMBIO IMPORTANTE! IDs Integer a IDs Long.
+5bafe7941 @Repository -> @Service. @Transactional eliminado.
+f2f7cff74 Cosas de migración en progreso... (archivo creado)</pre></div>
+</body>
+</html>

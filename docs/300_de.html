@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>#300: ProjectForgeApplication [DE]</title>
+<style>
+body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}
+h1{border-bottom:2px solid #333;padding-bottom:.3em}
+h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}
+h3{margin-top:2em;color:#444}
+a{color:#0366d6}
+.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}
+.nav{font-size:.9em;color:#888;margin-bottom:1em}
+.lang{font-size:.85em;color:#888;float:right}
+.lang a{color:#888;text-decoration:none;padding:0 .3em}
+.lang a.active{color:#0366d6;font-weight:600;text-decoration:underline}
+.meta{font-size:.9em;margin:1em 0;color:#555}
+code{background:#f0f0f0;padding:0 .2em;font-size:.93em}
+pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}
+table{border-collapse:collapse;width:100%;margin:1em 0}
+th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}
+th{background:#f5f5f5;font-weight:600}
+.hist{font-size:.85em;color:#555}
+.warn{background:#fff3cd;border-left:3px solid #ffc107;padding:.5em 1em;margin:1em 0}
+.tip{background:#d4edda;border-left:3px solid #28a745;padding:.5em 1em;margin:1em 0}
+</style>
+</head>
+<body>
+<div class="lang"><a href="300.html">EN</a> · <a href="300_de.html" class="active">DE</a> · <a href="300_ru.html">RU</a> · <a href="300_fr.html">FR</a> · <a href="300_es.html">ES</a></div>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← Datei-Index</a> · <a href="299.html">← Vorherige</a> · <a href="301.html">Nächste →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-application/src/main/java/org/projectforge/start/ProjectForgeApplication.java" target="_blank">📄 Quelle</a></div>
+<h1>#300: <code>ProjectForgeApplication.java</code></h1>
+<div class="meta"><code>projectforge-application/src/main/java/org/projectforge/start/ProjectForgeApplication.java</code> · Spring Boot Einstiegspunkt · 194 Zeilen · 128 Code · 49 Kommentare · 17 Leerzeilen</div>
+<div class="c">Der einzige Einstiegspunkt für den gesamten ProjectForge-Server. Start mit <code>./gradlew bootRun</code> oder <code>java -jar projectforge-application.jar</code>. Annotiert mit <code>@SpringBootApplication</code> (aktiviert Auto-Konfiguration, Komponenten-Scanning und Auto-Konfiguration) und <code>@ServletComponentScan</code> (erkennt <code>@WebFilter</code>/<code>@WebServlet</code>-Annotationen für Wicket- und REST-Servlets). Erweitert <code>SpringBootServletInitializer</code> für die Unterstützung traditioneller WAR-Bereitstellung.</div>
+
+<h2>Startsequenz</h2>
+<div class="c"><strong>1. Argument-Parsing:</strong> Benutzerdefinierte Argumente werden extrahiert, bevor Spring Boot sie verarbeitet. <code>--base-dir=/pfad</code> setzt das Arbeitsverzeichnis (Logs, Konfiguration, temporäre Dateien). <code>--time-zone=Europe/Berlin</code> setzt <code>TimeZone.setDefault()</code>. Unbekannte Argumente werden an Spring Boot zur Standardbehandlung (Port, Profile usw.) weitergeleitet.<br><br>
+<strong>2. Basisverzeichnis-Auflösung</strong> (Prioritätsreihenfolge):<br>① <code>--base-dir</code> CLI-Argument → ② Systemeigenschaft <code>projectforge.base-dir</code> → ③ Umgebungsvariable <code>PROJECTFORGE_BASE_DIR</code> → ④ <code>~/.projectforge</code> (Standard)<br><br>
+<strong>3. Verzeichnisinitialisierung:</strong> Erstellt die Unterverzeichnisse <code>logs/</code>, <code>temp/</code> und <code>fonts/</code> unter dem Basisverzeichnis. Schreibt die aktuelle Prozess-PID in <code>temp/projectforge.pid</code> für Überwachungs- und Herunterfahrskripte.<br><br>
+<strong>4. Zeitzonen-Einrichtung:</strong> Setzt <code>TimeZone.setDefault()</code> auf den konfigurierten Wert (Standard: UTC). Dies ist kritisch – alle serverseitigen Datumsberechnungen verwenden diese Zeitzone. Das Frontend kann Daten in der lokalen Zeitzone des Benutzers anzeigen, aber der Server arbeitet in einer einzigen konsistenten Zone.<br><br>
+<strong>5. Versionsbanner:</strong> Liest <code>META-INF/projectforge-version.properties</code> (von Gradle generiert) und protokolliert die Version, den Build-Zeitstempel und den Git-Commit-Hash.<br><br>
+<strong>6. Spring Boot Start:</strong> Ruft <code>SpringApplication.run()</code> mit dem vollständig konfigurierten Anwendungskontext auf.</div>
+
+<h2>Fehlerbehandlung beim Start</h2>
+<div class="c"><strong>Portkonflikt:</strong> Fängt <code>ConnectorStartFailedException</code> – wenn Port 8080 bereits belegt ist, wird die vorhandene PID aus <code>temp/projectforge.pid</code> gelesen und eine klare Meldung protokolliert: "Port 8080 wird bereits von Prozess PID=XXXXX verwendet". Es wird NICHT wiederholt oder automatisch umgeschaltet – der Administrator muss den Konflikt manuell lösen.<br><br>
+<strong>Graceful Shutdown:</strong> Registriert einen Shutdown-Hook über <code>SecurityShutdown</code>, der sensible Daten (Passwörter, Token, Verschlüsselungsschlüssel) bei JVM-Beendigung aus dem Speicher löscht. Dies ist eine Maßnahme zur Verteidigung in der Tiefe – falls der JVM-Heap nach dem Herunterfahren ausgelesen wird, sollten sensible Daten genullt sein.</div>
+
+<h2>Klassenhierarchie</h2>
+<div class="c"><code>ProjectForgeApplication extends SpringBootServletInitializer</code> – dies ermöglicht die Bereitstellung als traditionelle WAR-Datei in einem Servlet-Container (Tomcat, Jetty) zusätzlich zum eingebetteten Server-Modus. Die Methode <code>configure()</code> wird überschrieben, um die Quellen auf <code>ProjectForgeApplication.class</code> zu setzen und dem Servlet-Container mitzuteilen, welche Spring-Konfigurationsklasse gebootstrapt werden soll.<br><br>
+Die Annotation <code>@ServletComponentScan</code> ist für die Wicket-Kompatibilität unerlässlich – Wicket registriert seinen Filter über die <code>@WebFilter</code>-Annotation anstelle von Spring Boots <code>FilterRegistrationBean</code>, und ohne <code>@ServletComponentScan</code> würde der Wicket-Filter nie gefunden werden.</div>
+
+<h2>Git-Verlauf</h2>
+<div class="hist"><table>
+<tr><th>Commit</th><th>Was wurde geändert</th></tr>
+<tr><td><code>868d6abb7</code></td><td>Copyright 2025→2026</td></tr>
+<tr><td><code>63081666f</code></td><td>Copyright 2024→2025</td></tr>
+<tr><td><code>b6092df09</code></td><td>Copyright 2023→2024</td></tr>
+<tr><td><code>ab45d51fa</code></td><td>Copyright 2001-2022→2001-2023</td></tr>
+<tr><td><code>5f7ef41b8</code></td><td>Copyright 2021→2022</td></tr>
+<tr><td><code>ceb63e8a1</code></td><td>Copyright 2001-2021</td></tr>
+<tr><td><code>7c79f192</code></td><td>Copyright 2020</td></tr>
+<tr><td><code>dd5ca38ac</code></td><td>Erster Commit – ProjectForgeApplication als Spring Boot Einstiegspunkt mit Argument-Parsing, Verzeichniseinrichtung und Zeitzonenkonfiguration erstellt.</td></tr>
+<tr><td><code>9ebb88522</code></td><td>Projekterstellung – diese Datei war Teil der anfänglichen Projektstruktur.</td></tr>
+</table></div>
+
+<div class="tip"><strong>Warum zwei Startmodi?</strong> Die Klasse unterstützt sowohl <code>java -jar</code> (eingebetteter Tomcat über Spring Boot) als auch WAR-Bereitstellung (externer Tomcat über <code>SpringBootServletInitializer</code>). Der WAR-Modus wird von Organisationen verwendet, die eine vorhandene Tomcat-Infrastruktur haben und ProjectForge lieber neben anderen Webanwendungen bereitstellen. Der JAR-Modus ist einfacher für Entwicklung und Docker-Bereitstellungen.</div>
+
+</body>
+</html>

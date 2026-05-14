@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>#640 [RU]</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333}a{color:#0366d6}.meta{font-size:.9em;margin:1em 0}.nav{font-size:.9em;color:#888;margin-bottom:1em}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}code{background:#f0f0f0;padding:0 .2em}</style>
+</head>
+<body>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Индекс</a> · <a href="file-index.html">← Индекс файлов</a> · <a href="639.html">← Назад</a> · <a href="641.html">Вперёд →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/java/org/projectforge/database/jdbc/JdbcExecutor.java" target="_blank" title="Посмотреть исходник на GitHub">📄 исходник</a></div>
+<h1>#640: <code>JdbcExecutor.java</code></h1>
+<div class="meta"><code>projectforge-business/src/main/java/org/projectforge/database/jdbc/JdbcExecutor.java</code> <strong>Строк:</strong> 95 · <strong>Автор:</strong> Kai Reinhard · <strong>Тип:</strong> Абстрактный класс Java — шаблонный метод <span style="color:#888">95 строк · 61 код · 26 комментариев · 8 пустых</span></div>
+<div class="c"><p><strong>Абстрактный исполнитель операций JDBC, использующий шаблонный метод.</strong> 95 строк. Это основа для всех низкоуровневых операций JDBC в ProjectForge — <a href="635.html">DatabaseExecutorImpl</a> создаёт анонимные подклассы для каждого SQL-вызова. Этот класс <strong>управляет жизненным циклом соединения</strong>, позволяя подклассам определять <strong>что происходит с выражением</strong>.</p>
+
+<p><strong>Шаблонный метод — <code>execute(String sql, boolean ignoreErrors, Object... args)</code>:</strong></p><ol>
+<li><strong>Получение соединения:</strong> <code>dataSource.getConnection()</code> — получает сырое JDBC-соединение из пула (или напрямую в тестовом режиме)</li>
+<li><strong>Подготовка выражения:</strong> <code>con.prepareStatement(sql)</code> — создаёт <code>PreparedStatement</code></li>
+<li><strong>Привязка параметров:</strong> перебирает <code>args[]</code> и вызывает <code>stmt.setObject(i+1, args[i])</code> — обратите внимание на преобразование <code>i+1</code>: параметры JDBC имеют нумерацию с 1 (спецификация JDBC), в то время как массивы Java — с 0. Это частая причина ошибок, если забыть</li>
+<li><strong>Делегирование:</strong> вызывает <code>execute(stmt)</code> — абстрактный метод, переопределяемый подклассами. Возвращаемое значение типизировано как <code>Object</code>, поскольку подклассы возвращают разные типы: <code>null</code> для DDL, <code>List&lt;DatabaseResultRow&gt;</code> для запросов, <code>Integer</code> для обновлений/количеств</li>
+<li><strong>Обработка ошибок:</strong> если перехвачено <code>SQLException</code> и <code>ignoreErrors=true</code>, записывает ошибку на уровне ERROR и возвращает <code>null</code>. Если <code>ignoreErrors=false</code>, оборачивает в <code>RuntimeException</code> и пробрасывает — это <strong>непроверяемое исключение</strong> по дизайну; вызывающим не нужен <code>try-catch</code> для SQL-ошибок</li></ol>
+
+<p><strong>Очистка ресурсов (блок <code>finally</code>):</strong> Сначала закрывает <code>PreparedStatement</code>, затем <code>Connection</code>. Каждое закрытие в собственном <code>try-catch</code> — если закрытие выражения выбрасывает исключение, соединение всё равно закрывается. <strong>Критический нюанс:</strong> если любое из закрытий выбрасывает исключение, устанавливается флаг <code>static boolean hasErrors</code>. После обоих закрытий, если произошли ошибки, выбрасывается <code>RuntimeException</code>. Это гарантирует, что ошибки утечки ресурсов не будут молча проглочены — вызывающий узнает, что очистка ресурсов не удалась.</p>
+
+<p><strong>Абстрактный метод — <code>execute(PreparedStatement stmt)</code>:</strong> Реализуется анонимными подклассами в <a href="635.html">DatabaseExecutorImpl</a> для 4 различных операций: выполнение DDL (<code>stmt.execute()</code>), запрос (<code>stmt.executeQuery()</code> + маппинг ResultSet), скалярный запрос (<code>rs.getInt(1)</code>) и обновление (<code>stmt.executeUpdate()</code>).</p>
+
+<p><strong>Отсутствие пула соединений:</strong> В Javadoc предупреждается «соединения могут теряться» — этот класс получает <code>Connection</code> через <code>DataSource.getConnection()</code> и закрывает его в <code>finally</code>. Это <strong>корректно</strong> для пулированных DataSource (закрытие возвращает соединение в пул), но автор беспокоился о прямых соединениях <code>DriverManager</code> в тестовом режиме, где каждый вызов открывает новое TCP-соединение. В продакшене с HikariCP пулинг работает отлично — предупреждение излишне осторожно.</p></div>
+</body>
+</html>

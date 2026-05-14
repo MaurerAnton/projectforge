@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>#709 [RU]</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:2em;color:#444}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}.warn{background:#fff3cd;border-left:3px solid #ffc107;padding:.5em 1em;margin:1em 0}.tip{background:#d4edda;border-left:3px solid #28a745;padding:.5em 1em;margin:1em 0}</style>
+</head>
+<body>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Индекс</a> · <a href="file-index.html">← Индекс файлов</a> · <a href="708.html">← Предыдущий</a> · <a href="710.html">Следующий →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/java/org/projectforge/framework/persistence/xstream/HibernateProxyXPathMarshaller.java" target="_blank" title="Просмотреть исходник на GitHub">📄 исходник</a></div>
+<h1>#709: <code>HibernateProxyXPathMarshaller.java</code></h1>
+<div class="meta"><code>projectforge-business/src/main/java/org/projectforge/framework/persistence/xstream/HibernateProxyXPathMarshaller.java</code> Маршаллер XStream — XPath-маршаллер ссылок, который разворачивает прокси Hibernate при обходе графа сущностей, <code>projectforge-business/src/main/java/org/projectforge/framework/persistence/xstream/HibernateProxyXPathMarshaller.java</code> <span style="color:#888">56 строк · 25 кода · 25 комментариев · 6 пустых</span></div>
+<div class="c">Расширяет <code>ReferenceByXPathMarshaller</code> от XStream для перехвата метода <code>convertAnother()</code> — центральной точки диспетчеризации, где XStream переходит от одного объекта к другому во время XML-сериализации графа сущностей. Перед делегированием родительскому классу для XPath-отслеживания ссылок он разворачивает любой <code>HibernateProxy</code> до его реальной реализации сущности. Это гарантирует, что отслеживание ссылок XStream работает с реальной идентичностью сущности, а не с идентичностью прокси, предотвращая дублирующую сериализацию одной и той же сущности, появляющейся как через прямые, так и через прокси-ссылки. Это критически важный компонент для сериализации графов JPA-сущностей, содержащих двунаправленные ассоциации с ленивой загрузкой.</div>
+
+<h2>Архитектура</h2>
+
+<h3>Иерархия классов</h3>
+<p><code>HibernateProxyXPathMarshaller</code> расширяет <code>com.thoughtworks.xstream.core.ReferenceByXPathMarshaller</code>, который, в свою очередь, расширяет <code>AbstractReferenceMarshaller</code> (расширяющий <code>TreeMarshaller</code>). Иерархия маршаллинга XStream:</p>
+<pre>TreeMarshaller
+  └── AbstractReferenceMarshaller       (добавляет отслеживание ссылок на объекты)
+       ├── ReferenceByXPathMarshaller   (использует XPath-выражения для ссылок)
+       │    └── HibernateProxyXPathMarshaller  (этот класс — добавляет разворачивание прокси)
+       └── ReferenceByIdMarshaller      (использует атрибуты ID/IDREF для ссылок)
+            └── ProxyIdRefMarshaller    (<a href="708.html">#708</a> — альтернативная стратегия на основе ID)</pre>
+
+<div class="tip">И <code>HibernateProxyXPathMarshaller</code>, и <a href="708.html">ProxyIdRefMarshaller</a> решают одну и ту же проблему (прокси-ориентированный маршаллинг), но используют разные режимы ссылок XStream: XPath против ID/IDREF. Выбор между ними осуществляется <a href="710.html">XStreamMarshallingStrategy</a> (использует XPath) и <a href="709.html">ProxyIdRefMarshallingStrategy</a> (использует ID/IDREF).</div>
+
+<h3>Конструктор</h3>
+<p>Принимает четыре параметра, соответствующие сигнатуре конструктора <code>ReferenceByXPathMarshaller</code>:</p>
+<table>
+<tr><th>Параметр</th><th>Тип</th><th>Назначение</th></tr>
+<tr><td><code>writer</code></td><td><code>HierarchicalStreamWriter</code></td><td>Писатель XML-вывода</td></tr>
+<tr><td><code>converterLookup</code></td><td><code>ConverterLookup</code></td><td>Реестр конвертеров XStream</td></tr>
+<tr><td><code>mapper</code></td><td><code>Mapper</code></td><td>Маппер имён классов XStream</td></tr>
+<tr><td><code>mode</code></td><td><code>int</code></td><td>Режим XPath-ссылок (<code>RELATIVE</code>, <code>ABSOLUTE</code> и т.д.)</td></tr>
+</table>
+
+<h3>convertAnother(Object item, Converter converter)</h3>
+<p>Это единственный переопределённый метод — единственная точка, где разворачивание прокси внедряется в поток XPath-маршаллинга:</p>
+<ol>
+  <li><strong>Обнаружение прокси:</strong> Проверяет <code>HibernateProxy.class.isAssignableFrom(item.getClass())</code>. Используется <code>isAssignableFrom</code>, а не <code>instanceof</code>, поскольку <code>item</code> может быть передан в ненулевом контексте, где статический тип шире.</li>
+  <li><strong>Разворачивание:</strong> Вызывает <code>((HibernateProxy) item).getHibernateLazyInitializer().getImplementation()</code> для получения реальной сущности. Это запускает ленивую загрузку, если прокси ещё не был инициализирован.</li>
+  <li><strong>Делегирование:</strong> Передаёт развёрнутый объект <code>toConvert</code> в <code>super.convertAnother(toConvert, converter)</code>, который обрабатывает XPath-отслеживание ссылок и запись XML.</li>
+</ol>
+
+<h3>Режим XPath-ссылок</h3>
+<p><code>ReferenceByXPathMarshaller</code> от XStream обрабатывает циклические ссылки, записывая XPath-выражения (например, <code>&lt;task reference="../../../task"&gt;</code>) вместо сериализации одного и того же объекта дважды. Параметр <code>mode</code> управляет тем, будут ли эти XPath-выражения относительными или абсолютными. Относительные пути делают XML более устойчивым к структурным изменениям и обычно предпочтительны для документо-ориентированного XML.</p>
+
+<h2>Точки интеграции</h2>
+<ul>
+  <li><strong>Создаётся:</strong> <a href="710.html">XStreamMarshallingStrategy</a>, который передаёт режим <code>RELATIVE</code>. Это <em>единственное</em> место, где создаётся <code>HibernateProxyXPathMarshaller</code> — стратегия выступает в роли фабрики.</li>
+  <li><strong>Работает в рамках:</strong> Конвейера древовидного маршаллинга XStream. Когда XStream обходит граф объектов, он вызывает <code>convertAnother()</code> для каждой встреченной ссылки на объект.</li>
+  <li><strong>Ссылается на JIRA XSTR-226:</strong> Комментарий в исходнике <code>// http://jira.codehaus.org/browse/XSTR-226</code> ведёт к оригинальной проблеме Codehaus JIRA, которая мотивировала создание этого класса — известное ограничение XStream, когда прокси Hibernate нарушали механизм отслеживания ссылок. Этот класс является исправлением этой проблемы.</li>
+</ul>
+
+<h2>Проектные решения и особенности</h2>
+<ul>
+  <li><strong>Разворачивание прокси против прокси-ориентированного отслеживания ссылок:</strong> Альтернативный дизайн мог бы модифицировать само отслеживание ссылок для работы с прокси (сопоставляя идентичность прокси с идентичностью реального объекта). Этот класс использует более простой подход: развернуть перед входом в трекер ссылок. Следствие — вызов <code>getImplementation()</code> принудительно инициализирует прокси, что приводит к обращению к базе данных для ленивых прокси.</li>
+  <li><strong>Режим XPath жёстко задан на уровне стратегии:</strong> Параметр <code>mode</code> не настраивается для каждого вызова — он фиксируется во время создания стратегией. <a href="710.html">XStreamMarshallingStrategy</a> всегда передаёт <code>RELATIVE</code>. Если бы потребовались абсолютные XPath, потребовался бы новый класс стратегии.</li>
+  <li><strong>Потенциальная двойная инициализация:</strong> Если и <a href="705.html">HibernateProxyConverter</a>, и этот маршаллер активны в одном конвейере XStream, прокси может быть развёрнут дважды. Однако второе разворачивание уже инициализированного прокси — дешёвая операция без побочных эффектов (Hibernate возвращает тот же экземпляр реализации).</li>
+  <li><strong>Класс уровня пакета:</strong> Как и большинство классов в этом пакете, <code>HibernateProxyXPathMarshaller</code> имеет видимость на уровне пакета (<code>public class</code>, но пакет внутренний). Он открыт публично только для того, чтобы класс стратегии мог его создать.</li>
+</ul>
+
+<h2>История Git</h2><div class="hist"><pre>868d6abb7 2025 -> 2026
+63081666f Заголовки исходных файлов: 2024-> 2025.
+b6092df09 Авторские права 2023 -> 2024
+ab45d51fa Авторские права 2001-2022 -> 2001-2023.
+5f7ef41b8 Авторские права 2021 -> 2022
+ceb63e8a1 Заголовок исходного кода: (C) 2001-2021.
+7c79f1922 Авторские права в заголовке исходника -> 2020.
+32f634b88 Оптимизация импортов
+dd5ca38ac Обновлены или созданы авторские права во всех заголовках java-файлов.
+9ebb88522 Первоначальный коммит</pre></div>
+</body>
+</html>

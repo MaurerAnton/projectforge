@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>#129: IHKRight [RU]</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:2em;color:#444}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.lang{font-size:.85em;color:#888;float:right}.lang a{color:#888;text-decoration:none;padding:0 .3em}.lang a.active{color:#0366d6;font-weight:600;text-decoration:underline}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}.warn{background:#fff3cd;border-left:3px solid #ffc107;padding:.5em 1em;margin:1em 0}.tip{background:#d4edda;border-left:3px solid #28a745;padding:.5em 1em;margin:1em 0}</style>
+</head>
+<body>
+<div class="lang"><a href="128.html">EN</a> · <a href="128_de.html">DE</a> · <a href="128_ru.html" class="active">RU</a> · <a href="128_fr.html">FR</a> · <a href="128_es.html">ES</a></div>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Индекс</a> · <a href="file-index.html">← Индекс файлов</a> · <a href="128.html">← Назад</a> · <a href="130.html">Вперёд →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/plugins/org.projectforge.plugins.ihk/src/main/java/org/projectforge/plugins/ihk/IHKRight.java" target="_blank" title="Просмотреть исходный код на GitHub">📄 исходник</a></div>
+<h1>#129: <code>IHKRight.java</code></h1>
+<div class="meta"><code>plugins/org.projectforge.plugins.ihk/src/main/java/org/projectforge/plugins/ihk/IHKRight.java</code> Контроль доступа, <code>plugins/org.projectforge.plugins.ihk/src/main/java/org/projectforge/plugins/ihk/IHKRight.java</code> <span style="color:#888">59 строк · 26 кода · 28 комментариев · 5 пустых</span></div>
+<div class="c">Проверка прав доступа для плагина IHK. Расширяет <code>UserRightAccessCheck&lt;TimesheetDO&gt;</code>, чтобы гарантировать, что пользователи могут просматривать и экспортировать только свои собственные табели учёта рабочего времени через отчёт об обучении IHK.</div>
+
+<h2>Архитектура</h2>
+<p><code>IHKRight</code> регистрируется в <code>IHKPlugin.initialize()</code> через <code>registerRight(new IHKRight())</code> и управляет всем доступом к данным табелей в контексте модуля IHK.</p>
+
+<h3>Конструктор</h3>
+<pre>public IHKRight() {
+    super(IHKPluginUserRightId.IHK, UserRightCategory.PLUGINS, UserRightValue.TRUE);
+}</pre>
+<p>Привязывается к значению перечисления <code>IHKPluginUserRightId.IHK</code> (идентификатор <code>"PLUGIN_IHK"</code>), категоризированному как <code>PLUGINS</code>, со значением по умолчанию <code>TRUE</code> (включено для всех пользователей по умолчанию). Это означает, что право отображается в интерфейсе администрирования пользователей в категории «Плагины» и изначально предоставляется каждому.</p>
+
+<h3>Логика доступа</h3>
+<p>Метод <code>hasAccess(PFUserDO user, TimesheetDO obj, TimesheetDO oldObj, OperationType operationType)</code> реализует простую проверку владельца:</p>
+<ul>
+  <li>Если и <code>obj</code>, и <code>oldObj</code> равны null, возвращает <code>true</code> — общий доступ на вставку/выбор предоставляется по умолчанию.</li>
+  <li>В противном случае сравнивает <code>user.getId()</code> с <code>timesheet.getUserId()</code> с помощью <code>Objects.equals()</code> — только владелец табеля может получить к нему доступ через модуль IHK.</li>
+</ul>
+
+<h2>Проектные решения</h2>
+<ul>
+  <li><strong>Право, включённое по умолчанию:</strong> Использование <code>UserRightValue.TRUE</code> означает, что все пользователи по умолчанию имеют право IHK. Администраторы могут отозвать его для отдельных пользователей или групп в интерфейсе управления доступом, но обычному стажёру не требуется явное назначение.</li>
+  <li><strong>Доступ только владельцу:</strong> Проверка намеренно проста. Стажёр может экспортировать только свои собственные табели. В этом классе нет переопределения для руководителя/менеджера — более широкий доступ предоставляется через другие механизмы доступа ProjectForge (например, собственные проверки доступа TimesheetDao).</li>
+  <li><strong>Безопасность при null:</strong> Использует <code>oldObj != null ? oldObj : obj</code> для обработки сценариев обновления, где исходный объект может содержать соответствующий идентификатор пользователя.</li>
+</ul>
+
+<h2>Зависимости</h2>
+<table>
+  <tr><th>Класс</th><th>Роль</th></tr>
+  <tr><td><code>UserRightAccessCheck&lt;T&gt;</code></td><td>Абстрактная база, предоставляющая фреймворк регистрации прав</td></tr>
+  <tr><td><code>IHKPluginUserRightId.IHK</code></td><td>Константа перечисления, идентифицирующая это право в системе</td></tr>
+  <tr><td><code>TimesheetDO</code></td><td>Доменный объект, который защищает это право</td></tr>
+</table>
+
+<h2>История Git</h2><div class="hist"><pre>868d6abb7 2025 -> 2026
+63081666f Заголовки исходных файлов: 2024-> 2025.
+4efcbd0fb Работа по миграции в процессе...
+b6092df09 Авторское право 2023 -> 2024
+ab45d51fa Авторское право 2001-2022 -> 2001-2023.
+5f7ef41b8 Авторское право 2021 -> 2022
+ceb63e8a1 Заголовок исходного кода: (C) 2001-2021.
+7c79f1922 Авторское право заголовка исходного кода -> 2020.
+45cad02e9 Добавлен плагин IHK (в долгосрочной перспективе заменит плагин "Ihk-Export")</pre></div>
+</body>
+</html>

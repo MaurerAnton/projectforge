@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>#1419 [RU]</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:2em;color:#444}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}</style>
+</head>
+<body>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Индекс</a> · <a href="file-index.html">← Индекс файлов</a> · <a href="1418.html">← Предыдущий</a> · <a href="1420.html">Следующий →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/kotlin/org/projectforge/security/My2FAService.kt" target="_blank" title="Просмотреть исходный код на GitHub">📄 исходный код</a></div>
+<h1>#1419: <code>My2FAService.kt</code></h1>
+<div class="meta"><code>projectforge-business/src/main/kotlin/org/projectforge/security/My2FAService.kt</code> Сервис, projectforge-business/src/main/kotlin/org/projectforge/security/My2FAService.kt <span style="color:#888">253 строки · 177 кода · 53 комментария · 23 пустых</span></div>
+<div class="c">Центральный сервис двухфакторной аутентификации: проверяет OTP-коды через приложение-аутентификатор (TOTP), SMS или электронную почту с защитой от перебора.</div>
+
+<h2>Архитектура</h2>
+<p><code>My2FAService</code> — это <code>@Service</code>, который координирует многоканальную 2FA-верификацию. Он связывает <code>UserAuthenticationsService</code> (хранение токенов), <code>SmsSenderConfig</code> (проверка доступности SMS), <code>My2FABruteForceProtection</code> (ограничение частоты запросов), <code>My2FARequestConfiguration</code> (отключение на основе групп) и <code>WebAuthnSupport</code> (доступность WebAuthn).</p>
+
+<h3>Конвейер проверки OTP</h3>
+<ol>
+<li><code>validateOTP(code, *expectedToken)</code> — Основная точка входа. Принимает 6-значный код и один или несколько ожидаемых токенов (из SMS или электронной почты).</li>
+<li><code>preCheck(code)</code> — Возвращает BLOCKED, если активна защита от перебора, FAILED, если код слишком короткий (&lt;4 символов).</li>
+<li>Сравнивает код с каждым <code>expectedToken</code> (токены SMS/email). При совпадении: вызывает <code>bruteForceProtection.registerOTPSuccess()</code> и обновляет временную метку <code>lastSuccessful2FA</code>.</li>
+<li>Если ни один токен SMS/email не совпал, переходит к <code>_validateAuthenticatorOTP(code)</code>, который проверяет код относительно сохранённого TOTP-токена через <code>TimeBased2FA.standard.validate()</code>.</li>
+<li>При неудаче: <code>bruteForceProtection.registerOTPFailure()</code> увеличивает счётчик неудач.</li>
+</ol>
+
+<h3>Защита от перебора</h3>
+<p>Успешные регистрации сбрасывают счётчик. Неудачи увеличивают его. <code>getBlockedResult()</code> возвращает null или BLOCKED OTPCheckResult с локализованным сообщением. Предварительная проверка ограничивает минимальную длину кода (4), чтобы избежать ненужного подсчёта перебора для заведомо неверных входных данных.</p>
+
+<h3>Проверки статуса 2FA</h3>
+<ul>
+<li><code>userConfigured2FA</code> — True, если у пользователя настроен хотя бы один метод 2FA (токен приложения-аутентификатора, мобильный телефон для SMS или учётные данные WebAuthn).</li>
+<li><code>smsConfigured</code> — True, если настроен отправитель SMS или система находится в режиме разработки.</li>
+<li><code>checklastSuccessful2FA(timePeriod, unit, user)</code> — Проверяет, была ли последняя успешная 2FA в течение заданного периода времени (поддерживает MINUTES, HOURS, DAYS).</li>
+<li><code>isMail2FADisabledForUser(userContext)</code> — Проверяет, принадлежит ли пользователь к какой-либо группе, указанной в <code>My2FARequestConfiguration.disableEmail2FAForGroups</code>.</li>
+</ul>
+
+<h3>Отключение 2FA на основе групп</h3>
+<p><code>setDisabled(groupNames)</code> разбирает строку с именами групп, разделённую точкой с запятой/запятой/двоеточием, из конфигурации, сопоставляет их с <code>GroupService.allGroups</code> и заполняет <code>mail2FADisabledGroupIds</code>. Пользователи в этих группах пропускают 2FA на основе электронной почты. Это настраивается в <code>@PostConstruct</code> из <code>my2FARequestConfiguration.disableEmail2FAForGroups</code>.</p>
+
+<h2>Обоснование дизайна</h2>
+<p>Многоканальная проверка OTP (SMS, электронная почта, приложение-аутентификатор) реализована как цепочка запасных вариантов: сначала проверяются внешние токены, затем TOTP. Это позволяет одному вызову <code>validateOTP</code> работать независимо от способа доставки. Защита от перебора применяется на уровне OTP (не на уровне входа в систему), поэтому каждая попытка 2FA ограничивается по частоте независимо. Функция отключения на основе групп поддерживает организационные политики, когда определённым пользователям (например, администраторам с аппаратными токенами) не нужна 2FA по электронной почте. Временная метка <code>lastSuccessful2FA</code> позволяет кэшировать 2FA на уровне сессии (не запрашивать повторно, если проверка была недавно).</p>
+
+<h2>История Git</h2>
+<div class="hist"><pre>868d6abb7 2025 -> 2026
+600951ee0 2025 -> 2026
+63081666f Заголовки исходных файлов: 2024-> 2025.
+199c26801 Заголовки исходных файлов: 2024-> 2025.
+67805f2fc ThreadLocalUserContext.user -> loggedInUser
+58ffda82b ThreadLocalUserContext.user -> loggedInUser
+4c04cfd65 MAJOR-CHANGE! Миграция целочисленных id на Long id.
+fd13c259a MAJOR-CHANGE! Миграция целочисленных id на Long id.
+4f5a458c9 Миграция в процессе...
+635197c0b Миграция в процессе...
+77bade6df javax.* -> jakarta.*
+3afa03fb1 javax.* -> jakarta.*
+b6092df09 Авторское право 2023 -> 2024
+9a0609dd1 Авторское право 2023 -> 2024
+ab45d51fa Авторское право 2001-2022 -> 2001-2023.
+29815da21 Авторское право 2001-2022 -> 2001-2023.
+38bec971a ThreadLocal -> Kotlin
+19bb46d57 ThreadLocal -> Kotlin
+cb605ebde 2FA: WebAuthn не экспериментальный; требуется хотя бы одна 2FA.
+f988a9b1b 2FA: WebAuthn не экспериментальный; требуется хотя бы одна 2FA.
+</pre></div>
+</body>
+</html>

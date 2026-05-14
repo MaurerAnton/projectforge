@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>#3034: ReportObjectivesPage.java [FR]</title>
+<style>
+body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}
+h1{border-bottom:2px solid #333;padding-bottom:.3em}
+h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}
+h3{margin-top:2em;color:#444}
+a{color:#0366d6}
+.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}
+.nav{font-size:.9em;color:#888;margin-bottom:1em}
+.lang{font-size:.85em;color:#888;float:right}
+.lang a{color:#888;text-decoration:none;padding:0 .3em}
+.lang a.active{color:#0366d6;font-weight:600;text-decoration:underline}
+.meta{font-size:.9em;margin:1em 0;color:#555}
+code{background:#f0f0f0;padding:0 .2em;font-size:.93em}
+pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}
+table{border-collapse:collapse;width:100%;margin:1em 0}
+th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}
+th{background:#f5f5f5;font-weight:600}
+.hist{font-size:.85em;color:#555}
+</style>
+</head>
+<body>
+<div class="lang"><a href="3034.html">EN</a> · <a href="3034_de.html">DE</a> · <a href="3034_ru.html">RU</a> · <a href="3034_fr.html" class="active">FR</a> · <a href="3034_es.html">ES</a></div>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← Index des fichiers</a> · <a href="1047.html">← Précédent</a> · <a href="3271.html">Suivant →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-wicket/src/main/java/org/projectforge/web/fibu/ReportObjectivesPage.java" target="_blank" title="Voir la source sur GitHub">📄 source</a></div>
+<h1>#3034 : <code>ReportObjectivesPage.java</code></h1>
+<div class="meta"><code>projectforge-wicket/src/main/java/org/projectforge/web/fibu/ReportObjectivesPage.java</code> Type : Java · Rôle : Comptabilité financière · Source : projectforge-wicket/src/main/java/org/projectforge/web/fibu/ReportObjectivesPage.java <span style="color:#888">139 lignes · 97 code · 25 commentaires · 17 vides</span></div>
+<div class="c">Implémentation de la page Wicket pour ReportObjectives. Compose des panneaux, des formulaires et la navigation.</div>
+<h2>Structure du code</h2>
+<p>Paquetage : <code>org.projectforge.web.fibu</code></p>
+<p>Classes : <code>ReportObjectivesPage</code></p>
+<p>Étend : <code>AbstractStandardFormPage</code></p>
+<p>Méthodes (6) : <code>importReportObjectivs</code>, <code>createReport</code>, <code>clear</code>, <code>getReportStorage</code>, <code>checkAccess</code>, <code>getTitle</code></p>
+<p>Champs (3) : <code>serialVersionUID</code>, <code>KEY_REPORT_STORAGE</code>, <code>form</code></p>
+<p>Importations : 11 paquetages</p>
+<h2>Code source (abrégé)</h2>
+<pre>
+package org.projectforge.web.fibu;
+
+import org.apache.wicket.markup.html.form.upload.FileUpload;
+import org.apache.wicket.request.mapper.parameter.PageParameters;
+import org.apache.wicket.spring.injection.annot.SpringBean;
+import org.projectforge.business.fibu.kost.reporting.Report;
+import org.projectforge.business.fibu.kost.reporting.ReportDao;
+import org.projectforge.business.fibu.kost.reporting.ReportStorage;
+import org.projectforge.business.user.ProjectForgeGroup;
+import org.projectforge.framework.time.PFDay;
+import org.projectforge.web.WicketSupport;
+import org.projectforge.web.wicket.AbstractStandardFormPage;
+
+import java.io.InputStream;
+
+public class ReportObjectivesPage extends AbstractStandardFormPage
+{
+  private static final long serialVersionUID = 5880523229854750164L;
+
+  private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(ReportObjectivesPage.class);
+
+  public static final String KEY_REPORT_STORAGE = &quot;ReportObjectivesPage:storage&quot;;
+
+  private final ReportObjectivesForm form;
+
+  protected transient ReportStorage reportStorage;
+
+  public ReportObjectivesPage(final PageParameters parameters)
+  {
+    super(parameters);
+    form = new ReportObjectivesForm(this);
+    body.add(form);
+    form.init();
+  }
+
+  protected void importReportObjectivs()
+  {
+    checkAccess();
+    log.info(&quot;importation des objectifs du rapport.&quot;);
+    final FileUpload fileUpload = form.fileUploadField.getFileUpload();
+    if (fileUpload != null) {
+      try {
+        final String clientFileName = fileUpload.getClientFileName();
+        final InputStream is = fileUpload.getInputStream();
+        final Report report = WicketSupport.get(ReportDao.class).createReport(is);
+
+        if (report == null) {
+          error(&quot;Une erreur s'est produite lors de l'importation (voir les fichiers journaux pour les détails).&quot;);
+          return;
+        }
+
+        reportStorage = new ReportStorage(report);
+        reportStorage.setFileName(clientFileName);
+        putUserPrefEntry(KEY_REPORT_STORAGE, reportStorage, false);
+      } catch (final Exception ex) {
+        log.error(ex.getMessage(), ex);
+        error(&quot;Une erreur s'est produite (voir les fichiers journaux pour les détails) : &quot; + ex.getMessage());
+      }
+    }
+  }
+
+  protected void createReport()
+  {
+    checkAccess();
+    final ReportObjectivesFilter filter = form.getFilter();
+    if (filter.getFromDate() == null) {
+      return;
+    }
+    log.info(&quot;chargement du rapport : &quot; + filter);
+    final ReportStorage storage = getReportStorage();
+    final Report report = storage.getRoot();
+    final String currentReportId = storage.getCurrentReport().getId(); // Stocker l'ID du rapport actuel.
+    final PFDay day = PFDay.from(filter.getFromDate()); // non nul
+    report.setFrom(day.getYear(), day.getMonthValue());
+    PFDay untilDay;
+    if (filter.getToDate() != null) {
+      untilDay = PFDay.from(filter.getToDate()); // non nul
+    } else {
+      untilDay = day.getEndOfMonth();
+    }
+    report.setTo(untilDay.getYear(), untilDay.getMonthValue());
+    WicketSupport.get(ReportDao.class).loadReport(report);
+    storage.setCurrentReport(currentReportId); // Sélectionner le rapport actuel précédent.
+  }
+
+  protected void clear()
+  {
+    checkAccess();
+    log.info(&quot;effacement du rapport.&quot;);
+    removeUserPrefEntry(KEY_REPORT_STORAGE);
+    this.reportStorage = null;
+  }
+
+  /**
+   * @return Tout stockage utilisateur existant ou null s'il n'existe pas (ni dans la classe ni dans la session de l'utilisateur).
+   */
+  protected ReportStorage getReportStorage()
+  {
+    if (reportStorage != null) {
+      return reportStorage;
+    }
+    return (ReportStorage) getUserPrefEntry(KEY_REPORT_STORAGE);
+  }
+
+  private void checkAccess()
+  {
+    getAccessChecker().isLoggedInUserMemberOfGroup(ProjectForgeGroup.FINANCE_GROUP, ProjectForgeGroup.CONTROLLING_GROUP);
+    getAccessChecker().checkRestrictedOrDemoUser();
+  }
+
+  @Override
+  protected String getTitle()
+  {
+    return getString(&quot;fibu.kost.reporting&quot;);
+  }
+}</pre>
+
+<h2>Historique Git</h2><div class="hist"><pre>868d6abb7 2025 -> 2026
+63081666f En-têtes des fichiers source : 2024 -> 2025.
+a73905c14 Correction de fautes de frappe dans les répertoires projectforge*/ Trouvé via codespell Voir c3b0602a893
+4efcbd0fb Travaux de migration en cours...
+b6092df09 Droits d'auteur 2023 -> 2024</pre></div>
+</body>
+</html>

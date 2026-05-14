@@ -1,36 +1,34 @@
-<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>1031</title>
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>#1031</title>
 <style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:2em;color:#444}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}</style></head>
-<body><div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="1030.html">← Prev</a> · <a href="1032.html">Next →</a></div>
-<h1>1031: <code>PollDO.kt</code></h1>
-<div class="meta">JPA Entity (Poll), projectforge-business/src/main/kotlin/org/projectforge/business/poll/PollDO.kt</div>
-<div class="c">Central poll entity. Maps to <code>t_poll</code> table. Stores poll metadata (title, description, location, deadline), access control lists (CSV-encoded user IDs and group IDs for attendees and full access), input field definitions, and a state machine (RUNNING → FINISHED → FINISHED_AND_MAIL_SENT).</div>
+<body><div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="1030.html">← Prev</a> · <a href="1032.html">Next →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/kotlin/org/projectforge/business/orga/VisitorbookService.kt" target="_blank" title="View source on GitHub">📄 source</a></div>
+<h1>#1031: <code>VisitorbookService.kt</code></h1>
+<div class="meta"><code>projectforge-business/src/main/kotlin/org/projectforge/business/orga/VisitorbookService.kt</code> Service (Visitorbook), projectforge-business/src/main/kotlin/org/projectforge/business/orga/VisitorbookService.kt <span style="color:#888">246 lines · 176 code · 47 comments · 23 blank</span></div>
+<div class="c">Service layer for visitorbook entry CRUD operations. Implements <code>IDao<VisitorbookDO></code>, providing insert/update/delete/undelete for visit entries with access control. Integrates with <code>VisitorbookCache</code> for cache invalidation after mutations.</div>
 
-<h2>Entity Design</h2>
-<p>Extends <code>DefaultBaseDO</code> with <code>@AUserRightId(value="poll", checkAccess=false)</code>. Key design elements:</p>
+<h2>Architecture</h2>
+<h3>Dual Layer</h3>
+<p>Delegates listing and access checks to <code>VisitorbookDao</code> (which injects itself via <code>@PostConstruct</code> into <code>visitorbookDao</code>). Handles entry-level operations directly using <code>BaseDOPersistenceService</code> and <code>PfPersistenceService</code>.</p>
+
+<h3>Cache Integration</h3>
+<p>Every mutation method (<code>insert</code>, <code>updateVisitorbookEntry</code>, <code>markVisitorbookEntryAsDeleted</code>, <code>undeleteVisitorbookEntry</code>) calls <code>visitorbookCache.setExpired(visitorbook.id)</code> to trigger selective cache refresh of the affected visitorbook's aggregate data.</p>
+
+<h3>Entry Management Methods</h3>
 <ul>
-<li><strong>CSV-encoded ID lists:</strong> <code>attendeeIds</code>, <code>groupAttendeeIds</code>, <code>fullAccessGroupIds</code>, <code>fullAccessUserIds</code> are comma-separated strings stored in VARCHAR columns, parsed via <code>toLongArray()</code> utility and <code>StringHelper.splitToLongs</code>.</li>
-<li><strong>Computed Role:</strong> <code>getPollAssignment()</code> determines the current user's role by checking owner, accessUserIds, and attendeeIds against the logged-in user.</li>
-<li><strong>State:</strong> Inner enum <code>State</code> (RUNNING, FINISHED, FINISHED_AND_MAIL_SENT) with <code>getPollStatus()</code> translating to <code>PollState</code> filter enum.</li>
-<li><strong>Input Fields:</strong> <code>inputFields</code> stores serialized question definitions for the poll response form.</li>
+<li><code>selectAllVisitorbookEntries</code>: Loads all entries for a visitorbook ordered by date descending, with optional deleted status filter.</li>
+<li><code>findVisitorbookEntry</code>: Finds single entry by ID with optional access check.</li>
+<li><code>insertVisitorbookEntry</code>: Convenience method constructing an entry from date/time strings.</li>
+<li><code>markVisitorbookEntryAsDeleted</code>/<code>undeleteVisitorbookEntry</code>: Soft-delete/restore operations with cache invalidation.</li>
 </ul>
 
 <h2>Git History</h2><div class="hist"><pre>
 868d6abb7 2025 -> 2026
 63081666f Source file headers: 2024-> 2025.
-67805f2fc ThreadLocalUserContext.user -> ThreadLocalUserContext.loggedInUser
+27a5e6cad Visitorbook: bugfix on contactPersons.
+18bf92219 WIP: History entries handling. VisitorBookDao.
+b5dc26e24 Migration stuff in progress...
+1b50060c3 BaseDao: renamed: get -> find, save -> insert, getList -> select, load -> select
+3aeda5ef5 Big change: all save|update|...InTrans renamed.
+b095e6f7d !!!!! Big change of Transaction handling.
 4c04cfd65 MAJOR-CHANGE! Migration of integer id's to Long id's.
-c04fb0d51 Migration stuff in progress...
-b6092df09 Copyright 2023 -> 2024
-b89441787 Added State.FINISHED_AND_MAIL_SENT and smaller fixes
-598bfefe0 toIntArray changes
-5cfd12067 Reformat code, some logging, i18n & Source Headers
-5752ef33b Add Access and Attendee Filter to overview Page
-70c983a5f Redo the filter for overview page.
-25185faa0 Add Attendee and Access filter.
-be1f00a8f accessuser and accessgroup
-17c9ac5c6 change data object and database
-1bde3ce8b begin to add Questions.
-52b6be8ce Database model working
-a8a0aedcb poll entries in database possible
 </pre></div>
 </body></html>

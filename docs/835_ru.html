@@ -1,0 +1,124 @@
+Here is the complete HTML translated into Russian, with the language set to `ru` and the title updated to include `[RU]`.
+
+```html
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>#835: BirthdayCache.kt [RU]</title>
+<style>
+  body { font-family: system-ui, sans-serif; max-width: 960px; margin: 2em auto; padding: 0 1em; background: #fafafa; color: #222; line-height: 1.6; }
+  h1 { border-bottom: 2px solid #333; padding-bottom: 0.3em; }
+  h2 { margin-top: 2.5em; border-bottom: 1px solid #ddd; padding-bottom: 0.2em; color: #333; }
+  h3 { margin-top: 2em; color: #444; }
+  a { color: #0366d6; }
+  .c { border-left: 3px solid #ddd; padding: .5em 1em; margin: 1em 0; background: #fff; }
+  .nav { font-size: .9em; color: #888; margin-bottom: 1em; }
+  .meta { font-size: .9em; margin: 1em 0; color: #555; }
+  code { background: #f0f0f0; padding: 0 .2em; font-size: .93em; }
+  pre { background: #f5f5f5; padding: .8em 1em; border: 1px solid #ddd; border-radius: 4px; overflow-x: auto; font-size: .88em; line-height: 1.4; }
+  table { border-collapse: collapse; width: 100%; margin: 1em 0; }
+  th, td { border: 1px solid #ddd; padding: .5em .8em; text-align: left; font-size: .9em; }
+  th { background: #f5f5f5; font-weight: 600; }
+  .hist { font-size: .85em; color: #555; }
+  .warn { background: #fff3cd; border-left: 3px solid #ffc107; padding: .5em 1em; margin: 1em 0; }
+</style>
+</head>
+<body>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Индекс</a> · <a href="file-index.html">← Индекс файлов</a> · <a href="834.html">← Предыдущий</a> · <a href="836.html">Следующий →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/kotlin/org/projectforge/business/address/BirthdayCache.kt" target="_blank" title="Просмотреть исходный код на GitHub">📄 Исходник</a></div>
+
+<h1>#835: <code>BirthdayCache.kt</code></h1>
+<div class="meta"><code>projectforge-business/src/main/kotlin/org/projectforge/business/address/BirthdayCache.kt</code> <strong>Класс кэша Kotlin</strong> — кэшированный индекс всех дней рождения из адресной книги для быстрых запросов по диапазону дат. Расширяет <code>AbstractCache</code> для автоматического обновления на основе TTL. Расположение: <code>projectforge-business/src/main/kotlin/org/projectforge/business/address/BirthdayCache.kt</code> <span style="color:#888">124 строки · 81 код · 33 комментария · 10 пустых</span></div>
+
+<div class="c">
+<strong>Назначение:</strong> Панель управления календарем и система уведомлений о днях рождения должны эффективно отвечать на вопрос «чей день рождения на этой неделе / в этом месяце?». Без кэша каждый запрос сканировал бы всю таблицу адресов. BirthdayCache загружает все неудаленные адреса с датой рождения в память один раз и выполняет фильтрацию по диапазону дат в памяти, обеспечивая стоимость запроса O(1) после начальной загрузки.
+</div>
+
+<h2>Архитектура</h2>
+
+<h3>Цепочка наследования</h3>
+<div class="c">
+<code>BirthdayCache</code> расширяет <strong><code>AbstractCache</code></strong> (из <code>org.projectforge.framework.cache</code>), базовый класс ProjectForge для кэшей на основе TTL. Это дает ему:<br>
+• <code>checkRefresh()</code> — автоматически вызывает <code>refresh()</code>, если TTL истек<br>
+• <code>setExpireInMinutes()</code> — настраиваемый TTL<br>
+• Потокобезопасная регистрация в <code>PfCaches</code> (<a href="820.html">#820</a>)<br>
+• Участие в массовом обновлении <code>SystemService.refreshCaches()</code>
+</div>
+
+<h3>Защита от множественных экземпляров (Singleton)</h3>
+<div class="c">
+Кэш использует <strong>companion object</strong> с <code>lateinit var instance</code> и защитой <code>instanceCounter</code>. Если Spring (или тестовый код) создает второй экземпляр, записывается предупреждение. Это предотвращает двойную регистрацию кэша в <code>PfCaches</code> базовым классом <code>AbstractCache</code>, что могло бы вызвать дублирующие вызовы обновления.
+</div>
+
+<h3>Модель данных</h3>
+<div class="c">
+Кэш хранит <code>MutableList&lt;BirthdayAddress&gt;</code>, где каждый <code>BirthdayAddress</code> оборачивает <code>AddressDO</code> и реализует <code>Comparable</code>. Сравнение упорядочивает сначала по месяцу/дню рождения, затем по имени — это позволяет <code>TreeSet</code>, используемому в <code>getBirthdays()</code>, выдавать естественно отсортированный результат без явных вызовов сортировки.
+</div>
+
+<h2>Алгоритм запроса</h2>
+<div class="c">
+<code>getBirthdays(fromDate, toDate, all, favorites)</code> фильтрует кэшированный список с четырьмя условиями, применяемыми в следующем порядке приоритета для эффективности:<br><br>
+<strong>1. Контроль доступа</strong> (<code>addressDao.hasLoggedInUserSelectAccess</code>): Пропускает адреса, которые текущий пользователь не может видеть. Это необходимо, так как кэш загружает ВСЕ адреса (используя <code>checkAccess = false</code> в запросе DAO).<br>
+<strong>2. Фильтр избранного</strong> (<code>!all && !favorites.contains(address.id)</code>): Если не в режиме «все», включаются только адреса из списка избранного пользователя.<br>
+<strong>3. Наличие дня рождения</strong>: Пропускает адреса, где <code>PFDateTime.fromOrNull(address.birthday)</code> возвращает null.<br>
+<strong>4. Проверка диапазона дат</strong> (<code>DateHelper.dateOfYearBetween</code>): Сравнивает месяц/день (игнорируя год) с диапазоном. Обрабатывает диапазоны, переходящие через год (например, 15 дек — 15 янв).<br><br>
+Результаты собираются в <code>TreeSet&lt;BirthdayAddress&gt;</code> для автоматической сортировки.
+</div>
+
+<h2>Логика обновления</h2>
+<div class="c">
+<code>refresh()</code> выполняется внутри <strong><code>persistenceService.runIsolatedReadOnly { }</code></strong> — выделенного контекста транзакции, отдельного от любого активного HTTP-запроса. Эта изоляция предотвращает:<br>
+• Конкуренцию с сессиями Hibernate в области запроса<br>
+• Проблемы с ленивой загрузкой (все данные загружаются жадно)<br>
+• Феномены чтения от незафиксированных записей в транзакции запроса<br><br>
+Запрос использует <code>QueryFilter.isNotNull("birthday")</code> для исключения адресов без даты рождения (которые составляют большинство). Фильтр <code>deleted = false</code> гарантирует исключение мягко удаленных адресов.<br><br>
+Дополнительная защитная проверка (<code>if (it.deleted != true)</code>) защищает от сущностей, к которым фильтр JPA мог не применяться (например, во время миграции или при изменении конфигурации фильтра).
+</div>
+
+<h2>История Git</h2>
+<div class="hist">
+<pre>868d6abb7 2025 → 2026 (обновление года авторских прав)
+b131193e7 Рефакторинг переменных-членов с использованием by lazy {} (включая BirthdayCache)
+63081666f Заголовки исходных файлов: 2024→2025
+0ceceb28f Все обновления кэша теперь выполняются в изолированных транзакциях или контекстах
+1b50060c3 BaseDao переименован: get→find, save→insert, getList→select, load→select
+87aaf6a5a Рефакторинг BaseDao (переименованы внутренние методы)
+4c04cfd65 MAJOR: Миграция целочисленных id на Long id (включая каскады FK)
+b6092df09 Авторские права 2023 → 2024
+ab45d51fa Авторские права 2001-2022 → 2001-2023
+cf80afb28 Удалена функциональность аренды (протестировано в системе)
+c0f2b9de0 Функциональность арендаторов удалена везде
+b209e00ba PFDay/PFDateTime.from → from, fromOrNow, fromOrNull
+24019a0f5 Устранение использований DateHolder
+bfa336a64 BirthdayCache теперь обновляется через SystemService.refreshCaches(), игнорирует удаленных пользователей
+76a8fb69d Hibernate.Restrictions → PF.QueryFilter
+140cb4c40 WIP: Кэш дней рождения (начальная реализация)
+615c248f4 Исправление производительности: PersonalAddressDao.getList вызывал замедления; введены BirthdayCache и PersonalAddressDao.getIdList
+</pre>
+</div>
+
+<h2>Ключевые коммиты с пояснениями</h2>
+<div class="c">
+<strong><code>615c248f4</code> (самый ранний) — Исправление производительности:</strong> Кэш был создан для решения критической проблемы производительности. Выполнение <code>PersonalAddressDao.getList</code> занимало секунды, а отображение дней рождения в представлении календаря вызывало заметную задержку. Кэш устранил необходимость сканирования таблицы адресов при каждом запросе.<br><br>
+<strong><code>0ceceb28f</code> — Изолированные транзакции:</strong> Операции обновления перемещены из транзакции запроса в <code>runIsolatedReadOnly</code>. Это исправило класс ошибок, когда длительное обновление внутри транзакции запроса могло вызывать тайм-ауты сессии Hibernate или проблемы с видимостью устаревших данных.<br><br>
+<strong><code>4c04cfd65</code> — Миграция int→Long:</strong> Все типы ID изменены с <code>Integer</code> на <code>Long</code>, что затронуло параметр <code>favorites: List&lt;Long&gt;</code> и сравнения <code>address.id</code> во всей логике фильтрации.<br><br>
+<strong><code>cf80afb28</code> — Удаление аренды:</strong> Функция мультиарендности была удалена, что упростило кэш (изоляция по арендаторам больше не нужна).<br><br>
+<strong><code>bfa336a64</code> — Исправление для удаленных пользователей:</strong> Добавлена явная проверка дня рождения удаленных пользователей, чтобы они не отображались в виджетах панели управления.
+</div>
+
+<h2>Характеристики производительности</h2>
+<table>
+<tr><th>Операция</th><th>Временная сложность</th><th>Примечания</th></tr>
+<tr><td>Обновление (загрузка кэша)</td><td>O(n), где n = адреса с днем рождения</td><td>Один SQL-запрос, выполняется в изолированной транзакции</td></tr>
+<tr><td>getBirthdays() (диапазон дат)</td><td>O(n) сканирование кэшированного списка</td><td>В памяти; обычно n &lt; 500 для SME</td></tr>
+<tr><td>getBirthdays() (только избранное)</td><td>O(n) сканирование с <code>favorites.contains()</code> = O(1) на элемент</td><td>Список избранного передается как параметр (уже загружен)</td></tr>
+<tr><td>Проверка доступа на запись</td><td>O(1) на запись (кэшированные членства в группах)</td><td><code>AddressDao.hasLoggedInUserSelectAccess</code></td></tr>
+</table>
+<div class="c">
+Линейное сканирование приемлемо, потому что кэш содержит только адреса с днями рождения (не всю адресную книгу), а фильтрация доступа/избранного избегает дорогих обращений к БД для каждой записи, работая полностью в памяти с предварительно загруженными данными безопасности.
+</div>
+
+<div class="warn"><strong>Ловушка — Обход контроля доступа при обновлении:</strong> Запрос обновления использует <code>checkAccess = false</code> для загрузки ВСЕХ адресов. Контроль доступа применяется позже в <code>getBirthdays()</code> для каждого запроса. Это означает, что кэш сам хранит данные, которые текущий пользователь может быть не вправе видеть. Каждый вызов <code>getBirthdays()</code> повторно оценивает доступ на основе <em>текущего</em> вошедшего в систему пользователя, делая кэш независимым от пользователя при хранении, но учитывающим пользователя при запросе. Если доступ пользователя отозван, следующий запрос дня рождения (а не следующее обновление кэша) исключит его записи.</div>
+
+</body>
+</html>

@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>#888: AbstractRechnungsPositionDO.kt [DE]</title>
+<style>
+body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}
+h1{border-bottom:2px solid #333;padding-bottom:.3em}
+h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}
+h3{margin-top:2em;color:#444}
+a{color:#0366d6}
+.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}
+.nav{font-size:.9em;color:#888;margin-bottom:1em}
+.meta{font-size:.9em;margin:1em 0;color:#555}
+code{background:#f0f0f0;padding:0 .2em;font-size:.93em}
+pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}
+table{border-collapse:collapse;width:100%;margin:1em 0}
+th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}
+th{background:#f5f5f5;font-weight:600}
+.hist{font-size:.85em;color:#555}
+</style>
+</head>
+<body>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← Dateiindex</a> · <a href="887.html">← Vorherige</a> · <a href="889.html">Nächste →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/kotlin/org/projectforge/business/fibu/AbstractRechnungsPositionDO.kt" target="_blank" title="Quelle auf GitHub anzeigen">📄 Quelle</a></div>
+
+<h1>#888: <code>AbstractRechnungsPositionDO.kt</code></h1>
+
+<div class="meta"><code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/AbstractRechnungsPositionDO.kt</code> 
+<p><strong>Typ:</strong> Abstrakte JPA <code>@MappedSuperclass</code>-Entität</p>
+<p><strong>Paket:</strong> <code>org.projectforge.business.fibu</code></p>
+<p><strong>Vollständiger Pfad:</strong> <code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/AbstractRechnungsPositionDO.kt</code></p>
+ <span style="color:#888">141 Zeilen · 88 Code · 29 Kommentare · 24 leer</span></div>
+
+<div class="c">
+<p>Abstrakte Basisklasse für Rechnungsposition-Entitäten in ProjectForge. Dient als gemeinsame Oberklasse sowohl für <em>Ausgangsrechnungs</em>-Positionen (<code>RechnungsPositionDO</code>) als auch für <em>Eingangsrechnungs</em>-Positionen (<code>EingangsrechnungsPositionDO</code>). Stellt gemeinsame Felder wie Positionsnummer, Text, Menge, Einzelnetto und Umsatzsteuersatz (<code>vat</code>) sowie die Logik zur Verwaltung von Kostenverteilungen (<code>KostZuweisungDO</code>) bereit.</p>
+</div>
+
+<h2>Klassenhierarchie</h2>
+<p>Erweitert <code>DefaultBaseDO</code>, implementiert <code>DisplayNameCapable</code> und <code>IRechnungsPosition</code>. Mit <code>@MappedSuperclass</code> annotiert, sodass es selbst keine Datenbanktabelle ist – konkrete Unterklassen stellen ihre eigenen JPA-Mappings bereit.</p>
+
+<h2>Wichtige Eigenschaften</h2>
+<table>
+<tr><th>Eigenschaft</th><th>Typ</th><th>DB-Spalte</th><th>Beschreibung</th></tr>
+<tr><td><code>number</code></td><td><code>Short</code></td><td><code>number</code></td><td>Positionsnummer, beginnend bei 1</td></tr>
+<tr><td><code>text</code></td><td><code>String?</code></td><td><code>s_text</code> (1000)</td><td>Beschreibung der Rechnungsposition</td></tr>
+<tr><td><code>menge</code></td><td><code>BigDecimal?</code></td><td><code>menge</code></td><td>Menge (Genauigkeit 18, Skalierung 5)</td></tr>
+<tr><td><code>einzelNetto</code></td><td><code>BigDecimal?</code></td><td><code>einzel_netto</code></td><td>Einzelnetto (Genauigkeit 18, Skalierung 2)</td></tr>
+<tr><td><code>vat</code></td><td><code>BigDecimal?</code></td><td><code>vat</code></td><td>Umsatzsteuersatz (Genauigkeit 10, Skalierung 5)</td></tr>
+<tr><td><code>kostZuweisungen</code></td><td><code>MutableList&lt;KostZuweisungDO&gt;?</code></td><td>transient</td><td>Kostenverteilungsliste (abstrakt, von Unterklasse bereitgestellt)</td></tr>
+<tr><td><code>info</code></td><td><code>RechnungPosInfo</code></td><td>transient</td><td>Berechnete Rechnungspositionsinfo (gesetzt über <code>RechnungCalculator</code>)</td></tr>
+</table>
+
+<h2>Verwaltung der Kostenverteilung</h2>
+<p>Die Klasse stellt Methoden zur Verwaltung von <code>KostZuweisungDO</code>-Kostenverteilungen bereit, die an jede Rechnungsposition gebunden sind:</p>
+<ul>
+<li><code>addKostZuweisung(kostZuweisung)</code> – Fügt eine Kostenverteilung mit automatisch inkrementiertem Index hinzu</li>
+<li><code>deleteKostZuweisung(idx)</code> – Entfernt eine Kostenverteilung am angegebenen Index (nur löschbar, wenn noch nicht persistiert, d.h. <code>id == null</code>)</li>
+<li><code>ensureAndGetKostzuweisungen()</code> – Gibt die veränderbare Liste zurück und initialisiert sie bei Bedarf, falls null</li>
+<li><code>isKostZuweisungDeletable()</code> – Schützt vor dem Löschen bereits persistierter Kostenverteilungen</li>
+<li><code>getKostZuweisung(idx)</code> – Gibt die Kostenverteilung am angegebenen Index oder null zurück</li>
+</ul>
+
+<h2>Berechnete Eigenschaften</h2>
+<table>
+<tr><th>Eigenschaft</th><th>Typ</th><th>Beschreibung</th></tr>
+<tr><td><code>displayName</code></td><td><code>String</code></td><td>Gibt die Positionsnummer als Zeichenkette zurück</td></tr>
+<tr><td><code>isEmpty</code></td><td><code>Boolean</code></td><td>True, wenn <code>text</code> leer ist und <code>einzelNetto</code> null oder null ist</td></tr>
+<tr><td><code>isInfoInitialized</code></td><td><code>Boolean</code></td><td>True, wenn das <code>lateinit</code>-<code>info</code> initialisiert wurde</td></tr>
+</table>
+
+<h2>Gleichheit &amp; HashCode</h2>
+<p>Die Gleichheit basiert auf <code>number</code> und <code>rechnungId</code> (der übergeordneten Rechnungs-ID). Die <code>rechnungId</code> ist eine abstrakte Eigenschaft, die von konkreten Unterklassen implementiert wird.</p>
+
+<h2>Entwurfshinweise</h2>
+<ul>
+<li>Die Eigenschaft <code>info</code> ist mit <code>@CandHIgnore</code> markiert, um zu verhindern, dass CandH (Copy-and-History) versucht, sie zu verarbeiten, da sie nicht immer initialisiert ist.</li>
+<li>Alle JPA-gemappten Eigenschaften sind als <code>open</code> deklariert, um Hibernate-Lazy-Loading-Proxys zu unterstützen.</li>
+<li>Die abstrakte Methode <code>checkKostZuweisungId</code> ermöglicht es Unterklassen, zu validieren, dass eine Kostenverteilung zu dieser Position gehört.</li>
+</ul>
+
+<h2>Git-Verlauf</h2>
+<div class="hist"><pre>868d6abb7 2025 -> 2026
+63081666f Quellkopfzeilen: 2024 -> 2025.
+5f9bbfbd3 Korrigiere Tippfehler im Verzeichnis projectforge-business
+197d60efa Finanzen: Eingangsrechnungen korrigiert.
+ff2cc4cfa Migration in Arbeit... (alle Tests aller Pakete: OK).
+ba2479571 Migration in Arbeit...
+b47c21af6 Überarbeitung des Cachings und der Berechnungen mit Rechnungen (noch nicht abgeschlossen)
+4c04cfd65 MAJOR-CHANGE! Migration von Integer-IDs zu Long-IDs (einschließlich Fremdschlüsseln usw.)
+06828f490 Migration in Arbeit...
+b6092df09 Copyright 2023 -> 2024
+ab45d51fa Copyright 2001-2022 -> 2001-2023.
+5f7ef41b8 Copyright 2021 -> 2022
+a7fceb731 Einige Compiler-Warnungen behoben.
+ceb63e8a1 Quellkopfzeile: (C) 2001-2021.
+a1cf6f591 Code-Bereinigung
+07cb34acb IRechnung, IRechnungsPosition eingeführt. DTOs für Eingangsrechnung{sPosition}DO hinzugefügt.
+552603f75 Setter-Methoden in RechnungDO umbenannt, um Konflikte mit Jackson zu vermeiden
+b78b870bd ShortDisplayNameCapable -> DisplayNameCapable.
+7c79f1922 Copyright der Quellkopfzeile -> 2020.
+8241700f0 ShortDisplayNameCapable nach Kotlin konvertiert. DO-Klassen, die ShortDisplayNameCapable implementieren, überarbeitet.
+7588a4be8 AbstractRechnungsPositionsDO.isEmpty korrigiert.
+bc7b1761c Eingangsrechnungen: Kostzuweisungen korrigiert.
+e63a1e98e AuftragsPositionDO: Fehlerbehebung KostZuweisungen jetzt in der update-Methode behandelt.
+8675a1dbe Großes Performance-Problem gefunden: Alle Kotlin-JPA-Entitäten und ihre Eigenschaften als open deklariert. Lazy Loading wurde von Hibernate nicht unterstützt...
+483b8409d Schwere WIP: Überarbeitung von (Eingangs)Rechnung*.
+a55ef0c14 Schwere WIP: Überarbeitung von (Eingangs)Rechnung*.
+812b5b751 Schwere WIP: Überarbeitung von (Eingangs)Rechnung*.
+339e017b4 ElementRegistry: @PropertyInfo wird jetzt auch für Getter-Methoden von schreibgeschützten vals unterstützt.
+dd1dc1bef EingangsrechnungRest: Positionsliste zur Bearbeitungsseite hinzugefügt
+c9c80e385 AbstractRechnungsPositionDO.kt: Warnungen auflösen
+f2b55f6aa RechnungsPositionDO.java -> RechnungsPositionDO.kt (erste Kotlin-Konvertierung)</pre></div>
+</body>
+</html>

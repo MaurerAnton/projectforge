@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>#1207 [ES]</title>
+<style>
+body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}
+h1{border-bottom:2px solid #333;padding-bottom:.3em}
+h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}
+h3{margin-top:2em;color:#444}
+a{color:#0366d6}
+.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}
+.nav{font-size:.9em;color:#888;margin-bottom:1em}
+.meta{font-size:.9em;margin:1em 0;color:#555}
+code{background:#f0f0f0;padding:0 .2em;font-size:.93em}
+pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}
+table{border-collapse:collapse;width:100%;margin:1em 0}
+th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}
+th{background:#f5f5f5;font-weight:600}
+.hist{font-size:.85em;color:#555}
+</style>
+</head>
+<body>
+
+<div class="nav">
+  <a href="https://maureranton.github.io/projectforge/">&#8592; Índice</a> &#183;
+  <a href="file-index.html">&#8592; Índice de archivos</a> &#183;
+  <a href="1200.html">&#8592; Anterior</a> &#183;
+  <a href="1202.html">Siguiente &#8594;</a>
+</div>
+
+<h1>#1207: <code>AbstractJob.kt</code></h1>
+
+<div class="meta">
+  <code>projectforge-business/src/main/kotlin/org/projectforge/framework/jobs/AbstractJob.kt</code>
+  Marco de trabajo de trabajos (jobs), projectforge-business/src/main/kotlin/org/projectforge/framework/jobs/AbstractJob.kt
+  <span style="color:#888">429 líneas · 280 código · 93 comentarios · 56 en blanco</span>
+</div>
+
+<div class="c">
+  Clase base abstracta para trabajos en segundo plano en ProjectForge. Soporta estrategias de cola (ninguna, por-cola, por-cola-y-usuario, rechazar), tiempo de espera opcional (120s por defecto), seguimiento de progreso (conteo total/procesado) y cancelación mediante corrutinas de Kotlin. Los trabajos tienen un ciclo de vida y exponen <code>readAccess</code> / <code>writeAccess</code> para verificaciones de permisos. Se integra con <code>UserGroupCache</code> para la visualización del propietario.
+</div>
+
+<h2>Arquitectura</h2>
+
+<h3>Jerarquía de clases</h3>
+<ul>
+  <li><strong>AbstractJob</strong> — clase abstracta que implementa <code>Comparable&lt;AbstractJob&gt;</code></li>
+  <li>Las subclases deben implementar <code>suspend fun run()</code></li>
+</ul>
+
+<h3>Enums clave</h3>
+<table>
+  <tr><th>Enum</th><th>Valores</th><th>Propósito</th></tr>
+  <tr><td><code>QueueStrategy</code></td><td>NONE, PER_QUEUE, PER_QUEUE_AND_USER, REFUSE_PER_QUEUE, REFUSE_PER_QUEUE_AND_USER</td><td>Controla si el trabajo bloquea/rechaza nuevos trabajos en la misma área</td></tr>
+  <tr><td><code>Status</code></td><td>RUNNING, WAITING, FINISHED, FAILED, CANCELLED, REFUSED</td><td>Implementa <code>I18nEnum</code>; define el orden en la lista de trabajos</td></tr>
+  <tr><td><code>ErrorCode</code></td><td>TIMEOUT_WHILE_WAITING, REFUSED_BY_ANOTHER_RUNNING_JOB</td><td>Razón de fallo/rechazo</td></tr>
+</table>
+
+<h3>Ciclo de vida del trabajo</h3>
+<p>El ciclo de vida es gestionado por <code>JobHandler</code>:</p>
+<ol>
+  <li><code>addJob()</code> — trabajo añadido al manejador, estado = WAITING</li>
+  <li>Verificación de cola — compara con trabajos en ejecución mediante <code>isBlocking()</code></li>
+  <li><code>onBeforeStart()</code> — gancho antes de la ejecución</li>
+  <li><code>start()</code> — establece el estado a RUNNING, llama a <code>run()</code></li>
+  <li>En éxito: <code>onFinish()</code> → <code>onAfterFinish()</code> → <code>onAfterTermination()</code></li>
+  <li>En cancelación: <code>cancel()</code> → <code>onBeforeCancel()</code> → <code>onAfterCancel()</code> → <code>onAfterTermination()</code></li>
+  <li>En fallo: <code>markJobAsFailed()</code> → <code>onAfterException()</code> → <code>onAfterTermination()</code></li>
+</ol>
+
+<h3>Propiedades clave</h3>
+<table>
+  <tr><th>Propiedad</th><th>Tipo</th><th>Descripción</th></tr>
+  <tr><td><code>title</code></td><td>String</td><td>Título legible para mostrar/registrar</td></tr>
+  <tr><td><code>area</code></td><td>String?</td><td>Agrupa trabajos; la estrategia de cola se limita a la misma área</td></tr>
+  <tr><td><code>ownerId</code></td><td>Long?</td><td>Usuario que inició el trabajo</td></tr>
+  <tr><td><code>id</code></td><td>Int</td><td>ID único autoincremental del trabajo</td></tr>
+  <tr><td><code>timeout</code></td><td>Int</td><td>Tiempo de espera en ms (del parámetro del constructor en segundos)</td></tr>
+  <tr><td><code>timeoutReached</code></td><td>Boolean</td><td>Verdadero si el trabajo superó el tiempo de espera mientras estaba RUNNING</td></tr>
+  <tr><td><code>isActive</code></td><td>Boolean</td><td>Conveniencia: status==RUNNING && coroutineJob.isActive</td></tr>
+  <tr><td><code>progressPercentage</code></td><td>Int</td><td>Calculado a partir de processedNumber/totalNumber</td></tr>
+  <tr><td><code>terminatedForDeletion</code></td><td>Boolean</td><td>Verdadero si terminó hace más de 1 hora (limpieza)</td></tr>
+  <tr><td><code>info</code></td><td>String</td><td>Información de estado en formato Markdown (propietario, horas, estado, título)</td></tr>
+</table>
+
+<h3>Permisos</h3>
+<ul>
+  <li><code>readAccess(user)</code> — delega en <code>writeAccess(user)</code> por defecto</li>
+  <li><code>writeAccess(user)</code> — abstracto, debe ser implementado por la subclase</li>
+  <li><code>isOwner</code> — verifica si el usuario actual autenticado coincide con <code>ownerId</code></li>
+</ul>
+
+<h3>Puntos de integración</h3>
+<ul>
+  <li><strong>JobHandler</strong> — gestiona trabajos, llama a métodos del ciclo de vida</li>
+  <li><strong>JobHandlerScheduler</strong> — ejecuta <code>tidyUp()</code> cada minuto</li>
+  <li><strong>AccessChecker</strong> — inyectado mediante <code>@Autowired</code></li>
+  <li><strong>Corrutinas</strong> — el manejador <code>Job</code> se almacena como <code>coroutinesJob</code></li>
+  <li><strong>I18n</strong> — etiquetas de estado mediante <code>I18nEnum.i18nKey</code></li>
+</ul>
+
+<h2>Historial Git</h2>
+<div class="hist"><pre>
+868d6abb7 2025 -> 2026
+63081666f Encabezados de archivos fuente: 2024 -> 2025.
+cba940301 Migración en progreso...
+67805f2fc ThreadLocalUserContext.user -> ThreadLocalUserContext.loggedInUser (renombrado)
+4c04cfd65 CAMBIO MAYOR: Migración de IDs enteros a IDs Long (incluyendo claves foráneas, etc.)
+b6092df09 Copyright 2023 -> 2024
+ab45d51fa Copyright 2001-2022 -> 2001-2023.
+163492453 WIP: Trabajos y registros de cuentas bancarias.
+232a91c5a BaseUserGroupRightUtils implementado. WIP BankingPlugin y manejo de trabajos.
+38bec971a ThreadLocal -> Kotlin
+09b3f0df7 WIP: Jobmonitor. ListStatisticsSupport -> MarkdownBuilder
+fcc4c67f6 WIP: Jobmonitor.
+a1646e91a WIP: Plugin bancario (y nuevo módulo de importación).
+d93f61491 WIP: Plugin bancario (y nuevo módulo de importación).
+cd69cc40f WIP: Plugin bancario (y nuevo módulo de importación).
+f68cda98e Jobmonitor.
+67eed70e4 WIP: Plugin bancario (y nuevo módulo de importación). JobHandler/monitor iniciado.
+</pre></div>
+
+</body>
+</html>

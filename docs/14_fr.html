@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>#14 [FR]</title>
+<style>
+  body { font-family: system-ui, sans-serif; max-width: 960px; margin: 2em auto; padding: 0 1em; background: #fafafa; color: #222; line-height: 1.6; }
+  h1 { border-bottom: 2px solid #333; }
+  h2 { margin-top: 2.5em; border-bottom: 1px solid #ddd; padding-bottom: 0.2em; }
+  h3 { margin-top: 2em; }
+  a { color: #0366d6; text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  .meta { background: #f0f0f0; border-radius: 6px; padding: 1em; margin: 1em 0; font-size: 0.9em; }
+  .code-block { background: #f8f8f8; border: 1px solid #ddd; border-radius: 4px; padding: 0.5em; margin: 0.5em 0; overflow-x: auto; }
+  .code-block pre { margin: 0; font-family: 'Consolas', monospace; font-size: 0.85em; line-height: 1.5; }
+  .commentary { margin: 1em 0; line-height: 1.7; background: #fff; padding: 0.5em 1em; border-radius: 6px; border-left: 4px solid #ddd; }
+  table { border-collapse: collapse; width: 100%; margin: 1em 0; font-size: 0.9em; }
+  th, td { border: 1px solid #ddd; padding: 0.5em; text-align: left; }
+  th { background: #f0f0f0; }
+  code { background: #e8e8e8; border-radius: 3px; padding: 0.1em 0.3em; font-size: 0.9em; }
+  .nav { font-size: 0.9em; color: #888; margin-bottom: 1em; }
+  .diagram { background: #f8f8f8; border: 1px solid #ddd; border-radius: 4px; padding: 0.8em; font-family: 'Consolas', monospace; font-size: 0.85em; line-height: 1.7; white-space: pre; }
+  .warn { background: #fff3cd; border: 1px solid #ffc107; border-radius: 4px; padding: 0.5em 1em; margin: 0.5em 0; }
+</style>
+</head>
+<body>
+
+<div class="nav">
+  <a href="https://maureranton.github.io/projectforge/">← Index de la documentation</a> ·
+  <a href="file-index.html">← Index des fichiers</a> ·
+  <a href="13.html">← Précédent</a> · Suivant → · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/buildSrc/src/main/kotlin/buildlogic.pf-module-conventions.gradle.kts" target="_blank" title="Voir la source sur GitHub">📄 source</a></div>
+
+<h1>#14 : <code>buildlogic.pf-module-conventions.gradle.kts</code></h1>
+
+<div class="meta"><code>buildSrc/src/main/kotlin/buildlogic.pf-module-conventions.gradle.kts</code> 
+  <p><strong>Chemin :</strong> <code>./buildSrc/src/main/kotlin/buildlogic.pf-module-conventions.gradle.kts</code></p>
+  <p><strong>Type :</strong> Plugin de convention Gradle précompilé (DSL Kotlin)</p>
+  <p><strong>Lignes :</strong> 64</p>
+  <p><strong>Objectif :</strong> Configuration de build partagée appliquée à <strong>chaque</strong> module ProjectForge — Java 17, JUnit 5, verrouillage des versions de dépendances, dépôts</p>
+  <p><strong>Appliqué dans :</strong> Chaque <code>build.gradle.kts</code> de sous-projet via <code>plugins { id("buildlogic.pf-module-conventions") }</code></p>
+  <p><strong>Source :</strong> <a href="https://github.com/micromata/projectforge/blob/9ed5fbe0f/buildSrc/src/main/kotlin/buildlogic.pf-module-conventions.gradle.kts">GitHub</a></p>
+ <span style="color:#888">64 lignes · 50 lignes de code · 4 commentaires · 10 lignes vides</span></div>
+
+<h2>Ce qu'il fait</h2>
+
+<div class="commentary">
+  <p>C'est le <strong>cœur du système de build de ProjectForge</strong>. Chaque module (<code>projectforge-business</code>, <code>projectforge-webapp</code>, etc.) applique ce plugin avec une seule ligne, et obtient :</p>
+  <ul>
+    <li>Compilation Java 17 avec <code>--release 17</code> (construit sur JDK 21, s'exécute sur JDK 17)</li>
+    <li>Kotlin stdlib + kotlin-logging comme dépendances de module</li>
+    <li>Framework de test JUnit 5 (<code>useJUnitPlatform()</code>)</li>
+    <li>Verrouillage de version Jackson — force tous les modules à utiliser la même version de Jackson</li>
+    <li>Accès au dépôt basé sur GitHub (pour la dépendance gephi)</li>
+  </ul>
+</div>
+
+<h2>Ligne par ligne</h2>
+
+<h3>Lignes 1–3 : Plugin de base</h3>
+
+<div class="code-block"><pre><span style="color:#999">1</span> plugins {
+<span style="color:#999">2</span>     id("java-library")
+<span style="color:#999">3</span> }</pre></div>
+
+<div class="commentary">
+  <p><strong><a href="https://docs.gradle.org/current/userguide/java_library_plugin.html"><code>java-library</code></a></strong> étend <code>java</code> avec la séparation <code>api</code> vs <code>implementation</code>. Lorsque le module A applique ce plugin et utilise <code>api()</code> pour déclarer une dépendance, cette dépendance est transmise aux consommateurs du module A. Ceci est important pour le système de plugins : les plugins dépendent des modules ProjectForge via des dépendances <code>api</code>.</p>
+</div>
+
+<h3>Lignes 5–11 : Dépôts</h3>
+
+<div class="code-block"><pre><span style="color:#999"> 5</span> repositories {
+<span style="color:#999"> 6</span>     mavenLocal()
+<span style="color:#999"> 7</span>     gradlePluginPortal()
+<span style="color:#999"> 8</span>     maven { url = uri("https://oss.sonatype.org/content/repositories/public/") }
+<span style="color:#999"> 9</span>     maven { url = uri("https://repo.maven.apache.org/maven2/") }
+<span style="color:#999">10</span>     maven { url = uri("https://raw.githubusercontent.com/gephi/gephi/mvn-thirdparty-repo/") }
+<span style="color:#999">11</span> }</pre></div>
+
+<div class="commentary">
+  <p>Cinq sources de dépôts, recherchées dans l'ordre :</p>
+  <table>
+    <tr><th>Ligne</th><th>Dépôt</th><th>Objectif</th></tr>
+    <tr><td>6</td><td><code>mavenLocal()</code></td><td><code>~/.m2/repository</code> local — pour les artefacts construits localement pendant le développement</td></tr>
+    <tr><td>7</td><td><code>gradlePluginPortal()</code></td><td>Plugins Gradle — plugin Spring Boot, etc.</td></tr>
+    <tr><td>8</td><td>Sonatype OSS</td><td>Versions snapshot et de staging</td></tr>
+    <tr><td>9</td><td>Maven2</td><td>Miroir standard du dépôt Maven</td></tr>
+    <tr><td>10</td><td>gephi/gephi GitHub</td><td><a href="https://gephi.org/">Gephi</a> — bibliothèque de visualisation de graphes utilisée par ProjectForge pour les diagrammes de réseau</td></tr>
+  </table>
+</div>
+
+<h3>Lignes 13–18 : Contournement du catalogue de versions</h3>
+
+<div class="code-block"><pre><span style="color:#999">13</span> val libs = project.extensions.getByType&lt;VersionCatalogsExtension&gt;().named("libs")
+<span style="color:#999">14</span> 
+<span style="color:#999">15</span> // libs.versions etc. non disponibles dans buildSrc. Doit utiliser findVersion et findLibrary à la place.
+<span style="color:#999">16</span> 
+<span style="color:#999">17</span> group = "org.projectforge"
+<span style="color:#999">18</span> version = libs.findVersion("org.projectforge").get().requiredVersion</pre></div>
+
+<div class="commentary">
+  <div class="warn"><strong>⚠️ Limitation clé :</strong> Le raccourci <code>libs.versions.xxx</code> qui fonctionne dans les fichiers <code>build.gradle.kts</code> normaux ne fonctionne <strong>PAS</strong> à l'intérieur des plugins de convention <code>buildSrc/</code>. Vous devez utiliser <code>findVersion()</code> et <code>findLibrary()</code> comme indiqué à la ligne 13 et dans tout ce fichier.</div>
+  
+  <p><strong>Ligne 13 :</strong> Obtient l'extension du catalogue de versions par type — la seule façon d'y accéder dans buildSrc.</p>
+  <p><strong>Ligne 17 :</strong> Définit <code>group = "org.projectforge"</code> — identique à la ligne 8 du <a href="1.html">build.gradle.kts</a> racine. Dupliqué ici car buildSrc est un projet séparé.</p>
+  <p><strong>Ligne 18 :</strong> Lit la version depuis le catalogue (<code>libs.versions.toml</code>) — aucun numéro de version en dur.</p>
+</div>
+
+<h3>Lignes 20–29 : Configuration Java 17</h3>
+
+<div class="code-block"><pre><span style="color:#999">20</span> extensions.configure&lt;JavaPluginExtension&gt; {
+<span style="color:#999">21</span>     sourceCompatibility = JavaVersion.VERSION_17
+<span style="color:#999">22</span>     targetCompatibility = JavaVersion.VERSION_17
+<span style="color:#999">23</span> }
+<span style="color:#999">24</span> 
+<span style="color:#999">25</span> tasks.withType&lt;JavaCompile&gt; {
+<span style="color:#999">26</span>     options.encoding = "UTF-8"
+<span style="color:#999">27</span>     options.isIncremental = true
+<span style="color:#999">28</span>     options.release.set(17)
+<span style="color:#999">29</span> }</pre></div>
+
+<div class="commentary">
+  <p><strong>Lignes 21–22 :</strong> <code>sourceCompatibility</code> et <code>targetCompatibility</code> — indiquent à Gradle quelle version de Java le code source utilise (17) et quelle version de bytecode produire (17). Ceux-ci contrôlent les fonctionnalités du langage et la sortie de compilation.</p>
+  <p><strong>Ligne 28 :</strong> <code>options.release.set(17)</code> — le drapeau du compilateur <a href="https://docs.oracle.com/en/java/javase/17/docs/specs/man/javac.html#option-release"><code>--release 17</code></a>. C'est <strong>plus fort</strong> que <code>sourceCompatibility</code> seul — il restreint le compilateur aux seuls symboles de l'API Java 17. Sans cela, la construction sur JDK 21 pourrait produire du bytecode référençant des API Java 18+ qui n'existent pas sur JDK 17, provoquant une <code>UnsupportedClassVersionError</code> à l'exécution.</p>
+  <p><strong>Pourquoi Java 17 ?</strong> C'est la version LTS actuelle supportée par <a href="https://spring.io/blog/2023/11/23/spring-boot-3-2-0-available-now">Spring Boot 3.x</a> (minimum requis). ProjectForge utilise Kotlin qui compile en bytecode JVM, donc la version du JDK est importante pour les deux langages.</p>
+</div>
+
+<h3>Lignes 30–35 : Compilation Kotlin (commentée)</h3>
+
+<div class="code-block"><pre><span style="color:#999">30</span> /*
+<span style="color:#999">31</span> tasks.withType&lt;KotlinCompile&gt; {
+<span style="color:#999">32</span>     compilerOptions {
+<span style="color:#999">33</span>         jvmTarget.set(JvmTarget.JVM_17)
+<span style="color:#999">34</span>     }
+<span style="color:#999">35</span> }*/</pre></div>
+
+<div class="commentary">
+  <p>Cible JVM Kotlin 17 — actuellement <strong>commentée</strong>. Kotlin compile en bytecode <code>1.8</code> (Java 8) par défaut, ce qui est compatible avec Java 17. Le fichier utilise <code>options.release = 17</code> à la ligne 28 pour les fichiers Java. L'équivalent Kotlin serait décommenté lorsque le projet aura explicitement besoin du bytecode Kotlin Java 17.</p>
+</div>
+
+<h3>Lignes 37–39 : JUnit 5</h3>
+
+<div class="code-block"><pre><span style="color:#999">37</span> tasks.withType&lt;Test&gt; {
+<span style="color:#999">38</span>     useJUnitPlatform()
+<span style="color:#999">39</span> }</pre></div>
+
+<div class="commentary">
+  <p>Active <a href="https://junit.org/junit5/">JUnit 5</a> (Jupiter) pour toutes les tâches de test dans tous les modules. Sans cela, Gradle utilise par défaut JUnit 4. ProjectForge a migré du mélange TestNG + JUnit4 vers JUnit5 pur dans des commits comme <code>20e07f9d1</code>.</p>
+</div>
+
+<h3>Lignes 45–56 : Forçage de version Jackson</h3>
+
+<div class="code-block"><pre><span style="color:#999">45</span> configurations.all {
+<span style="color:#999">46</span>     resolutionStrategy {
+<span style="color:#999">47</span>         preferProjectModules()
+<span style="color:#999">48</span>         // Forcer toutes les versions des modules Jackson à correspondre à la version Jackson explicite du projet.
+<span style="color:#999">49</span>         // Les dépendances transitives (ex. ez-vcard, groovy-yaml, flyway) peuvent apporter des versions plus récentes de Jackson.
+<span style="color:#999">50</span>         val jacksonVersion = libs.findVersion("com.fasterxml.jackson").get().requiredVersion
+<span style="color:#999">51</span>         force("com.fasterxml.jackson:jackson-bom:$jacksonVersion")
+<span style="color:#999">52</span>         force("com.fasterxml.jackson.core:jackson-core:$jacksonVersion")
+<span style="color:#999">53</span>         force("com.fasterxml.jackson.core:jackson-databind:$jacksonVersion")
+<span style="color:#999">54</span>         force("com.fasterxml.jackson.core:jackson-annotations:$jacksonVersion")
+<span style="color:#999">55</span>     }
+<span style="color:#999">56</span> }</pre></div>
+
+<div class="commentary">
+  <p><strong>C'est la section la plus importante pour la stabilité du build.</strong> <a href="https://github.com/FasterXML/jackson">Jackson</a> est une dépendance transitive de nombreuses bibliothèques (ez-vcard, groovy-yaml, flyway). Chaque bibliothèque peut apporter une version <em>différente</em> de Jackson, conduisant à des <code>NoSuchMethodError</code> ou <code>ClassNotFoundException</code> à l'exécution.</p>
+  
+  <p><strong>Comment fonctionne <code>force()</code> :</strong> La <a href="https://docs.gradle.org/current/userguide/resolution_rules.html">résolution des dépendances</a> de Gradle collecte toutes les versions demandées de Jackson dans tout l'arbre de dépendances. La directive <code>force()</code> <strong>remplace</strong> toute version — indépendamment de ce que demande une bibliothèque, Jackson sera verrouillé sur la version de <code>libs.versions.toml</code>.</p>
+
+  <p><strong>Pourquoi quatre artefacts :</strong> Jackson est divisé en modules (<code>jackson-core</code>, <code>jackson-databind</code>, <code>jackson-annotations</code>) qui doivent être synchronisés en version. Le <code>jackson-bom</code> (Bill of Materials) fournit des versions coordonnées, mais <code>force()</code> sur des artefacts individuels est plus explicite.</p>
+
+  <p><strong>Sans cette section :</strong> Différents sous-projets pourraient compiler avec différentes versions de Jackson — le JAR complet contiendrait plusieurs JAR Jackson, et le chargeur de classe prendrait le premier trouvé. Cela se manifeste par des erreurs de sérialisation mystérieuses en production.</p>
+</div>
+
+<h3>Lignes 58–64 : Dépendances partagées</h3>
+
+<div class="code-block"><pre><span style="color:#999">58</span> dependencies {
+<span style="color:#999">59</span>     api(libs.findLibrary("org-jetbrains-kotlin-stdlib").get())
+<span style="color:#999">60</span>     api(libs.findLibrary("io-github-microutils-kotlin-logging").get())
+<span style="color:#999">61</span>     testImplementation(libs.findLibrary("org-junit-jupiter-api").get())
+<span style="color:#999">62</span>     testImplementation(libs.findLibrary("org-junit-jupiter-engine").get())
+<span style="color:#999">63</span>     testImplementation(libs.findLibrary("org-junit-platform-launcher").get())
+<span style="color:#999">64</span> }</pre></div>
+
+<div class="commentary">
+  <p>Cinq dépendances appliquées à <strong>chaque module</strong> :</p>
+  <table>
+    <tr><th>Dépendance</th><th>Portée</th><th>Objectif</th></tr>
+    <tr><td><code>kotlin-stdlib</code></td><td><code>api</code></td><td>Bibliothèque standard Kotlin — tous les modules utilisent Kotlin</td></tr>
+    <tr><td><code>kotlin-logging</code></td><td><code>api</code></td><td>Wrapper Kotlin autour de SLF4J — <a href="https://github.com/oshai/kotlin-logging">microutils/kotlin-logging</a></td></tr>
+    <tr><td><code>junit-jupiter-api</code></td><td><code>testImplementation</code></td><td>Annotations de test JUnit 5 (<code>@Test</code>, <code>@BeforeEach</code>)</td></tr>
+    <tr><td><code>junit-jupiter-engine</code></td><td><code>testImplementation</code></td><td>Moteur d'exécution de test JUnit 5</td></tr>
+    <tr><td><code>junit-platform-launcher</code></td><td><code>testImplementation</code></td><td>Intégration IDE/exécuteur de tests</td></tr>
+  </table>
+</div>
+
+<h2>Points clés à retenir</h2>
+
+<div class="commentary">
+  <ul>
+    <li><strong>64 lignes, chaque module :</strong> Ce fichier est l'ADN du build de ProjectForge — appliqué à tous les 15+ modules.</li>
+    <li><strong>La ligne 28 est importante :</strong> <code>--release 17</code> est la raison pour laquelle ProjectForge se construit sur JDK 21 mais s'exécute sur JDK 17.</li>
+    <li><strong>Forçage Jackson (lignes 50–54) :</strong> Empêche la source n°1 de bugs de classpath à l'exécution (incompatibilité de version).</li>
+    <li><strong>Commentaire à la ligne 15 :</strong> Explique pourquoi <code>findVersion()</code>/<code>findLibrary()</code> est utilisé à la place du raccourci habituel <code>libs.versions.xxx</code>.</li>
+    <li><strong>Fréquence de modification :</strong> Mis à jour lorsque les dépendances changent — peut-être une fois toutes les quelques versions.</li>
+  </ul>
+</div>
+
+<div class="nav" style="margin-top:2em; padding-top:1em; border-top:1px solid #ddd">
+  <a href="3.html">← #3 : buildSrc/settings.gradle.kts</a> ·
+  Suivant : <a href="5.html">#5 : BuildPropertiesGenerator.kt</a>
+</div>
+
+</body>
+</html>

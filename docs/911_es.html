@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>#911: CurrencyConversionService.kt [ES]</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:2em;color:#444}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}</style>
+</head>
+<body>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Índice</a> · <a href="file-index.html">← Índice de archivos</a> · <a href="910.html">← Anterior</a> · <a href="912.html">Siguiente →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/kotlin/org/projectforge/business/fibu/CurrencyConversionService.kt" target="_blank" title="Ver fuente en GitHub">📄 fuente</a></div>
+
+<h1>#911: <code>CurrencyConversionService.kt</code></h1>
+
+<div class="meta"><code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/CurrencyConversionService.kt</code> 
+  <strong>Tipo:</strong> Spring Service<br>
+  <strong>Paquete:</strong> <code>org.projectforge.business.fibu</code><br>
+  <strong>Ruta:</strong> <code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/CurrencyConversionService.kt</code><br>
+  <strong>Autor:</strong> Kai Reinhard (k.reinhard@micromata.de)
+ <span style="color:#888">254 líneas · 129 código · 102 comentarios · 23 en blanco</span></div>
+
+<div class="c">
+  <p>El <strong>servicio público</strong> para operaciones de conversión de divisas. Delega operaciones de lectura/escritura en base de datos a <code>CurrencyConversionServiceSupport</code> y el almacenamiento en caché a <code>CurrencyConversionCache</code>. Proporciona un método <code>convert()</code> de alto nivel que maneja en una sola llamada: no-operación para misma moneda, búsqueda de pares bidireccionales, obtención de tasa y multiplicación. Expone un singleton estático a través del objeto companion.</p>
+</div>
+
+<h2>Arquitectura</h2>
+
+<h3>Dependencias</h3>
+<table>
+  <tr><th>Dependencia</th><th>Rol</th></tr>
+  <tr><td><code>CurrencyPairDao</code></td><td>Control de acceso y búsqueda de pares de divisas para CRUD de tasas</td></tr>
+  <tr><td><code>CurrencyConversionCache</code></td><td>Búsqueda en caché en memoria de pares, tasas y fechas de tasa activa</td></tr>
+  <tr><td><code>CurrencyConversionServiceSupport</code></td><td>Operaciones internas de base de datos (buscar, insertar, actualizar, eliminar, validar)</td></tr>
+  <tr><td><code>ConfigurationService</code></td><td>Proporciona la moneda predeterminada del sistema (ej. "EUR")</td></tr>
+</table>
+
+<h3>Categorías de métodos</h3>
+
+<h4>Operaciones de consulta de tasas</h4>
+<table>
+  <tr><th>Método</th><th>Descripción</th></tr>
+  <tr><td><code>findRate(id)</code></td><td>Busca una tasa por id, delega a la clase de soporte</td></tr>
+  <tr><td><code>selectAllRates(pairId)</code></td><td>Lista tasas; usa caché para activas, BD para tasas eliminadas</td></tr>
+  <tr><td><code>getConversionRate(pair, date)</code></td><td>Obtiene el factor de tasa numérico para un par en una fecha</td></tr>
+  <tr><td><code>getConversionRateDate(pair, date)</code></td><td>Obtiene la fecha validFrom de la tasa activa</td></tr>
+</table>
+
+<h4>Conversión</h4>
+<table>
+  <tr><th>Método</th><th>Descripción</th></tr>
+  <tr><td><code>convert(amount, target, source?, date?, scale?, rounding?)</code></td><td><strong>Método principal.</strong> Convierte un monto entre divisas. Misma moneda devuelve sin cambios. Usa la moneda predeterminada del sistema cuando <code>sourceCurrency</code> es nulo. Soporta escala y modo de redondeo configurables. Opcionalmente recurre a la tasa más antigua (con advertencias de cumplimiento).</td></tr>
+</table>
+
+<h4>Operaciones CRUD de tasas</h4>
+<table>
+  <tr><th>Método</th><th>Descripción</th></tr>
+  <tr><td><code>validateRate(rate)</code></td><td>Valida unicidad; devuelve cadena de mensaje de error o nulo</td></tr>
+  <tr><td><code>insertRate(pairId, rate)</code></td><td>Inserta una nueva tasa para un par de divisas</td></tr>
+  <tr><td><code>updateRate(pairId, rate)</code></td><td>Actualiza una tasa existente</td></tr>
+  <tr><td><code>markRateAsDeleted(pairId, rateId)</code></td><td>Eliminación suave de una tasa</td></tr>
+</table>
+
+<h3>Flujo de conversión</h3>
+<ol>
+  <li>Guardas contra nulo/vacío en <code>amount</code> y <code>targetCurrency</code></li>
+  <li>Resolver moneda de origen efectiva (parámetro o predeterminada del sistema)</li>
+  <li>Verificación de misma moneda: devolver monto sin cambios con escala aplicada</li>
+  <li>Búsqueda bidireccional de pares mediante <code>cache.findCurrencyPairForConversion()</code></li>
+  <li>Obtener tasa de la caché (aplicando inversa si la búsqueda encontró el par inverso)</li>
+  <li><code>amount * rate</code> → escalar con modo de redondeo</li>
+</ol>
+
+<h3>Ciclo de vida</h3>
+<p><code>@PostConstruct</code> almacena el singleton en <code>Companion.instance</code> para acceso estático por otros servicios (ej., cálculos estadísticos).</p>
+
+<h2>Historial Git</h2>
+<div class="hist"><pre>
+868d6abb7 2025 -> 2026
+f4a839e3a CurrencyConversion: Mostrar fecha de tasas activas en vista de lista.
+472fbc977 WIP: conversión de divisas con Claude Code.
+75ea9dc1a WIP: conversión de divisas con Claude Code.
+abdac2e1b WIP: conversión de divisas con Claude Code.
+07edc85de WIP: conversión de divisas con Claude Code.
+e1323795d WIP: conversión de divisas con Claude Code.
+2d79ded16 WIP: conversión de divisas con Claude Code.
+357ebee61 WIP: conversión de divisas con Claude Code.
+bd69407de Revisión inicial con Claude Code.
+</pre></div>
+
+</body>
+</html>

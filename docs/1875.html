@@ -1,10 +1,93 @@
-<!DOCTYPE html>
-<html lang="en"><head><meta charset="utf-8"><title>File #1875: VisitorbookDao.java</title>
-<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333}a{color:#0366d6}.meta{background:#f0f0f0;border-radius:6px;padding:1em;margin:1em 0;font-size:.9em}.commentary{margin:.8em 0;background:#fff;padding:.5em 1em;border-radius:6px;border-left:4px solid #ddd;line-height:1.7}table{border-collapse:collapse;width:100%;margin:.8em 0;font-size:.9em}th,td{border:1px solid #ddd;padding:.4em .6em}th{background:#f0f0f0}code{background:#e8e8e8;border-radius:3px;padding:.1em .3em;font-size:.9em}.nav{font-size:.9em;color:#888;margin-bottom:1em}.history{background:#fffbe6;border-radius:6px;padding:1em;margin:1em 0;font-size:.9em;border-left:4px solid #ffc107}</style></head>
-<body><div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="1874.html">← Prev</a> · <a href="1876.html">Next →</a></div>
-<h1>File #1875: <code>VisitorbookDao.java</code></h1>
-<div class="meta"><p><strong>Path:</strong> <code>(not found)</code> · <strong>Type:</strong> Java file</p><p><strong>Source:</strong> <a href="https://github.com/micromata/projectforge/blob/develop/(not found)">GitHub</a></p></div>
-<div class="history"><table><tr><th>Commit</th><th>Message</th></tr><tr><td><code>9ebb88522</code></td><td>2016-07-18 Initial commit</td></tr></table></div>
-<div class="commentary"><p>Part of the ProjectForge Wicket web application. Located at <code>(not found)</code>. Wicket component providing reusable UI functionality for the web layer.</p></div>
-<div class="nav" style="margin-top:2em"><a href="1874.html">← #1874</a> · <a href="1876.html">#1876 →</a></div>
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>#1875: BeanHelper.java</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:2em;color:#444}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.lang{font-size:.85em;color:#888;float:right}.lang a{color:#888;text-decoration:none;padding:0 .3em}.lang a.active{color:#0366d6;font-weight:600;text-decoration:underline}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}.warn{background:#fff3cd;border-left:3px solid #ffc107;padding:.5em 1em;margin:1em 0}.tip{background:#d4edda;border-left:3px solid #28a745;padding:.5em 1em;margin:1em 0}</style></head>
+<body><div class="lang"><a href="1875.html" class="active">EN</a> · <a href="1875_de.html">DE</a> · <a href="1875_ru.html">RU</a> · <a href="1875_fr.html">FR</a> · <a href="1875_es.html">ES</a></div>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="1874.html">← Prev</a> · <a href="1876.html">Next →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-common/src/main/java/org/projectforge/common/BeanHelper.java" target="_blank" title="View source on GitHub">📄 source</a></div>
+<h1>#1875: <code>BeanHelper.java</code></h1>
+<div class="meta"><code>projectforge-common/src/main/java/org/projectforge/common/BeanHelper.java</code> Utility class — org.projectforge.common package, projectforge-common/src/main/java/org/projectforge/common/BeanHelper.java <span style="color:#888">678 lines · 481 code · 150 comments · 47 blank</span></div>
+<div class="c">Comprehensive JavaBean introspection and reflection utility. Core infrastructure for ProjectForge's ORM/Wicket integration layer — provides property name resolution from getter/setter methods, getter/setter method lookup with extensive caching (five internal caches for performance), field annotation discovery, nested/indexed property access, property copying with difference detection, and reflection-based object instantiation. Widely used across all ProjectForge modules for Wicket list sorting, form binding, and DO-to-DTO conversion.</div>
+<h2>Architecture</h2>
+<div class="c">
+<h3>Imports</h3>
+<ul>
+<li><code>org.apache.commons.lang3.ArrayUtils</code> — Array concatenation for field/method collection across class hierarchy</li>
+<li><code>org.apache.commons.lang3.StringUtils</code> — String manipulation (capitalize, uncapitalize, split)</li>
+<li><code>java.lang.annotation.Annotation</code> — Annotation discovery on fields</li>
+<li><code>java.lang.reflect.*</code> — Core Java reflection API: Field, Method, Constructor, Modifier, Array, InvocationTargetException</li>
+<li><code>java.util.*</code> — Collections, iterators, hash maps for caching</li>
+<li><code>org.slf4j.Logger</code> — Error logging for reflection failures</li>
+</ul>
+
+<h3>Internal Caching Architecture</h3>
+<p>BeanHelper uses <strong>five static synchronized caches</strong> to avoid repeated reflection calls, which are expensive in Java. This is critical for Wicket list pages where BeanHelper is called for every cell in a sortable data table.</p>
+<table>
+<tr><th>Cache</th><th>Key</th><th>Value</th><th>Benefit</th></tr>
+<tr><td><code>declaredFieldsCache</code></td><td>Class</td><td>Field[]</td><td>Avoids re-scanning class hierarchy for fields</td></tr>
+<tr><td><code>declaredMethodsCache</code></td><td>Class</td><td>Method[]</td><td>Avoids re-scanning class hierarchy for methods</td></tr>
+<tr><td><code>declaredFieldAnnotationsCache</code></td><td>"class:fieldname"</td><td>Annotation[]</td><td>Avoids re-resolving annotated fields (critical for Wicket column sorting)</td></tr>
+<tr><td><code>getterMethodsCache</code></td><td>"class:fieldname"</td><td>Method</td><td>Avoids re-searching for getter methods</td></tr>
+<tr><td><code>declaredGetterMethodsCache</code></td><td>String</td><td>Method[]</td><td>Declared but appears unused in provided code — may be populated elsewhere</td></tr>
+</table>
+
+<h3>Key Operations</h3>
+
+<h4>Property Name Resolution</h4>
+<ul>
+<li><code>determinePropertyName(Method)</code> — Strips <code>get</code>/<code>set</code>/<code>is</code>/<code>has</code> prefix and lowercases first character</li>
+<li><code>determineGetter(Class, fieldname, onlyPublicGetter)</code> — Finds getter method (<code>getX()</code>, <code>isX()</code> for booleans, <code>hasX()</code> for booleans), handles bridge methods (not returning bridged synthetic methods)</li>
+<li><code>determineSetter(Class, fieldname)</code> — Finds setter with single parameter</li>
+<li><code>determinePropertyType(Class, fieldname)</code> — Gets the return type of the getter (property type)</li>
+</ul>
+
+<h4>Annotation Access</h4>
+<p><code>getDeclaredAnnotations(Class, fieldname)</code> supports <strong>nested property paths</strong> (dot-separated, e.g., <code>"address.city.name"</code>) by walking the field chain through reflection to find the terminal field's annotations. This is essential for Wicket data tables that display nested object properties with sortable columns.</p>
+
+<h4>Property Access (Nested + Indexed)</h4>
+<ul>
+<li><code>getProperty(Object, String)</code> — Invokes getter on a bean</li>
+<li><code>setProperty(Object, String, Object)</code> — Invokes setter</li>
+<li><code>getIndexedProperty(Object, "prop[3]")</code> — Supports collection/array indexed access</li>
+<li><code>getNestedProperty(Object, "a.b.c")</code> — Walks dot-separated property path, handling nulls gracefully (returns null if any intermediate is null)</li>
+</ul>
+
+<h4>Property Copying (copyProperties)</h4>
+<p>Copies specified properties from source to destination object, returning true if any property actually changed. Supports:
+<ul>
+<li><strong>Collection comparison</strong>: Element-by-element equality check (order-sensitive, using iterators)</li>
+<li><strong>Array comparison</strong>: Uses <code>Arrays.equals()</code></li>
+<li><strong>Scalar comparison</strong>: Uses <code>Objects.equals()</code> (null-safe)</li>
+<li><strong>WhitespaceEqualsNull mode</strong>: Treats empty/missing strings as equivalent (only copies if both are non-empty and different)</li>
+</ul>
+
+<h4>Reflection Utilities</h4>
+<ul>
+<li><code>getAllDeclaredFields(Class)</code> — Returns all fields including inherited ones, walking the superclass chain</li>
+<li><code>getAllDeclaredMethods(Class)</code> — Returns all methods including inherited ones</li>
+<li><code>getDeclaredPropertyFields(Class)</code> — Returns only non-transient, non-static, non-final fields (actual persistent properties)</li>
+<li><code>getFieldValue(Object, Class/String, fieldname)</code> — Reads field value via reflection (setAccessible for private fields)</li>
+<li><code>newInstance(Class, ...)</code> — Multiple overloads for reflective object construction with various constructor signatures</li>
+<li><code>invoke(Object, Method, args)</code> — Generic method invocation with error handling</li>
+</ul>
+
+<h3>Test Mode Feature</h3>
+<p>The <code>TEST_MODE</code> flag (controlled by <code>enterTestMode()</code>/<code>exitTestMode()</code>) suppresses error logging during test execution. This allows tests to attempt reflection operations that are expected to fail without polluting test logs with stacktraces. The <code>logInstantiationException()</code> methods honor this flag.</p>
+
+<h3>Design Decisions</h3>
+<ol>
+<li><strong>Aggressive caching</strong>: Five caches exist because reflection is slow and BeanHelper is called on hot paths (Wicket data table rendering and sorting)</li>
+<li><strong>Bridge method filtering</strong>: <code>determineGetter()</code> skips bridge methods (synthetic methods created by the compiler for generic type erasure) to return the actual implemented method</li>
+<li><strong>Null-safe traversal</strong>: <code>getNestedProperty()</code> returns null at any point in the chain where an intermediate value is null, rather than throwing NPE</li>
+<li><strong>Constructor accessibility</strong>: <code>newInstance()</code> calls <code>constructor.setAccessible(true)</code> to instantiate classes with private constructors</li>
+<li><strong>No external bean library</strong>: Despite depending on <code>commons-beanutils</code> in the Gradle build, BeanHelper implements its own property resolution rather than using Apache BeanUtils directly — likely for performance control and caching</li>
+</ol>
+
+<div class="tip">The <code>isEqualList()</code> helper (package-private) performs element-by-element comparison using iterators, not <code>equals()</code>. This means collection equality is based on element identity/equality of <em>corresponding positions</em>, not set equality — two lists with the same elements in different order are not equal.</div>
+</div>
+<h2>Git History</h2><div class="hist"><pre>868d6abb7 2025 -> 2026
+63081666f Source file headers: 2024-> 2025.
+a73905c14 Fix typos in projectforge*/ directories Found via codespell
+694987647 Migration stuff in progress... (all tests of all packages: OK).
+ae50b2522 BeanHelper.getProperty supports now nested properties by simply using new PropertyUtils.
+b6092df09 Copyright 2023 -> 2024
+ab45d51fa Copyright 2001-2022 -> 2001-2023.
+0203e3261 AbstractListPage: long-running queries: change of sort order shows result list without search button. BeanHelper: lots of caches for faster sort in Wicket result lists.</pre></div>
 </body></html>

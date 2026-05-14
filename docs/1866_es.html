@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>#1866: PropFindRequestHandlerTest [ES]</title>
+<style>
+body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}
+h1{border-bottom:2px solid #333;padding-bottom:.3em}
+h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}
+h3{margin-top:2em;color:#444}
+a{color:#0366d6}
+.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}
+.nav{font-size:.9em;color:#888;margin-bottom:1em}
+.lang{font-size:.85em;color:#888;float:right}
+.lang a{color:#888;text-decoration:none;padding:0 .3em}
+.lang a.active{color:#0366d6;font-weight:600;text-decoration:underline}
+.meta{font-size:.9em;margin:1em 0;color:#555}
+code{background:#f0f0f0;padding:0 .2em;font-size:.93em}
+pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}
+table{border-collapse:collapse;width:100%;margin:1em 0}
+th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}
+th{background:#f5f5f5;font-weight:600}
+.hist{font-size:.85em;color:#555}
+.warn{background:#fff3cd;border-left:3px solid #ffc107;padding:.5em 1em;margin:1em 0}
+.tip{background:#d4edda;border-left:3px solid #28a745;padding:.5em 1em;margin:1em 0}
+</style>
+</head>
+<body>
+<div class="lang">
+<a href="1866.html">EN</a> · <a href="1866_de.html">DE</a> · <a href="1866_ru.html">RU</a> · <a href="1866_fr.html">FR</a> · <a href="1866_es.html" class="active">ES</a>
+</div>
+<div class="nav">
+<a href="https://maureranton.github.io/projectforge/">← Índice</a> · 
+<a href="file-index.html">← Índice de archivos</a> · 
+<a href="1865.html">← Anterior</a> · 
+<a href="1867.html">Siguiente →</a> · 
+<a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-carddav/src/test/kotlin/org/projectforge/carddav/PropFindRequestHandlerTest.kt" target="_blank" title="Ver fuente en GitHub">📄 fuente</a>
+</div>
+<h1>#1866: <code>PropFindRequestHandlerTest.kt</code></h1>
+<div class="meta">
+<code>projectforge-carddav/src/test/kotlin/org/projectforge/carddav/PropFindRequestHandlerTest.kt</code> Prueba unitaria — paquete org.projectforge.carddav, projectforge-carddav/src/test/kotlin/org/projectforge/carddav/PropFindRequestHandlerTest.kt 
+<span style="color:#888">108 líneas · 83 código · 22 comentarios · 3 en blanco</span>
+</div>
+<div class="c">
+Prueba <code>PropFindRequestHandler.generatePropFindResponse()</code> — el generador central de respuestas PROPFIND de WebDAV. Verifica respuestas XML <code>multistatus</code> correctas para dos escenarios: consultas de tipo de recurso/nombre mostrado y consultas de principal/privilegio. Utiliza mocks de Mockito para objetos servlet HTTP y una entidad <code>PFUserDO</code> real.
+</div>
+<h2>Arquitectura</h2>
+<div class="c">
+<p><code>PropFindRequestHandler</code> es el manejador del lado del servidor que responde a solicitudes CardDAV PROPFIND según <strong>RFC 4918</strong> (WebDAV). PROPFIND es el mecanismo principal mediante el cual los clientes CardDAV descubren capacidades del servidor, tipos de recursos e información del principal del usuario.</p>
+
+<h3>Importaciones</h3>
+<ul>
+<li><strong>jakarta.servlet.http.HttpServletRequest</strong> / <strong>HttpServletResponse</strong> — API de Servlet para mock de solicitud/respuesta</li>
+<li><strong>org.junit.jupiter.api.Assertions</strong> — Framework de aserciones JUnit 5</li>
+<li><strong>org.junit.jupiter.api.Test</strong> — Anotación de prueba JUnit 5</li>
+<li><strong>org.mockito.Mockito</strong> — Framework de mocking Mockito</li>
+<li><strong>org.projectforge.framework.persistence.user.entities.PFUserDO</strong> — Entidad de usuario con nombre de usuario "kai"</li>
+<li><strong>org.projectforge.carddav.Prop</strong>, <strong>PropType</strong>, <strong>RequestWrapper</strong>, <strong>WriterContext</strong>, <strong>PropFindRequestHandler</strong> — Clases internas de CardDAV</li>
+</ul>
+
+<h3>Escenarios de prueba</h3>
+
+<h4>Escenario 1: RESOURCETYPE + DISPLAYNAME</h4>
+<p>Cuando un cliente solicita PROPFIND para las propiedades <code>resourcetype</code> y <code>displayname</code> en <code>/carddav/users/kai/</code>, el manejador debe responder con:</p>
+<ul>
+<li><strong>d:resourcetype</strong> → <code>&lt;d:collection /&gt;</code> (indicando que es un recurso de tipo colección/contenedor)</li>
+<li><strong>d:displayname</strong> → <code>kai</code> (el nombre de usuario)</li>
+</ul>
+<p>La respuesta es un documento XML <code>multistatus</code> completo con declaraciones de espacio de nombres DAV, CardDAV, CalDAV y personalizado.</p>
+
+<h4>Escenario 2: CURRENT_USER_PRINCIPAL + PRIVILEGE_SET + PRINCIPAL_URL</h4>
+<p>Cuando un cliente consulta propiedades de identidad de usuario:</p>
+<ul>
+<li><strong>d:current-user-principal</strong> → <code>&lt;d:href&gt;/carddav/principals/users/kai/&lt;/d:href&gt;</code></li>
+<li><strong>d:current-user-privilege-set</strong> → cuatro privilegios: <code>read</code>, <code>write</code>, <code>write-properties</code>, <code>write-content</code></li>
+<li><strong>d:principal-URL</strong> → <code>&lt;d:href&gt;/carddav/principals/users/kai/&lt;/d:href&gt;</code></li>
+</ul>
+
+<h3>Grafo de dependencias</h3>
+<table>
+<tr><th>Clase</th><th>Rol</th></tr>
+<tr><td><code>Prop</code></td><td>Representa una única propiedad DAV solicitada con un valor enum <code>PropType</code></td></tr>
+<tr><td><code>PropType</code></td><td>Enum de propiedades DAV conocidas: RESOURCETYPE, DISPLAYNAME, CURRENT_USER_PRINCIPAL, CURRENT_USER_PRIVILEGE_SET, PRINCIPAL_URL, GETETAG, GETCTAG, SYNCTOKEN</td></tr>
+<tr><td><code>RequestWrapper</code></td><td>Envuelve HttpServletRequest, extrae la URI de solicitud para generar el href de respuesta</td></tr>
+<tr><td><code>WriterContext</code></td><td>Agrupa el wrapper de solicitud, respuesta, usuario y propiedades solicitadas — el contexto completo que necesita el manejador</td></tr>
+<tr><td><code>PropFindRequestHandler</code></td><td>Método estático <code>generatePropFindResponse(WriterContext): String</code> — función pura que genera la cadena XML</td></tr>
+</table>
+
+<h3>Estrategia de mocking</h3>
+<ul>
+<li><strong>HttpServletRequest</strong>: Simulado para devolver <code>/carddav/users/kai/</code> como requestURI</li>
+<li><strong>HttpServletResponse</strong>: Simulado pero no utilizado (el manejador devuelve un String, no escribe directamente en la respuesta en la prueba)</li>
+<li><strong>PFUserDO</strong>: Objeto real con <code>username = "kai"</code> — no necesita simulación</li>
+<li><strong>WriterContext</strong>: Objeto real construido a partir de mocks y usuario real</li>
+</ul>
+
+<h3>Declaraciones de espacios de nombres XML</h3>
+<p>Todas las respuestas incluyen estas declaraciones de espacios de nombres XML:</p>
+<pre>
+xmlns:d="DAV:"
+xmlns:card="urn:ietf:params:xml:ns:carddav"
+xmlns:cs="http://calendarserver.org/ns/"
+xmlns:me="http://me.com/_namespace/"
+</pre>
+<p>Estos corresponden a: núcleo DAV, CardDAV, extensiones de Apple CalendarServer y un espacio de nombres personalizado.</p>
+
+<div class="tip">El manejador es una función pura (produce una cadena XML a partir del contexto) — sin efectos secundarios, sin acceso a base de datos. Este diseño lo hace altamente comprobable y sigue el patrón de núcleo funcional/cáscara imperativa.</div>
+</div>
+<h2>Historial Git</h2>
+<div class="hist">
+<table>
+<tr><th>Commit</th><th>Qué cambió en este archivo</th></tr>
+<tr><td><code>868d6abb7</code></td><td>Año de copyright 2025→2026. Sin cambio de lógica.</td></tr>
+<tr><td><code>63081666f</code></td><td>Año de copyright 2024→2025. Sin cambio de lógica.</td></tr>
+<tr><td><code>f86cfa20a</code></td><td><strong>Eliminado <code>&lt;card:addressbook/&gt;</code></strong> del XML esperado. El tipo de recurso reporta solo <code>&lt;d:collection/&gt;</code> — ya no declara capacidad de libreta de direcciones CardDAV. Limpieza final después de que el elemento addressbook pasara por múltiples ciclos de agregar/eliminar.</td></tr>
+<tr><td><code>139f9f316</code></td><td><strong>Agregado <code>&lt;card:addressbook/&gt;</code></strong> al tipo de recurso. Parte del soporte para foto/avatar — el elemento se agregó brevemente para anunciar capacidad CardDAV, luego se eliminó nuevamente en <code>f86cfa20a</code>.</td></tr>
+<tr><td><code>5167dab99</code></td><td><strong>Cambio mayor de API.</strong> (1) <code>Prop.RESOURCETYPE</code>→<code>Prop(PropType.RESOURCETYPE)</code>: Prop pasó a basarse en constructor. (2) El nombre mostrado cambió de clave i18n <code>"address.cardDAV..."</code> al nombre de usuario real <code>"kai"</code>. (3) <code>&lt;card:addressbook/&gt;</code> eliminado temporalmente.</td></tr>
+<tr><td><code>6c1daac93</code></td><td><strong>Introducido <code>WriterContext</code>.</strong> La firma de <code>generatePropFindResponse()</code> cambió de <code>(request, user, props)</code> a un único objeto de contexto. Se agregó mock de <code>HttpServletResponse</code>. Extensibilidad más limpia.</td></tr>
+<tr><td><code>0d7a81f91</code></td><td><strong>Agregado espacio de nombres <code>xmlns:me</code>.</strong> Se intercambió el orden de elementos: <code>&lt;collection/&gt;</code> antes que <code>&lt;addressbook/&gt;</code>. El elemento requerido por DAV ahora va primero.</td></tr>
+<tr><td><code>b14376470</code></td><td><strong><code>cr:addressbook</code>→<code>card:addressbook</code>.</strong> Prefijo de espacio de nombres estandarizado de <code>cr</code> (poco claro) a <code>card</code> (convencional).</td></tr>
+<tr><td><code>744d238de</code></td><td><strong>Corrección de URI de espacio de nombres.</strong> Prefijo xmlns <code>cr</code>→<code>card</code>, corregida la cadena URI del espacio de nombres CardDAV.</td></tr>
+<tr><td><code>c4062ed97</code></td><td><strong>Agregados prefijos de espacio de nombres XML.</strong> Elementos simples (<code>&lt;multistatus&gt;</code>) → calificados con espacio de nombres (<code>&lt;d:multistatus&gt;</code>). Coincide con la salida del manejador después de que comenzara a emitir XML calificado.</td></tr>
+<tr><td><code>40e554cbe</code></td><td><strong>Cambiada URI de prueba</strong> de <code>/carddav</code> genérico a <code>/carddav/users/kai/</code> específico de usuario. Coincide con la estructura real de URL por usuario.</td></tr>
+<tr><td><code>2ad0cfe66</code></td><td><strong>Creación inicial.</strong> Prueba PROPFIND básica con literales XML en línea, mocks HTTP de Mockito. Verificadas propiedades RESOURCETYPE + DISPLAYNAME.</td></tr>
+</table>
+</div>
+</body>
+</html>

@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>#710 [RU]</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:2em;color:#444}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}.warn{background:#fff3cd;border-left:3px solid #ffc107;padding:.5em 1em;margin:1em 0}.tip{background:#d4edda;border-left:3px solid #28a745;padding:.5em 1em;margin:1em 0}</style>
+</head>
+<body>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Индекс</a> · <a href="file-index.html">← Индекс файлов</a> · <a href="709.html">← Пред.</a> · <a href="711.html">След. →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/java/org/projectforge/framework/persistence/xstream/ProxyIdRefMarshaller.java" target="_blank" title="Просмотреть исходный код на GitHub">📄 исходник</a></div>
+<h1>#710: <code>ProxyIdRefMarshaller.java</code></h1>
+<div class="meta"><code>projectforge-business/src/main/java/org/projectforge/framework/persistence/xstream/ProxyIdRefMarshaller.java</code> Маршаллер XStream — маршаллер ссылок на основе ID с удалением CGLIB-прокси, разворачиванием Hibernate-прокси и предотвращением циклических ссылок, <code>projectforge-business/src/main/java/org/projectforge/framework/persistence/xstream/ProxyIdRefMarshaller.java</code> <span style="color:#888">91 строка · 54 кода · 24 комментария · 13 пустых</span></div>
+<div class="c">Расширяет <code>ReferenceByIdMarshaller</code> от XStream для обеспечения надежной сериализации графа сущностей с тремя уровнями обработки прокси: (1) удаляет Spring CGLIB-прокси <code>Enhancer</code> путем обхода цепочки суперклассов, (2) разворачивает Hibernate-прокси через <a href="706.html">HibernateProxyHelper.get()</a> и (3) присваивает инкрементальные числовые ID каждому изменяемому объекту и записывает ссылки ID/IDREF при повторной встрече того же объекта. Это предотвращает бесконечную рекурсию из-за двунаправленных JPA-связей и гарантирует, что идентичность сущности (ID в БД) сохраняется в сериализованном XML — одна и та же сущность, появляющаяся в нескольких путях ассоциаций, сериализуется только один раз, а последующие появления отображаются как <code>&lt;entity reference="3"/&gt;</code>. Это самый сложный прокси-ориентированный маршаллер в слое моста XStream ProjectForge.</div>
+
+<h2>Архитектура</h2>
+
+<h3>Иерархия классов</h3>
+<pre>TreeMarshaller
+  └── AbstractReferenceMarshaller       (добавляет отслеживание ссылок на объекты)
+       ├── ReferenceByXPathMarshaller   (<a href="707.html">#707</a> — ссылки на основе XPath)
+       └── ReferenceByIdMarshaller      (ссылки на основе ID/IDREF)
+            └── ProxyIdRefMarshaller    (этот класс — добавляет удаление прокси + обработку CGLIB)</pre>
+
+<h3>Поля</h3>
+<table>
+<tr><th>Поле</th><th>Тип</th><th>Назначение</th></tr>
+<tr><td><code>references</code></td><td><code>ObjectIdDictionary</code></td><td>Отслеживает каждый сериализованный объект, сопоставляя идентичность объекта → сгенерированный ID. Используется для обнаружения циклических/дублирующихся ссылок.</td></tr>
+<tr><td><code>idGenerator</code></td><td><code>IDGenerator</code></td><td>Генерирует уникальные последовательные ID. По умолчанию <code>SequenceGenerator(1)</code> создает ID "1", "2", "3", ...</td></tr>
+<tr><td><code>classMapper</code></td><td><code>Mapper</code></td><td>Кэшированная ссылка на маппер классов XStream (не <code>mapper</code> из суперкласса, который его затеняет).</td></tr>
+<tr><td><code>log</code></td><td><code>org.slf4j.Logger</code></td><td>Статический SLF4J-логгер для отладки трассировки маршаллированных объектов.</td></tr>
+</table>
+
+<h3>Конструкторы</h3>
+<p>Две перегрузки конструктора:</p>
+<ol>
+  <li><strong>Полный конструктор:</strong> Принимает <code>HierarchicalStreamWriter</code>, <code>ConverterLookup</code>, <code>Mapper</code> и <code>IDGenerator</code>. Позволяет использовать пользовательские стратегии генерации ID.</li>
+  <li><strong>Упрощенный конструктор:</strong> Опускает параметр <code>IDGenerator</code> и по умолчанию использует <code>SequenceGenerator(1)</code> — создает последовательные числовые ID, начиная с 1.</li>
+</ol>
+
+<h3>convertAnother(Object item) — Основной алгоритм</h3>
+<p>Это переопределенный метод, в котором происходит вся обработка прокси и отслеживание ссылок. Он заменяет стандартный <code>convertAnother()</code> XStream на логику с поддержкой прокси:</p>
+
+<ol>
+  <li><strong>Удаление CGLIB Enhancer (строки ~56-59):</strong>
+    <pre>Class&lt;?&gt; targetClass = item.getClass();
+while (Enhancer.isEnhanced(targetClass)) {
+    targetClass = targetClass.getSuperclass();
+}</pre>
+    Поднимается по цепочке суперклассов, удаляя Spring CGLIB-прокси (созданные <code>@Transactional</code>, <code>@Cacheable</code> и т.д.). <code>Enhancer.isEnhanced()</code> возвращает true для CGLIB-сгенерированных подклассов. Это делается <em>до</em> поиска конвертера, чтобы был выбран правильный конвертер сущностей.</li>
+
+  <li><strong>Поиск конвертера (строка ~61):</strong>
+    <pre>Converter converter = converterLookup.lookupConverterForType(targetClass);</pre>
+    Находит подходящий конвертер XStream для реального (без прокси) класса сущности.</li>
+
+  <li><strong>Разворачивание Hibernate-прокси (строка ~62):</strong>
+    <pre>Object realItem = HibernateProxyHelper.get(item);</pre>
+    Использует <a href="706.html">HibernateProxyHelper</a> для разворачивания Hibernate-прокси ленивой загрузки. После этого шага <code>realItem</code> — это реальный экземпляр сущности без прокси-оберток.</li>
+
+  <li><strong>Быстрый путь для неизменяемых типов (строки ~64-66):</strong>
+    <pre>if (classMapper.isImmutableValueType(realItem.getClass())) {
+    converter.marshal(item, writer, this);
+}</pre>
+    Строки, целые числа, даты, перечисления и другие неизменяемые типы маршаллируются напрямую без отслеживания ID. Это предотвращает загрязнение словаря ссылок значениями, которые никогда не могут образовывать циклические ссылки.</li>
+
+  <li><strong>Обнаружение дублирующихся ссылок (строки ~67-70):</strong>
+    <pre>Object idOfExistingReference = references.lookupId(realItem);
+if (idOfExistingReference != null) {
+    writer.addAttribute("reference", idOfExistingReference.toString());
+    return;
+}</pre>
+    Проверяет <code>ObjectIdDictionary</code> на наличие <code>realItem</code> в уже сериализованных. Если найден, записывает атрибут <code>reference</code> (например, <code>reference="3"</code>), указывающий на предыдущую сериализацию по сгенерированному ID. Это механизм, предотвращающий бесконечную рекурсию в двунаправленных ассоциациях — когда XStream возвращается к родителю от дочернего элемента, он находит родителя уже в словаре и выдает ссылку вместо повторной сериализации.</li>
+
+  <li><strong>Первичная сериализация (строки ~71-81):</strong>
+    <pre>String newId = idGenerator.next(realItem);
+writer.addAttribute("id", newId);
+references.associateId(realItem, newId);
+converter.marshal(realItem, writer, this);</pre>
+    Генерирует новый уникальный ID, сохраняет его в словаре ссылок, записывает как атрибут <code>id</code> в XML-элементе, затем делегирует конвертеру полную сериализацию. Теперь элемент зарегистрирован, так что будущие встречи приведут к шагу 5.</li>
+</ol>
+
+<h3>ObjectIdDictionary</h3>
+<p><code>ObjectIdDictionary</code> от XStream — это карта на основе идентичности (использует <code>System.identityHashCode()</code> и сравнение <code>==</code>, а не <code>.equals()</code>). Это критически важно, поскольку JPA-сущности часто реализуют <code>equals()</code> на основе ID в БД, который может быть null для транзиентных сущностей. Отслеживание на основе идентичности гарантирует уникальное отслеживание каждого экземпляра объекта независимо от реализации <code>equals()</code>.</p>
+
+<div class="warn"><strong>Особенность идентичности Hibernate-прокси:</strong> Если два разных экземпляра Hibernate-прокси оборачивают одну и ту же базовую сущность (возможно, когда сущность загружается через разные сессии или ассоциации), <code>ObjectIdDictionary</code> увидит их как разные объекты (разные хеши идентичности) даже после <code>HibernateProxyHelper.get()</code>. Это может привести к тому, что одна и та же строка БД будет сериализована дважды с разными сгенерированными ID. Это известное ограничение отслеживания на основе идентичности — альтернатива (отслеживание на основе значений с использованием ID БД) потребовала бы специальной обработки для транзиентных сущностей.</div>
+
+<h2>Точки интеграции</h2>
+<ul>
+  <li><strong>Создается:</strong> Стратегией <a href="709.html">ProxyIdRefMarshallingStrategy</a>, которая переопределяет <code>createMarshallingContext()</code> для создания этого маршаллера вместо стандартного <code>ReferenceByIdMarshaller</code>.</li>
+  <li><strong>Альтернатива:</strong> <a href="707.html">HibernateProxyXPathMarshaller</a> — этот использует атрибуты ID/IDREF, тогда как другой использует XPath-выражения. Оба подхода валидны; выбор зависит от того, какая <code>MarshallingStrategy</code> сконфигурирована.</li>
+  <li><strong>Зависит от:</strong> <a href="706.html">HibernateProxyHelper</a> для разворачивания Hibernate-прокси. Использует <code>Enhancer</code> от Spring Framework для обнаружения CGLIB-прокси (зависимость компиляции от <code>spring-core</code>).</li>
+</ul>
+
+<h2>Проектные решения и подводные камни</h2>
+<ul>
+  <li><strong>Зависимость от Spring CGLIB:</strong> Импорт <code>org.springframework.cglib.proxy.Enhancer</code> создает жесткую зависимость от Spring Framework, что приемлемо, поскольку ProjectForge — Spring-приложение. Однако этот класс не будет работать вне Spring-контекста без модификации.</li>
+  <li><strong>Быстрый путь для неизменяемых:</strong> Проверка <code>classMapper.isImmutableValueType()</code> — важная оптимизация. Без нее каждой строке, целому числу и дате в графе сущностей присваивался бы ID и добавлялся в словарь ссылок, что сильно увеличило бы использование памяти и объем XML.</li>
+  <li><strong>Отладочное логирование:</strong> SLF4J-отладка логирует каждый класс маршаллированного объекта. В продакшене это должно быть на уровне TRACE, чтобы избежать спама в логах при экспорте больших графов сущностей.</li>
+  <li><strong>Потенциальная коллизия ID:</strong> <code>SequenceGenerator(1)</code> создает ID в рамках одного контекста маршаллинга. Если два отдельных экземпляра <code>ProxyIdRefMarshaller</code> сериализуют разные графы объектов в одном XML-документе (маловероятно, но теоретически возможно при вложенности <code>MarshallingContext</code> от XStream), ID могут конфликтовать. Это не является практической проблемой, поскольку каждый контекст маршаллинга использует свой собственный экземпляр маршаллера.</li>
+  <li><strong>Затенение classMapper:</strong> И этот класс, и суперкласс имеют поле <code>mapper</code>. Двухаргументный конструктор устанавливает <code>this.classMapper</code>, но трехаргументный устанавливает оба. Код последовательно использует <code>this.classMapper</code> для локально хранимой ссылки, избегая путаницы с унаследованным полем.</li>
+</ul>
+
+<h2>История Git</h2>
+<div class="hist"><pre>868d6abb7 2025 -> 2026
+63081666f Заголовки исходных файлов: 2024-> 2025.
+b6092df09 Авторские права 2023 -> 2024
+ab45d51fa Авторские права 2001-2022 -> 2001-2023.
+5f7ef41b8 Авторские права 2021 -> 2022
+ceb63e8a1 Заголовок исходного кода: (C) 2001-2021.
+7c79f1922 Авторские права заголовка исходника -> 2020.
+32f634b88 Оптимизация импортов
+000ca723d Удаление бессмысленных булевых выражений (business)
+dd5ca38ac Обновлены или созданы авторские права во всех заголовках java-файлов.
+a954d7f7d Изменения из ветки Java 9
+a5bbdca6a Смена логгера на slf4j
+9ebb88522 Первоначальный коммит</pre></div>
+</body>
+</html>

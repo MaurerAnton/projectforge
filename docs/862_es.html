@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>#862: CalendarLegacyFilter.kt — ProjectForge Docs [ES]</title>
+<style>
+body { font-family: system-ui, sans-serif; max-width: 960px; margin: 2em auto; padding: 0 1em; background: #fafafa; color: #222; line-height: 1.6; }
+h1 { border-bottom: 2px solid #333; padding-bottom: 0.3em; }
+h2 { margin-top: 2.5em; border-bottom: 1px solid #ddd; padding-bottom: 0.2em; color: #333; }
+h3 { margin-top: 2em; color: #444; }
+a { color: #0366d6; }
+.c { border-left: 3px solid #ddd; padding: .5em 1em; margin: 1em 0; background: #fff; }
+.nav { font-size: .9em; color: #888; margin-bottom: 1em; }
+.meta { font-size: .9em; margin: 1em 0; color: #555; }
+code { background: #f0f0f0; padding: 0 .2em; font-size: .93em; }
+pre { background: #f5f5f5; padding: .8em 1em; border: 1px solid #ddd; border-radius: 4px; overflow-x: auto; font-size: .88em; line-height: 1.4; }
+table { border-collapse: collapse; width: 100%; margin: 1em 0; }
+th, td { border: 1px solid #ddd; padding: .5em .8em; text-align: left; font-size: .9em; }
+th { background: #f5f5f5; font-weight: 600; }
+.hist { font-size: .85em; color: #555; }
+</style>
+</head>
+<body>
+
+<p class="nav">
+<a href="https://maureranton.github.io/projectforge/">← Índice</a> ·
+<a href="file-index.html">← Índice de archivos</a> ·
+<a href="861.html">← Anterior</a> ·
+<a href="863.html">Siguiente →</a>
+</p>
+
+<h1>#862: <code>CalendarLegacyFilter.kt</code></h1>
+
+<div class="meta"><code>projectforge-business/src/main/kotlin/org/projectforge/business/calendar/CalendarLegacyFilter.kt</code> 
+<strong>Tipo:</strong> Clase Kotlin (utilidad de migración)<br>
+<strong>Propósito:</strong> Migra las preferencias de calendario de ProjectForge v6 (Wicket) al sistema de calendario v7+<br>
+<strong>Ruta de origen:</strong> <code>projectforge-business/src/main/kotlin/org/projectforge/business/calendar/CalendarLegacyFilter.kt</code><br>
+<strong>Anotación del archivo:</strong> <code>@file:Suppress("DEPRECATION")</code>
+ <span style="color:#888">97 líneas · 47 código · 43 comentarios · 7 en blanco</span></div>
+
+<div class="c">
+<p>
+<code>CalendarLegacyFilter</code> es una clase de migración única que lee las antiguas preferencias de filtro de calendario basadas en Wicket (almacenadas como <code>TeamCalCalendarFilter</code> en <code>t_user_xml_prefs</code> bajo la clave <code>"TeamCalendarPage.userPrefs"</code>) y las convierte en las estructuras de datos modernas del calendario: <code>CalendarFilterState</code>, <code>Favorites&lt;CalendarFilter&gt;</code>, <code>CalendarStyleMap</code> y un <code>CalendarFilter</code> predeterminado. Esto permite actualizaciones sin problemas de ProjectForge v6 a v7+ sin que los usuarios pierdan sus configuraciones de calendario.
+</p>
+</div>
+
+<h2>Constructor</h2>
+<p>La clase contiene todos los datos migrados como propiedades del constructor:</p>
+<table>
+<tr><th>Propiedad</th><th>Tipo</th><th>Descripción</th></tr>
+<tr><td><code>state</code></td><td><code>CalendarFilterState</code></td><td>El último estado de vista del usuario (rango de fechas y tipo de vista).</td></tr>
+<tr><td><code>list</code></td><td><code>Favorites&lt;CalendarFilter&gt;</code></td><td>La lista migrada de filtros de calendario con nombre (favoritos).</td></tr>
+<tr><td><code>current</code></td><td><code>CalendarFilter</code></td><td>El filtro actualmente activo después de la migración (derivado de la plantilla activa anterior).</td></tr>
+<tr><td><code>styleMap</code></td><td><code>CalendarStyleMap</code></td><td>Estilos de color/visualización para cada calendario, inferidos de las entradas de plantilla antiguas.</td></tr>
+</table>
+
+<h2>Objeto complementario — Punto de entrada de migración</h2>
+
+<h3><code>migrate(userXmlPreferenceService: UserXmlPreferencesService): CalendarLegacyFilter?</code></h3>
+<p>El punto de entrada principal. Pasos:</p>
+<ol>
+  <li>Recupera el antiguo <code>TeamCalCalendarFilter</code> de <code>userXmlPreferenceService</code> usando la clave <code>"TeamCalendarPage.userPrefs"</code>.</li>
+  <li>Si no existe un filtro antiguo, devuelve <code>null</code> (no se necesita migración).</li>
+  <li>Crea un nuevo <code>CalendarFilterState</code> y establece <code>startDate</code> (convertido desde el antiguo <code>Date</code> mediante <code>PFDateCompatibilityUtils</code>) y <code>view</code> (convertido desde el antiguo <code>ViewType</code>).</li>
+  <li>Crea un <code>CalendarStyleMap</code>, inicializándolo con colores de fondo de las antiguas entradas <code>CalendarProperty</code> de cada plantilla.</li>
+  <li>Crea el filtro activo copiando la antigua <code>activeTemplateEntry</code> mediante <code>CalendarFilter.copyFrom()</code>.</li>
+  <li>Itera sobre todas las antiguas <code>templateEntries</code>, convirtiendo cada una en un <code>CalendarFilter</code> y agregándolas a la lista de favoritos.</li>
+  <li>Resuelve el ID del filtro activo desde la lista de favoritos coincidiendo por nombre.</li>
+  <li>Devuelve un <code>CalendarLegacyFilter</code> que contiene los cuatro componentes migrados.</li>
+</ol>
+
+<h3><code>convert(oldViewType: ViewType?): CalendarView?</code></h3>
+<p>Mapeo privado del antiguo enum <code>ViewType</code> al moderno enum <code>CalendarView</code>:</p>
+<table>
+<tr><th>ViewType antiguo</th><th>CalendarView nuevo</th></tr>
+<tr><td><code>AGENDA_WEEK</code></td><td><code>CalendarView.WEEK</code></td></tr>
+<tr><td><code>BASIC_WEEK</code></td><td><code>CalendarView.WEEK</code></td></tr>
+<tr><td><code>AGENDA_DAY</code></td><td><code>CalendarView.DAY</code></td></tr>
+<tr><td><code>BASIC_DAY</code></td><td><code>CalendarView.DAY</code></td></tr>
+<tr><td><em>cualquier otro</em></td><td><code>CalendarView.MONTH</code></td></tr>
+</table>
+
+<h2>Consejos para pruebas SQL</h2>
+<p>La documentación de la clase incluye fragmentos SQL para que los desarrolladores inspeccionen manualmente las preferencias heredadas durante las pruebas:</p>
+<pre>select key, serializedSettings from t_user_xml_prefs
+  where user_id=2 and key like 'calendar.%';
+
+delete from t_user_pref where user_fk=2 and area='calendar';</pre>
+
+<h2 class="hist">Historial de Git</h2>
+<div class="hist">
+<ul>
+<li><strong>868d6abb7</strong> 2025 → 2026</li>
+<li><strong>63081666f</strong> Encabezados de archivos fuente: 2024 → 2025</li>
+<li><strong>b6092df09</strong> Copyright 2023 → 2024</li>
+<li><strong>ab45d51fa</strong> Copyright 2001-2022 → 2001-2023</li>
+<li><strong>6bffc03e8</strong> Calendario: fondos transparentes, color de borde/texto con contraste mejorado</li>
+<li><strong>5f7ef41b8</strong> Copyright 2021 → 2022</li>
+<li><strong>ceb63e8a1</strong> Copyright 2001-2021</li>
+<li><strong>6874f66b4</strong> FirstDayOfWeek</li>
+<li><strong>7c79f1922</strong> Copyright → 2020</li>
+<li><strong>d3a178833</strong> Revertida refactorización incorrecta de "calendar" → "datetime"</li>
+<li><strong>4b53b6562</strong> PFDate → PFDay, introducido IPFDate</li>
+<li><strong>8c31eba2a</strong> WIP pesado: migración de Calendar/DateHolder/DayHolder</li>
+<li><strong>4e33c1e82</strong> CalendarFavorites reemplazado con Favorites&lt;CalendarFilter&gt; (+ @JsonTypeInfo)</li>
+<li><strong>f1a9303a1</strong> Advertencias de deprecación suprimidas</li>
+<li><strong>940b236bb</strong> WIP: UserPrefDao y CalendarFavorites</li>
+<li><strong>3e5dc3d34</strong> WIP: CalendarFavorites</li>
+<li><strong>523ce3c90</strong> Nuevo UserPrefCache funcionando</li>
+<li><strong>21d9fe231</strong> Renombrado: UserPreferencesService → UserXmlPreferencesService</li>
+<li><strong>ec647396e</strong> WIP: CalendarStyleMap</li>
+<li><strong>73398dec9</strong> WIP: CalendarFilter</li>
+<li><strong>05244ff19</strong> Encabezado de archivo Kotlin creado/actualizado</li>
+<li><strong>526902584</strong> WIP: Favoritos de usuario</li>
+<li><strong>46f71e71a</strong> Movido al módulo de negocio</li>
+<li><strong>bd3a3e824</strong> Renombre de módulo: jax-rs → rest</li>
+<li><strong>6da83b5c3</strong> WIP: CalendarFilter</li>
+<li><strong>ec1da5369</strong> WIP: CalendarFilter</li>
+<li><strong>e2ed596ad</strong> Filtro heredado AGENDA_WEEK → WEEK</li>
+<li><strong>d27ecfa74</strong> WIP: CalendarFilter</li>
+</ul>
+</div>
+
+<h2>Justificación del diseño</h2>
+<p>
+La lógica de migración está intencionalmente aislada en una clase separada en lugar de estar incrustada en <code>CalendarFilter</code> o en la capa de servicio del calendario. Esto mantiene el modelo de datos central limpio de dependencias heredadas y permite que la clase de migración se elimine en una versión futura una vez que todos los usuarios hayan sido actualizados. La supresión <code>@file:Suppress("DEPRECATION")</code> es necesaria porque el código hace referencia intencionalmente a tipos obsoletos (<code>TeamCalCalendarFilter</code>, <code>ViewType</code>, <code>TemplateEntry</code>); estos son los tipos exactos desde los que se está migrando. La clase hace referencia tanto a la clave de persistencia XStream antigua (<code>OLD_USERPREF_KEY</code>) como a las utilidades de fecha heredadas (<code>PFDateCompatibilityUtils</code>), encapsulando todo el conocimiento heredado en un solo lugar.
+</p>
+
+</body>
+</html>

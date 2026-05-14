@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>#636 [FR]</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333}a{color:#0366d6}.meta{font-size:.9em;margin:1em 0}.nav{font-size:.9em;color:#888;margin-bottom:1em}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}code{background:#f0f0f0;padding:0 .2em}</style>
+</head>
+<body>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← Index des fichiers</a> · <a href="635.html">← Précédent</a> · <a href="637.html">Suivant →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/java/org/projectforge/database/DatabaseSupport.java" target="_blank" title="Voir la source sur GitHub">📄 source</a></div>
+
+<h1>#636: <code>DatabaseSupport.java</code></h1>
+<div class="meta"><code>projectforge-business/src/main/java/org/projectforge/database/DatabaseSupport.java</code> <strong>Lignes :</strong> 101 · <strong>Auteur :</strong> Kai Reinhard · <strong>Type :</strong> Singleton Java — package <code>org.projectforge.database</code> <span style="color:#888">101 lignes · 47 code · 42 commentaires · 12 vides</span></div>
+
+<div class="c"><p><strong>Couche d'abstraction du dialecte de base de données.</strong> Singleton (static <code>getInstance()</code> + <code>setInstance()</code> — défini lors du démarrage de l'application). Contient le <code>DatabaseDialect</code> détecté (PostgreSQL ou HSQL) et fournit des optimisations spécifiques au dialecte. 101 lignes.</p>
+
+<p><strong>Constructeur :</strong> <code>DatabaseSupport(DatabaseDialect dialect)</code> — enregistre le dialecte détecté au niveau INFO : <em>"Réglage du dialecte de base de données sur : PostgreSQL"</em>. Le dialecte est déterminé par <code>ConfigurationService</code> à partir de l'URL JDBC au démarrage.</p>
+
+<p><strong>Méthode clé — <code>getIntervalInSeconds(fromProperty, toProperty)</code> :</strong> C'est la méthode critique pour les performances. Pour calculer la durée (par exemple, <code>stopTime - startTime</code> d'une feuille de temps), au lieu de récupérer toutes les lignes en Java et de calculer les différences en mémoire (<code>O(n)</code> mémoire + CPU), elle génère une <strong>somme côté base de données en SQL</strong> :</p>
+<pre>PostgreSQL : "SUM(EXTRACT(EPOCH FROM toProperty) - EXTRACT(EPOCH FROM fromProperty))"</pre>
+<p>Cela renvoie le total des secondes sous forme d'agrégat unique de la base de données — taille de résultat <code>O(1)</code> quel que soit le nombre de lignes. Critique pour les installations avec de nombreuses entrées de feuilles de temps. L'alternative commentée <code>EXTRACT(EPOCH FROM SUM(to - from))</code> a été envisagée mais le calcul par ligne a été choisi pour la précision.</p>
+<p><strong>Solution de repli :</strong> Si la base de données n'est pas PostgreSQL (c'est-à-dire HSQL pour les tests), renvoie <code>null</code>. L'appelant doit alors récupérer toutes les lignes et calculer la somme en Java. Un <strong>avertissement unique</strong> est enregistré (protégé par <code>static boolean errorMessageShown</code>) demandant de contacter le développeur si l'installation contient plus de 10 000 entrées de feuilles de temps — l'agrégation côté Java devient lente à grande échelle.</p>
+
+<p><strong><code>getShutdownDatabaseStatement()</code> :</strong> Appelé par <code>WicketApplication</code> lors de l'arrêt. Pour HSQL (base de données de test embarquée), renvoie <code>"SHUTDOWN COMPACT"</code> — ferme en toute sécurité la base de données embarquée et compacte le fichier de données. Pour PostgreSQL, renvoie <code>null</code> — le pool de connexions gère l'arrêt.</p>
+
+<p><strong>Note de conception :</strong> C'est le <strong>seul</strong> endroit dans la base de code où du SQL spécifique à la base de données est généré. Tout autre SQL est généré par Hibernate/HQL, qui est indépendant de la base de données. Cette classe existe spécifiquement pour l'optimisation des intervalles que HQL ne peut pas exprimer de manière portable.</p></div>
+
+</body></html>

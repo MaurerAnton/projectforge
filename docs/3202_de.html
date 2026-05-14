@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="de">
+<head><meta charset="utf-8"><title>#3202: ErrorPage.java [DE]</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333}h2{margin-top:2em;border-bottom:1px solid #ddd}h3{margin-top:1.5em;color:#333}a{color:#0366d6}.meta{background:#f0f0f0;border-radius:6px;padding:1em;margin:1em 0;font-size:.9em}.code-block{background:#1e1e1e;color:#d4d4d4;border-radius:4px;padding:.8em 1em;margin:.5em 0;overflow-x:auto;font-family:Consolas,monospace;font-size:.82em;line-height:1.5;white-space:pre-wrap}.commentary{margin:.8em 0;background:#fff;padding:.5em 1em;border-radius:6px;border-left:4px solid #ddd;line-height:1.7}table{border-collapse:collapse;width:100%;margin:.8em 0;font-size:.9em}th,td{border:1px solid #ddd;padding:.4em .6em}th{background:#f0f0f0}code{background:#e8e8e8;border-radius:3px;padding:.1em .3em;font-size:.9em}.nav{font-size:.9em;color:#888;margin-bottom:1em}.history{background:#fffbe6;border-radius:6px;padding:1em;margin:1em 0;font-size:.9em;border-left:4px solid #ffc107}.arch{background:#e8f4fd;border-radius:6px;padding:1em;margin:1em 0;font-size:.9em;border-left:4px solid #2196f3}.warn{background:#fff3cd;border-radius:6px;padding:1em;margin:1em 0;font-size:.9em;border-left:4px solid #ffc107}</style></head>
+<body><div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← Dateiindex</a> · <a href="3201.html">← Zurück</a> · <a href="3203.html">Weiter →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-wicket/src/main/java/org/projectforge/web/wicket/ErrorPage.java" target="_blank" title="Quellcode auf GitHub ansehen">📄 Quelle</a></div>
+<h1>#3202: <code>ErrorPage.java</code></h1>
+<div class="meta"><code>projectforge-wicket/src/main/java/org/projectforge/web/wicket/ErrorPage.java</code> <p><strong>Pfad:</strong> <code>projectforge-wicket/src/main/java/org/projectforge/web/wicket/ErrorPage.java</code> · <strong>Zeilen:</strong> 268 · <strong>Erweitert:</strong> <code>AbstractSecuredPage</code> · <strong>Autor:</strong> Kai Reinhard</p><p><strong>Zweck:</strong> DIE globale Fehlerseite – fängt JEDE unbehandelte Ausnahme in der Wicket-Webapp ab. Klassifiziert Ausnahmen in 6 Kategorien, protokolliert mit eindeutigen Nachrichtennummern (<code>System.currentTimeMillis()</code>), zeigt benutzerfreundliche übersetzte Meldungen, rendert optional ein Feedback-Formular für Benutzer zur Übermittlung von Fehlerberichten und sendet proaktiv E-Mails an das Support-Team bei kritischen Fehlern. Hier ist der Pac-Man-Easter-Egg verlinkt.</p><p><strong>Quelle:</strong> <a href="https://github.com/micromata/projectforge/blob/develop/projectforge-wicket/src/main/java/org/projectforge/web/wicket/ErrorPage.java">GitHub</a></p> <span style="color:#888">268 Zeilen · 199 Code · 48 Kommentare · 21 leer</span></div>
+<div class="history"><table><tr><th>Commit</th><th>Nachricht</th></tr><tr><td><code>9ebb88522</code></td><td>2016-07-18 Erster Commit</td></tr></table><p>Originalcode von Kai Reinhard. Hat die Migration von Wicket zu React überstanden – immer noch aktiv im Wicket-Modul.</p></div>
+
+<h2>Der 6-Wege-Ausnahmenklassifizierer – Zeilen 88-116</h2>
+<div class="code-block"><pre>public static String getExceptionMessage(AbstractSecuredBasePage securedPage,
+                                         ProjectForgeException exception, boolean doLog) {
+  if (exception instanceof UserException) {           // Kategorie 1: Benutzerfehler
+    return securedPage.translateParams(ex.getI18nKey(), ex.getMsgParams(), ex.getParams());
+  } else if (exception instanceof InternalErrorException) { // Kategorie 2: interne Fehler
+    return securedPage.translateParams(ex.getI18nKey(), ex.getMsgParams(), ex.getParams());
+  } else if (exception instanceof AccessException) {  // Kategorie 3: Zugriff verweigert
+    return securedPage.translateParams(ex.getI18nKey(), ex.getMessageArgs(), ex.getParams());
+  }
+  throw new UnsupportedOperationException("...füge hier unbekannte ProjectForgeException hinzu!", exception);
+}</pre></div>
+<div class="commentary"><p>Drei ProjectForge-spezifische Ausnahmetypen, jeder mit i18n-Übersetzung behandelt. Der Hauptunterschied zwischen ihnen:</p><table><tr><th>Ausnahme</th><th>Benutzer sieht</th><th>Protokollstufe</th><th>Parameter</th></tr><tr><td><code>UserException</code></td><td>Übersetzte Nachricht von i18n-Schlüssel + Nachrichtenparameter</td><td>INFO (wenn doLog)</td><td><code>getMsgParams()</code> – benutzerseitige Parameter</td></tr><tr><td><code>InternalErrorException</code></td><td>Gleich wie UserException – übersetzte Nachricht</td><td>INFO (wenn doLog)</td><td><code>getMsgParams()</code> – interne Parameter</td></tr><tr><td><code>AccessException</code></td><td>Lokalisierte "Zugriff verweigert"-Meldung mit Parametern</td><td>INFO (wenn doLog)</td><td><code>getParams()</code> / <code>getMessageArgs()</code> – Zugriffsparameter</td></tr></table><p><strong>Die UnsupportedOperationException in Zeile 115 ist ein bewusster Absturz:</strong> Wenn eine unbekannte <code>ProjectForgeException</code>-Unterklasse diesen Punkt erreicht, hat der Entwickler vergessen, einen Handler hinzuzufügen. Der Kommentar <em>"Für Entwickler: Bitte füge hier unbekannte ProjectForgeException hinzu!"</em> ist ein selbstdokumentierendes Design – der Absturz zwingt den Entwickler, neue Ausnahmetypen explizit zu behandeln, anstatt stillschweigend mit einer generischen Fehlermeldung durchzufallen.</p><p><strong>StackTrace-Filterung:</strong> <code>ONLY4NAMESPACE = "org.projectforge"</code> (Zeile 65) begrenzt Stacktraces auf ProjectForge-Pakete. Dies hält die Protokolle sauber – keine Dutzende von Spring/Hibernate/Tomcat-Frames, die Fehlerberichte überladen. <code>ExceptionHelper.getFilteredStackTrace(ex, ONLY4NAMESPACE)</code> entfernt alles außerhalb von <code>org.projectforge</code>.</p></div>
+
+<h2>Der Konstruktor – 4 Ausnahmepfade, 81 Zeilen Fehlerweiterleitung (Zeilen 118-199)</h2>
+<div class="code-block"><pre>public ErrorPage(final Throwable throwable) {
+  // Standard: generischen Fehler mit Feedback-Formular anzeigen
+  errorMessage = getString("errorpage.unknownError");
+  showFeedback = true;
+  
+  if (throwable != null) {
+    rootCause = ExceptionHelper.getRootCause(throwable);
+    
+    // PFAD A: ProjectForgeException – übersetzte Nachricht
+    if (rootCause instanceof ProjectForgeException) {
+      errorMessage = getExceptionMessage(this, (ProjectForgeException) rootCause, true);
+    
+    // PFAD B: ServletException – protokollieren + "Kontaktieren Sie das Entwicklerteam"-Nachricht
+    } else if (throwable instanceof ServletException) {
+      messageNumber = String.valueOf(System.currentTimeMillis());
+      log.error("Nachricht #" + messageNumber + ": " + throwable.getMessage(), throwable);
+      errorMessage = getLocalizedMessage(UserException.I18N_KEY_PLEASE_CONTACT_DEVELOPER_TEAM, messageNumber);
+    
+    // PFAD C: PageExpiredException – Sitzung abgelaufen (kein Feedback-Formular)
+    } else if (throwable instanceof PageExpiredException) {
+      showFeedback = false;  // Benutzer bei Zeitüberschreitung nicht um Feedback bitten
+      errorMessage = getString("message.wicket.pageExpired");
+    
+    // PFAD D: Alles andere – generische "Kontaktieren Sie das Entwicklerteam"-Meldung
+    } else {
+      messageNumber = String.valueOf(System.currentTimeMillis());
+      log.error("Nachricht #" + messageNumber + ": " + throwable.getMessage(), throwable);
+      errorMessage = getLocalizedMessage(UserException.I18N_KEY_PLEASE_CONTACT_DEVELOPER_TEAM, messageNumber);
+    }
+  }
+}</pre></div>
+<div class="commentary"><p><strong>PFAD A – ProjectForge-Ausnahmen (Zeilen 130-131):</strong> Der glückliche Pfad für bekannte Fehler. Die Ursache wird über <code>ExceptionHelper.getRootCause()</code> entpackt (entfernt ServletException/Spring-Wrapper), und die Nachricht wird über i18n übersetzt. Der Benutzer sieht eine hilfreiche Nachricht in seiner Sprache.</p><p><strong>PFAD B – ServletException (Zeilen 132-138):</strong> Container-Level-Fehler (Tomcat-Filterkettenfehler, Anfrage-Parsing-Fehler). Erhält eine <code>messageNumber</code> – <code>System.currentTimeMillis()</code> als Zeichenkette. Dies ist die eindeutige Fehler-ID, die dem Benutzer als <em>"Bitte kontaktieren Sie das Entwicklerteam mit Nachricht #1712345678901"</em> angezeigt wird. Die Nummer ist ein Zeitstempel, sodass der Support sie mit Serverprotokollen korrelieren kann.</p><p><strong>PFAD C – PageExpiredException (Zeilen 139-143):</strong> Die Wicket-Sitzung des Benutzers ist abgelaufen. <code>showFeedback = false</code> – kein Feedback-Formular, da der Benutzer keinen Fehler gefunden hat, sondern nur zu lange gewartet hat. Der Titel wird auf "Nachricht" (Zeile 143) anstelle des Standardtitels "Fehler" gesetzt.</p><p><strong>PFAD D – Alles andere (Zeilen 144-148):</strong> Unbekannte Ausnahmen (NullPointerException, Hibernate-Ausnahmen usw.). Gleiche Behandlung wie ServletException – Nachrichtennummer + "Kontaktieren Sie das Entwicklerteam".</p></div>
+
+<h2>Proaktive Fehlerberichterstattung – E-Mail an das Support-Team (Zeilen 201-223)</h2>
+<div class="code-block"><pre>private void sendProactiveMessageToSupportTeam() {
+  if (configService.getPfSupportMailAddress() != null && configService.isSendMailConfigured()) {
+    SendFeedbackData errorData = new SendFeedbackData();
+    errorData.setSender(sendMail.getMailFromStandardEmailSender());
+    errorData.setReceiver(configService.getPfSupportMailAddress());
+    errorData.setSubject("Fehler aufgetreten: #" + messageNumber + " auf " + domainService.getDomain());
+    errorData.setDescription(
+      "Fehler aufgetreten um: " + dateString + "(" + timeZone + ")" +
+      " mit Nummer: #" + messageNumber +
+      " von Benutzer: " + sender +
+      " Ausnahme-Stapelverfolgung: \n" + rootCauseStackTrace);
+    sendFeedback.send(errorData);
+  }
+}</pre></div>
+<div class="commentary"><p><strong>Dies ist das proaktive Überwachungssystem.</strong> Wenn ein kritischer Fehler auftritt UND die Support-E-Mail konfiguriert ist, sendet das System automatisch eine E-Mail mit:</p><ul><li>Der eindeutigen Nachrichtennummer (Zeitstempel)</li><li>Der Domain, auf der der Fehler aufgetreten ist</li><li>Dem Datum/der Uhrzeit mit Zeitzone</li><li>Dem Benutzer, der den Fehler gefunden hat</li><li>Der vollständigen Stapelverfolgung der Ursache</li></ul><p>Dies ist im Wesentlichen ein integriertes Fehlerüberwachungssystem ohne Sentry, Datadog oder ELK. Für selbst gehostete Bereitstellungen ist dies die primäre Methode, mit der Administratoren von Produktionsfehlern erfahren. Die E-Mail geht an <code>configService.getPfSupportMailAddress()</code> – konfiguriert in <code>projectforge.properties</code>.</p></div>
+
+<h2>Benutzer-Feedback-Formular – Crowd-sourced Fehlerberichte (Zeilen 150-178)</h2>
+<div class="commentary"><p>Wenn <code>showFeedback = true</code> UND eine Nachrichtennummer generiert wurde UND eine Empfänger-E-Mail konfiguriert ist, rendert die Seite ein <code>ErrorForm</code> (Wicket-Formularkomponente), mit dem Benutzer Fehlerberichte einreichen können. Vorausgefüllte Daten:</p><table><tr><th>Feld</th><th>Wert</th></tr><tr><td>Empfänger</td><td>Von <code>ConfigurationParam.FEEDBACK_E_MAIL</code></td></tr><tr><td>Nachrichtennummer</td><td>Die <code>System.currentTimeMillis()</code>-ID</td></tr><tr><td>Nachricht</td><td><code>throwable.getMessage()</code> – die kurze Nachricht der Ausnahme</td></tr><tr><td>Stapelverfolgung</td><td>Vollständige Stapelverfolgung über <code>ExceptionHelper.printStackTrace()</code></td></tr><tr><td>Absender</td><td>Vollständiger Name des aktuell angemeldeten Benutzers</td></tr><tr><td>Betreff</td><td><code>"ProjectForge-Fehler #" + messageNumber + " von " + sender</code></td></tr><tr><td>Ursache</td><td>Ursachennachricht + deren Stapelverfolgung</td></tr></table><p>Die Methode <code>sendFeedback()</code> (Zeilen 229-246) behandelt das Absenden: ruft <code>SendFeedback.send()</code> auf, leitet zu <code>MessagePage</code> mit Erfolgs-/Fehlermeldung weiter. Bei Fehler wird <code>"mail.error.exception"</code> mit <code>setWarning(true)</code> angezeigt.</p></div>
+
+<h2>Ausnahmenunterdrückung – wann Stille bewahrt werden soll (Zeilen 180-198)</h2>
+<div class="code-block"><pre>if (throwable == null ||
+    throwable instanceof ComponentNotFoundException ||
+    throwable instanceof ConnectException) {
+  // STILL – dies sind keine Fehler, sondern erwartete Lebenszyklusereignisse
+} else if (rootCause instanceof UserException) {
+  // STILL – bereits dem Benutzer präsentiert
+} else if (GlobalExceptionRegistry.sendMailToDevelopers(throwable)) {
+  sendProactiveMessageToSupportTeam();  // Nur E-Mail für echte Fehler senden
+}</pre></div>
+<div class="commentary"><p><strong>Drei Kategorien von Ausnahmen werden bewusst unterdrückt</strong> – es wird keine E-Mail gesendet, keine proaktive Benachrichtigung:</p><table><tr><th>Ausnahme</th><th>Warum unterdrückt</th></tr><tr><td><code>null</code> throwable</td><td>ErrorPage ohne Ausnahme aufgerufen – von <code>CallAllPagesTest</code> (Kommentar Zeile 188-189). Die Testsuite navigiert direkt zur ErrorPage, um zu überprüfen, ob sie gerendert wird.</td></tr><tr><td><code>ComponentNotFoundException</code></td><td>Normaler Wicket-Lebenszyklus. Wenn ein Benutzer durch die AddressListPage navigiert, werden Bildkomponenten vom Framework entfernt – Wicket wirft dies, wenn versucht wird, eine Komponente zu finden, die bereits bereinigt wurde. Kein Fehler.</td></tr><tr><td><code>ConnectException</code></td><td>Der Browser des Benutzers hat die Verbindung getrennt. Tritt auf, wenn der Benutzer während einer langlaufenden Anfrage wegklickt – bis die Antwort bereit ist, ist der Browser weg. Kein Fehler.</td></tr></table><p><strong><code>GlobalExceptionRegistry</code> statischer Block (Zeilen 67-70):</strong> Vorregistriert <code>StalePageException</code> und <code>ComponentNotFoundException</code> mit menschenlesbaren Beschreibungen ("Wicket-Seite nicht mehr verfügbar"). Die Prüfung <code>sendMailToDevelopers()</code> in Zeile 196 konsultiert diese Registrierung – nur Ausnahmen, die NICHT als "bekannt/erwartet" registriert sind, lösen proaktive E-Mails aus.</p></div>
+
+<h2>Wicket-Überschreibungen – Seitenidentität</h2>
+<div class="code-block"><pre>@Override public boolean isVersioned() { return false; }    // Niemals Seitenversionen speichern
+@Override public boolean isErrorPage() { return true; }     // Wicket mitteilen, dass DIES eine Fehlerseite ist</pre></div>
+<div class="commentary"><p><strong><code>isVersioned() = false</code> (Zeile 257):</strong> Wicket versioniert normalerweise Seiten – speichert alte Kopien, damit die Zurück-Schaltfläche des Browsers funktioniert. Für Fehlerseiten ist die Versionierung deaktiviert, weil: (1) Fehlerseiten sind flüchtig – man sollte nicht zu einem Fehler zurücknavigieren, (2) die Versionierung speichert das Ausnahmeobjekt in der Sitzung, was Speicher verlieren oder sensible Daten enthalten könnte, (3) Fehlerseiten sollten bei erneutem Besuch immer frische Inhalte anzeigen.</p><p><strong><code>isErrorPage() = true</code> (Zeile 265):</strong> Teilt der Wicket-Ausnahmebehandlungskette mit, dass DIESE Seite die Fehlerseite ist – verhindert Endlosschleifen, wenn die Fehlerseite selbst eine Ausnahme auslöst (Wicket würde dann seine eigene Fallback-Fehlerseite anzeigen).</p></div>
+
+<h2>Wo Pac-Man hineinpasst</h2>
+<div class="commentary"><p>Der Pac-Man-Easter-Egg (#3780) wird VON dieser Fehlerseite verlinkt. Die HTML-Vorlage (<code>ErrorPage.html</code>, 24 Zeilen) zeigt die Struktur: ein alert-danger-Div für die Fehlermeldung, ein FeedbackPanel für Benutzerberichte und ein Formular mit Aktionsschaltflächen. Die Schaltfläche "Pac-Man spielen" würde als eine der Aktionsschaltflächen des Formulars gerendert – aus einem 500er-Fehler eine Spieleinladung machen. Dies ist der Moment, in dem Frustration zu Spaß wird.</p></div>
+<div class="nav" style="margin-top:2em"><a href="3259.html">← #3259</a> · <a href="3261.html">#3261 →</a></div>
+</body></html>

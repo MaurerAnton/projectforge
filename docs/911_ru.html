@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>#911: CurrencyConversionService.kt [RU]</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:2em;color:#444}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}</style>
+</head>
+<body>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Индекс</a> · <a href="file-index.html">← Индекс файлов</a> · <a href="910.html">← Назад</a> · <a href="912.html">Вперёд →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/kotlin/org/projectforge/business/fibu/CurrencyConversionService.kt" target="_blank" title="Просмотреть исходник на GitHub">📄 исходник</a></div>
+
+<h1>#911: <code>CurrencyConversionService.kt</code></h1>
+
+<div class="meta"><code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/CurrencyConversionService.kt</code> 
+  <strong>Тип:</strong> Spring Service<br>
+  <strong>Пакет:</strong> <code>org.projectforge.business.fibu</code><br>
+  <strong>Путь:</strong> <code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/CurrencyConversionService.kt</code><br>
+  <strong>Автор:</strong> Kai Reinhard (k.reinhard@micromata.de)
+ <span style="color:#888">254 строки · 129 кода · 102 комментария · 23 пустых</span></div>
+
+<div class="c">
+  <p><strong>Публичный сервис</strong> для операций конвертации валют. Делегирует операции чтения/записи в БД классу <code>CurrencyConversionServiceSupport</code>, а кэширование — <code>CurrencyConversionCache</code>. Предоставляет высокоуровневый метод <code>convert()</code>, который обрабатывает холостой вызов для одной валюты, двунаправленный поиск пары, получение курса и умножение за один вызов. Предоставляет статический синглтон через объект-компаньон.</p>
+</div>
+
+<h2>Архитектура</h2>
+
+<h3>Зависимости</h3>
+<table>
+  <tr><th>Зависимость</th><th>Роль</th></tr>
+  <tr><td><code>CurrencyPairDao</code></td><td>Контроль доступа и поиск валютных пар для CRUD-операций с курсами</td></tr>
+  <tr><td><code>CurrencyConversionCache</code></td><td>Кэширование в памяти пар, курсов и дат активных курсов</td></tr>
+  <tr><td><code>CurrencyConversionServiceSupport</code></td><td>Внутренние операции с БД (поиск, вставка, обновление, удаление, проверка)</td></tr>
+  <tr><td><code>ConfigurationService</code></td><td>Предоставляет валюту системы по умолчанию (например, "EUR")</td></tr>
+</table>
+
+<h3>Категории методов</h3>
+
+<h4>Операции запроса курса</h4>
+<table>
+  <tr><th>Метод</th><th>Описание</th></tr>
+  <tr><td><code>findRate(id)</code></td><td>Найти курс по идентификатору, делегирует вспомогательному классу</td></tr>
+  <tr><td><code>selectAllRates(pairId)</code></td><td>Список курсов; использует кэш для активных, БД для удалённых</td></tr>
+  <tr><td><code>getConversionRate(pair, date)</code></td><td>Получить числовой коэффициент курса для пары на дату</td></tr>
+  <tr><td><code>getConversionRateDate(pair, date)</code></td><td>Получить дату validFrom активного курса</td></tr>
+</table>
+
+<h4>Конвертация</h4>
+<table>
+  <tr><th>Метод</th><th>Описание</th></tr>
+  <tr><td><code>convert(amount, target, source?, date?, scale?, rounding?)</code></td><td><strong>Основной метод.</strong> Конвертирует сумму между валютами. Для одной валюты возвращает без изменений. Использует валюту системы по умолчанию, если <code>sourceCurrency</code> равен null. Поддерживает настраиваемый масштаб и режим округления. Опционально использует самый старый курс (с оговорками о соответствии требованиям).</td></tr>
+</table>
+
+<h4>CRUD-операции с курсами</h4>
+<table>
+  <tr><th>Метод</th><th>Описание</th></tr>
+  <tr><td><code>validateRate(rate)</code></td><td>Проверяет уникальность; возвращает строку с сообщением об ошибке или null</td></tr>
+  <tr><td><code>insertRate(pairId, rate)</code></td><td>Вставить новый курс для валютной пары</td></tr>
+  <tr><td><code>updateRate(pairId, rate)</code></td><td>Обновить существующий курс</td></tr>
+  <tr><td><code>markRateAsDeleted(pairId, rateId)</code></td><td>Мягкое удаление курса</td></tr>
+</table>
+
+<h3>Процесс конвертации</h3>
+<ol>
+  <li>Проверка <code>amount</code> и <code>targetCurrency</code> на null/пустое значение</li>
+  <li>Определение фактической исходной валюты (параметр или системная по умолчанию)</li>
+  <li>Проверка на одну валюту: возврат суммы без изменений с применением масштаба</li>
+  <li>Двунаправленный поиск пары через <code>cache.findCurrencyPairForConversion()</code></li>
+  <li>Получение курса из кэша (с применением инверсии, если найдена обратная пара)</li>
+  <li><code>amount * rate</code> → масштабирование с режимом округления</li>
+</ol>
+
+<h3>Жизненный цикл</h3>
+<p><code>@PostConstruct</code> сохраняет синглтон в <code>Companion.instance</code> для статического доступа из других сервисов (например, для статистических расчётов).</p>
+
+<h2>История Git</h2>
+<div class="hist"><pre>
+868d6abb7 2025 -> 2026
+f4a839e3a Конвертация валют: отображение даты активных курсов в списке.
+472fbc977 WIP: конвертация валют с Claude Code.
+75ea9dc1a WIP: конвертация валют с Claude Code.
+abdac2e1b WIP: конвертация валют с Claude Code.
+07edc85de WIP: конвертация валют с Claude Code.
+e1323795d WIP: конвертация валют с Claude Code.
+2d79ded16 WIP: конвертация валют с Claude Code.
+357ebee61 WIP: конвертация валют с Claude Code.
+bd69407de Начальная версия с Claude Code.
+</pre></div>
+
+</body>
+</html>

@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>#1873: DiffMatchPatch.java [DE]</title>
+<style>
+body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}
+h1{border-bottom:2px solid #333;padding-bottom:.3em}
+h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}
+h3{margin-top:2em;color:#444}
+a{color:#0366d6}
+.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}
+.nav{font-size:.9em;color:#888;margin-bottom:1em}
+.lang{font-size:.85em;color:#888;float:right}
+.lang a{color:#888;text-decoration:none;padding:0 .3em}
+.lang a.active{color:#0366d6;font-weight:600;text-decoration:underline}
+.meta{font-size:.9em;margin:1em 0;color:#555}
+code{background:#f0f0f0;padding:0 .2em;font-size:.93em}
+pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}
+table{border-collapse:collapse;width:100%;margin:1em 0}
+th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}
+th{background:#f5f5f5;font-weight:600}
+.hist{font-size:.85em;color:#555}
+.warn{background:#fff3cd;border-left:3px solid #ffc107;padding:.5em 1em;margin:1em 0}
+.tip{background:#d4edda;border-left:3px solid #28a745;padding:.5em 1em;margin:1em 0}
+</style>
+</head>
+<body>
+<div class="lang"><a href="1873.html">EN</a> · <a href="1873_de.html" class="active">DE</a> · <a href="1873_ru.html">RU</a> · <a href="1873_fr.html">FR</a> · <a href="1873_es.html">ES</a></div>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← Dateiindex</a> · <a href="1872.html">← Vorherige</a> · <a href="1874.html">Nächste →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-common/src/main/java/name/fraser/neil/plaintext/DiffMatchPatch.java" target="_blank" title="Quellcode auf GitHub anzeigen">📄 Quelle</a></div>
+<h1>#1873: <code>DiffMatchPatch.java</code></h1>
+<div class="meta"><code>projectforge-common/src/main/java/name/fraser/neil/plaintext/DiffMatchPatch.java</code> Drittanbieter-Bibliothek (eingebettet) — Google diff-match-patch, projectforge-common/src/main/java/name/fraser/neil/plaintext/DiffMatchPatch.java <span style="color:#888">2464 Zeilen · 1638 Code · 688 Kommentare · 138 leer</span></div>
+<div class="c">Googles <strong>diff-match-patch</strong> Algorithmus-Bibliothek von Neil Fraser, direkt in ProjectForge unter dem ursprünglichen Paket <code>name.fraser.neil.plaintext</code> eingebettet. Lizenziert unter Apache License 2.0. Bietet synchronen Textvergleich (Diff), unscharfe Suche (Match) und Patch-Anwendung (Patch) — dieselben Algorithmen, die Google Docs, Etherpad und Wikipedias Versionsvergleich antreiben. Wird von ProjectForge für Textänderungsverfolgung und Versionsvergleiche verwendet.</div>
+<h2>Architektur</h2>
+<div class="c">
+<h3>Ursprung und Lizenz</h3>
+<ul>
+<li><strong>Autor</strong>: Neil Fraser (fraser@google.com), Google Inc.</li>
+<li><strong>Urheberrecht</strong>: 2006 Google Inc.</li>
+<li><strong>Lizenz</strong>: Apache License 2.0</li>
+<li><strong>Originalprojekt</strong>: <a href="https://github.com/google/diff-match-patch">google-diff-match-patch</a> auf GitHub</li>
+<li><strong>Homepage</strong>: http://code.google.com/p/google-diff-match-patch/ (ursprüngliches Google Code, jetzt archiviert)</li>
+<li><strong>Paket beibehalten</strong>: <code>name.fraser.neil.plaintext</code> — der exakte Paketname aus der Originalbibliothek</li>
+</ul>
+
+<h3>Algorithmen-Überblick</h3>
+<p>Die Bibliothek implementiert drei verwandte Algorithmen, die alle auf Klartext operieren:</p>
+
+<h4>1. Diff — Myers' O(ND)-Differenzalgorithmus</h4>
+<p>Berechnet die minimale Menge an Änderungen, um Text1 in Text2 zu überführen. Der Kernalgorithmus ist <strong>Myers' Diff-Algorithmus</strong> (1986), der das kürzeste Bearbeitungsskript mit einem O(ND)-Zeit-/Platzansatz findet, wobei N die Summe der Zeichenkettenlängen und D die Anzahl der Unterschiede ist.</p>
+<ul>
+<li><strong>Operation-Enum</strong>: <code>DELETE</code>, <code>INSERT</code>, <code>EQUAL</code> — jedes Diff ist eine verkettete Liste von Operationen</li>
+<li><strong>Optimierungen</strong>: Entfernung gemeinsamer Präfixe/Suffixe, Vorvergleich auf Zeilenebene (checklines-Flag), deadline-basierte vorzeitige Beendigung</li>
+<li><strong>Nachbearbeitung</strong>: <code>diff_cleanupSemantic()</code> macht Diffs menschenlesbar; <code>diff_cleanupEfficiency()</code> optimiert für die maschinelle Verarbeitung; <code>diff_cleanupMerge()</code> führt benachbarte Gleich-/Löschoperationen zusammen</li>
+<li><strong>Semantische Bereinigung</strong>: Erkennt Satz-/Absatzgrenzen, kurze isolierte Gleichheiten und Leerzeichenänderungen für eine intuitivere Ausgabe</li>
+</ul>
+
+<h4>2. Match — Bitap-Algorithmus (Shift-Or)</h4>
+<p>Lokalisiert die beste ungefähre Übereinstimmung für ein Muster innerhalb eines größeren Textes. Verwendet den <strong>Bitap-Algorithmus</strong> (auch bekannt als Shift-Or oder Baeza-Yates–Gonnet-Algorithmus), der:</p>
+<ul>
+<li>Das Muster als Bitmaske von Zeichenpositionen kodiert</li>
+<li>Bitweise Operationen für O(n) approximatives Zeichenketten-Matching verwendet</li>
+<li>Unscharfe Suche mit konfigurierbarer Fehlerschwelle unterstützt (<code>Match_Threshold</code>)</li>
+<li>Ein lokalitätssensitives Bewertungssystem verwendet (<code>Match_Distance</code>), um Übereinstimmungen in der Nähe der erwarteten Position zu bevorzugen</li>
+</ul>
+
+<h4>3. Patch — Unified-Diff-Format + unscharfe Anwendung</h4>
+<p>Erstellt Patches (Textdarstellungen von Diffs), die serialisiert, übertragen und auf andere Texte angewendet werden können:</p>
+<ul>
+<li>Verwendet ein <strong>Unified-Diff</strong>-ähnliches Format: <code>@@ -start,length +start,length @@ context</code></li>
+<li>Patches können mit Toleranz für Zeilennummernverschiebungen angewendet werden (<code>Patch_Margin</code>-Kontext für das Matching)</li>
+<li><code>patch_apply()</code> versucht unscharfes Matching, wenn der exakte Kontext nicht übereinstimmt — verwendet intern den Match-Algorithmus</li>
+<li>Unterstützt teilweise Patch-Anwendung mit Ergebnissen, die anzeigen, welche Patches erfolgreich waren</li>
+</ul>
+
+<h3>Wichtige Konfigurationsparameter</h3>
+<table>
+<tr><th>Feld</th><th>Standard</th><th>Zweck</th></tr>
+<tr><td><code>Diff_Timeout</code></td><td>1,0 Sekunden</td><td>Maximale Sekunden für eine Diff-Berechnung, bevor ein Teilergebnis zurückgegeben wird (0 = unendlich)</td></tr>
+<tr><td><code>Diff_EditCost</code></td><td>4</td><td>Kosten einer leeren Bearbeitungsoperation — höhere Werte erzeugen sauberere, weniger fragmentierte Diffs</td></tr>
+<tr><td><code>Match_Threshold</code></td><td>0,5</td><td>Schwelle für unscharfe Übereinstimmungen (0,0 = exakt, 1,0 = sehr locker)</td></tr>
+<tr><td><code>Match_Distance</code></td><td>1000</td><td>Lokalitätsbonus — Entfernung in Zeichen von der erwarteten Übereinstimmungsposition</td></tr>
+<tr><td><code>Patch_DeleteThreshold</code></td><td>0,5</td><td>Wie genau Löschblöcke mit dem erwarteten Inhalt übereinstimmen müssen, um akzeptiert zu werden</td></tr>
+<tr><td><code>Patch_Margin</code></td><td>4</td><td>Kontextzeichenanzahl um Patch-Hunks herum</td></tr>
+<tr><td><code>Match_MaxBits</code></td><td>32</td><td>Bitbreite für den Bitap-Algorithmus (entspricht der Java-int-Größe)</td></tr>
+</table>
+
+<h3>Datenstruktur: Diff (Innere Klasse)</h3>
+<p>Diffs werden als <code>LinkedList&lt;Diff&gt;</code> dargestellt, wobei jedes <code>Diff</code> eine innere statische Klasse ist mit:</p>
+<ul>
+<li><code>Operation operation</code> — DELETE, INSERT oder EQUAL</li>
+<li><code>String text</code> — das Textsegment für diese Operation</li>
+</ul>
+
+<h3>Internes Hilfsmittel: LinesToCharsResult</h3>
+<p>Eine Optimierung für große Texte: Konvertiert Zeilen in eindeutige Unicode-Zeichen, führt das Diff auf der komprimierten Darstellung durch und rekonstruiert dann die Ausgabe auf Zeilenebene. Dies reduziert den Vergleichsraum für zeilenorientierten Text (z. B. Quellcode) drastisch.</p>
+
+<h3>Importe</h3>
+<ul>
+<li><code>java.io.UnsupportedEncodingException</code></li>
+<li><code>java.net.URLDecoder / URLEncoder</code> — Zum Kodieren der Diff-Ausgabe für URL-sichere Übertragung</li>
+<li><code>java.util.*</code> — Listen, Maps, ArrayLists, LinkedLists, Regex-Muster</li>
+</ul>
+
+<h3>ProjectForge-Verwendung</h3>
+<p>ProjectForge bettet diese Bibliothek ein, anstatt sie als externes JAR zu verwenden. Dies wurde wahrscheinlich aus folgenden Gründen getan:
+<ol>
+<li>Die Bibliothek ist stabil und ändert sich selten (die letzte bedeutende Aktualisierung war der Java-Port um 2010)</li>
+<li>Das Einbetten vermeidet Abhängigkeitsmanagement-Probleme</li>
+<li>Der Paketname (<code>name.fraser.neil.plaintext</code>) ist eindeutig und konfliktfrei</li>
+<li>Es könnte kundenspezifische Änderungen für ProjectForge-spezifische Anforderungen geben (obwohl der Code dem Standard-Port zu entsprechen scheint)</li>
+</ol>
+DiffMatchPatch wird verwendet, um Änderungen an Textfeldern in ProjectForge-Datenobjekten zu verfolgen — anzuzeigen, was sich zwischen Versionen einer Adresse, Projektbeschreibung oder anderem Textinhalt geändert hat.</p>
+
+<div class="tip">Die Bibliothek wurde in mehrere Sprachen portiert (Python, JavaScript, Java, C++, C#, Lua, Dart). Die Java-Version verwendet <code>LinkedList</code> für die Diff-Speicherung, da Diffs hauptsächlich sequenziell durchlaufen werden (kein wahlfreier Zugriff) und der Algorithmus häufig Elemente voranstellt/anhängt.</div>
+</div>
+<h2>Git-Verlauf</h2><div class="hist"><pre>48a93dedb Farbige Konsolenausgabe. UserGroupCache-Export zum Debuggen und Vergleichen von Arbeiten jetzt möglich. CollectionUtil verbessert. KotlinStringExtension.shortenMiddle() hinzugefügt.</pre></div>
+</body>
+</html>

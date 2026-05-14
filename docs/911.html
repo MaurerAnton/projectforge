@@ -3,23 +3,23 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>#911: EmployeeSalaryImportService.kt</title>
+<title>#911: CurrencyConversionService.kt</title>
 <style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:2em;color:#444}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}</style>
 </head>
 <body>
-<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="910.html">← Prev</a> · <a href="912.html">Next →</a></div>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="910.html">← Prev</a> · <a href="912.html">Next →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/kotlin/org/projectforge/business/fibu/CurrencyConversionService.kt" target="_blank" title="View source on GitHub">📄 source</a></div>
 
-<h1>#911: <code>EmployeeSalaryImportService.kt</code></h1>
+<h1>#911: <code>CurrencyConversionService.kt</code></h1>
 
-<div class="meta">
-  <strong>Type:</strong> Spring Service (import orchestration)<br>
-  <strong>Package:</strong> <code>org.projectforge.business.fibu.datev</code><br>
-  <strong>Actual Path:</strong> <code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/datev/EmployeeSalaryImportService.kt</code><br>
-  <strong>Note:</strong> The file does <strong>not</strong> exist at the requested path (<code>.../excelimport/...</code>). It resides in the <code>datev</code> sub-package. The documentation below reflects the actual source.
-</div>
+<div class="meta"><code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/CurrencyConversionService.kt</code> 
+  <strong>Type:</strong> Spring Service<br>
+  <strong>Package:</strong> <code>org.projectforge.business.fibu</code><br>
+  <strong>Path:</strong> <code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/CurrencyConversionService.kt</code><br>
+  <strong>Author:</strong> Kai Reinhard (k.reinhard@micromata.de)
+ <span style="color:#888">254 lines · 129 code · 102 comments · 23 blank</span></div>
 
 <div class="c">
-  <p>Orchestration service for the <strong>employee salary import</strong> pipeline. Follows the same three-phase import lifecycle (import → reconcile → commit) established by <code>DatevImportService</code>. Coordinates between the <code>EmployeeSalaryExcelImporter</code> (parsing), <code>EmployeeSalaryDao</code> (persistence), and <code>EmployeeSalaryService</code> (lookup).</p>
+  <p>The <strong>public-facing service</strong> for currency conversion operations. Delegates database read/write operations to <code>CurrencyConversionServiceSupport</code> and caching to <code>CurrencyConversionCache</code>. Provides a high-level <code>convert()</code> method that handles same-currency no-op, bidirectional pair lookup, rate retrieval, and multiplication in a single call. Exposes a static singleton via the companion object.</p>
 </div>
 
 <h2>Architecture</h2>
@@ -27,33 +27,63 @@
 <h3>Dependencies</h3>
 <table>
   <tr><th>Dependency</th><th>Role</th></tr>
-  <tr><td><code>EmployeeSalaryExcelImporter</code></td><td>Parses the Excel workbook into <code>ImportStorage&lt;EmployeeSalaryDO&gt;</code></td></tr>
-  <tr><td><code>EmployeeSalaryService</code></td><td>Lookup existing salaries by month for reconciliation</td></tr>
-  <tr><td><code>EmployeeSalaryDao</code></td><td>Bulk commit and access control</td></tr>
+  <tr><td><code>CurrencyPairDao</code></td><td>Access control & currency pair lookup for rate CRUD</td></tr>
+  <tr><td><code>CurrencyConversionCache</code></td><td>In-memory cached lookup of pairs, rates, and active rate dates</td></tr>
+  <tr><td><code>CurrencyConversionServiceSupport</code></td><td>Internal database operations (find, insert, update, delete, validate)</td></tr>
+  <tr><td><code>ConfigurationService</code></td><td>Provides system default currency (e.g. "EUR")</td></tr>
 </table>
 
-<h2>Import Lifecycle</h2>
+<h3>Method Categories</h3>
 
-<h3>Phase 1: Import</h3>
-<p><code>importData(inputStream, filename, year, month)</code> — opens an <code>ExcelWorkbook</code>, creates an <code>ImportStorage</code>, delegates to <code>EmployeeSalaryExcelImporter.doImport()</code>. Returns the populated storage.</p>
+<h4>Rate Query Operations</h4>
+<table>
+  <tr><th>Method</th><th>Description</th></tr>
+  <tr><td><code>findRate(id)</code></td><td>Find a single rate by id, delegates to support class</td></tr>
+  <tr><td><code>selectAllRates(pairId)</code></td><td>List rates; uses cache for active, DB for deleted rates</td></tr>
+  <tr><td><code>getConversionRate(pair, date)</code></td><td>Get the numeric rate factor for a pair at a date</td></tr>
+  <tr><td><code>getConversionRateDate(pair, date)</code></td><td>Get the validFrom date of the active rate</td></tr>
+</table>
 
-<h3>Phase 2: Reconcile</h3>
-<p><code>reconcile(storage, sheetName, year, month)</code> — looks up existing salaries for the given year/month via <code>employeeSalaryService.selectByMonth()</code>, then matches each imported element to an existing DB record by employee id. Sets <code>oldValue</code>, <code>id</code>, and <code>created</code> timestamp on the element for the commit phase. Sets status to <code>RECONCILED</code>.</p>
+<h4>Conversion</h4>
+<table>
+  <tr><th>Method</th><th>Description</th></tr>
+  <tr><td><code>convert(amount, target, source?, date?, scale?, rounding?)</code></td><td><strong>Core method.</strong> Converts an amount between currencies. Same-currency returns unchanged. Uses default system currency when <code>sourceCurrency</code> is null. Supports configurable scale and rounding mode. Optionally falls back to oldest rate (with compliance caveats).</td></tr>
+</table>
 
-<h3>Phase 3: Commit</h3>
-<p><code>commit(storage, sheetName)</code> — requires <code>RECONCILED</code> status. Collects selected elements, copies the existing <code>id</code> from <code>oldValue</code> for updates, and bulk-commits via <code>employeeSalaryDao.insertOrUpdate()</code> in blocks of 50. Sets status to <code>IMPORTED</code>.</p>
+<h4>Rate CRUD Operations</h4>
+<table>
+  <tr><th>Method</th><th>Description</th></tr>
+  <tr><td><code>validateRate(rate)</code></td><td>Validates uniqueness; returns error message string or null</td></tr>
+  <tr><td><code>insertRate(pairId, rate)</code></td><td>Insert a new rate for a currency pair</td></tr>
+  <tr><td><code>updateRate(pairId, rate)</code></td><td>Update an existing rate</td></tr>
+  <tr><td><code>markRateAsDeleted(pairId, rateId)</code></td><td>Soft-delete a rate</td></tr>
+</table>
 
-<h2>Access Control</h2>
-<p><code>checkLoggedinUserRight()</code> delegates to <code>employeeSalaryDao.checkLoggedInUserInsertAccess()</code>, which verifies the user has the insert right for employee salaries.</p>
+<h3>Conversion Flow</h3>
+<ol>
+  <li>Null/blank guards on <code>amount</code> and <code>targetCurrency</code></li>
+  <li>Resolve effective source currency (parameter or system default)</li>
+  <li>Same-currency check: return amount unchanged with scale applied</li>
+  <li>Bidirectional pair lookup via <code>cache.findCurrencyPairForConversion()</code></li>
+  <li>Get rate from cache (applying inverse if lookup found the reverse pair)</li>
+  <li><code>amount * rate</code> → scale with rounding mode</li>
+</ol>
 
-<h2>Insert Block Size</h2>
-<p><code>SALARY_INSERT_BLOCK_SIZE = 50</code> — controls batch size for persistence operations.</p>
+<h3>Lifecycle</h3>
+<p><code>@PostConstruct</code> stores the singleton in <code>Companion.instance</code> for static access by other services (e.g., statistical calculations).</p>
 
 <h2>Git History</h2>
 <div class="hist"><pre>
 868d6abb7 2025 -> 2026
-63081666f Source file headers: 2024-> 2025.
-1012e347a Migration stuff in progress... (all tests of all packages: OK).
+f4a839e3a CurrencyConversion: Show date of active rates in list view.
+472fbc977 WIP: currency conversion with Claude Code.
+75ea9dc1a WIP: currency conversion with Claude Code.
+abdac2e1b WIP: currency conversion with Claude Code.
+07edc85de WIP: currency conversion with Claude Code.
+e1323795d WIP: currency conversion with Claude Code.
+2d79ded16 WIP: currency conversion with Claude Code.
+357ebee61 WIP: currency conversion with Claude Code.
+bd69407de Initial revision with Claude Code.
 </pre></div>
 
 </body>

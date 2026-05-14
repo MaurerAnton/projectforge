@@ -1,0 +1,124 @@
+<!DOCTYPE html><html lang="de"><head><meta charset="utf-8"><title>#354: GeneralAggregation.groovy [DE]</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:2em;color:#444}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.lang{font-size:.85em;color:#888;float:right}.lang a{color:#888;text-decoration:none;padding:0 .3em}.lang a.active{color:#0366d6;font-weight:600;text-decoration:underline}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}</style></head>
+<body><div class="lang"><a href="354.html">EN</a> · <a href="354_de.html" class="active">DE</a> · <a href="354_ru.html">RU</a> · <a href="354_fr.html">FR</a> · <a href="354_es.html">ES</a></div>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← Dateiindex</a> · <a href="2461.html">← Vorherige</a> · <a href="1491.html">Nächste →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/groovy/GeneralAggregation.groovy" target="_blank" title="Quellcode auf GitHub ansehen">📄 Quelle</a></div>
+<h1>#354: <code>GeneralAggregation.groovy</code></h1>
+<div class="meta"><code>projectforge-business/src/main/groovy/GeneralAggregation.groovy</code> Typ: Groovy · Rolle: Komponente · Quelle: projectforge-business/src/main/groovy/GeneralAggregation.groovy <span style="color:#888">111 Zeilen · 64 Code · 19 Kommentare · 28 leer</span></div>
+<div class="c">Quellcodedatei unter <code>projectforge-business/src/main/groovy/GeneralAggregation.groovy</code> mit Groovy-Code für die Komponentenschicht.</div>
+<h2>Codestruktur</h2>
+<p>Klassen: <code>GeneralAggregation</code></p>
+<h2>Quellcode (gekürzt)</h2>
+<pre>class GeneralAggregation {
+	
+	public static void main(def args){
+	
+		// Äquivalent, wenn ...
+		Closure equiv = {l1, l2 -&gt; l1[0] % 5 == l2[0] % 5}
+	
+		// Arithmetisches Mittel der 4. und Standardabweichung der 5. Spalte (Indizierung der Spalten beginnt mit 0)
+		Closure init = {l -&gt; 	l[3]=[1,l[3]]
+								l[4]=[1,l[4]**2]
+								l}
+		
+		Closure agg = {l,a -&gt; 	a[3]=[a[3][0]+=1,a[3][1]+=l[3]]
+								a[4]=[a[4][0]+=1,a[4][1]+=l[4]**2]}
+		
+		Closure fin = {a -&gt;		a[3] = a[3][1]/a[3][0]
+								a[4] = (a[4][1]/a[4][0])**0.5}
+		
+		Closure iaf = {i -&gt; def aggfun = [init,agg,fin]
+							return [i]}
+		
+		// Beispieldaten: Beachte, dass dritter Eintrag konstant auf Äquivalenzklasse sein muss
+		List list = (0..100).collect{n -&gt; [n,2*n,n % 2,n,n]}
+
+		aggregate2(list,equiv,init,agg,fin).each{println it}
+		
+		def lol = (1..10).collect{n -&gt; (1..3).collect{m -&gt; n*m}}
+		//println lolToLoo(lol,[&quot;first&quot;,&quot;second&quot;,&quot;third&quot;]).each{o -&gt; println o.first+&quot; &quot;+o.second+&quot; &quot;+o.third}
+		
+		
+		// Alternativ mit HashMap
+		List mlist = (0..100).collect{n -&gt; 	def m = new HashMap()
+										 	m[&#x27;first&#x27;] = n
+										 	m[&#x27;second&#x27;] = 2*n
+										 	m[&#x27;third&#x27;] = n % 2
+										 	m[&#x27;fourth&#x27;] = n
+										 	m[&#x27;fifth&#x27;] = n
+										 	return m}
+		
+		Closure equiv2 = {l1, l2 -&gt; l1.first % 5 == l2.first % 5}
+
+		Closure init2 = {l -&gt; 	l.fourth=[1,l.fourth]
+								l.fifth=[1,l.fifth**2]
+								l}
+
+		Closure agg2 = {l,a -&gt; 	a.fourth=[a.fourth[0]+=1,a.fourth[1]+=l.fourth]
+								a.fifth=[a.fifth[0]+=1,a.fifth[1]+=l.fifth**2]}
+		
+		Closure fin2 = {a -&gt;	a.fourth = a.fourth[1]/a.fourth[0]
+								a.fifth = (a.fifth[1]/a.fifth[0])**0.5}
+		
+		aggregate(mlist,equiv2,init2,agg2,fin2).each{println it}
+		
+	}
+	
+	/*
+	 * lol ist Liste von Listen, die Tabelle repräsentiert (Jedes Element ist Liste, die eine Zeile der Tabelle beschreibt)
+	 * equiv ist Äquivalenzrelation auf n Spalten der Liste
+	 * init ist Closure, das Initialisierung der Aggregationsfunktion beschreibt
+	 * agg ist Closure, das Aggregation der Aggregationsfunktion beschreibt
+	 * finalize ist Closure, das Finalisierung der Aggregationsfunktion beschreibt
+	 */
+	public static List aggregate2(List&lt;List&gt; lol, Closure equiv, Closure init = {x -&gt; x}, Closure agg, Closure finalize = {x -&gt; x}) {
+		def resultTable = [] // Tabelle mit aggregierten Werten
+		def rep = [] // Zeile in resultTable mit Repräsentant der Äquivalenzklasse und Aggregat
+
+		lol.each{ row -&gt;
+			if((rep = resultTable.find{r -&gt; equiv(row,r)}) != null) agg(row,rep)
+			else resultTable &lt;&lt; init(row)
+		}
+		
+		resultTable.each{finalize(it)}
+	}
+	
+  /*
+   * Closure zum Erzeugen der Äquivalenzrelation für die Aggregation
+   */
+	public static Closure createEquiv(List&lt;String&gt; fields) {
+    def getter = HashMap.class.getMethod(&quot;get&quot;,Object)
+		return {x,y -&gt;  fields.inject(true) {cumPropValue, field -&gt; cumPropValue &amp;&amp; getter.invoke(x,field) == getter.invoke(y,field)}}
+	}
+	
+	/*
+	 * lom ist Liste von Maps
+	 */
+	
+	public static List aggregate(List&lt;HashMap&gt; lom, Closure equiv, Closure init = {x -&gt; x}, Closure agg, Closure finalize = {x -&gt; x}) {
+		def resultTable = [] // Tabelle mit aggregierten Werten
+		def rep = [] // Zeile in resultTable mit Repräsentant der Äquivalenzklasse und Aggregat
+	
+		lom.each{row -&gt;
+			if((rep = resultTable.find{r -&gt; equiv(row,r)}) != null) agg(row,rep)
+			else resultTable &lt;&lt; init(row)
+		}
+		
+		resultTable.each{finalize(it)}
+	}
+	
+	// Bildet Objekt und Liste von Attributen (Strings) auf Liste der Werte der Attribute ab
+	public static List looToLol(List loo, List attlist) {
+		Closure o2l = {obj,attList -&gt; attList.collect{att -&gt; obj.&quot;${att}&quot;}}
+		loo.collect{obj -&gt; o2l(obj,attList)}
+	}
+	
+	public static List lolToLoo(List lol, List attnames) {
+		return lol.collect{list -&gt; def x = new Expando()
+							(0..(attnames.size-1)).each{n -&gt; x.&quot;${attnames[n]}&quot; = list[n]}
+							return x}
+	}
+	
+}</pre>
+
+<h2>Git-Verlauf</h2><div class="hist"><pre>9ebb88522 Erster Commit</pre></div>
+</body></html>

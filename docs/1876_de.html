@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>#1876: CSVParser.java [DE]</title>
+<style>
+body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}
+h1{border-bottom:2px solid #333;padding-bottom:.3em}
+h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}
+h3{margin-top:2em;color:#444}
+a{color:#0366d6}
+.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}
+.nav{font-size:.9em;color:#888;margin-bottom:1em}
+.lang{font-size:.85em;color:#888;float:right}
+.lang a{color:#888;text-decoration:none;padding:0 .3em}
+.lang a.active{color:#0366d6;font-weight:600;text-decoration:underline}
+.meta{font-size:.9em;margin:1em 0;color:#555}
+code{background:#f0f0f0;padding:0 .2em;font-size:.93em}
+pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}
+table{border-collapse:collapse;width:100%;margin:1em 0}
+th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}
+th{background:#f5f5f5;font-weight:600}
+.hist{font-size:.85em;color:#555}
+.warn{background:#fff3cd;border-left:3px solid #ffc107;padding:.5em 1em;margin:1em 0}
+.tip{background:#d4edda;border-left:3px solid #28a745;padding:.5em 1em;margin:1em 0}
+</style>
+</head>
+<body>
+<div class="lang"><a href="1876.html">EN</a> · <a href="1876_de.html" class="active">DE</a> · <a href="1876_ru.html">RU</a> · <a href="1876_fr.html">FR</a> · <a href="1876_es.html">ES</a></div>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← Dateiindex</a> · <a href="1875.html">← Vorherige</a> · <a href="1877.html">Nächste →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-common/src/main/java/org/projectforge/common/CSVParser.java" target="_blank" title="Quellcode auf GitHub ansehen">📄 Quelle</a></div>
+<h1>#1876: <code>CSVParser.java</code></h1>
+<div class="meta"><code>projectforge-common/src/main/java/org/projectforge/common/CSVParser.java</code> Hilfsklasse — Paket org.projectforge.common, projectforge-common/src/main/java/org/projectforge/common/CSVParser.java <span style="color:#888">342 Zeilen · 248 Code · 57 Kommentare · 37 Leer</span></div>
+<div class="c">Eigener CSV-Parser (Komma-getrennte Werte) mit einer handgeschriebenen Lexer/Parser-Architektur. Liest von einem <code>java.io.Reader</code> und tokenisiert CSV-Daten Zeichen für Zeichen. Unterstützt quotierte Felder, eingebettete Zeilenumbrüche innerhalb quotierter Zellen, maskierte doppelte Anführungszeichen (<code>""</code>-Konvention), konfigurierbare Feldtrennzeichen, Spaltennamen-Mapping für Kopfzeilen und UTF-8-BOM-Erkennung. Geschrieben von Kai Reinhard und H. Spiewok (2005), älter als und ohne externe CSV-Bibliotheksabhängigkeiten.</div>
+<h2>Architektur</h2>
+<div class="c">
+<h3>Importe</h3>
+<ul>
+<li><code>java.io.IOException</code> / <code>java.io.Reader</code> — Zeichenstrom-Eingabe</li>
+<li><code>java.util.ArrayList</code>, <code>HashMap</code>, <code>List</code>, <code>Map</code> — Ergebnis-Speicher und Spaltenindex für Kopfzeilen</li>
+<li><code>org.apache.commons.lang3.StringUtils</code> — Leerzeichen-Prüfung in Fehlermeldungen</li>
+<li><code>org.slf4j.Logger</code> — Fehlerprotokollierung</li>
+</ul>
+
+<h3>Parser-Architektur — Handgeschriebener Lexer</h3>
+<p>Anstatt Regex oder einen Parser-Generator zu verwenden, implementiert CSVParser einen <strong>zeichenweisen Lexer</strong> mit einem Pushback-Puffer. Dieses Design priorisiert Kontrolle über Fehlerbehandlung und Leistung für die spezifische Teilmenge der CSV-Formatierung, die von ProjectForge verwendet wird.</p>
+
+<h3>Kernkomponenten</h3>
+
+<h4>Typ-Enum</h4>
+<pre>enum Type { EOF, EOL, CHAR }</pre>
+<p>Token-Typen: Dateiende (End-Of-File), Zeilenende (End-Of-Line) oder Zeichendaten. Dies steuert die Zustandsmaschine des Parsers.</p>
+
+<h4>Zeichenstrom-Verwaltung</h4>
+<ul>
+<li><strong>Pushback-Puffer</strong>: Ein 5-Elemente <code>int[]</code> (<code>pushbackBuffer</code>) mit Indexverfolgung — ermöglicht Vorausschau und Rückverfolgung ohne Reader-Unterstützung für <code>mark()</code>/<code>reset()</code></li>
+<li><strong>read()</strong>: Gibt das nächste Zeichen aus dem Pushback-Puffer (falls vorhanden) oder dem zugrunde liegenden Reader zurück. Verfolgt Zeilennummern bei <code>\n</code></li>
+<li><strong>unread(int)</strong>: Legt ein Zeichen zurück in den Puffer und passt die Zeilen-/Spaltenzähler an</li>
+<li><strong>nextToken()</strong>: Kern-Tokenizer — gibt den nächsten Typ (EOF, EOL, CHAR) zurück und setzt <code>cval</code> für Zeichen-Token. Behandelt <code>\r\n</code> (Windows CRLF) als einzelnes EOL-Token</li>
+</ul>
+
+<h4>UTF-8-BOM-Behandlung</h4>
+<p><code>skipBOM()</code> wird während der Konstruktion aufgerufen, um ein UTF-8-Byte-Order-Mark (<code>\uFEFF</code>) am Dateianfang zu erkennen und zu überspringen. Wenn keine BOM vorhanden ist, wird das erste Zeichen zurückgelegt (unread). Dies ermöglicht das korrekte Parsen von CSV-Dateien, die aus Microsoft Excel exportiert wurden, da diese für UTF-8-Dateien eine BOM enthalten.</p>
+
+<h4>Zellen-Parsing (parseCell)</h4>
+<p>Die Kern-CSV-Parsing-Logik behandelt diese Fälle:</p>
+<table>
+<tr><th>Fall</th><th>Verhalten</th></tr>
+<tr><td>Unquotierte Zelle</td><td>Zeichen werden bis zum Trennzeichen oder Zeilenende gesammelt</td></tr>
+<tr><td>Quotierte Zelle (<code>"..."</code>)</td><td>Zeichen innerhalb der Anführungszeichen werden gesammelt; Anführungszeichen müssen korrekt geschlossen sein</td></tr>
+<tr><td>Maskiertes Anführungszeichen (<code>""</code>)</td><td>Zwei aufeinanderfolgende doppelte Anführungszeichen innerhalb einer quotierten Zelle repräsentieren ein einziges literales Anführungszeichen</td></tr>
+<tr><td>Eingebetteter Zeilenumbruch</td><td>Zeilenumbrüche innerhalb quotierter Zellen werden beibehalten (mehrzeilige Zellenwerte)</td></tr>
+<tr><td>Nachgestelltes Leerzeichen</td><td>Leerzeichen nach dem schließenden Anführungszeichen werden übersprungen; erwartet als nächstes Trennzeichen oder Zeilenende</td></tr>
+<tr><td>Nicht geschlossenes Anführungszeichen</td><td>Löst eine RuntimeException mit einer beschreibenden Fehlermeldung aus, die Zeilen-/Spaltennummer enthält</td></tr>
+</table>
+
+<h4>Zeilen-Parsing (parseLine)</h4>
+<p>Liest Zellen bis zum Zeilenende oder Dateiende und sammelt sie in einer <code>List&lt;String&gt;</code>. Gibt bei Dateiende null zurück (keine leere Liste — Aufrufer können Dateiende von leeren Zeilen unterscheiden).</p>
+
+<h4>Spaltenkopf-Unterstützung (parseHeadCols / getCell)</h4>
+<p>Für CSV-Dateien mit einer Kopfzeile liest <code>parseHeadCols()</code> die erste Zeile und erstellt eine <code>colMap: Map&lt;String, Integer&gt;</code>, die Spaltennamen ihren Positionsindizes zuordnet. Nachfolgende Aufrufe von <code>getCell(List&lt;String&gt;, spaltenname)</code> rufen Werte nach Spaltenname statt nach Position ab. Dies ermöglicht einen Excel-ähnlichen Zugriff auf benannte Spalten.</p>
+
+<h3>Fehlermeldungen</h3>
+<p>Drei verschiedene Fehlerkonstanten bieten spezifische Diagnosen:</p>
+<pre>
+ERROR_UNEXPECTED_QUOTATIONMARK = "Unerwartetes Anführungszeichen \" (nur in quotierten Zellen erlaubt)."
+ERROR_QUOTATIONMARK_MISSED_AT_END_OF_CELL = "Anführungszeichen \" am Ende der Zelle fehlt."
+ERROR_DELIMITER_OR_NEW_LINE_EXPECTED_AFTER_QUOTATION_MARK = "Trennzeichen oder Zeilenumbruch nach Anführungszeichen erwartet."
+ERROR_UNEXPECTED_CHARACTER_AFTER_QUOTATION_MARK = "Unerwartetes Zeichen nach Anführungszeichen."
+</pre>
+<p>Jede Meldung wird über <code>createMessage()</code> um Zeilen- und Spaltennummern ergänzt.</p>
+
+<h3>Integration mit CSVWriter</h3>
+<p>CSVParser verwendet <code>CSVWriter.DEFAULT_CSV_SEPARATOR_CHAR</code> (<code>';'</code> — Semikolon) als Standardtrennzeichen. Dies ist die europäische CSV-Konvention (Microsoft Excel in deutschen Gebietsschemata verwendet semikolongetrennte CSV). Das Trennzeichen ist über <code>setCsvSeparatorChar()</code> konfigurierbar.</p>
+
+<h3>Design-Einschränkungen</h3>
+<ul>
+<li><strong>Kein Streaming</strong>: Jeder Aufruf von <code>parseLine()</code> liest eine Zeile und gibt alle Zellen zurück — geeignet für mittelgroße Dateien, aber nicht für sehr große (Multi-GB) CSVs</li>
+<li><strong>Fester Pushback-Puffer</strong>: Der 5-Zeichen-Pushback begrenzt die Vorausschau; ausreichend für CSV-Escape-Muster, aber nicht für allgemeines Parsing</li>
+<li><strong>Keine Typkonvertierung</strong>: Alle Werte werden als Zeichenketten zurückgegeben; Aufrufer müssen Zahlen, Daten usw. selbst parsen</li>
+<li><strong>Semikolon-Standard</strong>: Verwendet die europäische CSV-Konvention; muss für kommagetrennte Dateien explizit geändert werden</li>
+<li><strong>Fehlerbehandlung</strong>: Verwendet RuntimeExceptions anstelle von geprüften Ausnahmen oder Fehlerbehebung — fehlerhafte Eingabe stoppt das Parsing</li>
+</ul>
+
+<div class="tip">Diese benutzerdefinierte Implementierung wurde 2005 geschrieben, lange bevor Apache Commons CSV (veröffentlicht 2014) oder OpenCSV weit verbreitet waren. Zu dieser Zeit hatte das JDK keine integrierte CSV-Unterstützung. Der Code wurde mit inkrementellen Verbesserungen gewartet: BOM-Behandlung (Commit 2024), Unterstützung für mehrzeilige quotierte Felder und Tippfehlerkorrekturen mittels codespell.</div>
+</div>
+<h2>Git-Verlauf</h2><div class="hist"><pre>868d6abb7 2025 -> 2026
+161d71602 WIP: CSVParser: BOM-Zeichen.
+dfb2378df WIP: CSVParser: Mehrzeiler usw.
+63081666f Quellcode-Dateiköpfe: 2024 -> 2025.
+a73905c14 Korrigiere Tippfehler in Verzeichnissen projectforge*/ Gefunden mittels codespell
+a72903e36 *.java, *.kt: StringBuffer -> StringBuilder.
+b6092df09 Copyright 2023 -> 2024
+ab45d51fa Copyright 2001-2022 -> 2001-2023.</pre></div>
+</body>
+</html>

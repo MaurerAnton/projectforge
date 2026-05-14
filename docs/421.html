@@ -1,5 +1,265 @@
-<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>#421</title><style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333}a{color:#0366d6}.meta{font-size:.9em;margin:1em 0}.nav{font-size:.9em;color:#888;margin-bottom:1em}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}</style></head>
-<body><div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="420.html">← Prev</a> · <a href="422.html">Next →</a></div>
-<h1>#421: <code>Kost2ArtDao.java</code></h1>
-<div class="meta"><strong>Java DAO</strong> — cost type categories (Kostenarten). Extends <code>BaseDao</code>. Manages Kost2Art — the classification dimension for cost items (e.g. "Hardware", "Software licenses", "Travel expenses", "Consulting"). Each Kost2 (cost item) belongs to one Kost2Art. Used in the cost accounting hierarchy: Kost1 (cost center) → Kost2Art (cost type) → Kost2 (specific cost item).</div>
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>421: OrderExport.java</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:1.5em;color:#444;font-size:1em}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.lang{font-size:.85em;color:#888;float:right}.lang a{color:#888;text-decoration:none;padding:0 .3em}.lang a.active{color:#0366d6;font-weight:600;text-decoration:underline}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}pre.diff{background:#fff;font-size:.82em;max-height:300px;overflow-y:auto}</style></head>
+<body><div class="lang"><a href="421.html" class="active">EN</a> · <a href="421_de.html">DE</a> · <a href="421_ru.html">RU</a> · <a href="421_fr.html">FR</a> · <a href="421_es.html">ES</a></div>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="449.html">← Prev</a> · <a href="1492.html">Next →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/java/org/projectforge/business/fibu/OrderExport.java" target="_blank" title="View source on GitHub">📄 source</a></div>
+<h1>#421: <code>OrderExport.java</code></h1>
+<div class="meta"><code>projectforge-business/src/main/java/org/projectforge/business/fibu/OrderExport.java</code> Java class, <code>projectforge-business/src/main/java/org/projectforge/business/fibu/OrderExport.java</code> <span style="color:#888">382 lines · 321 code · 35 comments · 26 blank</span></div>
+<div class="c"><strong>Purpose:</strong> Source file: projectforge/business/fibu/OrderExport.java. OrderExport.java is part of the ProjectForge open-source project management application.</div>
+<h2>Source (first 100 lines)</h2>
+<pre>/////////////////////////////////////////////////////////////////////////////
+//
+// Project ProjectForge Community Edition
+//         www.projectforge.org
+//
+// Copyright (C) 2001-2026 Micromata GmbH, Germany (www.micromata.com)
+//
+// ProjectForge is dual-licensed.
+//
+// This community edition is free software; you can redistribute it and/or
+// modify it under the terms of the GNU General Public License as published
+// by the Free Software Foundation; version 3 of the License.
+//
+// This community edition is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General
+// Public License for more details.
+//
+// You should have received a copy of the GNU General Public License along
+// with this program; if not, see http://www.gnu.org/licenses/.
+//
+/////////////////////////////////////////////////////////////////////////////
+
+package org.projectforge.business.fibu;
+
+import org.apache.commons.collections4.CollectionUtils;
+import org.projectforge.business.excel.*;
+import org.projectforge.business.task.TaskDO;
+import org.projectforge.business.task.TaskNode;
+import org.projectforge.business.task.TaskTree;
+import org.projectforge.business.user.UserGroupCache;
+import org.projectforge.common.DateFormatType;
+import org.projectforge.export.MyXlsContentProvider;
+import org.projectforge.framework.access.AccessChecker;
+import org.projectforge.framework.persistence.user.api.ThreadLocalUserContext;
+import org.projectforge.framework.persistence.user.entities.PFUserDO;
+import org.projectforge.framework.time.DateFormats;
+import org.projectforge.framework.time.PFDay;
+import org.projectforge.framework.utils.NumberHelper;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
+
+import java.math.BigDecimal;
+import java.util.Collection;
+import java.util.List;
+import java.util.Set;
+
+/**
+ * For excel export.
+ *
+ * @author Kai Reinhard (k.reinhard@micromata.de)
+ */
+@Service
+public class OrderExport {
+    private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(OrderExport.class);
+
+    @Autowired
+    protected AccessChecker accessChecker;
+
+    @Autowired
+    private RechnungCache rechnungCache;
+
+    @Autowired
+    private AuftragsCache auftragsCache;
+
+    @Autowired
+    private TaskTree taskTree;
+
+    private ExportColumn[] createOrderColumns() {
+        return new ExportColumn[]{
+                new I18nExportColumn(OrderCol.NUMMER, "fibu.auftrag.nummer.short", MyXlsContentProvider.LENGTH_ID),
+                new I18nExportColumn(OrderCol.NUMBER_OF_POSITIONS, "fibu.auftrag.positions", MyXlsContentProvider.LENGTH_ID),
+                new I18nExportColumn(OrderCol.DATE_OF_OFFER, "fibu.auftrag.angebot.datum", MyXlsContentProvider.LENGTH_DATE),
+                new I18nExportColumn(OrderCol.DATE_OF_ENTRY, "fibu.auftrag.erfassung.datum", MyXlsContentProvider.LENGTH_DATE),
+                new I18nExportColumn(OrderCol.DATE_OF_DESICION, "fibu.auftrag.entscheidung.datum", MyXlsContentProvider.LENGTH_DATE),
+                new I18nExportColumn(OrderCol.ORDER_DATE, "fibu.auftrag.beauftragungsdatum", MyXlsContentProvider.LENGTH_DATE),
+                new I18nExportColumn(OrderCol.STATUS, "status", 10),
+                new I18nExportColumn(OrderCol.STATUS_COMMENT, "fibu.auftrag.statusBeschreibung", 10),
+                new I18nExportColumn(OrderCol.PROJECT, "fibu.projekt", MyXlsContentProvider.LENGTH_STD),
+                new I18nExportColumn(OrderCol.PROJECT_CUSTOMER, "fibu.kunde", MyXlsContentProvider.LENGTH_STD),
+                new I18nExportColumn(OrderCol.TITLE, "fibu.auftrag.title", MyXlsContentProvider.LENGTH_STD),
+                new I18nExportColumn(OrderCol.PROJECTMANAGER, "fibu.projectManager", 30),
+                new I18nExportColumn(OrderCol.HEADOFBUSINESSMANAGER, "fibu.headOfBusinessManager", 30),
+                new I18nExportColumn(OrderCol.SALESMANAGER, "fibu.salesManager", 30),
+                new I18nExportColumn(OrderCol.NETSUM, "fibu.auftrag.nettoSumme", MyXlsContentProvider.LENGTH_CURRENCY),
+                new I18nExportColumn(OrderCol.INVOICED, "fibu.fakturiert", MyXlsContentProvider.LENGTH_CURRENCY),
+                new I18nExportColumn(OrderCol.TO_BE_INVOICED, "fibu.toBeInvoiced", MyXlsContentProvider.LENGTH_CURRENCY),
+                new I18nExportColumn(OrderCol.COMPLETELY_INVOICED, "fibu.auftrag.vollstaendigFakturiert", MyXlsContentProvider.LENGTH_BOOLEAN),
+                new I18nExportColumn(OrderCol.INVOICES, "fibu.rechnungen", MyXlsContentProvider.LENGTH_STD),
+                new I18nExportColumn(OrderCol.PERIOD_OF_PERFORMANCE_BEGIN, "fibu.periodOfPerformance.from", MyXlsContentProvider.LENGTH_DATE),
+                new I18nExportColumn(OrderCol.PERIOD_OF_PERFORMANCE_END, "fibu.periodOfPerformance.to", MyXlsContentProvider.LENGTH_DATE),
+                new I18nExportColumn(OrderCol.PROBABILITY_OF_OCCURRENCE, "fibu.probabilityOfOccurrence", MyXlsContentProvider.LENGTH_PERCENT),
+                new I18nExportColumn(OrderCol.FORECAST_TYPE, AuftragForecastType.getBaseKey(), MyXlsContentProvider.LENGTH_PERCENT),
+                new I18nExportColumn(OrderCol.CONTACT_PERSON, "contactPerson", MyXlsContentProvider.LENGTH_STD),
+                new I18nExportColumn(OrderCol.REFERENCE, "fibu.common.reference", MyXlsContentProvider.LENGTH_STD),
+                new I18nExportColumn(OrderCol.COMMENT, "comment", MyXlsContentProvider.LENGTH_COMMENT)
+        };
+    }
+
+    private void addOrderMapping(final PropertyMapping mapping, final AuftragDO order) {</pre>
+<h2>Git History</h2>
+<div class="hist">
+<pre>868d6abb7 2025 -> 2026
+49b1d6b8d Forecast and orderbook: forecast-Type for orders/positions added (current month or following month)
+63081666f Source file headers: 2024-> 2025.
+a35971f85 Issues from last pull request resolved. Great thanx to luzpaz.
+ae2c04ee0 Migration stuff in progress... (all tests of all packages: OK).</pre>
+<h3>868d6abb7</h3><div class="c"><strong>2025 -> 2026</strong><pre class="diff">868d6abb75cd191a892911ac8e45058932cf9074
+diff --git a/projectforge-business/src/main/java/org/projectforge/business/fibu/OrderExport.java b/projectforge-business/src/main/java/org/projectforge/business/fibu/OrderExport.java
+index 7b4c97894..60558a353 100644
+--- a/projectforge-business/src/main/java/org/projectforge/business/fibu/OrderExport.java
++++ b/projectforge-business/src/main/java/org/projectforge/business/fibu/OrderExport.java
+@@ -3,7 +3,7 @@
+ // Project ProjectForge Community Edition
+ //         www.projectforge.org
+ //
+-// Copyright (C) 2001-2025 Micromata GmbH, Germany (www.micromata.com)
++// Copyright (C) 2001-2026 Micromata GmbH, Germany (www.micromata.com)
+ //
+ // ProjectForge is dual-licensed.
+ //</pre></div><h3>49b1d6b8d</h3><div class="c"><strong>Forecast and orderbook: forecast-Type for orders/positions added (current month or following month)</strong><pre class="diff">49b1d6b8d73254b8b6f80d7eee11538f976c541b
+diff --git a/projectforge-business/src/main/java/org/projectforge/business/fibu/OrderExport.java b/projectforge-business/src/main/java/org/projectforge/business/fibu/OrderExport.java
+index eaf3e62a5..7b4c97894 100644
+--- a/projectforge-business/src/main/java/org/projectforge/business/fibu/OrderExport.java
++++ b/projectforge-business/src/main/java/org/projectforge/business/fibu/OrderExport.java
+@@ -60,9 +60,6 @@ public class OrderExport {
+     @Autowired
+     private RechnungCache rechnungCache;
+ 
+-    @Autowired
+-    private AuftragDao auftragDao;
+-
+     @Autowired
+     private AuftragsCache auftragsCache;
+ 
+@@ -93,6 +90,7 @@ public class OrderExport {
+                 new I18nExportColumn(OrderCol.PERIOD_OF_PERFORMANCE_BEGIN, "fibu.periodOfPerformance.from", MyXlsContentProvider.LENGTH_DATE),
+                 new I18nExportColumn(OrderCol.PERIOD_OF_PERFORMANCE_END, "fibu.periodOfPerformance.to", MyXlsContentProvider.LENGTH_DATE),
+                 new I18nExportColumn(OrderCol.PROBABILITY_OF_OCCURRENCE, "fibu.probabilityOfOccurrence", MyXlsContentProvider.LENGTH_PERCENT),
++                new I18nExportColumn(OrderCol.FORECAST_TYPE, AuftragForecastType.getBaseKey(), MyXlsContentProvider.LENGTH_PERCENT),
+                 new I18nExportColumn(OrderCol.CONTACT_PERSON, "contactPerson", MyXlsContentProvider.LENGTH_STD),
+                 new I18nExportColumn(OrderCol.REFERENCE, "fibu.common.reference", MyXlsContentProvider.LENGTH_STD),
+                 new I18nExportColumn(OrderCol.COMMENT, "comment", MyXlsContentProvider.LENGTH_COMMENT)
+@@ -134,6 +132,7 @@ public class OrderExport {
+         mapping.add(OrderCol.PERIOD_OF_PERFORMANCE_BEGIN, order.getPeriodOfPerformanceBegin());
+         mapping.add(OrderCol.PERIOD_OF_PERFORMANCE_END, order.getPeriodOfPerformanceEnd());
+         mapping.add(OrderCol.PROBABILITY_OF_OCCURRENCE, order.getProbabilityOfOccurrence());
++        mapping.add(OrderCol.FORECAST_TYPE, order.getForecastType());
+ 
+         final PFUserDO contactPerson = UserGroupCache.getInstance().getUserIfNotInitialized(order.getContactPerson());
+         mapping.add(OrderCol.CONTACT_PERSON, contactPerson != null ? contactPerson.getFullname() : "");
+@@ -164,6 +163,7 @@ public class OrderExport {
+                 new I18nExportColumn(PosCol.PERIOD_OF_PERFORMANCE_BEGIN, null, MyXlsContentProvider.LENGTH_DATE),
+                 new I18nExportColumn(PosCol.PERIOD_OF_PERFORMANCE_END, null, MyXlsContentProvider.LENGTH_DATE),
+                 new I18nExportColumn(OrderCol.PROBABILITY_OF_OCCURRENCE, "fibu.probabilityOfOccurrence", MyXlsContentProvider.LENGTH_PERCENT),
++                new I18nExportColumn(OrderCol.FORECAST_TYPE, AuftragForecastType.getBaseKey(), MyXlsContentProvider.LENGTH_PERCENT),
+                 new I18nExportColumn(OrderCol.CONTACT_PERSON, "contactPerson", 30),
+                 new I18nExportColumn(PosCol.TASK, "task", MyXlsContentProvider.LENGTH_STD),
+                 new I18nExportColumn(PosCol.COMMENT, "comment", MyXlsContentProvider.LENGTH_COMMENT)};
+@@ -214,6 +214,7 @@ public class OrderExport {
+             mapping.add(PosCol.PERIOD_OF_PERFORMANCE_END, order.getPeriodOfPerformanceEnd());
+         }
+         mapping.add(OrderCol.PROBABILITY_OF_OCCURRENCE, order.getProbabilityOfOccurrence());
++        mapping.add(OrderCol.FORECAST_TYPE, ForecastUtils.getForecastType(order, pos));
+         mapping.add(OrderCol.CONTACT_PERSON, order.getContactPerson() != null ? order.getContactPerson().getFullname() : "");
+         final TaskDO task = pos.getTask();
+         final TaskNode node = task != null ? taskTree.getTaskNodeById(task.getId()) : null;
+@@ -357,7 +358,7 @@ public class OrderExport {
+     }
+ 
+     private enum OrderCol {
+-        NUMMER, NUMBER_OF_POSITIONS, DATE_OF_OFFER, DATE_OF_ENTRY, DATE_OF_DESICION, ORDER_DATE, STATUS, STATUS_COMMENT, PROJECT, PROJECT_CUSTOMER, TITLE, PROJECTMANAGER, HEADOFBUSINESSMANAGER, SALESMANAGER, NETSUM, INVOICED, TO_BE_INVOICED, COMPLETELY_INVOICED, INVOICES, PERIOD_OF_PERFORMANCE_BEGIN, PERIOD_OF_PERFORMANCE_END, PROBABILITY_OF_OCCURRENCE, CONTACT_PERSON, REFERENCE, COMMENT
++        NUMMER, NUMBER_OF_POSITIONS, DATE_OF_OFFER, DATE_OF_ENTRY, DATE_OF_DESICION, ORDER_DATE, STATUS, STATUS_COMMENT, PROJECT, PROJECT_CUSTOMER, TITLE, PROJECTMANAGER, HEADOFBUSINESSMANAGER, SALESMANAGER, NETSUM, INVOICED, TO_BE_INVOICED, COMPLETELY_INVOICED, INVOICES, PERIOD_OF_PERFORMANCE_BEGIN, PERIOD_OF_PERFORMANCE_END, PROBABILITY_OF_OCCURRENCE, FORECAST_TYPE, CONTACT_PERSON, REFERENCE, COMMENT
+     }
+ 
+     private enum PosCol {</pre></div><h3>63081666f</h3><div class="c"><strong>Source file headers: 2024-> 2025.</strong><pre class="diff">63081666f620fb87315f01b817e560e0b2f6a33a
+diff --git a/projectforge-business/src/main/java/org/projectforge/business/fibu/OrderExport.java b/projectforge-business/src/main/java/org/projectforge/business/fibu/OrderExport.java
+index fc8df3cc4..eaf3e62a5 100644
+--- a/projectforge-business/src/main/java/org/projectforge/business/fibu/OrderExport.java
++++ b/projectforge-business/src/main/java/org/projectforge/business/fibu/OrderExport.java
+@@ -3,7 +3,7 @@
+ // Project ProjectForge Community Edition
+ //         www.projectforge.org
+ //
+-// Copyright (C) 2001-2024 Micromata GmbH, Germany (www.micromata.com)
++// Copyright (C) 2001-2025 Micromata GmbH, Germany (www.micromata.com)
+ //
+ // ProjectForge is dual-licensed.
+ //</pre></div><h3>a35971f85</h3><div class="c"><strong>Issues from last pull request resolved. Great thanx to luzpaz.</strong><pre class="diff">a35971f85aeb77de5c504292628bc7efd369d60c
+diff --git a/projectforge-business/src/main/java/org/projectforge/business/fibu/OrderExport.java b/projectforge-business/src/main/java/org/projectforge/business/fibu/OrderExport.java
+index 50f817986..fc8df3cc4 100644
+--- a/projectforge-business/src/main/java/org/projectforge/business/fibu/OrderExport.java
++++ b/projectforge-business/src/main/java/org/projectforge/business/fibu/OrderExport.java
+@@ -81,7 +81,7 @@ public class OrderExport {
+                 new I18nExportColumn(OrderCol.STATUS_COMMENT, "fibu.auftrag.statusBeschreibung", 10),
+                 new I18nExportColumn(OrderCol.PROJECT, "fibu.projekt", MyXlsContentProvider.LENGTH_STD),
+                 new I18nExportColumn(OrderCol.PROJECT_CUSTOMER, "fibu.kunde", MyXlsContentProvider.LENGTH_STD),
+-                new I18nExportColumn(OrderCol.TITLE, "fibu.auftrag.titel", MyXlsContentProvider.LENGTH_STD),
++                new I18nExportColumn(OrderCol.TITLE, "fibu.auftrag.title", MyXlsContentProvider.LENGTH_STD),
+                 new I18nExportColumn(OrderCol.PROJECTMANAGER, "fibu.projectManager", 30),
+                 new I18nExportColumn(OrderCol.HEADOFBUSINESSMANAGER, "fibu.headOfBusinessManager", 30),
+                 new I18nExportColumn(OrderCol.SALESMANAGER, "fibu.salesManager", 30),
+@@ -149,8 +149,8 @@ public class OrderExport {
+                 new I18nExportColumn(PosCol.DATE_OF_ENTRY, "fibu.auftrag.erfassung.datum", MyXlsContentProvider.LENGTH_DATE),
+                 new I18nExportColumn(PosCol.DATE_OF_DESICION, "fibu.auftrag.entscheidung.datum", MyXlsContentProvider.LENGTH_DATE),
+                 new I18nExportColumn(PosCol.PROJECT, "fibu.projekt", MyXlsContentProvider.LENGTH_STD),
+-                new I18nExportColumn(PosCol.ORDER_TITLE, "fibu.auftrag.titel", MyXlsContentProvider.LENGTH_STD),
+-                new I18nExportColumn(PosCol.TITLE, "fibu.auftrag.titel", MyXlsContentProvider.LENGTH_STD),
++                new I18nExportColumn(PosCol.ORDER_TITLE, "fibu.auftrag.title", MyXlsContentProvider.LENGTH_STD),
++                new I18nExportColumn(PosCol.TITLE, "fibu.auftrag.title", MyXlsContentProvider.LENGTH_STD),
+                 new I18nExportColumn(PosCol.TYPE, "fibu.auftrag.position.art", 10),
+                 new I18nExportColumn(PosCol.PAYMENTTYPE, "fibu.auftrag.position.paymenttype", 20),
+                 new I18nExportColumn(PosCol.STATUS, "status", 10),</pre></div><h3>ae2c04ee0</h3><div class="c"><strong>Migration stuff in progress... (all tests of all packages: OK).</strong><pre class="diff">ae2c04ee028ee405bf3b8a8b6678637703d1d16f
+diff --git a/projectforge-business/src/main/java/org/projectforge/business/fibu/OrderExport.java b/projectforge-business/src/main/java/org/projectforge/business/fibu/OrderExport.java
+index 4a2d6c2f8..50f817986 100644
+--- a/projectforge-business/src/main/java/org/projectforge/business/fibu/OrderExport.java
++++ b/projectforge-business/src/main/java/org/projectforge/business/fibu/OrderExport.java
+@@ -25,6 +25,7 @@ package org.projectforge.business.fibu;
+ 
+ import org.apache.commons.collections4.CollectionUtils;
+ import org.projectforge.business.excel.*;
++import org.projectforge.business.task.TaskDO;
+ import org.projectforge.business.task.TaskNode;
+ import org.projectforge.business.task.TaskTree;
+ import org.projectforge.business.user.UserGroupCache;
+@@ -108,8 +109,8 @@ public class OrderExport {
+         mapping.add(OrderCol.DATE_OF_DESICION, order.getEntscheidungsDatum());
+         mapping.add(OrderCol.ORDER_DATE, order.getBeauftragungsDatum());
+         mapping.add(OrderCol.STATUS,
+-                order.getAuftragsStatus() != null
+-                        ? ThreadLocalUserContext.getLocalizedString(order.getAuftragsStatus().getI18nKey()) : "");
++                order.getStatus() != null
++                        ? ThreadLocalUserContext.getLocalizedString(order.getStatus().getI18nKey()) : "");
+         mapping.add(OrderCol.STATUS_COMMENT, order.getStatusBeschreibung());
+         mapping.add(OrderCol.PROJECT, order.getProjektAsString());
+         final ProjektDO project = order.getProjekt();
+@@ -183,7 +184,7 @@ public class OrderExport {
+                 pos.getPaymentType() != null ? ThreadLocalUserContext.getLocalizedString(pos.getPaymentType().getI18nKey()) : "");
+         mapping.add(PosCol.STATUS,
+                 pos.getStatus() != null ? ThreadLocalUserContext.getLocalizedString(pos.getStatus().getI18nKey()) :
+-                        (order.getAuftragsStatus() != null ? ThreadLocalUserContext.getLocalizedString(order.getAuftragsStatus().getI18nKey()) : ""));
++                        (order.getStatus() != null ? ThreadLocalUserContext.getLocalizedString(order.getStatus().getI18nKey()) : ""));
+         mapping.add(PosCol.PERSON_DAYS, pos.getPersonDays());
+         var orderInfo = auftragsCache.getOrderInfo(order);
+         var posInfo = orderInfo.getInfoPosition(pos.getId());
+@@ -214,7 +215,8 @@ public class OrderExport {
+         }
+         mapping.add(OrderCol.PROBABILITY_OF_OCCURRENCE, order.getProbabilityOfOccurrence());
+         mapping.add(OrderCol.CONTACT_PERSON, order.getContactPerson() != null ? order.getContactPerson().getFullname() : "");
+-        final TaskNode node = taskTree.getTaskNodeById(pos.getTaskId());
++        final TaskDO task = pos.getTask();
++        final TaskNode node = task != null ? taskTree.getTaskNodeById(task.getId()) : null;
+         mapping.add(PosCol.TASK, node != null ? node.getTask().getTitle() : "");
+         mapping.add(PosCol.COMMENT, pos.getBemerkung());
+     }</pre></div>
+</div>
 </body></html>

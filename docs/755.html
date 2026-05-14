@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>#755: XmlObjectReader</title>
+<title>#755: XmlHelper</title>
 <style>
   body { font-family: system-ui, sans-serif; max-width: 960px; margin: 2em auto; padding: 0 1em; background: #fafafa; color: #222; line-height: 1.6; }
   h1 { border-bottom: 2px solid #333; padding-bottom: 0.3em; }
@@ -24,119 +24,50 @@
 </style>
 </head>
 <body>
-<div class="lang"><a href="755.html" class="active">EN</a> · <a href="755_de.html">DE</a> · <a href="755_ru.html">RU</a> · <a href="755_fr.html">FR</a> · <a href="755_es.html">ES</a></div>
-<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="754.html">← Prev</a> · <a href="756.html">Next →</a></div>
+<div class="lang"><a href="753.html" class="active">EN</a> · <a href="753_de.html">DE</a> · <a href="753_ru.html">RU</a> · <a href="753_fr.html">FR</a> · <a href="753_es.html">ES</a></div>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="754.html">← Prev</a> · <a href="756.html">Next →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/java/org/projectforge/framework/xmlstream/XmlHelper.java" target="_blank" title="View source on GitHub">📄 source</a></div>
 
-<h1>#755: <code>XmlObjectReader.java</code></h1>
-<div class="meta"><strong>Java deserialization engine</strong> — the heart of XmlStream reading. 514 lines. Uses dom4j. Source: <code>projectforge-business/src/main/java/org/projectforge/framework/xmlstream/XmlObjectReader.java</code></div>
+<h1>#755: <code>XmlHelper.java</code></h1>
+<div class="meta"><code>projectforge-business/src/main/java/org/projectforge/framework/xmlstream/XmlHelper.java</code> <strong>Java utility class</strong> — XML parsing and formatting bridge. 135 lines. Uses dom4j. Source: <code>projectforge-business/src/main/java/org/projectforge/framework/xmlstream/XmlHelper.java</code> <span style="color:#888">135 lines · 97 code · 28 comments · 10 blank</span></div>
 
 <div class="c">
-<strong>Purpose:</strong> The <strong>deserialization core</strong> of the XmlStream framework — converts XML (as dom4j <code>Element</code> trees) back into Java objects with populated fields. 514 lines. This is the <strong>largest file</strong> in the XmlStream framework. Javadoc: <em>"Parses objects serialized by the XmlObjectWriter. Uses the dom4j."</em> Works in pair with <a href="756.html">XmlObjectWriter</a> — Writer serializes objects to XML, Reader deserializes XML back to objects.
+<strong>Purpose:</strong> A utility class for XML operations — converting strings to dom4j Elements, Elements back to strings, and formatting. 135 lines. Uses <strong>dom4j</strong> for parsing/serialization of <strong>regular XML</strong> (not XStream, not W3C DOM). This is the <strong>third XML library</strong> in the project alongside XStream (user preferences) and W3C DOM API (SVG via Batik).
+
+The constant <code>XML_HEADER = "&lt;?xml version=\"1.0\" encoding=\"UTF-8\"?&gt;"</code> — the standard XML header used when generating XML export files. Encoding is hardcoded as <strong>UTF-8</strong> — a code-level decision, not configuration.
 </div>
 
-<h2>Architecture — State Machine with Backtracking</h2>
+<h2>Methods</h2>
 
 <div class="c">
-<p>Reader is a <strong>stateful object</strong> (unlike the stateless Writer). It holds state during a single read session:</p>
-<ul>
-<li><code>processedElements</code> (Set&lt;Element&gt;) — which XML elements were successfully read. After completion, elements NOT in this set are considered "ignored" and appear in warnings</li>
-<li><code>processedAttributes</code> (Map&lt;Element, Set&lt;String&gt;&gt;) — which attributes per element were read. Same purpose for warnings</li>
-<li><code>referenceObjects</code> (Map&lt;String, Object&gt;) — cache of deserialized objects keyed by <code>o-id</code>. Used for deduplication: if two XML elements reference the same object, it's deserialized once and returned from cache the second time</li>
-<li><code>warnings</code> (String) — accumulated warnings about ignored elements/attributes</li>
-</ul>
+<h3><code>replaceQuotes(String xml)</code> — quote normalization</h3>
+<p>Replaces single quotes (<code>'</code>) with double quotes (<code>"</code>) in XML strings. Javadoc: <em>"This is useful for writing xml string constants e.g. in test cases."</em> In Java string literals, single quotes for attributes avoid escaping, but valid XML requires double quotes. This method allows test code like: <code>XmlHelper.replaceQuotes("&lt;node name='test'/&gt;")</code> → <code>"&lt;node name=\"test\"/&gt;"</code>.</p>
+
+<h3><code>fromString(String str)</code> — string → dom4j Element</h3>
+<p>Parses an XML string into a dom4j <code>Element</code>. Uses <code>DocumentHelper.parseText()</code>. Returns the root element (<code>document.getRootElement()</code>). On parse error, logs and returns <code>null</code> (doesn't throw — caller must null-check). For empty/blank strings, returns null.</p>
+
+<h3><code>toString(Element el, boolean prettyFormat)</code> — dom4j Element → formatted XML string</h3>
+<p>Serializes a dom4j <code>Element</code> back to a string. Uses dom4j's <code>XMLWriter</code> with <code>OutputFormat</code>. When <code>prettyFormat=true</code>: enables newlines and 2-space indentation. Important: <code>writer.close()</code> is called to flush the buffer.</p>
+
+<h3><code>toString(org.w3c.dom.Document, boolean prettyFormat)</code> — W3C DOM Document → string</h3>
+<p>Works with <strong>a different XML type</strong> — <code>org.w3c.dom.Document</code> (used by SVG/Batik). Uses <code>javax.xml.transform.Transformer</code> (XSLT processor). With <code>prettyFormat=true</code>: adds <code>INDENT=yes</code> and Xalan-specific indent-amount=2. All errors are wrapped in <code>InternalErrorException</code> (unlike the dom4j method which logs and returns null) — because W3C DOM transformation errors are considered critical internal errors.</p>
 </div>
 
-<h2>Entry Points — Two <code>read()</code> Methods</h2>
+<h2>Two XML Libraries in One Class — Architectural Debt</h2>
 
 <div class="c">
-<h3><code>read(String xml)</code> — public API</h3>
-<p>Takes a raw XML string. Parses it via <code>XmlHelper.fromString()</code> → dom4j <code>Element</code>. Clears state (processedElements, processedAttributes, warnings). Calls internal <code>read(Element)</code>. After reading, runs <code>checkForIgnoredElements()</code> — if any XML tags/attributes weren't processed, they appear in warnings. Returns the root deserialized object.</p>
-
-<h3><code>read(Element el)</code> — internal API</h3>
-<p>Takes a dom4j Element, finds the class by tag name (via <code>getClass()</code>), and calls recursive <code>read(Class, Element, ...)</code>. If class not found — returns <code>null</code>.</p>
-</div>
-
-<h2>Three-Level Class Resolution — <code>getClass(String elementName)</code></h2>
-
-<div class="c">
-<p>When encountering an XML tag, Reader searches for the corresponding Java class in three places (in priority order):</p>
-<ol>
-<li><strong>Own AliasMap:</strong> <code>this.aliasMap.getClassForAlias(name)</code> — if explicitly set via <code>setAliasMap()</code></li>
-<li><strong>Global XmlRegistry:</strong> <code>xmlRegistry.getClassForAlias(name)</code> — classes registered at startup</li>
-<li><strong>Class.forName() (fallback):</strong> attempt to load by FQCN. If class is an interface, checks <code>implementationMapping</code>. If not found, logs error and returns <code>null</code> (element will be ignored)</li>
-</ol>
-<p>This three-level system allows flexible mapping management: AliasMap for local overrides, XmlRegistry for global rules, Class.forName for backward compatibility with old XML files where tags were FQCNs.</p>
-</div>
-
-<h2>Core Recursive Method — <code>read(Class, Element, attrName, attrValue)</code></h2>
-
-<div class="c">
-<p>The <strong>heart</strong> of Reader. Takes a field type, XML element, and optional attribute name/value. Logic is a chain of type checks:</p>
-<ol>
-<li><strong>Reference check:</strong> if element has attribute <code>o-ref-id</code> — it's a reference to an already-deserialized object. Looks up in <code>referenceObjects</code> and returns cached object (deduplication). If ref-id not found — logs error</li>
-<li><strong>Converter check:</strong> if type has a registered <code>IConverter</code> (via <code>xmlRegistry.getConverter(clazz)</code>) — calls <code>converter.fromString()</code>. For simple types: String, Integer, Date, BigDecimal, Boolean</li>
-<li><strong>Enum check:</strong> if class is enum, calls <code>enumFromString()</code>. Tries <code>Enum.valueOf(clazz, val)</code>. On <code>IllegalArgumentException</code>, does <strong>a second attempt with <code>toUpperCase()</code></strong> — backward compatibility with old XML where enums were lowercase. Value <code>"null"</code> is treated as <code>null</code></li>
-<li><strong>Collection check:</strong> if class is Collection (List/Set/SortedSet), creates the appropriate implementation (ArrayList/HashSet/TreeSet), and recursively reads all child XML elements as collection items. If <code>ignoreEmptyCollections=true</code> and collection is empty — leaves field <code>null</code></li>
-<li><strong>Complex object:</strong> for all other types (classes with <code>@XmlObject</code>) — creates instance via <code>BeanHelper.newInstance()</code>, checks <code>o-id</code> attribute (saves in <code>referenceObjects</code> for future ref-id lookups), and calls <code>read(obj, el)</code> for recursive field population</li>
-</ol>
-</div>
-
-<h2>Field Population — <code>read(Object obj, Element el)</code></h2>
-
-<div class="c">
-<p>Iterates all fields of the object (via <code>BeanHelper.getAllDeclaredFields()</code> — including inherited), makes them accessible (reflection), and for each XML attribute and child element finds the corresponding field:</p>
-<ul>
-<li>First checks <code>@XmlOmitField</code> — if present, field is skipped</li>
-<li>Looks for <code>@XmlField</code> annotation. Compares tag/attribute name with field name (case-sensitive) and with alias from annotation</li>
-<li>If field found — calls <code>read(field.getType(), element, key, attrValue)</code> for deserialization, then <code>field.set(obj, value)</code> for assignment</li>
-<li>If field NOT found — logs warning <code>"Field '...' not found."</code> Element remains unmarked in <code>processedElements</code> and will appear in warnings</li>
-</ul>
-<p><strong>Important:</strong> the <code>o-id</code> and <code>ref-id</code> fields (Writer's XML attributes) are explicitly skipped — they are not searched among object fields.</p>
-</div>
-
-<h2>Warnings — <code>checkForIgnoredElements()</code></h2>
-
-<div class="c">
-<p>After reading all XML, Reader checks: were all elements from the source XML tree marked as <code>processed</code>? If not — the XML contains tags for which no fields were found in the Java class. This may indicate:</p>
-<ul>
-<li>XML was created by a newer ProjectForge version (new fields in XML but not in code)</li>
-<li>Typo in field name or alias</li>
-<li>Class was modified (field removed or renamed)</li>
-</ul>
-<p>All unmarked elements and attributes are collected into a <code>warnings</code> string. If the string exceeds 500 characters — truncated (<code>ABBREVIATE_WARNING=500</code>) to avoid spamming logs.</p>
-</div>
-
-<h2>Template Method Hooks for Subclasses</h2>
-
-<div class="c">
-<p>Three protected methods can be overridden in subclasses:</p>
-<ul>
-<li><code>newInstance(Class, Element, String, String)</code> — intercepts object creation. If returns <code>Status.IGNORE</code>, the object is skipped. Default returns <code>null</code> (standard creation)</li>
-<li><code>addCollectionEntry(Collection, Object, Element)</code> — intercepts collection addition. If returns <code>true</code>, object is NOT auto-added. Default is <code>false</code></li>
-<li><code>setField(Field, Object, Object, Element, String, String)</code> — intercepts field assignment. Default calls <code>field.set(obj, value)</code></li>
-</ul>
-<p>These hooks allow subclasses to modify behavior without rewriting the entire logic — e.g., skip certain fields, filter collections, or post-process objects.</p>
-</div>
-
-<h2><code>initialize(Class)</code> — Pre-scanning</h2>
-
-<div class="c">
-<p>Can be called before reading to <strong>pre-register</strong> all @XmlObject classes in AliasMap. Recursively walks the type tree: for a class with <code>@XmlObject</code>, registers the alias, then for each non-primitive field recursively calls <code>initialize()</code>. Uses a <code>processed</code> Set to prevent infinite recursion on circular references. This allows passing just the root class — Reader itself finds all nested types.</p>
+Having methods for two different XML representations (dom4j and W3C DOM) in one class is a <strong>historical artifact</strong>. dom4j is used for XmlStream (data serialization), W3C DOM for SVG rendering (Batik). They ended up in the same utility class because "XML work" was perceived as one responsibility, though they serve different subsystems. A proper refactoring would extract the W3C method into an <code>SvgXmlHelper</code> or inline it into <code>BatikImageRenderer</code>.
 </div>
 
 <h2>Git History</h2>
 <div class="hist">
 <pre>868d6abb7 2025 → 2026 (copyright year update)
 63081666f Source file headers: 2024→2025
-a72903e36 *.java, *.kt: StringBuffer → StringBuilder
 b6092df09 Copyright 2023 → 2024
 ab45d51fa Copyright 2001-2022 → 2001-2023
-73b0be50b org.apache.commons.collections → org.apache.commons.collections4
 5f7ef41b8 Copyright 2021 → 2022
 cd27dd997 package xstream → xmlstream
 ceb63e8a1 Source code header: (C) 2001-2021
 7c79f1922 Copyright of source header → 2020
-73a9755df More code cleanup (StringBuffer→StringBuilder, diamond operator, etc.)
 32f634b88 Optimize imports
 000ca723d Remove pointless boolean expressions (business)
 dd5ca38ac CopyRight of all java file-header updated or created
@@ -146,7 +77,7 @@ f979e8a42 MGC-UPDATE: Update auf Version 3.0.0-SNAPSHOT
 </div>
 
 <div class="c">
-Key changes: <code>73b0be50b</code> migrated from commons-collections 3 to commons-collections4 — affecting <code>CollectionUtils</code> usage. <code>a72903e36</code> and <code>73a9755df</code> both replaced <code>StringBuffer</code> with <code>StringBuilder</code> (non-thread-safe but faster, since Reader is single-threaded per session). <code>a5bbdca6a</code> switched to SLF4J logging.
+Notable change: <code>a5bbdca6a</code> switched the logger from a proprietary implementation to SLF4J — part of a project-wide logging standardization. <code>000ca723d</code> removed pointless boolean expressions (e.g., <code>== true</code> or redundant null checks) during a code cleanup pass. <code>f979e8a42</code> was a major version bump from 2.x to 3.0.0-SNAPSHOT.
 </div>
 
 </body>

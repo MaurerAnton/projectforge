@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>#353: Aggregation.groovy [DE]</title>
+<style>
+body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}
+h1{border-bottom:2px solid #333;padding-bottom:.3em}
+h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}
+h3{margin-top:2em;color:#444}
+a{color:#0366d6}
+.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}
+.nav{font-size:.9em;color:#888;margin-bottom:1em}
+.lang{font-size:.85em;color:#888;float:right}
+.lang a{color:#888;text-decoration:none;padding:0 .3em}
+.lang a.active{color:#0366d6;font-weight:600;text-decoration:underline}
+.meta{font-size:.9em;margin:1em 0;color:#555}
+code{background:#f0f0f0;padding:0 .2em;font-size:.93em}
+pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}
+table{border-collapse:collapse;width:100%;margin:1em 0}
+th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}
+th{background:#f5f5f5;font-weight:600}
+.hist{font-size:.85em;color:#555}
+</style>
+</head>
+<body>
+<div class="lang"><a href="353.html">EN</a> · <a href="353_de.html" class="active">DE</a> · <a href="353_ru.html">RU</a> · <a href="353_fr.html">FR</a> · <a href="353_es.html">ES</a></div>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← Datei-Index</a> · <a href="201.html">← Vorherige</a> · <a href="209.html">Nächste →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/groovy/Aggregation.groovy" target="_blank" title="Quellcode auf GitHub ansehen">📄 Quelle</a></div>
+<h1>#353: <code>Aggregation.groovy</code></h1>
+<div class="meta"><code>projectforge-business/src/main/groovy/Aggregation.groovy</code> Typ: Groovy · Rolle: Komponente · Quelle: projectforge-business/src/main/groovy/Aggregation.groovy <span style="color:#888">141 Zeilen · 98 Code · 16 Kommentare · 27 leer</span></div>
+<div class="c">Quellcodedatei unter <code>projectforge-business/src/main/groovy/Aggregation.groovy</code> mit Groovy-Code für die Komponentenschicht.</div>
+<h2>Codestruktur</h2>
+<p>Klassen: <code>Aggregation</code>, <code>Aggregator</code></p>
+<h2>Quellcode (gekürzt)</h2>
+<pre>import java.lang.reflect.Method
+import java.text.SimpleDateFormat
+
+// an Kai übergeben um in Projectforge bereit gestellt zu werden
+
+public class Aggregation{
+	
+	static Aggregator sum = new Aggregator(&quot;Summe&quot;,{x -&gt; x},{x,y -&gt; x + y},{x -&gt; x})
+	static Aggregator avg = new Aggregator(&quot;Durchschnitt&quot;,{x -&gt; [x,1]},{x,y -&gt; [x[0]+=y,x[1]++]},{x -&gt; x[0]/x[1]})
+	static Aggregator max = new Aggregator(&quot;Maximum&quot;,{x -&gt; x},{x, y -&gt; Math.max(x,y)},{x -&gt; x})
+	static Aggregator min = new Aggregator(&quot;Minimum&quot;,{x -&gt; x},{x, y -&gt; Math.min(x,y)},{x -&gt; x})
+	static Closure monthly = {d1, d2 -&gt; Closure month = {d -&gt; 	Calendar myCal = Calendar.getInstance(); 
+																myCal.setTime(d);
+																myCal.get(Calendar.MONTH)}
+										Closure year = {d -&gt; 	Calendar myCal = Calendar.getInstance(); 
+																myCal.setTime(d);
+																myCal.get(Calendar.MONTH)}
+										month(d1) == month(d2) &amp;&amp; year(d1) == year(d2)}
+	static Closure total = {x,y -&gt; true}
+		
+	// Convenience-Methoden bei Kai anfordern (user x buchungssatz)
+	public static void main(def args){
+			
+		// Testdaten: Liste mit 100 Daten mit je drei Tagen Abstand
+		Calendar cal = Calendar.getInstance()
+		SimpleDateFormat df = new SimpleDateFormat(&quot;dd.MM.yyyy&quot;)
+		cal.se	tTime(df.parse(&quot;01.01.2009&quot;))
+		List list = (1..100).collect{n -&gt; cal.add(Calendar.DAY_OF_YEAR,3); [cal.getTime(),n]}
+		
+		Closure total = {d1, d2 -&gt; true}
+		
+		// Sortieren einer HashMap
+		def sortHashMap =	{ h -&gt;	m = [:]
+		 							h.keySet().toList().sort().each{n -&gt; m[n]=h[n]}    
+									return m
+		}
+		
+		// Berechnung der Aggregate (pro Monat und Gesamt)
+		[Agg.SUM,Agg.AVG,Agg.MAX,Agg.MIN].each{
+			{	agg -&gt;	println &quot;Monatlich aggregiert:&quot;
+						println &quot;---------------------&quot;
+						HashMap res = aggmap(monthly,agg).call(list)
+						res.keySet().toList().sort().each(){
+							h -&gt; cal.setTime(h); println &quot;Monat: &quot;+cal.get(Calendar.MONTH)+&quot; &quot;+agg.name+&quot;: &quot;+res[h]
+						}	
+						println agg.name+&quot; (gesamt): &quot;+aggmap(total,agg).call(list).values().toList().get(0)+&quot;\n&quot;
+			}.call(getAggregator(it))}
+	}
+	
+	static getAggregator(Agg agg){
+		switch(agg){
+			case Agg.SUM : return sum; break;
+			case Agg.AVG : return avg; break;
+			case Agg.MAX : return max; break;
+			case Agg.MIN : return min; break;
+			// Exception
+			default : return null; 
+		}
+	}
+	
+	// Convenience-Methode zur Berechnung der Monatssumme (summiert über valueAttribut)
+	public static HashMap monthlySum(List list, Method keyAttribut, Method valueAttribut){
+		return aggmap(monthly,sum,keyAttribut,valueAttribut).call(list)
+	}
+	
+	// Convenience-Methode zur Berechnung der Gesamtsumme (summiert über valueAttribut)
+	public static HashMap totalSum(List list, Method keyAttribut, Method valueAttribut){
+		return aggmap(total,sum,keyAttribut,valueAttribut).call(list)
+	}
+	
+	// ohne equiv, initial und ohne finalize
+	public static Closure aggmap(Closure aggfunc, Method a1, Method a2){ 
+		return aggmap({x,y -&gt; true},{x -&gt; x},aggfunc,{x -&gt; x},a1,a2)
+	}
+	
+	// ohne initial und ohne finalize
+	public static Closure aggmap(Closure equiv, Closure aggfunc, Method a1, Method a2){ 
+		return aggmap(equiv,{x -&gt; x},aggfunc,{x -&gt; x},a1,a2)
+	}
+	
+	// ohne finalize
+	public static Closure aggmap(Closure equiv, Closure initial, Closure aggfunc, Method a1, Method a2){ 
+		return aggmap(equiv,initial,aggfunc,{x -&gt; x},a1,a2)
+	}
+	
+	// mit Methoden (für Listenelemente)
+	public static Closure aggmap(Closure equiv, Closure initial, Closure aggfunc, Closure finalize, Method a1, Method a2){
+		Closure closure = {method, obj -&gt; method.invoke(obj)}
+		return aggmap(equiv,initial,aggfunc,finalize,closure.curry(a1),closure.curry(a2))
+	}
+	
+	// mit Closures (für Listenelemente)
+	public static Closure aggmap(Closure equiv, Closure initial, Closure aggfunc, Closure m1, Closure m2){
+		aggmap(equiv, initial, aggfunc,{x -&gt; x}, m1, m2)
+	}
+	
+	// Mit Aggregator und Methode für Liste von Listen
+	public static Closure aggmap(Closure equiv, Aggregator agg){
+		Closure el = {i,obj -&gt; ArrayList.getMethod(&quot;get&quot;,int).invoke(obj,i)}
+		aggmap(equiv, agg.initialize, agg.aggregate, agg.finalize, el.curry(0),el.curry(1))
+	}
+	
+	// Mit Aggregator und Methode für Liste von Listen
+	public static Closure aggmap(Closure equiv, Aggregator agg, Method m1, Method m2){
+		aggmap(equiv, agg.initialize, agg.aggregate, agg.finalize, m1,m2)
+	}
+	
+	// mit Closures (für Listenelemente)
+	public static Closure aggmap(Closure equiv, Closure initial, Closure aggfunc, Closure finalize, Closure m1, Closure m2){
+		return {list -&gt; Map map = new HashMap();
+						Object key;
+						
+						list.each{ obj -&gt;
+							if((key=map.keySet().find{equiv(it,m1(obj))}) != null) map[key] = aggfunc(map[key],m2(obj)) 
+							else map[m1(obj)] = initial(m2(obj)) 
+						}
+						
+						map.each{x -&gt; map[x.key] = finalize(x.value)}
+						return map
+				}
+// ... (gekürzt, insgesamt 138 Zeilen)</pre>
+
+<h2>Git-Verlauf</h2><div class="hist"><pre>32f634b88 Importe optimiert
+9ebb88522 Erster Commit</pre></div>
+</body>
+</html>

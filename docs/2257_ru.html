@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>#2257 [RU]</title>
+<style>
+body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}
+h1{border-bottom:2px solid #333;padding-bottom:.3em}
+h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}
+h3{margin-top:2em;color:#444}
+a{color:#0366d6}
+.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}
+.nav{font-size:.9em;color:#888;margin-bottom:1em}
+.meta{font-size:.9em;margin:1em 0;color:#555}
+code{background:#f0f0f0;padding:0 .2em;font-size:.93em}
+pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}
+table{border-collapse:collapse;width:100%;margin:1em 0}
+th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}
+th{background:#f5f5f5;font-weight:600}
+.hist{font-size:.85em;color:#555}
+</style>
+</head>
+<body>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Индекс</a> · <a href="file-index.html">← Индекс файлов</a> · <a href="2256.html">← Пред.</a> · <a href="2258.html">След. →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-rest/src/main/kotlin/org/projectforge/rest/importer/ImportStorage.kt" target="_blank" title="Просмотр исходного кода на GitHub">📄 исходник</a></div>
+<h1>#2257: <code>ImportStorage.kt</code></h1>
+<div class="meta"><code>projectforge-rest/src/main/kotlin/org/projectforge/rest/importer/ImportStorage.kt</code> Абстрактная сущность — Уровень REST-импорта, <code>projectforge-rest/src/main/kotlin/org/projectforge/rest/importer/ImportStorage.kt</code> <span style="color:#888">240 строк · 127 кода · 79 комментариев · 34 пустых</span></div>
+<div class="c">Абстрактный базовый класс для всех реализаций хранилищ импорта. Управляет сверкой импорта между загруженными данными и сущностями базы данных, сопоставлением/определением столбцов, жизненным циклом парных записей с отслеживанием ошибок/предупреждений, а также фильтрацией отображения для интерфейсов импорта. Параметризован типом изменяемой сущности <code>O</code> (расширяющим <code>ImportPairEntry.Modified&lt;O&gt;</code>).</div>
+
+<h2>Архитектура</h2>
+<h3>Иерархия классов</h3>
+<p><code>ImportStorage&lt;O : ImportPairEntry.Modified&lt;O&gt;&gt;</code> — основной абстрактный класс в подсистеме импорта. Конкретные импортёры расширяют его, чтобы определить, как загруженные данные сопоставляются с доменными сущностями. Он работает совместно с <code>ImportSettings</code>, <code>ImportPairEntry</code>, <code>AbstractImportJob</code> и <code>AbstractImportPageRest</code>.</p>
+
+<h3>Ключевые компоненты</h3>
+<table>
+<tr><th>Компонент</th><th>Тип</th><th>Назначение</th></tr>
+<tr><td><code>importSettings</code></td><td>Параметр конструктора</td><td>Неизменяемая конфигурация импорта (разделитель, кодировка и т.д.)</td></tr>
+<tr><td><code>pairEntries</code></td><td><code>MutableList&lt;ImportPairEntry&lt;O&gt;&gt;</code></td><td>Все записи импорта, объединяющие прочитанные (загруженные) и сохранённые (в базе) сущности</td></tr>
+<tr><td><code>detectedColumns</code></td><td><code>MutableMap&lt;String, ImportFieldSettings&gt;</code></td><td>Столбцы, обнаруженные из заголовков загруженного файла</td></tr>
+<tr><td><code>unknownColumns</code></td><td><code>MutableList&lt;String&gt;</code></td><td>Столбцы, найденные в файле, но не сопоставленные</td></tr>
+<tr><td><code>columnMapping</code></td><td><code>MutableMap&lt;Int, ImportFieldSettings&gt;</code></td><td>Сопоставление позиции с полем для разбора</td></tr>
+<tr><td><code>errors / warnings</code></td><td>Потокобезопасные списки</td><td>Глобальные сообщения об ошибках и предупреждениях с синхронизированным доступом</td></tr>
+<tr><td><code>displayOptions</code></td><td><code>DisplayOptions</code> (внутренний класс)</td><td>Переключение видимости новых/изменённых/неизменённых/импортированных/удалённых/ошибочных/неизвестных записей</td></tr>
+<tr><td><code>targetEntity / targetEntityTitle</code></td><td>Необязательные поля</td><td>Для импорта нескольких сущностей определяет текущую цель и её отображаемый заголовок</td></tr>
+</table>
+
+<h3>Процесс сверки</h3>
+<p>Основной механизм сверки реализован по шаблонному методу:</p>
+<ol>
+<li><code>reconcileImportStorage(rereadDatabaseEntries)</code> — финальный метод, устанавливает <code>hasBeenReconciled = true</code>, вызывает хук, помечает все записи как сверенные</li>
+<li><code>doReconcileImportStorage(rereadDatabaseEntries)</code> — защищённый открытый хук для реализации в подклассах (по умолчанию ничего не делает)</li>
+<li>После сверки <code>pairEntries</code> показывают статус каждой записи: НОВАЯ, ИЗМЕНЁННАЯ, НЕИЗМЕНЁННАЯ, ИМПОРТИРОВАННАЯ, УДАЛЁННАЯ, ОШИБОЧНАЯ</li>
+</ol>
+
+<h3>Жизненный цикл записи</h3>
+<table>
+<tr><th>Метод</th><th>Назначение</th></tr>
+<tr><td><code>prepareEntity(): O</code></td><td>Абстрактный — создаёт новую пустую сущность для заполнения</td></tr>
+<tr><td><code>prepareImportPairEntry(): ImportPairEntry&lt;O&gt;</code></td><td>Создаёт парную запись с подготовленной сущностью, готовую к разбору с отслеживанием ошибок</td></tr>
+<tr><td><code>addEntry(entry)</code></td><td>Добавляет в pairEntries с автоинкрементным ID</td></tr>
+<tr><td><code>setProperty(obj, fieldSettings, value): Boolean</code></td><td>Открытый — пользовательская установка свойства; возвращает true, если обработано, false для автоматической установки</td></tr>
+<tr><td><code>commitEntity(obj: O)</code></td><td>Абстрактный — сохраняет/пропускает сущность после установки всех свойств</td></tr>
+<tr><td><code>commitEntity(pairEntry)</code></td><td>Открытый — предпочтительный метод фиксации с использованием парной записи (вызывает commitEntity с прочитанной сущностью)</td></tr>
+<tr><td><code>createEntries(displayOptions)</code></td><td>Преобразует парные записи в отображаемые записи, применяя фильтр отображения и передавая ошибки</td></tr>
+</table>
+
+<h3>Потокобезопасность</h3>
+<p>Списки <code>errors</code> и <code>warnings</code> защищены блоками <code>synchronized</code>. Публичное чтение возвращает защитные копии. Список <code>pairEntries</code> также синхронизируется при назначении ID.</p>
+
+<h3>Экспорт информации</h3>
+<p><code>ImportStorageInfo</code> генерируется на лету через свойство <code>info</code>, предоставляя снимок количества (новые, изменённые, неизменённые, импортированные, удалённые, ошибочные, неизвестные) для отрисовки в интерфейсе.</p>
+
+<h2>Подклассы (в этой ветке)</h2>
+<ul>
+<li><code>BankingImportStorage</code> — импорт банковских транзакций (плагин Banking)</li>
+<li><code>AddressImportStorage</code> — импорт адресов/контактов из CSV/Excel</li>
+<li><code>EingangsrechnungImportStorage</code> — импорт входящих счетов</li>
+<li><code>ImportStorage</code> в пакете <code>rest/importer/</code></li>
+</ul>
+
+<h2>История Git</h2><div class="hist"><pre>868d6abb7 2025 -> 2026
+76f216b0f AbstractPagesRest: param request added to open functions, WIP. address vcf upload
+16ab7c6ef AbstractImportPage fix: Long - Integer comparison
+45479d226 WIP: Import of creditor invoices
+8717a58b8 WIP: Import of creditor invoices
+f4540acfa WIP: Import of creditor invoices
+fdd683ca7 WIP: Import of creditor invoices
+c9dff4cb8 WIP: Import of creditor invoices
+ffc71ab7e WIP: Import of creditor invoices
+95363546e WIP: Import of creditor invoices.
+f9f42dae1 WIP: ImportStorage
+63081666f Source file headers: 2024-> 2025.
+61f05ce90 Migration stuff in progress...
+b6092df09 Copyright 2023 -> 2024
+ab45d51fa Copyright 2001-2022 -> 2001-2023.
+1ea8d4062 WIP: Jobs and Bank account records.
+18cf43df0 WIP: Jobs and Bank account records.
+163492453 WIP: Jobs and Bank account records.
+09b3f0df7 WIP: Jobmonitor. ListStatisticsSupport -> MarkdownBuilder
+a1646e91a WIP: Banking plugin (and new import module).
+9ba1738ea WIP: Banking plugin (and new import module).
+c3331c88e WIP: Banking plugin (and new import module). DynamicDropArea: copy&paste bug fixed (function renamed)
+1b6b960a9 WIP: Banking plugin (and new import module).
+72a042463 WIP: Banking plugin (and new import module).
+6ec22a30d WIP: Banking plugin (and new import module).
+d38c01233 WIP: Banking plugin (and new import module).
+67333b119 WIP: Banking plugin (and new import module).
+750e60742 WIP: Banking plugin (and new import module).
+0936be3ed WIP: Banking plugin (and new import module).
+03796e3c6 WIP: Banking plugin (and new import module).
+e118c101d WIP: Banking plugin (and new import module).
+9ccbfdfc2 WIP: Banking plugin (and new import module).
+5f7ef41b8 Copyright 2021 -> 2022
+ceb63e8a1 Source code header: (C) 2001-2021.
+7c79f1922 Copyright of source header -> 2020.
+45cad02e9 IHK-Plugin added ( Will replace "Ihk-Export"-Plugin in the long run )
+dd5ca38ac CopyRight of all java file-header updated or created.
+9ebb88522 Initial commit</pre></div>
+</body>
+</html>

@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="de"><head><meta charset="utf-8"><title>#704 [DE]</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:2em;color:#444}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}.warn{background:#fff3cd;border-left:3px solid #ffc107;padding:.5em 1em;margin:1em 0}.tip{background:#d4edda;border-left:3px solid #28a745;padding:.5em 1em;margin:1em 0}</style></head>
+<body><div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← Datei-Index</a> · <a href="703.html">← Zurück</a> · <a href="705.html">Weiter →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/java/org/projectforge/framework/persistence/xstream/HibernateCollectionConverter.java" target="_blank" title="Quellcode auf GitHub anzeigen">📄 Quelle</a></div>
+<h1>#704: <code>HibernateCollectionConverter.java</code></h1>
+<div class="meta"><code>projectforge-business/src/main/java/org/projectforge/framework/persistence/xstream/HibernateCollectionConverter.java</code> XStream-Konverter — konvertiert Hibernate-Persistenzkollektionen während des Marshalling in JDK-Kollektionen, <code>projectforge-business/src/main/java/org/projectforge/framework/persistence/xstream/HibernateCollectionConverter.java</code> <span style="color:#888">130 Zeilen · 69 Code · 45 Kommentare · 16 leer</span></div>
+<div class="c">Implementiert <code>com.thoughtworks.xstream.converters.Converter</code>, um jede <code>PersistentCollection</code>-Instanz abzufangen, bevor XStream sie serialisiert. Erzwingt die Initialisierung von Lazy-Loaded-Kollektionen, extrahiert die zugrunde liegende <code>java.util</code>-Kollektion (unter Berücksichtigung von Hibernates eigentümlicher interner Darstellung von Sets als Maps) und delegiert das eigentliche XML-Schreiben an den entsprechenden Standard-XStream-Konverter. Dies ist der <em>Wertebene</em>-Konverter – der <a href="703.html">HibernateCollectionsMapper</a> kümmert sich um die Namenszuordnung, und dieser Konverter verarbeitet die eigentlichen Kollektionsdaten.</div>
+
+<h2>Architektur</h2>
+
+<h3>Konverter-Registrierung</h3>
+<p>XStream-Konverter bilden eine Kette. Wenn XStream auf ein zu serialisierendes Objekt trifft, iteriert es über registrierte Konverter und ruft <code>canConvert(Class)</code> auf. <code>HibernateCollectionConverter</code> beansprucht jede Klasse, die <code>org.hibernate.collection.spi.PersistentCollection</code> zuweisbar ist – dies umfasst <code>PersistentBag</code>, <code>PersistentList</code>, <code>PersistentSet</code>, <code>PersistentSortedSet</code>, <code>PersistentMap</code> und <code>PersistentSortedMap</code>. Da XStream Konverter in der Reihenfolge der Registrierung prüft, muss dieser Konverter <em>vor</em> den Standardkonvertern registriert werden. Dies geschieht durch <a href="704.html">HibernateMapper</a> beim Konfigurieren von XStream-Instanzen.</p>
+
+<h3>Konstruktor: Konverter-Caching</h3>
+<p>Der Konstruktor akzeptiert ein <code>ConverterLookup</code> und löst sofort fünf Konverterreferenzen auf und speichert sie zwischen:</p>
+<table>
+<tr><th>Feld</th><th>Konvertierter Typ</th><th>Zweck</th></tr>
+<tr><td><code>listSetConverter</code></td><td><code>ArrayList.class</code></td><td>Behandelt List- und Set-Ausgabe</td></tr>
+<tr><td><code>mapConverter</code></td><td><code>HashMap.class</code></td><td>Behandelt Map-Ausgabe</td></tr>
+<tr><td><code>treeMapConverter</code></td><td><code>TreeMap.class</code></td><td>Behandelt sortierte Map-Ausgabe</td></tr>
+<tr><td><code>treeSetConverter</code></td><td><code>TreeSet.class</code></td><td>Behandelt sortierte Set-Ausgabe</td></tr>
+<tr><td><code>defaultConverter</code></td><td><code>Object.class</code></td><td>Fallback für unbekannte Typen</td></tr>
+</table>
+
+<h3>marshal()-Algorithmus</h3>
+<ol>
+  <li><strong>Cast zu PersistentCollection:</strong> Prüft, ob <code>source instanceof PersistentCollection</code>. Wenn ja, ruft <code>forceInitialization()</code> auf, um Lazy Loading auszulösen, und ruft dann <code>getStoredSnapshot()</code> ab – die zugrunde liegende JDK-Kollektion, die Hibernate intern verwendet. (Hinweis: Ein TODO-Kommentar verweist auf <code>getCollectionSnapshot()</code> als mögliche Alternative.)</li>
+  <li><strong>PersistentSortedSet-Workaround:</strong> Hibernate speichert sortierte Sets intern als <code>HashMap</code>, wobei die Schlüssel die Set-Elemente sind. Der Konverter extrahiert <code>.values()</code> und verpackt sie in ein neues <code>TreeSet</code>, um die korrekte Set-Semantik wiederherzustellen.</li>
+  <li><strong>PersistentSet-Workaround:</strong> Gleiches Problem – intern als <code>HashMap</code> gespeichert. Extrahiert <code>.values()</code> und verpackt sie in ein neues <code>HashSet</code>.</li>
+  <li><strong>Konverter-Dispatch:</strong> Testet die endgültige Kollektionsklasse gegen die gecachten Konverter in der Reihenfolge: <code>listSetConverter</code> (für <code>ArrayList</code>/<code>HashSet</code>/<code>TreeSet</code>), <code>mapConverter</code>, <code>treeMapConverter</code>, <code>treeSetConverter</code>. Fallback auf <code>defaultConverter</code>.</li>
+</ol>
+
+<h3>unmarshal() — Nicht implementiert</h3>
+<div class="warn"><code>unmarshal()</code> gibt <code>null</code> zurück. Dieser Konverter ist unidirektional – er behandelt nur die Serialisierung (Java→XML). Deserialisierung (XML→Java) erzeugt Standard-JDK-Kollektionen, die dann Entitätsfeldern zugewiesen werden. Hibernate ersetzt sie durch persistente Wrapper, wenn die Entität später an eine Session angehängt wird.</div>
+
+<h2>Integrationspunkte</h2>
+<ul>
+  <li>Registriert bei XStream-Instanzen über <a href="704.html">HibernateMapper</a> oder direkte <code>xstream.registerConverter()</code>-Aufrufe.</li>
+  <li>Arbeitet zusammen mit <a href="703.html">HibernateCollectionsMapper</a>: Der Mapper übersetzt die Kollektions-<em>Typnamen</em> im XML, während dieser Konverter die Kollektions-<em>Inhalte</em> zur Marschallzeit übersetzt.</li>
+  <li>Wird vom XML-Export-Subsystem (<a href="710.html">XStreamMarshallingStrategy</a>) verwendet, das Entitätsgraphen für Backup-/Konfigurations-XML-Dateien serialisiert.</li>
+</ul>
+
+<h2>Designentscheidungen & Fallstricke</h2>
+<ul>
+  <li><strong>forceInitialization():</strong> Dies löst eine Datenbankabfrage aus, wenn die Kollektion Lazy-Loaded, aber noch nicht abgerufen wurde. Für den XML-Export großer Entitätsgraphen kann dies eine Kaskade von Abfragen verursachen. Der Aufrufer (typischerweise eine Service-Schicht-Exportmethode) muss sicherstellen, dass die Hibernate-Session geöffnet bleibt und idealerweise Assoziationen mit <code>JOIN FETCH</code>-Abfragen vorab lädt.</li>
+  <li><strong>Hibernate-Set-als-Map-Eigenheit:</strong> Hibernate 3.x/4.x stellt sowohl <code>PersistentSet</code> als auch <code>PersistentSortedSet</code> intern mit <code>HashMap</code>-Strukturen dar. Der Konverter muss diese explizit entpacken. Wenn diese Logik entfernt würde, würde XStream Sets als XML-Maps (mit Schlüsselelementen) serialisieren, was unparsbare Ausgabe erzeugt.</li>
+  <li><strong>Snapshot vs. Kollektion:</strong> Der TODO-Kommentar in Zeile ~66 schlägt vor, <code>getCollectionSnapshot().getSnapshot()</code> anstelle von <code>getStoredSnapshot()</code> zu verwenden. Der aktuelle Ansatz funktioniert, weil <code>forceInitialization()</code> garantiert, dass der gespeicherte Snapshot existiert, aber dies ist über Hibernate-Versionen hinweg fragil.</li>
+  <li><strong>Thread-Sicherheit:</strong> Die gecachten Konverterreferenzen sind nach der Konstruktion unveränderlich. Die Instanz ist für reine Lese-Konverteroperationen effektiv thread-sicher.</li>
+  <li><strong>Namensnennung:</strong> Ursprünglich verfasst von Costin Leau, einem bekannten Mitwirkenden im Spring/Hibernate-Integrationsökosystem.</li>
+</ul>
+
+<h2>Git-Verlauf</h2><div class="hist"><pre>868d6abb7 2025 -> 2026
+63081666f Quellcode-Dateiköpfe: 2024 -> 2025.
+c1d14ecdb Migration stuff in progress...
+b6092df09 Copyright 2023 -> 2024
+ab45d51fa Copyright 2001-2022 -> 2001-2023.
+5f7ef41b8 Copyright 2021 -> 2022
+ceb63e8a1 Quellcode-Kopfzeile: (C) 2001-2021.
+7c79f1922 Copyright des Quellkopfs -> 2020.
+32f634b88 Optimize imports
+dd5ca38ac CopyRight aller Java-Dateiköpfe aktualisiert oder erstellt.
+9ebb88522 Initial commit</pre></div>
+</body></html>

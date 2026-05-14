@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>551: TeamCalCache.java [FR]</title>
+<style>
+body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}
+h1{border-bottom:2px solid #333;padding-bottom:.3em}
+h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}
+h3{margin-top:1.5em;color:#444;font-size:1em}
+a{color:#0366d6}
+.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}
+.nav{font-size:.9em;color:#888;margin-bottom:1em}
+.lang{font-size:.85em;color:#888;float:right}
+.lang a{color:#888;text-decoration:none;padding:0 .3em}
+.lang a.active{color:#0366d6;font-weight:600;text-decoration:underline}
+.meta{font-size:.9em;margin:1em 0;color:#555}
+code{background:#f0f0f0;padding:0 .2em;font-size:.93em}
+pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}
+table{border-collapse:collapse;width:100%;margin:1em 0}
+th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}
+th{background:#f5f5f5;font-weight:600}
+.hist{font-size:.85em;color:#555}
+pre.diff{background:#fff;font-size:.82em;max-height:300px;overflow-y:auto}
+</style>
+</head>
+<body>
+<div class="lang"><a href="551.html">EN</a> · <a href="551_de.html">DE</a> · <a href="551_ru.html">RU</a> · <a href="551_fr.html" class="active">FR</a> · <a href="551_es.html">ES</a></div>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← Index des fichiers</a> · <a href="380.html">← Précédent</a> · <a href="585.html">Suivant →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/java/org/projectforge/business/teamcal/admin/TeamCalCache.java" target="_blank" title="Voir la source sur GitHub">📄 source</a></div>
+<h1>#551 : <code>TeamCalCache.java</code></h1>
+<div class="meta"><code>projectforge-business/src/main/java/org/projectforge/business/teamcal/admin/TeamCalCache.java</code> Classe Java, <code>projectforge-business/src/main/java/org/projectforge/business/teamcal/admin/TeamCalCache.java</code> <span style="color:#888">180 lignes · 113 code · 50 commentaires · 17 vides</span></div>
+<div class="c"><strong>Objectif :</strong> Fichier source : business/teamcal/admin/TeamCalCache.java. TeamCalCache.java fait partie de l'application open-source de gestion de projet ProjectForge.</div>
+<h2>Source (100 premières lignes)</h2>
+<pre>/////////////////////////////////////////////////////////////////////////////
+//
+// Projet ProjectForge Community Edition
+//         www.projectforge.org
+//
+// Copyright (C) 2001-2026 Micromata GmbH, Allemagne (www.micromata.com)
+//
+// ProjectForge est sous double licence.
+//
+// Cette édition communautaire est un logiciel libre ; vous pouvez la redistribuer et/ou
+// la modifier selon les termes de la GNU General Public License telle que publiée
+// par la Free Software Foundation ; version 3 de la Licence.
+//
+// Cette édition communautaire est distribuée dans l'espoir qu'elle sera utile,
+// mais SANS AUCUNE GARANTIE ; sans même la garantie implicite de
+// COMMERCIALISATION ou D'ADÉQUATION À UN USAGE PARTICULIER. Voir la GNU General
+// Public License pour plus de détails.
+//
+// Vous devriez avoir reçu une copie de la GNU General Public License avec
+// ce programme ; sinon, consultez http://www.gnu.org/licenses/.
+//
+/////////////////////////////////////////////////////////////////////////////
+
+package org.projectforge.business.teamcal.admin;
+
+import org.hibernate.Hibernate;
+import org.projectforge.business.teamcal.admin.model.TeamCalDO;
+import org.projectforge.business.teamcal.admin.right.TeamCalRight;
+import org.projectforge.business.user.UserRightId;
+import org.projectforge.framework.cache.AbstractCache;
+import org.projectforge.framework.configuration.ApplicationContextProvider;
+import org.projectforge.framework.persistence.api.UserRightService;
+import org.projectforge.framework.persistence.jpa.PfPersistenceService;
+import org.projectforge.framework.persistence.user.api.ThreadLocalUserContext;
+import org.projectforge.framework.persistence.user.entities.PFUserDO;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Component;
+
+import java.util.*;
+
+/**
+ * Met en cache tous les calendriers.
+ *
+ * @author Kai Reinhard (k.reinhard@micromata.de)
+ */
+@Component
+public class TeamCalCache extends AbstractCache {
+    private static final long serialVersionUID = 1742102774636598280L;
+
+    private static Logger log = LoggerFactory.getLogger(TeamCalCache.class);
+
+    @Autowired
+    PfPersistenceService persistenceService;
+
+    @Autowired
+    UserRightService userRights;
+
+    private transient TeamCalRight teamCalRight;
+
+    private Map&lt;Long, TeamCalDO&gt; calendarMap;
+
+    public TeamCalRight getTeamCalRight() {
+        return teamCalRight;
+    }
+
+    public TeamCalDO getCalendar(final Long calendarId) {
+        checkRefresh();
+        return calendarMap.get(calendarId);
+    }
+
+    /**
+     * Renvoie le TeamCalDO s'il est initialisé (Hibernate). Sinon, il sera chargé depuis la base de données.
+     * Empêche les chargements paresseux.
+     */
+    public TeamCalDO getCalendarIfNotInitialized(TeamCalDO teamCalDO) {
+        if (teamCalDO == null) {
+            return teamCalDO;
+        }
+        if (Hibernate.isInitialized(teamCalDO)) {
+            return teamCalDO;
+        }
+        return getCalendar(teamCalDO.getId());
+    }
+
+    /**
+     * Obtient les calendriers ordonnés (par titre et identifiant).
+     *
+     * @return Tous les calendriers accessibles de l'utilisateur contextuel (en tant que propriétaire ou avec un accès complet, en lecture seule ou minimal).
+     */
+    public Collection&lt;TeamCalDO&gt; getAllAccessibleCalendars() {
+        checkRefresh();
+        final Set&lt;TeamCalDO&gt; set = new TreeSet&lt;&gt;(new TeamCalsComparator());
+        final PFUserDO loggedInUser = ThreadLocalUserContext.getLoggedInUser();
+        for (final TeamCalDO cal : calendarMap.values()) {
+            if (teamCalRight.hasSelectAccess(loggedInUser, cal) &amp;&amp; !cal.getDeleted()) {
+                set.add(cal);
+            }
+        }</pre>
+<h2>Historique Git</h2>
+<div class="hist">
+<pre>868d6abb7 2025 -> 2026
+63081666f En-têtes des fichiers source : 2024 -> 2025.
+50c3b7b46 Travaux de migration en cours... (tous les tests de tous les packages : OK).
+4942c854d Travaux de migration en cours...
+d394f410f Travaux de migration en cours... (tous les tests de tous les packages : OK).</pre>
+<h3>868d6abb7</h3><div class="c"><strong>2025 -> 2026</strong><pre class="diff">868d6abb75cd191a892911ac8e45058932cf9074
+diff --git a/projectforge-business/src/main/java/org/projectforge/business/teamcal/admin/TeamCalCache.java b/projectforge-business/src/main/java/org/projectforge/business/teamcal/admin/TeamCalCache.java
+index e58f25362..972188fc0 100644
+--- a/projectforge-business/src/main/java/org/projectforge/business/teamcal/admin/TeamCalCache.java
++++ b/projectforge-business/src/main/java/org/projectforge/business/teamcal/admin/TeamCalCache.java
+@@ -3,7 +3,7 @@
+ // Projet ProjectForge Community Edition
+ //         www.projectforge.org
+ //
+-// Copyright (C) 2001-2025 Micromata GmbH, Allemagne (www.micromata.com)
++// Copyright (C) 2001-2026 Micromata GmbH, Allemagne (www.micromata.com)
+ //
+ // ProjectForge est sous double licence.
+ //</pre></div><h3>63081666f</h3><div class="c"><strong>En-têtes des fichiers source : 2024 -> 2025.</strong><pre class="diff">63081666f620fb87315f01b817e560e0b2f6a33a
+diff --git a/projectforge-business/src/main/java/org/projectforge/business/teamcal/admin/TeamCalCache.java b/projectforge-business/src/main/java/org/projectforge/business/teamcal/admin/TeamCalCache.java
+index cbae8b998..e58f25362 100644
+--- a/projectforge-business/src/main/java/org/projectforge/business/teamcal/admin/TeamCalCache.java
++++ b/projectforge-business/src/main/java/org/projectforge/business/teamcal/admin/TeamCalCache.java
+@@ -3,7 +3,7 @@
+ // Projet ProjectForge Community Edition
+ //         www.projectforge.org
+ //
+-// Copyright (C) 2001-2024 Micromata GmbH, Allemagne (www.micromata.com)
++// Copyright (C) 2001-2025 Micromata GmbH, Allemagne (www.micromata.com)
+ //
+ // ProjectForge est sous double licence.
+ //</pre></div><h3>50c3b7b46</h3><div class="c"><strong>Travaux de migration en cours... (tous les tests de tous les packages : OK).</strong><pre class="diff">50c3b7b46e5038432710f94a4f403dea31786a27
+diff --git a/projectforge-business/src/main/java/org/projectforge/business/teamcal/admin/TeamCalCache.java b/projectforge-business/src/main/java/org/projectforge/business/teamcal/admin/TeamCalCache.java
+index 63e7da77c..cbae8b998 100644
+--- a/projectforge-business/src/main/java/org/projectforge/business/teamcal/admin/TeamCalCache.java
++++ b/projectforge-business/src/main/java/org/projectforge/business/teamcal/admin/TeamCalCache.java
+@@ -75,14 +75,13 @@ public class TeamCalCache extends AbstractCache {
+      * Empêche les chargements paresseux.
+      */
+     public TeamCalDO getCalendarIfNotInitialized(TeamCalDO teamCalDO) {
+-        Long id = teamCalDO.getId();
+-        if (id == null) {
++        if (teamCalDO == null) {
+             return teamCalDO;
+         }
+         if (Hibernate.isInitialized(teamCalDO)) {
+             return teamCalDO;
+         }
+-        return getCalendar(id);
++        return getCalendar(teamCalDO.getId());
+     }
+ 
+     /**</pre></div><h3>4942c854d</h3><div class="c"><strong>Travaux de migration en cours...</strong><pre class="diff">4942c854d9c05928c5d2712e58b309ad12da14f0
+diff --git a/projectforge-business/src/main/java/org/projectforge/business/teamcal/admin/TeamCalCache.java b/projectforge-business/src/main/java/org/projectforge/business/teamcal/admin/TeamCalCache.java
+index 08ba0d1fa..63e7da77c 100644
+--- a/projectforge-business/src/main/java/org/projectforge/business/teamcal/admin/TeamCalCache.java
++++ b/projectforge-business/src/main/java/org/projectforge/business/teamcal/admin/TeamCalCache.java
+@@ -23,6 +23,7 @@
+ 
+ package org.projectforge.business.teamcal.admin;
+ 
++import org.hibernate.Hibernate;
+ import org.projectforge.business.teamcal.admin.model.TeamCalDO;
+ import org.projectforge.business.teamcal.admin.right.TeamCalRight;
+ import org.projectforge.business.user.UserRightId;
+@@ -69,6 +70,21 @@ public class TeamCalCache extends AbstractCache {
+         return calendarMap.get(calendarId);
+     }
+ 
++    /**
++     * Renvoie le TeamCalDO s'il est initialisé (Hibernate). Sinon, il sera chargé depuis la base de données.
++     * Empêche les chargements paresseux.
++     */
++    public TeamCalDO getCalendarIfNotInitialized(TeamCalDO teamCalDO) {
++        Long id = teamCalDO.getId();
++        if (id == null) {
++            return teamCalDO;
++        }
++        if (Hibernate.isInitialized(teamCalDO)) {
++            return teamCalDO;
++        }
++        return getCalendar(id);
++    }
++
+     /**
+      * Obtient les calendriers ordonnés (par titre et identifiant).
+      *</pre></div><h3>d394f410f</h3><div class="c"><strong>Travaux de migration en cours... (tous les tests de tous les packages : OK).</strong><pre class="diff">d394f410fc43d3e8ed04035f50382bffd8958a1d
+diff --git a/projectforge-business/src/main/java/org/projectforge/business/teamcal/admin/TeamCalCache.java b/projectforge-business/src/main/java/org/projectforge/business/teamcal/admin/TeamCalCache.java
+index d05791377..08ba0d1fa 100644
+--- a/projectforge-business/src/main/java/org/projectforge/business/teamcal/admin/TeamCalCache.java
++++ b/projectforge-business/src/main/java/org/projectforge/business/teamcal/admin/TeamCalCache.java
+@@ -143,7 +143,7 @@ public class TeamCalCache extends AbstractCache {
+     @Override
+     protected void refresh() {
+         log.info("Initialisation du TeamCalCache...");
+-        persistenceService.runIsolatedReadOnly(context -&gt; {
++        persistenceService.runIsolatedReadOnly(true, context -&gt; {
+             TeamCalDao dao = ApplicationContextProvider.getApplicationContext().getBean(TeamCalDao.class);
+             if (dao == null || teamCalRight == null) {
+                 teamCalRight = (TeamCalRight) userRights.getRight(UserRightId.PLUGIN_CALENDAR);
+@@ -158,8 +158,8 @@ public class TeamCalCache extends AbstractCache {
+                 }
+             }
+             this.calendarMap = map;
++            log.info("Initialisation du TeamCalCache terminée : " + context.formatStats(true));
+             return null;
+         });
+-        log.info("Initialisation du TeamCalCache terminée.");
+     }
+ }</pre></div>
+</div>
+</body>
+</html>

@@ -1,9 +1,8 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>#873: CustomField.kt</title>
+<meta charset="utf-8">
+<title>#873</title>
 <style>
 body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}
 h1{border-bottom:2px solid #333;padding-bottom:.3em}
@@ -19,55 +18,191 @@ table{border-collapse:collapse;width:100%;margin:1em 0}
 th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}
 th{background:#f5f5f5;font-weight:600}
 .hist{font-size:.85em;color:#555}
+.warn{background:#fff3cd;border-left:3px solid #ffc107;padding:.5em 1em;margin:1em 0}
 </style>
 </head>
 <body>
-<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="872.html">← Prev</a> · <a href="874.html">Next →</a></div>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="872.html">← Prev</a> · <a href="874.html">Next →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/kotlin/org/projectforge/business/common/BaseUserGroupRightUtils.kt" target="_blank" title="View source on GitHub">📄 source</a></div>
+<h1>#873: <code>BaseUserGroupRightUtils.kt</code></h1>
+<div class="meta"><code>projectforge-business/src/main/kotlin/org/projectforge/business/common/BaseUserGroupRightUtils.kt</code> <strong>Type:</strong> Kotlin object (static utility) · <strong>Purpose:</strong> Core access rights logic · <strong>Source:</strong> <code>projectforge-business/src/main/kotlin/org/projectforge/business/common/BaseUserGroupRightUtils.kt</code> <span style="color:#888">136 lines · 93 code · 33 comments · 10 blank</span></div>
+<div class="c">Standalone utility object containing the core access rights resolution logic. Determines whether a user has OWNER, FULL, READONLY, MINIMAL, or NONE access to a <code>BaseUserGroupRightsDO</code> object by checking the CSV ID fields against group membership and direct user ID matching. Used by both <code>BaseUserGroupRight</code> (<a href="864.html">#864</a>) and <code>TeamCalCache</code>.</div>
 
-<h1>#873: <code>CustomField.kt</code></h1>
+<h2>API</h2>
 
-<div class="meta">
-<p><strong>Type:</strong> Kotlin class — DTO with computed logic</p>
-<p><strong>Purpose:</strong> Represents a single custom field instance with its value, used in the D-velop API for synchronizing entity-specific custom data (e.g., the DATEV account number on a TradingPartner).</p>
-<p><strong>Source path:</strong> <code>projectforge-business/src/main/kotlin/org/projectforge/business/dvelop/CustomField.kt</code></p>
-</div>
+<h3><code>isOwner(user, obj)</code> / <code>isOwner(userId, obj)</code></h3>
+<p>Returns <code>true</code> if <code>userId == obj.ownerId</code> (both non-null). Simple identity check.</p>
 
-<div class="c">
-<p>Models a custom field value object as sent/received by the D-velop REST API. Each custom field has a <code>configID</code> (references a <code>CustomFieldDef</code> by UUID), a <code>name</code>, and a polymorphic <code>value</code>. Additional metadata like <code>label</code>, <code>type</code>, and <code>selectOptionDtos</code> support UI rendering. Primarily used within <code>TradingPartner.customFields</code> to map the DATEV account number (<code>datevKonto</code>) to D-velop's custom field API representation.</p>
-</div>
+<h3><code>getAccessType(obj, userId): DataobjectAccessType</code></h3>
+<p>The core resolution method. Evaluates access in priority order:</p>
+<ol>
+<li><strong>Null guard:</strong> Returns <code>NONE</code> if obj or userId is null</li>
+<li><strong>Owner check:</strong> Returns <code>OWNER</code> if <code>userId == obj.ownerId</code></li>
+<li><strong>Full access:</strong> Checks <code>fullAccessGroupIds</code> and <code>fullAccessUserIds</code></li>
+<li><strong>Read-only access:</strong> Checks <code>readonlyAccessGroupIds</code> and <code>readonlyAccessUserIds</code></li>
+<li><strong>Minimal access:</strong> Checks <code>minimalAccessGroupIds</code> and <code>minimalAccessUserIds</code></li>
+<li><strong>Fallback:</strong> Returns <code>NONE</code></li>
+</ol>
 
-<h2>Properties</h2>
-<table>
-<tr><th>Property</th><th>Type</th><th>Description</th></tr>
-<tr><td><code>configID</code></td><td><code>String?</code></td><td>Constructor param — UUID of the CustomFieldDef this value belongs to</td></tr>
-<tr><td><code>name</code></td><td><code>String?</code></td><td>Constructor param — Name of the custom field (e.g., "datevKonto")</td></tr>
-<tr><td><code>value</code></td><td><code>Any?</code></td><td>Constructor param — The actual value (polymorphic, e.g., <code>Int</code>, <code>String</code>)</td></tr>
-<tr><td><code>valueName</code></td><td><code>String?</code></td><td>Optional display name for the value</td></tr>
-<tr><td><code>selectOptionDtos</code></td><td><code>Array&lt;String&gt;?</code></td><td>Available options if the field has predefined values</td></tr>
-<tr><td><code>label</code></td><td><code>String?</code></td><td>Display label for UI rendering</td></tr>
-<tr><td><code>type</code></td><td><code>Type?</code></td><td>The data type of the field (currently only <code>NUMBER</code> is defined)</td></tr>
-</table>
+<h3><code>hasReadAccess(obj, userId, throwException?): Boolean</code></h3>
+<p>Returns <code>true</code> if access type is <code>READONLY</code>, <code>FULL</code>, or <code>OWNER</code>. Otherwise returns <code>false</code>, or throws <code>AccessException("access.exception.noReadAccess")</code> if <code>throwException</code> is true.</p>
 
-<h2>Inner Enum: <code>Type</code></h2>
-<table>
-<tr><th>Value</th><th>Description</th></tr>
-<tr><td><code>NUMBER</code></td><td>The only defined type — indicates the custom field holds a numeric value</td></tr>
-</table>
+<h3><code>hasWriteAccess(obj, userId, throwException?): Boolean</code></h3>
+<p>Returns <code>true</code> if access type is <code>FULL</code> or <code>OWNER</code>. Otherwise returns <code>false</code>, or throws <code>AccessException("access.exception.noWriteAccess")</code>.</p>
 
-<h2>Architecture Notes</h2>
-<p>This class mixes DTO concerns (data transfer to/from D-velop JSON API) with UI concerns (<code>label</code>, <code>selectOptionDtos</code>). The <code>value</code> field is typed as <code>Any?</code> to support polymorphic deserialization. The companion enum <code>Type</code> is minimal as of this version — only <code>NUMBER</code> is needed for the Datev account use case.</p>
+<h3><code>hasAccess(obj, userId, operationType, throwException?)</code></h3>
+<p>Routes to <code>hasReadAccess</code> or <code>hasWriteAccess</code> based on <code>operationType.isWriteType</code>.</p>
+
+<h3><code>hasAccess(obj, oldObj, userId, operationType, throwException?)</code></h3>
+<p>For write operations, checks the <em>old</em> object first (allowing modification if user already had write access). Falls back to checking the new object. For read operations, checks <code>oldObj ?: obj</code>.</p>
+
+<h2>Internal Logic</h2>
+
+<h3><code>isMemberOfAny(groupIds, userIds, userId): Boolean</code></h3>
+<p>Private helper that performs the actual group/user membership check:</p>
+<ul>
+<li>If <code>groupIds</code> is non-empty, checks <code>UserGroupCache.getInstance().isUserMemberOfAtLeastOneGroup(userId, *groupIds)</code></li>
+<li>If <code>userIds</code> contains the given <code>userId</code>, returns true</li>
+<li>Uses <code>StringHelper.splitToLongObjects()</code> to parse the CSV columns into <code>Array&lt;Long&gt;</code></li>
+</ul>
+
+<h2>Data Flow</h2>
+<pre>
+BaseUserGroupRightsDO (CSV columns)
+  │
+  ├─ StringHelper.splitToLongObjects()
+  │
+  ├─ UserGroupCache.isUserMemberOfAtLeastOneGroup()  ← groups
+  └─ Direct userId comparison                          ← users
+  │
+  ▼
+DataobjectAccessType (OWNER / FULL / READONLY / MINIMAL / NONE)
+  │
+  ▼
+hasReadAccess / hasWriteAccess → Boolean
+</pre>
+
+<h2>Design Rationale</h2>
+<p>The <code>object</code> (Kotlin singleton) pattern was chosen because the access logic is purely functional—no state or dependencies, just computation. This allows it to be called from anywhere (services, caches, entity constructors) without injection overhead.</p>
+
+<p>The tiered evaluation (owner → full → readonly → minimal → none) means the first match wins. If a user is both in the full-access group <em>and</em> the readonly group, they get <code>FULL</code> access. The <code>oldObj</code> parameter in <code>hasAccess</code> supports the pattern where permission to modify an object is checked against the pre-modification state—critical for update operations where the object's access lists may change as part of the edit.</p>
+
+<h2>External Dependencies</h2>
+<ul>
+<li><code>UserGroupCache</code> — singleton cache for group membership lookups</li>
+<li><code>StringHelper.splitToLongObjects()</code> — parses CSV ID strings to <code>Array&lt;Long&gt;</code></li>
+<li><code>AccessException</code> — thrown when <code>throwException = true</code> and access is denied</li>
+</ul>
 
 <h2>Git History</h2>
-<div class="hist"><pre>868d6abb7 2025 -> 2026
+<div class="hist"><pre>
+868d6abb7 2025 -> 2026
 63081666f Source file headers: 2024-> 2025.
+4c04cfd65 MAJOR-CHANGE! Migration of integer id's to Long id's
 b6092df09 Copyright 2023 -> 2024
-cb2915283 WIP D.velop
 ab45d51fa Copyright 2001-2022 -> 2001-2023.
-5f7ef41b8 Copyright 2021 -> 2022
-ceb63e8a1 Source code header: (C) 2001-2021.
-7c79f1922 Copyright of source header -> 2020.
-dd5ca38ac CopyRight of all java file-header updated or created.
-9ebb88522 Initial commit
+232a91c5a BaseUserGroupRightUtils implemented. WIP BankingPlugin and jobs-handling.
+</pre></div>
+</body>
+</html>
+
+<style>
+body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}
+h1{border-bottom:2px solid #333;padding-bottom:.3em}
+h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}
+h3{margin-top:2em;color:#444}
+a{color:#0366d6}
+.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}
+.nav{font-size:.9em;color:#888;margin-bottom:1em}
+.meta{font-size:.9em;margin:1em 0;color:#555}
+code{background:#f0f0f0;padding:0 .2em;font-size:.93em}
+pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}
+table{border-collapse:collapse;width:100%;margin:1em 0}
+th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}
+th{background:#f5f5f5;font-weight:600}
+.hist{font-size:.85em;color:#555}
+.warn{background:#fff3cd;border-left:3px solid #ffc107;padding:.5em 1em;margin:1em 0}
+</style>
+</head>
+<body>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="872.html">← Prev</a> · <a href="874.html">Next →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/kotlin/org/projectforge/business/common/BaseUserGroupRightUtils.kt" target="_blank" title="View source on GitHub">📄 source</a></div>
+<h1>#873: <code>BaseUserGroupRightUtils.kt</code></h1>
+<div class="meta"><strong>Type:</strong> Kotlin object (static utility) · <strong>Purpose:</strong> Core access rights logic · <strong>Source:</strong> <code>projectforge-business/src/main/kotlin/org/projectforge/business/common/BaseUserGroupRightUtils.kt</code></div>
+<div class="c">Standalone utility object containing the core access rights resolution logic. Determines whether a user has OWNER, FULL, READONLY, MINIMAL, or NONE access to a <code>BaseUserGroupRightsDO</code> object by checking the CSV ID fields against group membership and direct user ID matching. Used by both <code>BaseUserGroupRight</code> (<a href="864.html">#864</a>) and <code>TeamCalCache</code>.</div>
+
+<h2>API</h2>
+
+<h3><code>isOwner(user, obj)</code> / <code>isOwner(userId, obj)</code></h3>
+<p>Returns <code>true</code> if <code>userId == obj.ownerId</code> (both non-null). Simple identity check.</p>
+
+<h3><code>getAccessType(obj, userId): DataobjectAccessType</code></h3>
+<p>The core resolution method. Evaluates access in priority order:</p>
+<ol>
+<li><strong>Null guard:</strong> Returns <code>NONE</code> if obj or userId is null</li>
+<li><strong>Owner check:</strong> Returns <code>OWNER</code> if <code>userId == obj.ownerId</code></li>
+<li><strong>Full access:</strong> Checks <code>fullAccessGroupIds</code> and <code>fullAccessUserIds</code></li>
+<li><strong>Read-only access:</strong> Checks <code>readonlyAccessGroupIds</code> and <code>readonlyAccessUserIds</code></li>
+<li><strong>Minimal access:</strong> Checks <code>minimalAccessGroupIds</code> and <code>minimalAccessUserIds</code></li>
+<li><strong>Fallback:</strong> Returns <code>NONE</code></li>
+</ol>
+
+<h3><code>hasReadAccess(obj, userId, throwException?): Boolean</code></h3>
+<p>Returns <code>true</code> if access type is <code>READONLY</code>, <code>FULL</code>, or <code>OWNER</code>. Otherwise returns <code>false</code>, or throws <code>AccessException("access.exception.noReadAccess")</code> if <code>throwException</code> is true.</p>
+
+<h3><code>hasWriteAccess(obj, userId, throwException?): Boolean</code></h3>
+<p>Returns <code>true</code> if access type is <code>FULL</code> or <code>OWNER</code>. Otherwise returns <code>false</code>, or throws <code>AccessException("access.exception.noWriteAccess")</code>.</p>
+
+<h3><code>hasAccess(obj, userId, operationType, throwException?)</code></h3>
+<p>Routes to <code>hasReadAccess</code> or <code>hasWriteAccess</code> based on <code>operationType.isWriteType</code>.</p>
+
+<h3><code>hasAccess(obj, oldObj, userId, operationType, throwException?)</code></h3>
+<p>For write operations, checks the <em>old</em> object first (allowing modification if user already had write access). Falls back to checking the new object. For read operations, checks <code>oldObj ?: obj</code>.</p>
+
+<h2>Internal Logic</h2>
+
+<h3><code>isMemberOfAny(groupIds, userIds, userId): Boolean</code></h3>
+<p>Private helper that performs the actual group/user membership check:</p>
+<ul>
+<li>If <code>groupIds</code> is non-empty, checks <code>UserGroupCache.getInstance().isUserMemberOfAtLeastOneGroup(userId, *groupIds)</code></li>
+<li>If <code>userIds</code> contains the given <code>userId</code>, returns true</li>
+<li>Uses <code>StringHelper.splitToLongObjects()</code> to parse the CSV columns into <code>Array&lt;Long&gt;</code></li>
+</ul>
+
+<h2>Data Flow</h2>
+<pre>
+BaseUserGroupRightsDO (CSV columns)
+  │
+  ├─ StringHelper.splitToLongObjects()
+  │
+  ├─ UserGroupCache.isUserMemberOfAtLeastOneGroup()  ← groups
+  └─ Direct userId comparison                          ← users
+  │
+  ▼
+DataobjectAccessType (OWNER / FULL / READONLY / MINIMAL / NONE)
+  │
+  ▼
+hasReadAccess / hasWriteAccess → Boolean
+</pre>
+
+<h2>Design Rationale</h2>
+<p>The <code>object</code> (Kotlin singleton) pattern was chosen because the access logic is purely functional—no state or dependencies, just computation. This allows it to be called from anywhere (services, caches, entity constructors) without injection overhead.</p>
+
+<p>The tiered evaluation (owner → full → readonly → minimal → none) means the first match wins. If a user is both in the full-access group <em>and</em> the readonly group, they get <code>FULL</code> access. The <code>oldObj</code> parameter in <code>hasAccess</code> supports the pattern where permission to modify an object is checked against the pre-modification state—critical for update operations where the object's access lists may change as part of the edit.</p>
+
+<h2>External Dependencies</h2>
+<ul>
+<li><code>UserGroupCache</code> — singleton cache for group membership lookups</li>
+<li><code>StringHelper.splitToLongObjects()</code> — parses CSV ID strings to <code>Array&lt;Long&gt;</code></li>
+<li><code>AccessException</code> — thrown when <code>throwException = true</code> and access is denied</li>
+</ul>
+
+<h2>Git History</h2>
+<div class="hist"><pre>
+868d6abb7 2025 -> 2026
+63081666f Source file headers: 2024-> 2025.
+4c04cfd65 MAJOR-CHANGE! Migration of integer id's to Long id's
+b6092df09 Copyright 2023 -> 2024
+ab45d51fa Copyright 2001-2022 -> 2001-2023.
+232a91c5a BaseUserGroupRightUtils implemented. WIP BankingPlugin and jobs-handling.
 </pre></div>
 </body>
 </html>

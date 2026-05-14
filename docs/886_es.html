@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>#886: AbstractRechnungCache.kt [ES]</title>
+<style>
+body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}
+h1{border-bottom:2px solid #333;padding-bottom:.3em}
+h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}
+h3{margin-top:2em;color:#444}
+a{color:#0366d6}
+.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}
+.nav{font-size:.9em;color:#888;margin-bottom:1em}
+.meta{font-size:.9em;margin:1em 0;color:#555}
+code{background:#f0f0f0;padding:0 .2em;font-size:.93em}
+pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}
+table{border-collapse:collapse;width:100%;margin:1em 0}
+th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}
+th{background:#f5f5f5;font-weight:600}
+.hist{font-size:.85em;color:#555}
+</style>
+</head>
+<body>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Índice</a> · <a href="file-index.html">← Índice de archivos</a> · <a href="885.html">← Anterior</a> · <a href="887.html">Siguiente →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/kotlin/org/projectforge/business/fibu/AbstractRechnungCache.kt" target="_blank" title="Ver fuente en GitHub">📄 fuente</a></div>
+
+<h1>#886: <code>AbstractRechnungCache.kt</code></h1>
+
+<div class="meta"><code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/AbstractRechnungCache.kt</code> 
+<p><strong>Tipo:</strong> Clase abstracta de Kotlin que extiende <code>AbstractCache</code> — Capa de caché para cálculos de facturas</p>
+<p><strong>Propósito:</strong> Almacena en caché los totales de facturas precalculados (<code>RechnungInfo</code>) y los cálculos de posiciones (<code>RechnungPosInfo</code>) para evitar recálculos redundantes. Soporta tanto facturas de salida (<code>RechnungDO</code>) como facturas de entrada (<code>EingangsrechnungDO</code>) a través de su parámetro de tipo genérico.</p>
+<p><strong>Ruta de origen:</strong> <code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/AbstractRechnungCache.kt</code></p>
+ <span style="color:#888">136 líneas · 79 código · 44 comentarios · 13 en blanco</span></div>
+
+<div class="c">
+<p>Una <strong>caché de rendimiento en memoria</strong> sobre el marco <code>AbstractCache</code>. Los cálculos de facturas (totales netos/brutos, desglose de IVA, asignaciones de costos) son costosos porque requieren recorrer todo el árbol de posiciones con búsquedas de asignación de costos. Esta caché almacena objetos <code>RechnungInfo</code> y <code>RechnungPosInfo</code> precalculados, indexados por ID de entidad, con actualización automática mediante el mecanismo de programación de <code>CacheHelper</code>. La caché fue refactorizada de bloques <code>synchronized</code> a <code>ConcurrentHashMap</code> para eliminar un punto muerto.</p>
+</div>
+
+<h2>Parámetros de tipo y constructor</h2>
+<pre>abstract class AbstractRechnungCache(
+    val entityClass: KClass&lt;out AbstractRechnungDO&gt;,
+    protected val rechnungJdbcService: RechnungJdbcService,
+) : AbstractCache()</pre>
+
+<table>
+<tr><th>Parámetro</th><th>Descripción</th></tr>
+<tr><td><code>entityClass</code></td><td>La referencia de clase de Kotlin para el tipo de entidad de factura (<code>RechnungDO::class</code> o <code>EingangsrechnungDO::class</code>) — utilizada para consultas JDBC y registro</td></tr>
+<tr><td><code>rechnungJdbcService</code></td><td>Servicio JDBC para carga masiva eficiente de información de facturas desde la base de datos (evita Hibernate por rendimiento)</td></tr>
+</table>
+
+<h2>Estado interno</h2>
+<table>
+<tr><th>Campo</th><th>Tipo</th><th>Descripción</th></tr>
+<tr><td><code>invoiceInfoMap</code></td><td><code>ConcurrentHashMap&lt;Long, RechnungInfo&gt;</code></td><td>Caché principal: ID de factura → cálculos agregados de factura</td></tr>
+<tr><td><code>invoicePosInfoMap</code></td><td><code>ConcurrentHashMap&lt;Long, RechnungPosInfo&gt;</code></td><td>Caché secundaria: ID de posición → cálculos a nivel de posición</td></tr>
+</table>
+
+<p>Ambos mapas usan <code>ConcurrentHashMap</code> (no bloques sincronizados) — este cambio se realizó en el commit <code>85d8930b3</code> para corregir un punto muerto que ocurría cuando las operaciones de caché interactuaban entre sí bajo sincronización.</p>
+
+<h2>API pública</h2>
+
+<h3><code>update(invoice: AbstractRechnungDO)</code></h3>
+<p>Fuerza el recálculo de una sola factura y almacena el resultado en la caché. Se llama cuando se modifica una factura (insertada, actualizada o eliminada a través de la capa DAO). Utiliza <code>RechnungCalculator.calculate(invoice)</code> para calcular valores actualizados.</p>
+
+<h3><code>ensureRechnungInfo(rechnung: AbstractRechnungDO): RechnungInfo</code></h3>
+<p>Garantiza que exista un <code>RechnungInfo</code> para la factura dada. Si ya está en caché, devuelve la versión almacenada (y establece <code>rechnung.info</code>). De lo contrario, lo calcula mediante <code>RechnungCalculator</code>, lo almacena en la caché y lo devuelve. Este es el método de acceso preferido: funciona incluso si el árbol de posiciones aún no se ha cargado de forma diferida.</p>
+
+<h3><code>getRechnungInfo(rechnungId: Long?): RechnungInfo?</code></h3>
+<p>Devuelve la información de factura almacenada en caché por ID (seguro para nulos en el parámetro ID). Llama a <code>checkRefresh()</code> que asegura que la caché no esté obsoleta.</p>
+
+<h3><code>getRechnungInfo(rechnung: AbstractRechnungDO?): RechnungInfo?</code></h3>
+<p>Sobrecarga que extrae el ID de la entidad. Seguro para nulos.</p>
+
+<h3><code>ensureRechnungPosInfo(pos: AbstractRechnungsPositionDO): RechnungPosInfo</code></h3>
+<p>Análogo a <code>ensureRechnungInfo</code> pero para posiciones individuales. Asegura que primero exista el <code>RechnungInfo</code> de la factura principal (necesario como contexto), luego calcula la información específica de la posición mediante <code>RechnungCalculator.calculate(posInfo, pos)</code>.</p>
+
+<h3><code>getRechnungPosInfo(rechnungPosId: Long?): RechnungPosInfo?</code></h3>
+<p>Devuelve la información de posición almacenada en caché por ID. Seguro para nulos.</p>
+
+<h2>Actualización de caché (<code>override fun refresh()</code>)</h2>
+<p>Llamada automáticamente por el marco <code>CacheHelper</code> en un temporizador y durante la guardia <code>checkRefresh()</code>. La estrategia de actualización utiliza <strong>copia e intercambio</strong> para la seguridad en hilos:</p>
+<ol>
+<li>Crea nuevas instancias de <code>ConcurrentHashMap</code> (<code>nInvoiceInfoMap</code>, <code>nInvoicePosInfoMap</code>)</li>
+<li>Carga masiva de toda la información de facturas mediante <code>rechnungJdbcService.selectRechnungInfos(entityClass)</code> — esto usa JDBC directamente por rendimiento, evitando Hibernate</li>
+<li>Puebla ambos mapas desde el conjunto de resultados de JDBC</li>
+<li>Intercambia atómicamente los nuevos mapas en lugar de los antiguos</li>
+</ol>
+<p>Este enfoque significa que la caché <strong>nunca está obsoleta por más de un ciclo de actualización</strong>, y las lecturas nunca se bloquean en la operación de actualización.</p>
+
+<h2>Notas de arquitectura</h2>
+<ul>
+<li>Subclases concretas: <code>RechnungCache</code> (para <code>RechnungDO</code>) y <code>EingangsrechnungCache</code> (para <code>EingangsrechnungDO</code>), cada una proporcionando solo el parámetro <code>entityClass</code></li>
+<li>Utiliza <code>kotlin.reflect.KClass</code> de Kotlin en lugar de <code>Class</code> de Java para seguridad de tipos</li>
+<li>El campo <code>@Transient lateinit var info</code> en <code>AbstractRechnungDO</code> es el campo complementario que esta caché puebla</li>
+<li>Durante la actualización, las posiciones sin ID se registran como errores — esto puede ocurrir con facturas clonadas donde los ID de posición aún no se han asignado</li>
+<li>La utilidad <code>LogDuration</code> rastrea el rendimiento de la actualización en los registros</li>
+</ul>
+
+<h2>Historial de Git</h2>
+<div class="hist"><pre>868d6abb7 2025 -> 2026
+85d8930b3 AbstractRechnungCache: Deadlock eliminado reemplazando bloques sync por ConcurrentHashMaps
+63081666f Encabezados de archivos fuente: 2024 -> 2025.
+2d324f2bb Finanzas: facturas de entrada corregidas.
+12610fee2 Migración en progreso... (todas las pruebas de todos los paquetes: OK).
+ff2cc4cfa Migración en progreso... (todas las pruebas de todos los paquetes: OK).
+190c0aea1 Migración en progreso... (todas las pruebas de todos los paquetes: OK).
+2e9839891 Migración en progreso...
+ba2479571 Migración en progreso...
+b3293f0cc PersistenceService/Context: manejo de estadísticas mejorado.
+b47c21af6 Refactorización de caché y cálculos con facturas (aún no terminado)
+ccb7ca64d Migración en progreso...
+41b5c2645 Migración en progreso...
+87dd5b87c AuftragsCache refactorizado, migración... (todas las pruebas OK)
+9408b59d7 Migración en progreso...
+85b4e1175 PfPersistenceService y PfPersistenceContext: query renombrado a executeQuery.
+4c04cfd65 CAMBIO-MAYOR! Migración de IDs enteros a IDs Long (incluyendo claves foráneas, etc.)
+2863b30b9 Migración en progreso...
+067a4cbb1 Migración en progreso...
+9d8b94352 Migración en progreso...
+67ce75fe9 Migración en progreso...
+e33c8b9c2 Migración en progreso...
+</pre></div>
+</body>
+</html>

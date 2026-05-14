@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>#1863 : CardDavUtilsTest [FR]</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:2em;color:#444}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.lang{font-size:.85em;color:#888;float:right}.lang a{color:#888;text-decoration:none;padding:0 .3em}.lang a.active{color:#0366d6;font-weight:600;text-decoration:underline}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}.warn{background:#fff3cd;border-left:3px solid #ffc107;padding:.5em 1em;margin:1em 0}.tip{background:#d4edda;border-left:3px solid #28a745;padding:.5em 1em;margin:1em 0}</style>
+</head>
+<body>
+<div class="lang"><a href="1863.html">EN</a> · <a href="1863_de.html">DE</a> · <a href="1863_ru.html">RU</a> · <a href="1863_fr.html" class="active">FR</a> · <a href="1863_es.html">ES</a></div>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← Index des fichiers</a> · <a href="1862.html">← Précédent</a> · <a href="1864.html">Suivant →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-carddav/src/test/kotlin/org/projectforge/carddav/CardDavUtilsTest.kt" target="_blank" title="Voir la source sur GitHub">📄 source</a></div>
+<h1>#1863 : <code>CardDavUtilsTest.kt</code></h1>
+<div class="meta"><code>projectforge-carddav/src/test/kotlin/org/projectforge/carddav/CardDavUtilsTest.kt</code> Test unitaire — package org.projectforge.carddav, projectforge-carddav/src/test/kotlin/org/projectforge/carddav/CardDavUtilsTest.kt <span style="color:#888">50 lignes · 23 code · 22 commentaires · 5 vides</span></div>
+<div class="c">Teste les utilitaires de manipulation d'URL dans <code>CardDavUtils</code> : génération d'URL principale, normalisation d'URI (suppression des préfixes CardDAV) et extraction d'ID de contact à partir de chemins de fichiers VCF et photo. Ce sont des aides de routage essentielles pour l'implémentation du serveur CardDAV.</div>
+<h2>Architecture</h2>
+<div class="c">
+<p><code>CardDavUtils</code> est une classe utilitaire fournissant des méthodes statiques d'aide pour l'implémentation du protocole CardDAV. Ce test couvre trois fonctions clés de manipulation d'URL/chemin indispensables pour l'adressage des ressources CardDAV.</p>
+
+<h3>Importations</h3>
+<ul>
+<li><strong>org.junit.jupiter.api.Assertions</strong> — assertions JUnit 5</li>
+<li><strong>org.junit.jupiter.api.Test</strong> — annotation de test JUnit 5</li>
+<li><strong>org.projectforge.framework.persistence.user.entities.PFUserDO</strong> — entité utilisateur ProjectForge (mock construit en ligne avec <code>PFUserDO().also { it.username = "joe" }</code>)</li>
+</ul>
+
+<h3>Méthodes testées</h3>
+
+<h4>1. getPrincipalsUsersUrl(uri, user)</h4>
+<p>Convertit un chemin d'URL de ressource en l'URL principale correspondante. Dans WebDAV/CardDAV, chaque utilisateur possède une <em>ressource principale</em> représentant son identité. Cette méthode mappe les URL de collection d'utilisateurs vers les URL principales :</p>
+<ul>
+<li><code>/carddav/users/... → /carddav/principals/users/joe/</code></li>
+<li><code>/users/... → /principals/users/joe/</code></li>
+</ul>
+<p>La méthode supprime les suffixes d'URL (le <code>...</code> représente les segments de chemin suivants) et réécrit <code>users</code> en <code>principals/users/{username}</code>. Ceci est défini dans la <strong>RFC 3744</strong> (Contrôle d'accès WebDAV) et la <strong>RFC 6352</strong> (CardDAV).</p>
+
+<h4>2. normalizedUri(uri)</h4>
+<p>Supprime le préfixe CardDAV des URI, en les normalisant vers leur type de ressource de base :</p>
+<ul>
+<li><code>/carddav/users/ → users</code></li>
+<li><code>/users/ → users</code></li>
+<li><code>/principals/ → principals</code></li>
+</ul>
+<p>Cette méthode est utilisée en interne par le répartiteur CardDAV pour déterminer quel gestionnaire doit traiter une demande après que le filtre a décidé qu'il s'agit de trafic CardDAV.</p>
+
+<h4>3. extractContactId(path)</h4>
+<p>Extrait l'ID numérique du contact ProjectForge à partir de différents modèles de chemin de fichier :</p>
+<ul>
+<li>Fichiers VCF : <code>/carddav/users/joe/ProjectForge-123.vcf → 123</code></li>
+<li>Photos JPEG : <code>/carddav/photos/contact-123.jpg → 123</code></li>
+<li>Photos PNG : <code>/carddav/photos/contact-123.png → 123</code></li>
+</ul>
+<p>La méthode utilise une correspondance regex sur les modèles <code>ProjectForge-{id}</code> et <code>contact-{id}</code>, permettant au serveur de mapper les URL de ressources CardDAV vers les ID de base de données ProjectForge.</p>
+
+<h3>Modèle de construction d'objet utilisateur</h3>
+<p>Le test utilise le modèle de fonction de portée <code>apply</code> de Kotlin : <code>PFUserDO().also { it.username = "joe" }</code>. Cela crée un <code>PFUserDO</code> partiellement initialisé avec seulement le nom d'utilisateur défini — suffisant pour les méthodes de génération d'URL qui n'ont besoin que de la propriété du nom d'utilisateur.</p>
+
+<div class="tip">Les trois méthodes sont des fonctions pures (aucun effet secondaire, aucune dépendance externe), ce qui les rend idéales pour les tests unitaires sans simulations. La seule dépendance est l'entité PFUserDO qui est construite directement dans le test.</div>
+</div>
+<h2>Historique Git</h2><div class="hist"><pre>868d6abb7 2025 -> 2026
+63081666f En-têtes de fichiers source : 2024 -> 2025.
+cc9abacea Serveur CardDAV : WIP : gestion des images.
+c4062ed97 WIP : Carddav
+40e554cbe WIP : Carddav</pre></div>
+</body>
+</html>

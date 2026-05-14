@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="es"><head><meta charset="utf-8"><title>#2857: AdminPage [ES]</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:2em;color:#444}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.lang{font-size:.85em;color:#888;float:right}.lang a{color:#888;text-decoration:none;padding:0 .3em}.lang a.active{color:#0366d6;font-weight:600;text-decoration:underline}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}.warn{background:#fff3cd;border-left:3px solid #ffc107;padding:.5em 1em;margin:1em 0}.tip{background:#d4edda;border-left:3px solid #28a745;padding:.5em 1em;margin:1em 0}</style></head>
+<body><div class="lang"><a href="2857.html">EN</a> · <a href="2857_de.html">DE</a> · <a href="2857_ru.html">RU</a> · <a href="2857_fr.html">FR</a> · <a href="2857_es.html" class="active">ES</a></div>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Índice</a> · <a href="file-index.html">← Índice de archivos</a> · <a href="2856.html">← Anterior</a> · <a href="2858.html">Siguiente →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-wicket/src/main/java/org/projectforge/web/admin/AdminPage.java" target="_blank" title="Ver fuente en GitHub">📄 fuente</a></div>
+
+<h1>#2857: <code>AdminPage.java</code></h1>
+<div class="meta"><code>projectforge-wicket/src/main/java/org/projectforge/web/admin/AdminPage.java</code> <strong>Página Apache Wicket</strong> — panel de administración del sistema. Fuente: <code>projectforge-wicket/src/main/java/org/projectforge/web/admin/AdminPage.java</code> · ~590 líneas <span style="color:#888">590 líneas · 502 código · 43 comentarios · 45 en blanco</span></div>
+
+<div class="c">La página de administración central accesible solo para usuarios con privilegios de administrador. Proporciona operaciones a nivel de sistema agrupadas en cinco categorías de menú: <strong>Configuración</strong> (releer config XML, exportar config, exportar ajustes 2FA), <strong>Cachés</strong> (refrescar todas las cachés), <strong>Acciones de Base de Datos</strong> (actualizar preferencias de usuario, crear índices faltantes, volcar base de datos, exportar esquema, optimizar imágenes de direcciones), <strong>Verificación del Sistema</strong> (verificación de integridad) y <strong>Desarrollo</strong> (validación de claves i18n, depuración de UserGroupCache, reindexación de Hibernate Search, generación de datos de prueba, alertas del sistema). El menú de Desarrollo solo es visible cuando <code>SystemStatus.isDevelopmentMode()</code> es verdadero.</div>
+
+<h2>Arquitectura</h2>
+<div class="c">Extiende <strong><code>AbstractStandardFormPage</code></strong> e implementa <strong><code>ISelectCallerPage</code></strong> (para selección de fechas basada en calendario). La página utiliza el <strong>patrón de menú de contenido</strong> de ProjectForge: cada grupo de acciones es un <code>ContentMenuEntryPanel</code> con entradas de submenú, cada una contiene un <code>Link</code> de Wicket cuyo <code>onClick()</code> delega a un método privado.<br><br>La página también contiene un componente <strong><code>AdminForm</code></strong> (el cuerpo de la página) que proporciona elementos de UI adicionales como el panel de información del sistema, el verificador de actualizaciones y el visor de registros.<br><br><strong>Inyección de endpoint estático</strong> mediante <code>set(IProjectForgeEndpoints)</code> — no es inyección por constructor sino un setter estático. Este es un patrón heredado: el campo <code>projectForgeEndpoints</code> proporciona acceso a información del sistema (versión, fecha de compilación, estadísticas de memoria) que se muestra en el formulario de administración. El setter estático es llamado por el inicializador de la aplicación Wicket.</div>
+
+<h2>Grupos de Menú</h2>
+<table><tr><th>Grupo</th><th>Acciones</th><th>Requiere</th></tr>
+<tr><td><strong>Configuración</strong></td><td>Releer config XML desde disco, exportar config como propiedades, exportar configuración 2FA</td><td>Acceso admin</td></tr>
+<tr><td><strong>Cachés</strong></td><td>Refrescar todas las cachés (direcciones, usuario, grupo, i18n, información del sistema, etc.)</td><td>Acceso admin</td></tr>
+<tr><td><strong>Acciones de Base de Datos</strong></td><td>Actualizar todas las preferencias XML de usuario, crear índices de BD faltantes, volcar base de datos, exportar esquema, optimizar imágenes de direcciones (reducir + recrear vistas previas)</td><td>Acceso admin</td></tr>
+<tr><td><strong>Verificación del Sistema</strong></td><td>Ejecutar verificación de integridad (valida consistencia de BD, claves foráneas, registros huérfanos)</td><td>Acceso admin</td></tr>
+<tr><td><strong>Desarrollo</strong></td><td>Validación de claves i18n, exportación de depuración JSON de UserGroupCache, DatabaseTester, reindexación de Hibernate Search, crear datos de prueba (100 objetos BookDO), mensaje de alerta del sistema, volcar configuración del sistema, mostrar actualizaciones de BD</td><td>Admin + <code>SystemStatus.isDevelopmentMode()</code></td></tr>
+</table>
+
+<h2>Control de Acceso</h2>
+<div class="c">La página sobrescribe <code>onBeforeRender()</code> para llamar a <code>checkAccess()</code> — un método heredado de <code>AbstractStandardFormPage</code> que verifica que el usuario actual tenga el rol <code>ADMIN</code>. Si no, el usuario es redirigido a una página de acceso denegado. Esta es la <strong>única verificación de autorización</strong> — no hay autorización detallada por acción; cualquier administrador puede realizar cualquier operación en esta página.<br><br>El menú de Desarrollo tiene una protección adicional: <code>if (SystemStatus.isDevelopmentMode() == false) return;</code> al final de <code>addDevelopmentMenu()</code>. Esto significa que las acciones de desarrollo no solo están ocultas — sus entradas de menú nunca se agregan a la página cuando no está en modo de desarrollo.</div>
+
+<h2>Dependencias Clave</h2>
+<table><tr><th>Importación</th><th>Rol</th></tr>
+<tr><td><code>ConfigXml</code>, <code>Configuration</code></td><td>Leer/escribir configuración del sistema (releer, exportar)</td></tr>
+<tr><td><code>SystemService</code></td><td>Refresco de caché, verificación de integridad del sistema</td></tr>
+<tr><td><code>DatabaseService</code></td><td>Crear índices, volcar BD, exportar esquema</td></tr>
+<tr><td><code>DatabaseTester</code></td><td>Desarrollo: probar operaciones de base de datos</td></tr>
+<tr><td><code>AddressImageDao</code></td><td>Base de datos: reducir y recrear imágenes de direcciones</td></tr>
+<tr><td><code>UserXmlPreferencesCache</code>, <code>UserXmlPreferencesMigrationDao</code></td><td>Base de datos: actualizar XML de preferencias de usuario</td></tr>
+<tr><td><code>HibernateSearchReindexer</code></td><td>Desarrollo: reconstruir índice de búsqueda Lucene</td></tr>
+<tr><td><code>BookDao</code>, <code>BookDO</code></td><td>Desarrollo: crear objetos de libro de prueba</td></tr>
+<tr><td><code>I18nHelper</code></td><td>Desarrollo: validar uso de claves i18n</td></tr>
+<tr><td><code>CronSanityCheckJob</code></td><td>Desarrollo: activar verificación nocturna manualmente</td></tr>
+<tr><td><code>SystemAlertMessage</code>, <code>SystemStatus</code></td><td>Desarrollo: establecer/verificar banner de alerta del sistema</td></tr>
+<tr><td><code>WicketUtils</code>, <code>DownloadUtils</code></td><td>UI: diálogos de confirmación JavaScript, disparadores de descarga de archivos</td></tr>
+</table>
+
+<h2>Patrones de Diseño</h2>
+<div class="c"><strong>Patrón de Menú de Contenido:</strong> En lugar de una lista plana de botones, la página de administración utiliza una estructura de menú jerárquica. Cada grupo (<code>ContentMenuEntryPanel</code>) contiene entradas de submenú, cada una con un Link de Wicket. Esto permite organizar más de 20 acciones de administración en categorías lógicas sin abrumar al usuario.<br><br><strong>Links con clases internas anónimas:</strong> Cada acción es un <code>new Link&lt;Void&gt;() { onClick() { ... } }</code> — clases internas anónimas que delegan a métodos privados. Este es el estilo estándar de Wicket anterior a Java 8. Una reescritura moderna usaría expresiones lambda (<code>Link&lt;Void&gt; link = new Link&lt;&gt;(id) { ... }</code> no puede ser lambda porque Link es una clase, no una interfaz funcional).<br><br><strong>Inyección de endpoint estático:</strong> <code>projectForgeEndpoints</code> es un campo estático establecido mediante un setter estático. Esto es inusual en una aplicación gestionada por Spring y existe porque AdminPage es una página de Wicket (no un bean de Spring) y necesita acceso a información a nivel de sistema que normalmente proporcionan los servicios de Spring. El setter estático se llama desde el init de la aplicación Wicket.</div>
+
+<h2>Historial Git</h2>
+<div class="hist"><table>
+<tr><th>Commit</th><th>Qué cambió</th></tr>
+<tr><td><code>868d6abb7</code></td><td>Copyright 2025→2026.</td></tr>
+<tr><td><code>eeaafe0df</code></td><td><strong>Se agregó menú de optimización de imágenes de direcciones.</strong> Nueva acción "Optimizar imágenes de direcciones" en el menú de Base de Datos. Minimiza el tamaño de archivo de las imágenes de direcciones (compresión JPEG ~100KB) y recalcula las miniaturas de vista previa. Incluye diálogo de confirmación JavaScript.</td></tr>
+<tr><td><code>ab200b126</code></td><td><strong>Reducción automática de imágenes de direcciones.</strong> La acción de optimización ahora reduce automáticamente las imágenes que son demasiado grandes, no solo ofrece la opción.</td></tr>
+<tr><td><code>5b042ab5f</code></td><td><strong>Se agregaron exportación de depuración de UserGroupCache y DatabaseTester.</strong> Nueva acción "Depurar UserGroupCache" en el menú de Desarrollo — exporta el estado de la caché como JSON para análisis fuera de línea. Nueva acción DatabaseTester para pruebas de estrés en desarrollo. Se agregó registro del módulo Jackson Hibernate6 para serialización JSON de proxies de Hibernate.</td></tr>
+<tr><td><code>b309e9be9</code></td><td>Mejoras en adjuntos de correo (BirthdayButler, Polls). Notificación automática por correo electrónico cuando la verificación nocturna encuentra errores.</td></tr>
+<tr><td><code>092dbf9c5</code></td><td>SystemService migrado a Kotlin. Paquete renombrado de <code>systeminfo</code> a <code>system</code>.</td></tr>
+<tr><td><code>619985f48</code></td><td>Preparativos para la versión 8.1 — fusión de PR #247, varias estabilizaciones.</td></tr>
+<tr><td><code>1b50060c3</code></td><td>Renombrado de métodos en BaseDao: <code>get</code>→<code>find</code>, <code>save</code>→<code>insert</code>, <code>getList</code>→<code>select</code>, <code>load</code>→<code>select</code>. Todos los llamantes actualizados — las llamadas DAO de AdminPage usan los nuevos nombres.</td></tr>
+<tr><td><code>a72903e36</code></td><td>Migración de <code>StringBuffer</code>→<code>StringBuilder</code> en todos los archivos Java/Kotlin. Rendimiento: StringBuilder no está sincronizado, StringBuffer sí.</td></tr>
+<tr><td><code>3aeda5ef5</code></td><td>Manejo de transacciones refactorizado. Se eliminó el sufijo <code>*InTrans</code> de los métodos DAO. <code>PfPersistenceContext</code> ya no se pasa como parámetro — usa ThreadLocal en su lugar.</td></tr>
+<tr><td><code>b095e6f7d</code></td><td>Cambio importante en el manejo de transacciones. Reutiliza <code>PfPersistenceContext</code>. Las pruebas estaban rotas en este punto (aún no corregidas).</td></tr>
+</table></div>
+
+<div class="warn"><strong>Precaución:</strong> Esta página no tiene autorización por acción. Cualquier usuario con acceso de administrador puede activar volcados de base de datos, exportaciones de esquema, reindexación de Hibernate y creación de datos de prueba — todo en la base de datos de producción. El menú de Desarrollo está protegido por <code>SystemStatus.isDevelopmentMode()</code> pero eso es una única bandera booleana sin más granularidad.</div>
+
+<div class="tip"><strong>Ruta de migración:</strong> Esta es una de las páginas más antiguas que aún están en Wicket. Los equivalentes de API REST para estas operaciones de administración se están construyendo en <code>projectforge-rest</code> (ver <code>SystemAdminPageRest</code>). Una vez que la capa REST cubra todas las operaciones de administración, esta página puede ser reemplazada por un panel de administración basado en React.</div>
+
+</body></html>

@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="fr"><head><meta charset="utf-8"><title>#426: ProjektRight.java [FR]</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:2em;color:#444}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.lang{font-size:.85em;color:#888;float:right}.lang a{color:#888;text-decoration:none;padding:0 .3em}.lang a.active{color:#0366d6;font-weight:600;text-decoration:underline}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}</style></head>
+<body><div class="lang"><a href="426.html">EN</a> · <a href="426_de.html">DE</a> · <a href="426_ru.html">RU</a> · <a href="426_fr.html" class="active">FR</a> · <a href="426_es.html">ES</a></div>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← Index des fichiers</a> · <a href="673.html">← Précédent</a> · <a href="374.html">Suivant →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/java/org/projectforge/business/fibu/ProjektRight.java" target="_blank" title="Voir la source sur GitHub">📄 source</a></div>
+<h1>#426: <code>ProjektRight.java</code></h1>
+<div class="meta"><code>projectforge-business/src/main/java/org/projectforge/business/fibu/ProjektRight.java</code> Type : Java · Rôle : Comptabilité financière · Source : projectforge-business/src/main/java/org/projectforge/business/fibu/ProjektRight.java <span style="color:#888">125 lignes · 76 code · 40 commentaires · 9 vides</span></div>
+<div class="c">Vérificateur des droits d'accès pour les opérations sur les projets. Implémente les vérifications des ID de droits utilisateur PF et détermine les permissions CRUD par module.</div>
+<h2>Structure du code</h2>
+<p>Package : <code>org.projectforge.business.fibu</code></p>
+<p>Classes : <code>ProjektRight</code></p>
+<p>Étend : <code>UserRightAccessCheck</code></p>
+<p>Méthodes (4) : <code>hasSelectAccess</code>, <code>hasSelectAccess</code>, <code>hasAccess</code>, <code>hasHistoryAccess</code></p>
+<p>Champs (1) : <code>serialVersionUID</code></p>
+<p>Importations : 5 packages</p>
+<h2>Code source (abrégé)</h2>
+<pre>
+package org.projectforge.business.fibu;
+
+import org.projectforge.business.user.*;
+import org.projectforge.framework.access.OperationType;
+import org.projectforge.framework.persistence.user.api.ThreadLocalUserContext;
+import org.projectforge.framework.persistence.user.entities.PFUserDO;
+import org.projectforge.web.WicketSupport;
+
+/**
+ * @author Kai Reinhard (k.reinhard@me.de)
+ */
+public class ProjektRight extends UserRightAccessCheck&lt;ProjektDO&gt;
+{
+  private static final long serialVersionUID = -3712738266564403670L;
+
+  public ProjektRight()
+  {
+    super(UserRightId.PM_PROJECT, UserRightCategory.PM,
+        UserRightServiceImpl.FALSE_READONLY_READWRITE);
+    initializeUserGroupsRight(UserRightServiceImpl.FALSE_READONLY_READWRITE, UserRightServiceImpl.FIBU_ORGA_PM_GROUPS)
+        // Tous les chefs de projet ont un accès en lecture seule :
+        .setAvailableGroupRightValues(ProjectForgeGroup.PROJECT_MANAGER, UserRightValue.READONLY)
+        // Tous les assistants projet n'ont pas d'accès, ont un accès en lecture ou en lecture seule :
+        .setAvailableGroupRightValues(ProjectForgeGroup.PROJECT_ASSISTANT, UserRightValue.READONLY)
+        // Accès en lecture seule pour les utilisateurs du contrôle de gestion :
+        .setReadOnlyForControlling();
+  }
+
+  /**
+   * @return Vrai, si {@link UserRightId#PM_PROJECT} est potentiellement disponible pour l'utilisateur (indépendamment de la
+   * valeur configurée).
+   * @see org.projectforge.business.user.UserRightAccessCheck#hasSelectAccess(org.projectforge.framework.access.AccessChecker,
+   * org.projectforge.framework.persistence.user.entities.PFUserDO)
+   */
+  @Override
+  public boolean hasSelectAccess(final PFUserDO user)
+  {
+    return WicketSupport.getAccessChecker().isAvailable(user, UserRightId.PM_PROJECT);
+  }
+
+  @Override
+  public boolean hasSelectAccess(final PFUserDO user, final ProjektDO obj)
+  {
+    if (obj == null) {
+      return true;
+    }
+    var accessChecker = WicketSupport.getAccessChecker();
+    if (accessChecker.isUserMemberOfGroup(user, ProjectForgeGroup.CONTROLLING_GROUP)) {
+      return true;
+    }
+    if (accessChecker.isUserMemberOfGroup(user, ProjectForgeGroup.PROJECT_MANAGER,
+        ProjectForgeGroup.PROJECT_ASSISTANT)) {
+      Long userId = user.getId();
+      Long headOfBusinessManagerId = obj.getHeadOfBusinessManager() != null ? obj.getHeadOfBusinessManager().getId() : null;
+      Long projectManagerId = obj.getProjectManager() != null ? obj.getProjectManager().getId() : null;
+      Long salesManageId = obj.getSalesManager() != null ? obj.getSalesManager().getId() : null;
+      if (userId != null &amp;&amp; (userId.equals(headOfBusinessManagerId) || userId.equals(projectManagerId) || userId.equals(salesManageId))) {
+        return true;
+      }
+
+      final UserGroupCache userGroupCache = UserGroupCache.getInstance();
+      if (obj.getProjektManagerGroup() != null
+          &amp;&amp; userGroupCache.isUserMemberOfGroup(ThreadLocalUserContext.getLoggedInUserId(),
+          obj.getProjektManagerGroupId())) {
+        if ((obj.getStatus() == null || !obj.getStatus().isIn(ProjektStatus.ENDED))
+            &amp;&amp; !obj.getDeleted()) {
+          // Un chef de projet ne voit pas les projets inactifs ou supprimés.
+          return true;
+        }
+      }
+      if (accessChecker.isUserMemberOfGroup(user, ProjectForgeGroup.ORGA_TEAM,
+          ProjectForgeGroup.FINANCE_GROUP)) {
+        return accessChecker.hasReadAccess(user, getId(), false);
+      }
+      return false;
+    } else {
+      return accessChecker.hasReadAccess(user, getId(), false);
+    }
+  }
+
+  @Override
+  public boolean hasAccess(final PFUserDO user, final ProjektDO obj, final ProjektDO oldObj,
+      final OperationType operationType)
+  {
+    return WicketSupport.getAccessChecker().hasRight(user, getId(), UserRightValue.READWRITE);
+  }
+
+  /**
+   * Accès à l'historique autorisé uniquement pour les utilisateurs ayant un accès en lecture et/ou écriture.
+   *
+   * @see org.projectforge.business.user.UserRightAccessCheck#hasHistoryAccess(java.lang.Object)
+   */
+  @Override
+  public boolean hasHistoryAccess(final PFUserDO user, final ProjektDO obj)
+  {
+    var accessChecker = WicketSupport.getAccessChecker();
+    if (accessChecker.isUserMemberOfGroup(user, ProjectForgeGroup.CONTROLLING_GROUP)) {
+      return true;
+    }
+    return accessChecker.hasRight(user, getId(), UserRightValue.READWRITE);
+  }
+}</pre>
+
+<h2>Historique Git</h2><div class="hist"><pre>868d6abb7 2025 -> 2026
+63081666f En-têtes des fichiers sources : 2024 -> 2025.
+67805f2fc ThreadLocalUserContext.user -> ThreadLocalUserContext.loggedInUser (renommé pour éviter les malentendus dans le code).
+4c04cfd65 CHANGEMENT-MAJEUR ! Migration des identifiants entiers vers des identifiants Long (y compris les clés étrangères, etc.)
+4efcbd0fb Travaux de migration en cours...</pre></div>
+</body></html>

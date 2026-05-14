@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>#930: EmployeeServiceSupport.kt [ES]</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:2em;color:#444}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}</style>
+</head>
+<body>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Índice</a> · <a href="file-index.html">← Índice de archivos</a> · <a href="929.html">← Anterior</a> · <a href="931.html">Siguiente →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/kotlin/org/projectforge/business/fibu/EmployeeServiceSupport.kt" target="_blank" title="Ver fuente en GitHub">📄 fuente</a></div>
+<h1>#930: <code>EmployeeServiceSupport.kt</code></h1>
+<div class="meta"><code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/EmployeeServiceSupport.kt</code> Tipo: Spring Service (interno) · Propósito: Implementación interna de EmployeeService — lógica de validación, persistencia y búsqueda para atributos dependientes del tiempo · Ruta: <code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/EmployeeServiceSupport.kt</code> <span style="color:#888">418 líneas · 304 código · 88 comentarios · 26 en blanco</span></div>
+<div class="c">El motor de implementación detrás de <code>EmployeeService</code>. Marcado como <code>internal</code> — no accesible fuera del paquete <code>fibu</code>. Contiene toda la lógica real para consultar, validar, insertar, actualizar, eliminar suave y recuperar entradas <code>EmployeeValidSinceAttrDO</code>. También resuelve los valores de atributos actuales (vacaciones anuales, horas semanales, estado) a partir de las entradas del período de validez.</div>
+
+<h2>Arquitectura y Diseño</h2>
+
+<h3>Dependencias</h3>
+<table>
+<tr><th>Dependencia</th><th>Rol</th></tr>
+<tr><td><code>BaseDOPersistenceService</code></td><td>Operaciones CRUD genéricas (<code>insert</code>, <code>update</code>, <code>markAsDeleted</code>, <code>undelete</code>) con soporte de verificación de acceso.</td></tr>
+<tr><td><code>EmployeeCache</code></td><td>Invalidado después de cada mutación (<code>setExpired()</code>) para forzar la actualización de caché.</td></tr>
+<tr><td><code>EmployeeDao</code></td><td>Búsqueda de entidades y delegación de verificación de acceso (<code>checkLoggedInUserSelectAccess</code>, <code>checkLoggedInUserInsertAccess</code>, <code>checkLoggedInUserUpdateAccess</code>).</td></tr>
+<tr><td><code>PfPersistenceService</code></td><td>Ejecución directa de consultas para búsquedas y validaciones de <code>ValidSinceAttr</code>.</td></tr>
+</table>
+
+<h3>Métodos de Consulta</h3>
+<ul>
+<li><strong><code>findValidSinceAttr(id, expectedType, checkAccess)</code></strong> — Búsqueda simple de entidad por ID con validación opcional de tipo (lanza <code>IllegalArgumentException</code> si hay discrepancia de tipo).</li>
+<li><strong><code>selectAllValidSinceAttrs(employee, type, deleted, checkAccess)</code></strong> — Consulta principal: obtiene todos los <code>ValidSinceAttr</code> para un empleado, opcionalmente filtrados por tipo y estado de eliminación. Ordenados por <code>validSince DESC</code>.</li>
+<li><strong><code>selectAnnualLeaveDayEntries()</code></strong> / <strong><code>selectWeeklyWorkingHoursEntries()</code></strong> — Envoltorios de conveniencia que filtran por tipo <code>ANNUAL_LEAVE</code> o <code>WEEKLY_HOURS</code>. Disponibles con parámetros <code>employeeId</code> o <code>EmployeeDO</code>.</li>
+</ul>
+
+<h3>Resolución de Entrada Activa (<code>getActiveEntry</code>)</h3>
+<p>El método <code>getActiveEntry(entries, validAtDate)</code> resuelve un problema comercial clave: dada una lista de entradas <code>ValidSinceAttr</code> con fechas <code>validSince</code>, encontrar la que es actualmente aplicable en un punto dado en el tiempo. Algoritmo:</p>
+<ol>
+<li>Iterar todas las entradas no eliminadas.</li>
+<li>Para cada entrada donde <code>validAtDate >= entry.validSince</code>, comparar con la mejor encontrada hasta ahora.</li>
+<li>Seleccionar la entrada con el <strong>último</strong> <code>validSince</code> que aún sea anterior/en la fecha de referencia.</li>
+</ol>
+<p>Esto soporta búsquedas históricas — preguntar "cuál eran las vacaciones anuales para el empleado X en la fecha Y" — lo cual es crítico para informes precisos.</p>
+
+<h3>Lógica de Validación (<code>validate</code>)</h3>
+<p>Antes de insertar o actualizar, el sistema verifica si existe otro <code>ValidSinceAttr</code> con la misma combinación <code>(employee, type, validSince)</code>:</p>
+<ul>
+<li><strong>Nueva entrada (id==null):</strong> Usa la consulta nombrada <code>FIND_BY_TYPE_AND_DATE</code>.</li>
+<li><strong>Entrada existente:</strong> Usa <code>FIND_OTHER_BY_TYPE_AND_DATE</code> (excluye el ID actual).</li>
+<li><strong>Reutilización de entrada eliminada:</strong> Si existe una entrada eliminada con el mismo <code>validSince</code>, se devuelve para reutilización en lugar de lanzar excepción. Esto maneja el escenario de UX donde los usuarios no pueden ver entradas eliminadas pero intentan agregar una nueva que colisionaría — el sistema silenciosamente recupera y actualiza el registro existente.</li>
+<li>Si existe un duplicado no eliminado, lanza <code>IllegalArgumentException</code>.</li>
+</ul>
+
+<h3>Operaciones CRUD</h3>
+<ul>
+<li><strong><code>insert()</code></strong> — Valida, luego inserta uno nuevo o recupera uno existente (lógica de reutilización). Siempre expira la caché del empleado.</li>
+<li><strong><code>insertValidSinceAttr()</code></strong> — Fábrica de conveniencia: crea <code>EmployeeValidSinceAttrDO</code>, establece todos los campos e inserta.</li>
+<li><strong><code>updateValidSinceAttr()</code></strong> — Actualización compleja con semántica de copia: valida, potencialmente marca la entrada existente como eliminada y recupera/modifica una previamente eliminada con la fecha objetivo.</li>
+<li><strong><code>markValidSinceAttrAsDeleted()</code></strong> — Valida, luego elimina suavemente con verificación de acceso.</li>
+<li><strong><code>undeleteValidSinceAttr()</code></strong> — Valida, luego recupera con verificación de acceso.</li>
+</ul>
+
+<h3>Obtenedores de Valores Concretos</h3>
+<ul>
+<li><strong><code>getEmployeeStatus()</code></strong> — Selecciona entradas STATUS, obtiene la entrada activa, convierte el valor al enum <code>EmployeeStatus</code> mediante <code>safeValueOf()</code>. Registra error si se encuentra un valor de estado desconocido.</li>
+<li><strong><code>getAnnualLeaveDays()</code></strong> — Selecciona entradas ANNUAL_LEAVE, obtiene la entrada activa, convierte a <code>BigDecimal</code>.</li>
+<li><strong><code>getWeeklyWorkingHours()</code></strong> — Selecciona entradas WEEKLY_HOURS, obtiene la entrada activa, convierte a <code>BigDecimal</code>.</li>
+</ul>
+<p>Todos devuelven null si el empleado o validAtDate es null (para compatibilidad de pruebas con CallAllPagesTest/Wicket).</p>
+
+<h2>Historial Git</h2>
+<div class="hist"><pre>868d6abb7 2025 -> 2026
+28efde264 Employee: weeklyWorkingHours ahora como attr. dependiente del tiempo. eintritt/austritt: timestamp -> date
+63081666f Encabezados de archivos fuente: 2024 -> 2025.
+5f9bbfbd3 Corregir errores tipográficos en el directorio projectforge-business
+4ae4f3ea3 Correcciones de errores durante la puesta en producción...
+b5dc26e24 Migración en progreso... (todas las pruebas de todos los paquetes: OK).
+b0efaddc2 Migración en progreso... (todas las pruebas de todos los paquetes: OK).
+6aca64431 Migración en progreso... (todas las pruebas de todos los paquetes: OK).</pre></div>
+</body>
+</html>

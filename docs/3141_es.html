@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>3141: GroupEditForm.java [ES]</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:1.5em;color:#444;font-size:1em}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.lang{font-size:.85em;color:#888;float:right}.lang a{color:#888;text-decoration:none;padding:0 .3em}.lang a.active{color:#0366d6;font-weight:600;text-decoration:underline}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}pre.diff{background:#fff;font-size:.82em;max-height:300px;overflow-y:auto}</style>
+</head>
+<body>
+<div class="lang"><a href="3141.html">EN</a> · <a href="3141_de.html">DE</a> · <a href="3141_ru.html">RU</a> · <a href="3141_fr.html">FR</a> · <a href="3141_es.html" class="active">ES</a></div>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Índice</a> · <a href="file-index.html">← Índice de archivos</a> · <a href="2622.html">← Anterior</a> · <a href="766.html">Siguiente →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-wicket/src/main/java/org/projectforge/web/user/GroupEditForm.java" target="_blank" title="Ver fuente en GitHub">📄 fuente</a></div>
+<h1>#3141: <code>GroupEditForm.java</code></h1>
+<div class="meta"><code>projectforge-wicket/src/main/java/org/projectforge/web/user/GroupEditForm.java</code> Clase Java, <code>projectforge-wicket/src/main/java/org/projectforge/web/user/GroupEditForm.java</code> <span style="color:#888">289 líneas · 222 código · 49 comentarios · 18 en blanco</span></div>
+<div class="c"><strong>Propósito:</strong> Archivo fuente: projectforge/web/user/GroupEditForm.java. GroupEditForm.java es parte de la aplicación de gestión de proyectos de código abierto ProjectForge.</div>
+<h2>Fuente (primeras 100 líneas)</h2>
+<pre>/////////////////////////////////////////////////////////////////////////////
+//
+// Project ProjectForge Community Edition
+//         www.projectforge.org
+//
+// Copyright (C) 2001-2026 Micromata GmbH, Germany (www.micromata.com)
+//
+// ProjectForge tiene doble licencia.
+//
+// Esta edición comunitaria es software libre; puedes redistribuirla y/o
+// modificarla bajo los términos de la Licencia Pública General GNU publicada
+// por la Free Software Foundation; versión 3 de la Licencia.
+//
+// Esta edición comunitaria se distribuye con la esperanza de que sea útil,
+// pero SIN NINGUNA GARANTÍA; sin siquiera la garantía implícita de
+// COMERCIABILIDAD o IDONEIDAD PARA UN PROPÓSITO PARTICULAR. Consulte la
+// Licencia Pública General GNU para más detalles.
+//
+// Deberías haber recibido una copia de la Licencia Pública General GNU junto
+// con este programa; si no, visita http://www.gnu.org/licenses/.
+//
+/////////////////////////////////////////////////////////////////////////////
+
+package org.projectforge.web.user;
+
+import org.apache.commons.lang3.StringUtils;
+import org.apache.wicket.ajax.AjaxRequestTarget;
+import org.apache.wicket.ajax.markup.html.form.AjaxButton;
+import org.apache.wicket.markup.html.form.Button;
+import org.apache.wicket.markup.html.form.Form;
+import org.apache.wicket.markup.html.form.FormComponent;
+import org.apache.wicket.markup.html.form.validation.IFormValidator;
+import org.apache.wicket.model.PropertyModel;
+import org.apache.wicket.validation.IValidator;
+import org.apache.wicket.validation.ValidationError;
+import org.projectforge.business.ldap.GroupDOConverter;
+import org.projectforge.business.ldap.LdapGroupValues;
+import org.projectforge.business.ldap.LdapPosixGroupsUtils;
+import org.projectforge.business.ldap.LdapUserDao;
+import org.projectforge.business.login.Login;
+import org.projectforge.business.user.GroupDao;
+import org.projectforge.business.user.UsersComparator;
+import org.projectforge.business.user.service.UserService;
+import org.projectforge.framework.persistence.user.entities.GroupDO;
+import org.projectforge.framework.persistence.user.entities.PFUserDO;
+import org.projectforge.web.WicketSupport;
+import org.projectforge.web.common.MultiChoiceListHelper;
+import org.projectforge.web.wicket.AbstractEditForm;
+import org.projectforge.web.wicket.WebConstants;
+import org.projectforge.web.wicket.WicketUtils;
+import org.projectforge.web.wicket.bootstrap.GridSize;
+import org.projectforge.web.wicket.components.*;
+import org.projectforge.web.wicket.flowlayout.DivTextPanel;
+import org.projectforge.web.wicket.flowlayout.FieldsetPanel;
+import org.projectforge.web.wicket.flowlayout.InputPanel;
+import org.projectforge.web.wicket.flowlayout.TextAreaPanel;
+import org.slf4j.Logger;
+import org.wicketstuff.select2.Select2MultiChoice;
+
+import java.util.Collection;
+import java.util.LinkedList;
+import java.util.List;
+import java.util.Set;
+
+public class GroupEditForm extends AbstractEditForm&lt;GroupDO, GroupEditPage&gt;
+{
+  private static final long serialVersionUID = 3044732844606748738L;
+
+  private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(GroupEditForm.class);
+
+  MultiChoiceListHelper&lt;PFUserDO&gt; assignUsersListHelper;
+
+
+  // MultiChoiceListHelper&lt;GroupDO&gt; nestedGroupsListHelper;
+
+  LdapGroupValues ldapGroupValues;
+
+  private MinMaxNumberField&lt;Integer&gt; gidNumberField;
+
+  public GroupEditForm(final GroupEditPage parentPage, final GroupDO data)
+  {
+    super(parentPage, data);
+  }
+
+  @SuppressWarnings("serial")
+  @Override
+  protected void init()
+  {
+    super.init();
+    gridBuilder.newSplitPanel(GridSize.COL50);
+    {
+      // Nombre
+      final FieldsetPanel fs = gridBuilder.newFieldset(getString("name"));
+      final RequiredMaxLengthTextField name = new RequiredMaxLengthTextField(InputPanel.WICKET_ID,
+          new PropertyModel&lt;String&gt;(getData(),
+              "name"));
+      name.setMarkupId("name").setOutputMarkupId(true);
+      name.add((IValidator&lt;String&gt;) validatable -&gt; {
+        final String groupname = validatable.getValue();
+        getData().setName(groupname);</pre>
+<h2>Historial Git</h2>
+<div class="hist">
+<pre>868d6abb7 2025 -> 2026
+63081666f Encabezados de archivos fuente: 2024 -> 2025.
+8c0b82f21 Importaciones no utilizadas eliminadas.
+4efcbd0fb Migración en curso...
+b6092df09 Copyright 2023 -> 2024</pre>
+<h3>868d6abb7</h3><div class="c"><strong>2025 -> 2026</strong><pre class="diff">868d6abb75cd191a892911ac8e45058932cf9074
+diff --git a/projectforge-wicket/src/main/java/org/projectforge/web/user/GroupEditForm.java b/projectforge-wicket/src/main/java/org/projectforge/web/user/GroupEditForm.java
+index d6e1c2b48..de7e3b90f 100644
+--- a/projectforge-wicket/src/main/java/org/projectforge/web/user/GroupEditForm.java
++++ b/projectforge-wicket/src/main/java/org/projectforge/web/user/GroupEditForm.java
+@@ -3,7 +3,7 @@
+ // Project ProjectForge Community Edition
+ //         www.projectforge.org
+ //
+-// Copyright (C) 2001-2025 Micromata GmbH, Germany (www.micromata.com)
++// Copyright (C) 2001-2026 Micromata GmbH, Germany (www.micromata.com)
+ //
+ // ProjectForge is dual-licensed.
+ //</pre></div><h3>63081666f</h3><div class="c"><strong>Encabezados de archivos fuente: 2024 -> 2025.</strong><pre class="diff">63081666f620fb87315f01b817e560e0b2f6a33a
+diff --git a/projectforge-wicket/src/main/java/org/projectforge/web/user/GroupEditForm.java b/projectforge-wicket/src/main/java/org/projectforge/web/user/GroupEditForm.java
+index 496716389..d6e1c2b48 100644
+--- a/projectforge-wicket/src/main/java/org/projectforge/web/user/GroupEditForm.java
++++ b/projectforge-wicket/src/main/java/org/projectforge/web/user/GroupEditForm.java
+@@ -3,7 +3,7 @@
+ // Project ProjectForge Community Edition
+ //         www.projectforge.org
+ //
+-// Copyright (C) 2001-2024 Micromata GmbH, Germany (www.micromata.com)
++// Copyright (C) 2001-2025 Micromata GmbH, Germany (www.micromata.com)
+ //
+ // ProjectForge is dual-licensed.
+ //</pre></div><h3>8c0b82f21</h3><div class="c"><strong>Importaciones no utilizadas eliminadas.</strong><pre class="diff">8c0b82f212543f1da4a56ab523e8e599850e8338
+diff --git a/projectforge-wicket/src/main/java/org/projectforge/web/user/GroupEditForm.java b/projectforge-wicket/src/main/java/org/projectforge/web/user/GroupEditForm.java
+index faf770e95..496716389 100644
+--- a/projectforge-wicket/src/main/java/org/projectforge/web/user/GroupEditForm.java
++++ b/projectforge-wicket/src/main/java/org/projectforge/web/user/GroupEditForm.java
+@@ -31,7 +31,6 @@ import org.apache.wicket.markup.html.form.Form;
+ import org.apache.wicket.markup.html.form.FormComponent;
+ import org.apache.wicket.markup.html.form.validation.IFormValidator;
+ import org.apache.wicket.model.PropertyModel;
+-import org.apache.wicket.spring.injection.annot.SpringBean;
+ import org.apache.wicket.validation.IValidator;
+ import org.apache.wicket.validation.ValidationError;
+ import org.projectforge.business.ldap.GroupDOConverter;
+@@ -40,10 +39,8 @@ import org.projectforge.business.ldap.LdapPosixGroupsUtils;
+ import org.projectforge.business.ldap.LdapUserDao;
+ import org.projectforge.business.login.Login;
+ import org.projectforge.business.user.GroupDao;
+-import org.projectforge.business.user.UserDao;
+ import org.projectforge.business.user.UsersComparator;
+ import org.projectforge.business.user.service.UserService;
+-import org.projectforge.framework.access.AccessChecker;
+ import org.projectforge.framework.persistence.user.entities.GroupDO;
+ import org.projectforge.framework.persistence.user.entities.PFUserDO;
+ import org.projectforge.web.WicketSupport;</pre></div><h3>4efcbd0fb</h3><div class="c"><strong>Migración en curso...</strong><pre class="diff">4efcbd0fb62fb527758bd7d1834d604382c55b33
+diff --git a/projectforge-wicket/src/main/java/org/projectforge/web/user/GroupEditForm.java b/projectforge-wicket/src/main/java/org/projectforge/web/user/GroupEditForm.java
+index aedc5242c..faf770e95 100644
+--- a/projectforge-wicket/src/main/java/org/projectforge/web/user/GroupEditForm.java
++++ b/projectforge-wicket/src/main/java/org/projectforge/web/user/GroupEditForm.java
+@@ -46,6 +46,7 @@ import org.projectforge.business.user.service.UserService;
+ import org.projectforge.framework.access.AccessChecker;
+ import org.projectforge.framework.persistence.user.entities.GroupDO;
+ import org.projectforge.framework.persistence.user.entities.PFUserDO;
++import org.projectforge.web.WicketSupport;
+ import org.projectforge.web.common.MultiChoiceListHelper;
+ import org.projectforge.web.wicket.AbstractEditForm;
+ import org.projectforge.web.wicket.WebConstants;
+@@ -70,27 +71,6 @@ public class GroupEditForm extends AbstractEditForm&lt;GroupDO, GroupEditPage&gt;
+ 
+   private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(GroupEditForm.class);
+ 
+-  @SpringBean
+-  private AccessChecker accessChecker;
+-
+-  @SpringBean
+-  private GroupDao groupDao;
+-
+-  @SpringBean
+-  UserDao userDao;
+-
+-  @SpringBean
+-  UserService userService;
+-
+-  @SpringBean
+-  GroupDOConverter groupDOConverter;
+-
+-  @SpringBean
+-  LdapPosixGroupsUtils ldapPosixGroupsUtils;
+-
+-  @SpringBean
+-  LdapUserDao ldapUserDao;
+-
+   MultiChoiceListHelper&lt;PFUserDO&gt; assignUsersListHelper;
+ 
+ 
+@@ -121,7 +101,7 @@ public class GroupEditForm extends AbstractEditForm&lt;GroupDO, GroupEditPage&gt;
+       name.add((IValidator&lt;String&gt;) validatable -&gt; {
+         final String groupname = validatable.getValue();
+         getData().setName(groupname);
+-        if (groupDao.doesGroupnameAlreadyExist(getData()) == true) {
++        if (WicketSupport.get(GroupDao.class).doesGroupnameAlreadyExist(getData()) == true) {
+           validatable.error(new ValidationError().addKey("group.error.groupnameAlreadyExists"));
+         }
+       });
+@@ -154,7 +134,7 @@ public class GroupEditForm extends AbstractEditForm&lt;GroupDO, GroupEditPage&gt;
+       // Usuarios asignados
+       final FieldsetPanel fs = gridBuilder.newFieldset(getString("group.assignedUsers")).setLabelSide(false);
+       final Set&lt;PFUserDO&gt; assignedUsers = getData().getAssignedUsers();
+-      final UsersProvider usersProvider = new UsersProvider(userDao);
++      final UsersProvider usersProvider = new UsersProvider(WicketSupport.getUserDao());
+       assignUsersListHelper = new MultiChoiceListHelper&lt;PFUserDO&gt;().setComparator(new UsersComparator()).setFullList(
+           usersProvider.getSortedUsers());
+       if (assignedUsers != null) {
+@@ -174,9 +154,9 @@ public class GroupEditForm extends AbstractEditForm&lt;GroupDO, GroupEditPage&gt;</pre></div><h3>b6092df09</h3><div class="c"><strong>Copyright 2023 -> 2024</strong><pre class="diff">b6092df0927c4a3b161e888445f31dcab57493f2
+diff --git a/projectforge-wicket/src/main/java/org/projectforge/web/user/GroupEditForm.java b/projectforge-wicket/src/main/java/org/projectforge/web/user/GroupEditForm.java
+index 9a84c959f..aedc5242c 100644
+--- a/projectforge-wicket/src/main/java/org/projectforge/web/user/GroupEditForm.java
++++ b/projectforge-wicket/src/main/java/org/projectforge/web/user/GroupEditForm.java
+@@ -3,7 +3,7 @@
+ // Project ProjectForge Community Edition
+ //         www.projectforge.org
+ //
+-// Copyright (C) 2001-2023 Micromata GmbH, Germany (www.micromata.com)
++// Copyright (C) 2001-2024 Micromata GmbH, Germany (www.micromata.com)
+ //
+ // ProjectForge is dual-licensed.
+ //</pre></div>
+</div>
+</body>
+</html>

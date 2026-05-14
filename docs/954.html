@@ -1,106 +1,14 @@
-<!DOCTYPE html>
-<html lang="en">
-<head><meta charset="UTF-8"><title>#954: RechnungsPositionDO.kt</title>
-<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:2em;color:#444}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}</style></head>
-<body>
-<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="953.html">← Prev</a> · <a href="955.html">Next →</a></div>
-<h1>#954: <code>RechnungsPositionDO.kt</code></h1>
-<div class="meta">Type: JPA Entity (DO) · Purpose: Outgoing invoice line item (position) · Source: projectforge-business/src/main/kotlin/org/projectforge/business/fibu/RechnungsPositionDO.kt</div>
-<div class="c">Represents a single line item (position) within an outgoing invoice. Extends <code>AbstractRechnungsPositionDO</code> for shared position logic (number, title, quantity, net price, VAT). Adds outgoing-invoice-specific fields: back-reference to the parent <code>RechnungDO</code>, optional link to an order position (<code>AuftragsPositionDO</code>), and per-position period of performance settings.</div>
-<h2>Entity Design</h2>
-<table>
-<tr><th>Field</th><th>Type</th><th>DB Column</th><th>Description</th></tr>
-<tr><td><code>rechnung</code></td><td><code>RechnungDO?</code></td><td>FK rechnung_fk</td><td>Parent invoice (<code>@JsonBackReference</code>)</td></tr>
-<tr><td><code>auftragsPosition</code></td><td><code>AuftragsPositionDO?</code></td><td>FK auftrags_position_fk</td><td>Linked order position (optional)</td></tr>
-<tr><td><code>periodOfPerformanceType</code></td><td><code>PeriodOfPerformanceType?</code></td><td>VARCHAR(10)</td><td>SEEABOVE, EXACT, or NONE (default: SEEABOVE)</td></tr>
-<tr><td><code>periodOfPerformanceBegin</code></td><td><code>LocalDate?</code></td><td>DATE</td><td>Start of performance period for this position</td></tr>
-<tr><td><code>periodOfPerformanceEnd</code></td><td><code>LocalDate?</code></td><td>DATE</td><td>End of performance period for this position</td></tr>
-<tr><td><code>kostZuweisungen</code></td><td><code>MutableList&lt;KostZuweisungDO&gt;?</code></td><td>OneToMany</td><td>Cost assignments (<code>@JsonManagedReference</code>)</td></tr>
-</table>
-<h3>Computed (Transient) Properties</h3>
-<table>
-<tr><th>Property</th><th>Type</th><th>Description</th></tr>
-<tr><td><code>rechnungId</code></td><td><code>Long?</code></td><td>Shortcut for rechnung.id (JPA transient)</td></tr>
-</table>
-<h3>Inherited from AbstractRechnungsPositionDO</h3>
-<table>
-<tr><th>Field</th><th>Description</th></tr>
-<tr><td><code>number</code></td><td>Position number (ordered, 1-based)</td></tr>
-<tr><td><code>titel</code></td><td>Line item title/description</td></tr>
-<tr><td><code>menge</code></td><td>Quantity (<code>BigDecimal</code>)</td></tr>
-<tr><td><code>einzelNetto</code></td><td>Net unit price</td></tr>
-<tr><td><code>vat</code></td><td>VAT rate percentage</td></tr>
-<tr><td><code>nettoSumme</code></td><td>Computed net total (menge × einzelNetto)</td></tr>
-</table>
-<h2>Persistence Details</h2>
-<ul>
-<li>Mapped to <code>t_fibu_rechnung_position</code> with unique constraint on (rechnung_fk, number)</li>
-<li>Indexes on <code>auftrags_position_fk</code> and <code>rechnung_fk</code></li>
-<li>Cost assignments fetched <code>LAZY</code> with <code>@JsonManagedReference</code> (parent side of bidir)</li>
-<li><code>checkKostZuweisungId()</code> validates that a cost assignment belongs to this position</li>
-<li><code>newClone()</code> creates a deep copy including cloned cost assignments (for invoice cloning)</li>
-</ul>
-<h2>Period of Performance</h2>
-<p>Each position can have its own period of performance, controlled by <code>periodOfPerformanceType</code>:
-- <code>SEEABOVE</code>: Inherits from the parent invoice's period
-- <code>EXACT</code>: Uses <code>periodOfPerformanceBegin</code> / <code>periodOfPerformanceEnd</code>
-- <code>NONE</code>: No period specified</p>
-<h2>Design Comparison: Incoming vs Outgoing</h2>
-<table>
-<tr><th>Aspect</th><th>RechnungsPositionDO (outgoing)</th><th>EingangsrechnungsPositionDO (incoming)</th></tr>
-<tr><td>Parent ref</td><td><code>rechnung: RechnungDO</code></td><td><code>eingangsrechnung: EingangsrechnungDO</code></td></tr>
-<tr><td>Order link</td><td><code>auftragsPosition</code></td><td>N/A</td></tr>
-<tr><td>Perf. period</td><td>Per-position override</td><td>N/A</td></tr>
-</table>
-<h2>Source Code (abridged)</h2>
-<pre>@Entity @Indexed @Table(name = "t_fibu_rechnung_position", ...)
-open class RechnungsPositionDO : AbstractRechnungsPositionDO() {
-    @JsonBackReference @ManyToOne(fetch = LAZY)
-    @JoinColumn(name = "rechnung_fk", nullable = false)
-    open var rechnung: RechnungDO? = null
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>#954: SmppTest.java</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.lang{font-size:.85em;color:#888;float:right}.lang a{color:#888;text-decoration:none;padding:0 .3em}.lang a.active{color:#0366d6;font-weight:600;text-decoration:underline}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}.missing{background:#fff3cd;border:1px solid #ffc107;padding:.5em 1em;margin:1em 0;border-radius:4px}</style></head>
+<body><div class="lang"><a href="954.html" class="active">EN</a> · <a href="954_de.html">DE</a> · <a href="954_ru.html">RU</a> · <a href="954_fr.html">FR</a> · <a href="954_es.html">ES</a></div>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="953.html">← Prev</a> · <a href="955.html">Next →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/kotlin/org/projectforge/business/fibu/KontoDO.kt" target="_blank" title="View source on GitHub">📄 source</a></div>
+<h1>#954: <code>SmppTest.java</code></h1>
+<div class="meta"><code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/KontoDO.kt</code> Test - SMS, <code>projectforge-commons/src/test/java/org/projectforge/security/SmppTest.java</code> <span style="color:#888">109 lines · 63 code · 33 comments · 13 blank</span></div>
+<div class="c">Java unit test for SMPP protocol integration. Not present in the `fix/vite-eslint-upgrade` branch.</div>
 
-    @ManyToOne(fetch = LAZY) @JoinColumn(name = "auftrags_position_fk")
-    open var auftragsPosition: AuftragsPositionDO? = null
-
-    @Enumerated(STRING) @Column(name = "period_of_performance_type")
-    open var periodOfPerformanceType: PeriodOfPerformanceType? = SEEABOVE
-    open var periodOfPerformanceBegin: LocalDate? = null
-    open var periodOfPerformanceEnd: LocalDate? = null
-
-    @OneToMany(mappedBy = "rechnungsPosition", fetch = LAZY)
-    @OrderColumn(name = "index") @JsonManagedReference
-    override var kostZuweisungen: MutableList&lt;KostZuweisungDO&gt;? = null
-
-    fun newClone(): RechnungsPositionDO {
-        val clone = newInstance()
-        clone.copyValuesFrom(this, "id", "kostZuweisungen")
-        this.kostZuweisungen?.forEach {
-            clone.addKostZuweisung(it.newClone())
-        }
-        return clone
-    }
-}</pre>
-<h2>Git History</h2>
-<div class="hist"><pre>868d6abb7 2025 -> 2026
-aa20b7708 JoinColumn -> mappedBy fix.
-63081666f Source file headers: 2024-> 2025.
-0237d5eba Json: IdOnlySerializer and IdsOnlySerializer.
-db2599ab8 History in orderbook, invoices and projects.
-b47c21af6 Refactored caching and calculations with invoices.
-4c04cfd65 MAJOR-CHANGE! Integer id's to Long id's.
-f984352a0 JsonBackReference/JsonManagedReference: KostZuweisungDO
-a9cf30719 JsonBackReference/JsonManagedReference.
-c0f2b9de0 Tenants removed.
-ca0d5470e Remove DateBridges.
-78b436d9e Replace java.util.Date with java.time.LocalDate.
-1cf12f943 Infinitive loop in json serialization fixed.
-bc7b1761c Eingangsrechnungen: Kostzuweisungen fixed.
-8675a1dbe Kotlin JPA entities declared open.
-812b5b751 Heavy WIP: refactoring (Eingangs)Rechnung* perf killer.
-3bd2b6e9d RechnungRest: Add position list
-97d00031d LAZY instead of EAGER loading.
-00372579b RechnungDO linked to Menu.
-2c92507bc rechnungId now val (JPA transient).
-f2b55f6aa RechnungsPositionDO.java -> .kt</pre></div>
-</body>
-</html>
+<h2>File Status</h2>
+<div class="c"><b>Note:</b> This file does not exist in the <code>fix/vite-eslint-upgrade</code> branch. It may have been removed, renamed, or not yet migrated from the original codebase.</div>
+<h3>Domain Context</h3>
+<p>These test files cover the security module of <code>projectforge-commons</code>: access control (checker, filter, type, exception), security headers, logging, update events, SMS gateways (Sipgate, SMPP), system messages, user rights, and WebAuthn/FIDO2 support.</p>
+<h2>Git History</h2><div class="hist"><pre>No git history available (file not present in fix/vite-eslint-upgrade branch).</pre></div>
+</body></html>

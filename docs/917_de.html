@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>#917: EingangsrechnungDao.kt [DE]</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:2em;color:#444}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}</style>
+</head>
+<body>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← Dateiindex</a> · <a href="916.html">← Vorherige</a> · <a href="918.html">Nächste →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/kotlin/org/projectforge/business/fibu/EingangsrechnungDao.kt" target="_blank" title="Quelle auf GitHub anzeigen">📄 Quelle</a></div>
+
+<h1>#917: <code>EingangsrechnungDao.kt</code></h1>
+
+<div class="meta"><code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/EingangsrechnungDao.kt</code> 
+  <strong>Typ:</strong> DAO (Datenzugriffsobjekt) / Spring Service<br>
+  <strong>Paket:</strong> <code>org.projectforge.business.fibu</code><br>
+  <strong>Pfad:</strong> <code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/EingangsrechnungDao.kt</code><br>
+  <strong>Autor:</strong> Kai Reinhard (k.reinhard@micromata.de)
+ <span style="color:#888">270 Zeilen · 185 Code · 52 Kommentare · 33 leer</span></div>
+
+<div class="c">
+  <p>DAO für <strong>EingangsrechnungDO</strong> (Eingangsrechnungen). Erweitert <code>BaseDao&lt;EingangsrechnungDO&gt;</code> und bietet CRUD, gefilterte Auflistung, Zusammenführung des Verlaufs und Filterung nach Zahlungsstatus. Arbeitet mit <code>EingangsrechnungCache</code> für leistungsstarke Abfragen des Zahlungsstatus und <code>CurrencyConversionService</code> für Mehrwährungsstatistiken zusammen.</p>
+</div>
+
+<h2>Architektur</h2>
+
+<h3>Vererbung</h3>
+<ul>
+  <li><strong>BaseDao&lt;EingangsrechnungDO&gt;</strong> — Standard-DAO mit Filterung, Sortierung, Verlauf und Zugriffsprüfungen</li>
+</ul>
+
+<h3>Abhängigkeiten</h3>
+<table>
+  <tr><th>Abhängigkeit</th><th>Rolle</th></tr>
+  <tr><td><code>EingangsrechnungCache</code></td><td>Zwischengespeicherte Zahlungsstatusabfrage über <code>RechnungJdbcService</code></td></tr>
+  <tr><td><code>KontoDao</code></td><td>Setzt das Konto auf Eingangsrechnungsdatensätze</td></tr>
+  <tr><td><code>CurrencyConversionService</code></td><td>Währungsumrechnung für Statistiken</td></tr>
+  <tr><td><code>ConfigurationService</code></td><td>Systemstandardwährung für Statistiken</td></tr>
+</table>
+
+<h3>Zugriffskontrolle</h3>
+<p>Geschützt durch <code>UserRightId.FIBU_EINGANGSRECHNUNGEN</code>, gesetzt in <code>init</code>.</p>
+
+<h2>Wichtige Methoden</h2>
+
+<h3>Jahresspanne</h3>
+<p>Die Eigenschaft <code>years</code> führt eine benannte Abfrage <code>EingangsrechnungDO.SELECT_MIN_MAX_DATE</code> aus (Auswahl von <code>min(datum)</code> und <code>max(datum)</code>) und konvertiert das Ergebnis über <code>getYearsByTupleOfLocalDate()</code> in ein <code>IntArray</code>.</p>
+
+<h3>Statistiken</h3>
+<p><code>buildStatistik(list)</code> erstellt einen <code>EingangsrechnungsStatistik</code>-Akkumulator und fügt jede Rechnung hinzu. Vor der Verarbeitung werden der statische <code>currencyConversionService</code> und <code>configurationService</code> auf der gemeinsamen Basisklasse <code>AbstractRechnungsStatistik</code> initialisiert (Begleitobjekt-Dependency-Injection-Muster).</p>
+
+<h3>Kontozuweisung</h3>
+<p><code>setKonto(eingangsrechnung, kontoId)</code> sucht das <code>KontoDO</code> über <code>kontoDao.findOrLoad()</code> und weist es zu. Wenn <code>kontoId</code> null ist, wird das Konto auf null gesetzt.</p>
+
+<h3>Gefilterte Auflistung (<code>select</code>)</h3>
+<p>Umschließt den Filter bei Bedarf in einem <code>EingangsrechnungListFilter</code>. Erstellt einen <code>QueryFilter</code> mit Datumseinschränkungen und Zahlungsartfiltern. Sortiert nach <code>datum DESC</code>, dann <code>kreditor DESC</code>. Nach der Abfrage erfolgt eine <strong>Nachfilterung des Zahlungsstatus</strong> basierend auf <code>RechnungInfo</code> aus dem Cache:</p>
+<ul>
+  <li><code>isShowUnbezahlt</code> — Filter auf unbezahlte Rechnungen</li>
+  <li><code>isShowBezahlt</code> — Filter auf bezahlte Rechnungen</li>
+  <li><code>isShowUeberFaellig</code> — Filter auf überfällige Rechnungen</li>
+</ul>
+
+<h3>Lebenszyklus-Hooks</h3>
+<table>
+  <tr><th>Hook</th><th>Verhalten</th></tr>
+  <tr><td><code>afterLoad(obj)</code></td><td>Setzt <code>obj.info</code> aus dem Cache über <code>rechnungCache.ensureRechnungInfo(obj)</code></td></tr>
+  <tr><td><code>onInsertOrModify(obj, opType)</code></td><td>Delegiert an <code>AuftragAndRechnungDaoHelper.onSaveOrModify()</code>; skaliert <code>zahlBetrag</code> auf 2 Dezimalstellen; ruft <code>recalculate()</code> auf; stellt sicher, dass mindestens eine Position existiert (wirft <code>UserException</code> bei Leere); entfernt nachfolgende leere Positionen; schreibt UI-Status in XML.</td></tr>
+  <tr><td><code>afterInsertOrModify(obj, opType)</code></td><td>Ruft <code>rechnungCache.update(obj)</code> auf, um den Cache zu aktualisieren</td></tr>
+</table>
+
+<h3>Zusammenführung des Verlaufs</h3>
+<p><code>addOwnHistoryEntries()</code> iteriert über alle Positionen und deren Kostenverteilungen (<code>KostZuweisungDO</code>) und führt den Verlauf jedes Kindes in den übergeordneten Kontext zusammen. <code>getHistoryPropertyPrefix()</code> liefert kontextbezogene Präfixe: Positionsnummern und <code>"kost #N"</code> für Kostenverteilungen.</p>
+
+<h3>Zusätzliche Abfragen</h3>
+<table>
+  <tr><th>Methode</th><th>Beschreibung</th></tr>
+  <tr><td><code>findNewestByKreditor(kreditor)</code></td><td>Findet die neueste (nach <code>created</code> absteigend) nicht gelöschte Rechnung für einen bestimmten Kreditor</td></tr>
+  <tr><td><code>getByDateRange(from, until)</code></td><td>Findet alle nicht gelöschten Rechnungen in einem Datumsbereich, sortiert nach Datum und Kreditor. Wird für den Importabgleich verwendet.</td></tr>
+  <tr><td><code>contains(idSet, entry)</code></td><td>Prüft, ob eine Positions-ID in der angegebenen Menge enthalten ist (für die Bulk-Auswahl)</td></tr>
+</table>
+
+<h3>Zusätzliche Suchfelder</h3>
+<p>Enthält <code>"positionen.text"</code> in Suchabfragen und ermöglicht so eine Volltextsuche über Rechnungspositionen.</p>
+
+<h3>Zusätzliche Verlaufssuch-DOs</h3>
+<p>Enthält <code>EingangsrechnungsPositionDO</code> für entitätsübergreifende Verlaufssuchen.</p>
+
+<h3>Autovervollständigung</h3>
+<p>Aktiviert für <code>"kreditor"</code> (Kreditorenname).</p>
+
+<h2>Git-Verlauf</h2>
+<div class="hist"><pre>
+868d6abb7 2025 -> 2026
+6be9c2b84 WIP: Währungsumrechnung mit Claude Code.
+363d3b836 WIP: Import von Kreditorenrechnungen.
+63081666f Quelltextdatei-Header: 2024 -> 2025.
+db2599ab8 Verlauf in Auftragsbuch, Eingangs-/Ausgangsrechnungen und Projekten.
+18bf92219 WIP: Behandlung von Verlaufseinträgen. VisitorBookDao.
+b71b5073d Migration läuft... (alle Tests aller Pakete: OK).
+bbc198d03 Migration läuft... (alle Tests aller Pakete: OK).
+ba2479571 Migration läuft...
+b47c21af6 Überarbeitetes Caching und Berechnungen mit Rechnungen (noch nicht abgeschlossen)
+9e3c523c7 Migration läuft... (alle Tests aller Pakete: OK).
+c97135a57 Migration läuft...
+d18c899b5 Überarbeitung von Verlaufseinträgen, FlatDisplayHistoryEntries und DisplayHistoryEntries...
+b79a1edca Migration läuft... (alle Tests aller Pakete: OK).
+d67bce18b Migration läuft...
+</pre></div>
+
+</body>
+</html>

@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>#93: DataTransferPageRest.kt [DE]</title>
+<style>
+body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:2em;color:#444}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.lang{font-size:.85em;color:#888;float:right}.lang a{color:#888;text-decoration:none;padding:0 .3em}.lang a.active{color:#0366d6;font-weight:600;text-decoration:underline}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}</style>
+</head>
+<body>
+<div class="lang"><a href="93.html">EN</a> · <a href="93_de.html" class="active">DE</a> · <a href="93_ru.html">RU</a> · <a href="93_fr.html">FR</a> · <a href="93_es.html">ES</a></div>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← Datei-Index</a> · <a href="417.html">← Vorherige</a> · <a href="462.html">Nächste →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/plugins/org.projectforge.plugins.datatransfer/src/main/kotlin/org/projectforge/plugins/datatransfer/rest/DataTransferPageRest.kt" target="_blank" title="Quelltext auf GitHub ansehen">📄 Quelle</a></div>
+<h1>#93: <code>DataTransferPageRest.kt</code></h1>
+<div class="meta"><code>plugins/org.projectforge.plugins.datatransfer/src/main/kotlin/org/projectforge/plugins/datatransfer/rest/DataTransferPageRest.kt</code> Typ: Kotlin · Rolle: Plugin-Registrierung · Quelle: plugins/org.projectforge.plugins.datatransfer/src/main/kotlin/org/projectforge/plugins/datatransfer/rest/DataTransferPageRest.kt <span style="color:#888">366 Zeilen · 310 Code · 38 Kommentare · 18 leer</span></div>
+<div class="c">REST-API-Endpunkt für DataTransfer. Verarbeitet HTTP-Anfragen und gibt JSON-Antworten für das React-Frontend zurück.</div>
+<h2>Codestruktur</h2>
+<p>Annotationen: <code>PostConstruct</code>, <code>Valid</code>, <code>GetMapping</code>, <code>RequestBody</code>, <code>PathVariable</code>, <code>Autowired</code>, <code>return</code>, <code>RequestMapping</code>, <code>RestController</code>, <code>PostMapping</code>, <code>RequestParam</code></p>
+<p>Klassen: <code>DataTransferPageRest</code></p>
+<p>Supertyp(en): <code>AbstractDynamicPageRest</code></p>
+<p>Funktionen (7): <code>postConstruct</code>, <code>downloadAll</code>, <code>getForm</code>, <code>watchFields</code>, <code>isLoggedInUserObserver</code>, <code>hasEditAccess</code>, <code>convertData</code></p>
+<p>Eigenschaften (25): <code>attachmentsService</code>, <code>attachmentsServicesRest</code>, <code>dataTransferAreaPagesRest</code>, <code>dataTransferAreaDao</code>, <code>groupService</code>, <code>pair</code>, <code>dbObj</code>, <code>dto</code>, <code>id</code>, <code>pair</code>, <code>dbObj</code>, <code>dto</code>, <code>layout</code>, <code>attachmentsFieldset</code>, <code>fieldSet</code>, <code>id</code>, <code>userWantsToOserveArea</code>, <code>loggedInUser</code>, <code>dbDto</code>, <code>dbObj</code>, <code>newObservers</code>, <code>user</code>, <code>dbObj</code>, <code>dto</code>, <code>accessGroupUsers</code></p>
+<p>Importe: 30 Pakete</p>
+<p>Paket: <code>org.projectforge.plugins.datatransfer.rest</code></p>
+<h2>Quellcode (gekürzt)</h2>
+<pre>
+package org.projectforge.plugins.datatransfer.rest
+
+import org.projectforge.business.group.service.GroupService
+import org.projectforge.business.user.service.UserService
+import org.projectforge.common.NumberOfBytes
+import org.projectforge.framework.jcr.AttachmentsService
+import org.projectforge.framework.persistence.user.api.ThreadLocalUserContext
+import org.projectforge.framework.persistence.user.entities.PFUserDO
+import org.projectforge.framework.utils.NumberHelper
+import org.projectforge.menu.MenuItem
+import org.projectforge.menu.MenuItemTargetType
+import org.projectforge.model.rest.RestPaths
+import org.projectforge.plugins.datatransfer.DataTransferAreaDO
+import org.projectforge.plugins.datatransfer.DataTransferAreaDao
+import org.projectforge.plugins.datatransfer.DataTransferPlugin
+import org.projectforge.plugins.datatransfer.DataTransferUtils
+import org.projectforge.rest.AttachmentsServicesRest
+import org.projectforge.rest.config.Rest
+import org.projectforge.rest.core.AbstractDynamicPageRest
+import org.projectforge.rest.core.PagesResolver
+import org.projectforge.rest.core.RestResolver
+import org.projectforge.rest.dto.FormLayoutData
+import org.projectforge.rest.dto.PostData
+import org.projectforge.rest.dto.User
+import org.projectforge.ui.*
+import org.springframework.beans.factory.annotation.Autowired
+import org.springframework.http.ResponseEntity
+import org.springframework.web.bind.annotation.*
+import jakarta.annotation.PostConstruct
+import jakarta.servlet.http.HttpServletRequest
+import jakarta.servlet.http.HttpServletResponse
+import jakarta.validation.Valid
+
+/**
+ * Seite des Datenübertragungsbereichs mit Anhangsliste (inkl. Hochladen/Herunterladen und Bearbeitung).
+ */
+@RestController
+@RequestMapping(&quot;${Rest.URL}/datatransferfiles&quot;)
+class DataTransferPageRest : AbstractDynamicPageRest() {
+  @Autowired
+  private lateinit var attachmentsService: AttachmentsService
+
+  @Autowired
+  private lateinit var attachmentsServicesRest: AttachmentsServicesRest
+
+  @Autowired
+  private lateinit var dataTransferAreaPagesRest: DataTransferAreaPagesRest
+
+  @Autowired
+  private lateinit var dataTransferAreaDao: DataTransferAreaDao
+
+  @Autowired
+  private lateinit var groupService: GroupService
+
+  @PostConstruct
+  private fun postConstruct() {
+    attachmentsServicesRest.register(
+      dataTransferAreaPagesRest.category,
+      DataTransferAttachmentsActionListener(attachmentsService, dataTransferAreaDao)
+    )
+  }
+
+  @GetMapping(&quot;downloadAll/{id}&quot;)
+  fun downloadAll(
+    @PathVariable(&quot;id&quot;, required = true) id: Long,
+    response: HttpServletResponse
+  ) {
+    val pair = convertData(id)
+    val dbObj = pair.first
+    val dto = pair.second
+    DataTransferRestUtils.multiDownload(
+      response,
+      attachmentsService,
+      dataTransferAreaPagesRest.attachmentsAccessChecker,
+      dbObj,
+      dto.areaName,
+      jcrPath = dataTransferAreaPagesRest.jcrPath!!,
+      id,
+      dto.attachments,
+      byUser = ThreadLocalUserContext.loggedInUser
+    )
+  }
+
+  @GetMapping(&quot;dynamic&quot;)
+  fun getForm(request: HttpServletRequest, @RequestParam(&quot;id&quot;) idString: String?): FormLayoutData {
+    var id = NumberHelper.parseLong(idString)
+    if (id == -1L) {
+      // Persönliche Box des angemeldeten Benutzers wird angefordert:
+      id = dataTransferAreaDao.ensurePersonalBox(ThreadLocalUserContext.loggedInUserId!!)?.id
+    }
+    id ?: throw IllegalAccessException(&quot;Parameter id ist keine ganze Zahl oder keine persönliche Box gefunden.&quot;)
+    val pair = convertData(id)
+    val dbObj = pair.first
+    val dto = pair.second
+    val layout = UILayout(&quot;plugins.datatransfer.title.heading&quot;)
+    val attachmentsFieldset = UIFieldset(title = &quot;&#x27;${dto.areaName}&quot;)
+    attachmentsFieldset.add(
+      UIAttachmentList(
+        DataTransferPlugin.ID,
+        id,
+        showExpiryInfo = true,
+        maxSizeInKB = DataTransferAreaDao.getMaxUploadFileSizeKB(dbObj)
+      )
+    )
+    if ((dto.attachmentsSize ?: 0) in 1..NumberOfBytes.GIGA_BYTES) {
+      // Nicht alle herunterladen bei Anhängen mit einer Gesamtgröße von mehr als 1 GB.
+      attachmentsFieldset.add(
+        UIButton.createDownloadButton(
+          id = &quot;downloadAll&quot;,
+          title = &quot;plugins.datatransfer.button.downloadAll&quot;,
+          tooltip = &quot;plugins.datatransfer.button.downloadAll.info&quot;,
+          responseAction = ResponseAction(
+            RestResolver.getRestUrl(
+              this.javaClass,
+              &quot;downloadAll/$id&quot;
+            ), targetType = TargetType.DOWNLOAD
+          ),
+          default = true
+        )
+// ... (gekürzt, insgesamt 344 Zeilen)</pre>
+
+<h2>Git-Verlauf</h2>
+<div class="hist"><pre>868d6abb7 2025 -> 2026
+63081666f Quelltext-Dateiköpfe: 2024 -> 2025.
+4942c854d Migrationsarbeiten in Bearbeitung...
+1b50060c3 BaseDao: umbenannt: get -> find, save -> insert, getList -> select, load -> select
+2a8ea2076 Migrationsarbeiten in Bearbeitung... BaseDao umgestaltet (noch nicht abgeschlossen) interne* Methoden umbenannt.</pre></div>
+</body>
+</html>

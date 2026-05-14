@@ -1,60 +1,38 @@
-<!DOCTYPE html>
-<html lang="en">
-<head><meta charset="utf-8"><title>File #100: DataTransferPublicServicesRest.kt</title>
-<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333}h2{margin-top:2em;border-bottom:1px solid #ddd}h3{margin-top:1.5em;color:#333}a{color:#0366d6}.meta{background:#f0f0f0;border-radius:6px;padding:1em;margin:1em 0;font-size:.9em}.code-block{background:#1e1e1e;color:#d4d4d4;border-radius:4px;padding:.8em 1em;margin:.5em 0;overflow-x:auto;font-family:Consolas,monospace;font-size:.82em;line-height:1.5;white-space:pre-wrap}.commentary{margin:.8em 0;background:#fff;padding:.5em 1em;border-radius:6px;border-left:4px solid #ddd;line-height:1.7}table{border-collapse:collapse;width:100%;margin:.8em 0;font-size:.9em}th,td{border:1px solid #ddd;padding:.4em .6em}th{background:#f0f0f0}code{background:#e8e8e8;border-radius:3px;padding:.1em .3em;font-size:.9em}.nav{font-size:.9em;color:#888;margin-bottom:1em}.history{background:#fffbe6;border-radius:6px;padding:1em;margin:1em 0;font-size:.9em;border-left:4px solid #ffc107}.arch{background:#e8f4fd;border-radius:6px;padding:1em;margin:1em 0;font-size:.9em;border-left:4px solid #2196f3}</style></head>
-<body><div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="99.html">← Prev</a> · <a href="101.html">Next →</a></div>
-<h1>File #100: <code>DataTransferPublicServicesRest.kt</code></h1>
-<div class="meta"><p><strong>Path:</strong> <code>plugins/.../datatransfer/restPublic/DataTransferPublicServicesRest.kt</code> · <strong>Lines:</strong> 496 · <strong>Language:</strong> Kotlin · <strong>Base URL:</strong> <code>/rsPublic/datatransfer</code></p><p><strong>Purpose:</strong> PUBLIC REST API for the DataTransfer plugin — allows EXTERNAL users (without ProjectForge accounts) to download, upload, delete, and modify files via token/password authentication. 7 endpoints with full audit logging. The bridge between ProjectForge's internal file storage (JCR) and the outside world.</p><p><strong>Source:</strong> <a href="https://github.com/micromata/projectforge/blob/develop/plugins/org.projectforge.plugins.datatransfer/src/main/kotlin/org/projectforge/plugins/datatransfer/restPublic/DataTransferPublicServicesRest.kt">GitHub</a></p></div>
-<div class="history"><table><tr><th>Commit</th><th>Message</th></tr><tr><td><code>9ebb88522</code></td><td>2016-07-18 Initial commit</td></tr></table></div>
-<div class="arch"><strong>Not Spring Security.</strong> Authentication uses a custom token-based session system (<code>DataTransferPublicSession</code>), NOT Spring Security's filter chain. External users get an access token (typically a UUID in a URL parameter) that maps to a ProjectForge data transfer area. No ProjectForge user account needed — this is for sharing files with customers, suppliers, or the public.</div>
-
-<h2>7 endpoints — the full CRUD + bulk operations</h2>
-<div class="commentary"><table><tr><th>Endpoint</th><th>Method</th><th>Lines</th><th>What it does</th><th>Access check</th></tr><tr><td><code>/download/{category}/{id}</code></td><td>GET</td><td>83-119</td><td>Download a single file by fileId</td><td><code>hasDownloadAccess()</code> per-file</td></tr><tr><td><code>/downloadAll/{category}/{id}</code></td><td>GET</td><td>121-151</td><td>Download ALL files as ZIP</td><td><code>externalDownloadEnabled</code> on area</td></tr><tr><td><code>/multiDownload/{category}/{id}</code></td><td>GET</td><td>157-198</td><td>Download selected files as ZIP (CSV of fileIds)</td><td><code>externalDownloadEnabled</code> on area</td></tr><tr><td><code>/multiDelete</code></td><td>POST</td><td>200-284</td><td>Delete multiple files in one request</td><td><code>externalUploadEnabled</code> + per-file ownership</td></tr><tr><td><code>/upload/{category}/{id}/{listId}</code></td><td>POST</td><td>286-341</td><td>Upload a file via multipart form</td><td><code>externalUploadEnabled</code></td></tr><tr><td><code>/delete</code></td><td>POST</td><td>343-395</td><td>Delete a single file</td><td><code>hasDeleteAccess()</code> per-file</td></tr><tr><td><code>/modify</code></td><td>POST</td><td>397-440</td><td>Rename or change description of a file</td><td>Implicit via accessChecker on JCR operations</td></tr></table><p><strong>Every endpoint starts with the same 3 checks:</strong> (1) validate category = <code>"datatransfer"</code>, (2) validate listId = <code>DEFAULT_NODE</code>, (3) authenticate via <code>dataTransferPublicSession.checkLogin()</code>. The <code>check()</code> function throws <code>IllegalStateException</code> if the condition fails — uncaught, it becomes a 500 error. Arguably, these should return 400 responses instead.</p></div>
-
-<h2>Token-based public authentication — no user account needed</h2>
-<div class="code-block"><pre>val data = dataTransferPublicSession.checkLogin(request, id)
-    ?: return RestUtils.badRequest("No valid login.")
-val area: DataTransferAreaDO = data.first        // The DataTransfer area
-val sessionData = data.second                      // Session info (userInfo, token)</pre></div>
-<div class="commentary"><p><strong><code>DataTransferPublicSession.checkLogin()</code></strong> is the custom auth layer. It extracts an access token from the HTTP request (likely from query params: <code>?accessToken=abc123</code>) and validates it against the database. On success, it returns a <code>Pair&lt;DataTransferAreaDO, TransferAreaData&gt;</code> — the area being accessed and session metadata. On failure, returns null and the endpoint responds with 400 "No valid login."</p><p><strong>Not a JWT or OAuth system</strong> — this is a simple token lookup. The token is generated when an admin creates a data transfer area with external access enabled. The token is embedded in the shareable URL: <code>https://projectforge.acme.com/rsPublic/datatransfer/download/datatransfer/42?accessToken=uuid</code>.</p></div>
-
-<h2>multiDownload — the file ID prefix trick (lines 157-198)</h2>
-<div class="code-block"><pre>@RequestParam("fileIds") fileIds: String,     // CSV: "abc1,def2,ghi3"
-val fileIdList = fileIds.split(",")
-val attachments = attachmentsService.getAttachments(...)
-    ?.filter { attachment ->
-        fileIdList.any { attachment.fileId?.startsWith(it) == true }
-        // Match by PREFIX, not exact ID! "abc" matches "abc123def456"
-    }</pre></div>
-<div class="commentary"><p><strong>The Javadoc on line 154 explains the trick:</strong> <em>"For preserving url length, fileIds may also be shortened (e.g. first 4 chars)."</em> JCR file IDs are long UUIDs like <code>"a1b2c3d4-e5f6-7890-abcd-ef1234567890"</code>. Putting multiple full UUIDs in a URL query string bloats the URL past browser limits (~2000 chars). The solution: users can send just the first 4 characters of each file ID.</p><p><strong>How the matching works:</strong> <code>fileIdList.any { attachment.fileId?.startsWith(it) == true }</code> — for each attachment, check if its full fileId starts with ANY of the provided prefixes. If the user sends <code>"a1b2,d4e5"</code>, the server matches <code>"a1b2c3d4-..."</code> and <code>"d4e5f6a7-..."</code>. This is a trade-off: shorter URLs vs. risk of prefix collisions. With UUIDs, the first 4 hex chars have 16^4 = 65536 possibilities — collision risk is extremely low for typical usage (10-20 files per area).</p></div>
-
-<h2>ResponseAction pattern — server-driven UI updates</h2>
-<div class="code-block"><pre>// After upload, tell the React frontend to update the attachment list
-return ResponseEntity.ok()
-    .body(
-        ResponseAction(targetType = TargetType.UPDATE, merge = true)
-            .addVariable("data", AttachmentsServicesRest.ResponseData(list))
-    )
-
-// After delete/modify, tell React to close the modal
-return ResponseEntity.ok()
-    .body(
-        ResponseAction(targetType = TargetType.CLOSE_MODAL, merge = true)
-            .addVariable("data", AttachmentsServicesRest.ResponseData(list))
-    )</pre></div>
-<div class="commentary"><p>Instead of returning just the updated data, the endpoints return a <strong><code>ResponseAction</code></strong> — a command to the React frontend about what to do next. This is the server-driven UI pattern (SDUI) that ProjectForge uses for its dynamic layout system:</p><ul><li><strong><code>UPDATE</code></strong> — the frontend should update the current view with the new data (merge=true means merge into existing state, not replace)</li><li><strong><code>CLOSE_MODAL</code></strong> — the frontend should close the current modal dialog and update the parent view</li></ul><p>The <code>addVariable("data", ...)</code> attaches the new attachment list as a named variable. The frontend's dynamic layout engine reads the <code>ResponseAction</code> and decides which components to re-render. The server doesn't know about React components — it sends abstract actions; the frontend interprets them.</p></div>
-
-<h2>Audit trail — every operation logged with external user info</h2>
-<div class="code-block"><pre>attachmentsService.addAttachment(
-    jcrPath, fileInfo, inputStream,
-    baseDao = dataTransferAreaDao,
-    obj = area,
-    accessChecker = attachmentsAccessChecker,
-    userString = getExternalUserString(request, sessionData.userInfo)  // Audit!
-)</pre></div>
-<div class="commentary"><p><strong>Every JCR operation passes a <code>userString</code></strong> — a string identifying the external user. <code>getExternalUserString()</code> (from the companion object of <code>DataTransferAreaDao</code>) extracts the client's IP address and optional identity info from the HTTP request: <code>"192.168.1.42 (John from Acme Corp)"</code>. This string is stored in the JCR's audit log alongside the file modification. Even though the user has no ProjectForge account, their actions are traceable — critical for GDPR compliance and security forensics.</p><p><strong><code>registerFileAsOwner()</code></strong> (line 323): After upload, the session records which files the external user uploaded. This enables per-file ownership checks — a user can only delete/modify files they themselves uploaded, not files uploaded by other external users in the same shared area.</p></div>
-
-<h2>convert() — building the filtered DTO (lines 442-464)</h2>
-<div class="commentary"><p>The <code>convert()</code> helper builds a <code>DataTransferPublicArea</code> DTO for the frontend. Two key transformations:</p><ol><li><strong>Access filtering:</strong> <code>attachmentsAccessChecker.filterAttachments()</code> — removes files the current external user shouldn't see. This is defense-in-depth: even if the JCR query returns all files, the access checker strips unauthorized ones before they reach the client.</li><li><strong>Expiry info:</strong> <code>DataTransferUtils.expiryTimeLeft()</code> — data transfer areas can have expiration. Each attachment gets an expiry countdown added to its DTO. The frontend can display "Expires in 3 days" or a red warning for expired files.</li></ol></div>
-<div class="nav" style="margin-top:2em"><a href="99.html">← #99</a> · <a href="101.html">#101 →</a></div>
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>#100: DataTransferPublicPageRest.kt</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:2em;color:#444}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.lang{font-size:.85em;color:#888;float:right}.lang a{color:#888;text-decoration:none;padding:0 .3em}.lang a.active{color:#0366d6;font-weight:600;text-decoration:underline}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}.warn{background:#fff3cd;border-left:3px solid #ffc107;padding:.5em 1em;margin:1em 0}.tip{background:#d4edda;border-left:3px solid #28a745;padding:.5em 1em;margin:1em 0}</style></head>
+<body><div class="lang"><a href="100.html" class="active">EN</a> · <a href="100_de.html">DE</a> · <a href="100_ru.html">RU</a> · <a href="100_fr.html">FR</a> · <a href="100_es.html">ES</a></div>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="435.html">← Prev</a> · <a href="261.html">Next →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/plugins/org.projectforge.plugins.datatransfer/src/main/kotlin/org/projectforge/plugins/datatransfer/restPublic/DataTransferPublicPageRest.kt" target="_blank">📄 source</a></div>
+<h1>#100: <code>DataTransferPublicPageRest.kt</code></h1>
+<div class="meta"><code>plugins/org.projectforge.plugins.datatransfer/src/main/kotlin/org/projectforge/plugins/datatransfer/restPublic/DataTransferPublicPageRest.kt</code> · Public REST Controller · 230 lines · 176 code · 35 comments · 19 blank</div>
+<div class="c">
+<p>Part of the <strong>Data Transfer plugin</strong>. Public REST Controller.</p>
+<p>REST API endpoint handling HTTP requests and responses for the ProjectForge web services.</p>
+<h3>Structure</h3>
+<p><code>DataTransferPublicPageRest</code> — <em>class</em> : AbstractDynamicPageRest().</p>
+<p><strong>Key dependencies:</strong> <code>org.projectforge.common.NumberOfBytes</code>, <code>org.projectforge.framework.i18n.translate</code>, <code>org.projectforge.model.rest.RestPaths</code>, <code>org.projectforge.plugins.datatransfer.DataTransferAreaDO</code>, <code>org.projectforge.plugins.datatransfer.DataTransferAreaDao</code>, <code>org.projectforge.plugins.datatransfer.DataTransferPlugin</code>, <code>org.projectforge.rest.config.Rest</code>, <code>org.projectforge.rest.core.AbstractDynamicPageRest</code></p>
+</div>
+<h2>Design Decisions</h2>
+<ul>
+<li>Spring @RestController with typed DTOs. Endpoints use @RequestParam for filtering, sorting, pagination, and multi-select operations.</li>
+</ul>
+<h2>Gotchas & Pitfalls</h2>
+<div class="warn">
+<ul>
+<li>Returning JPA entities in REST responses triggers lazy-loading of all associations. Always map to dedicated DTOs before returning.</li>
+</ul>
+</div>
+<h2>Git History</h2>
+<div class="hist"><table>
+<tr><th>Commit</th><th>Description</th></tr>
+<tr><td><code>868d6abb7</code></td><td>2025 -&gt; 2026 (minor edit, license header update)</td></tr>
+<tr><td><code>cc0eb7b56</code></td><td>DataTransferPublicPagesRest: don't show access token in login form. Login fixed. (minor edit)</td></tr>
+<tr><td><code>63081666f</code></td><td>Source file headers: 2024-&gt; 2025. (minor edit, license header update)</td></tr>
+<tr><td><code>77bade6df</code></td><td>javax.* -&gt; jakarta.* (minor edit, updated imports)</td></tr>
+<tr><td><code>b6092df09</code></td><td>Copyright 2023 -&gt; 2024 (minor edit, license header update)</td></tr>
+<tr><td><code>ab45d51fa</code></td><td>Copyright 2001-2022 -&gt; 2001-2023.</td></tr>
+<tr><td><code>dca006902</code></td><td>WIP: Data-transfer audit</td></tr>
+<tr><td><code>668a015d7</code></td><td>WIP: AGGrid for attachments</td></tr>
+<tr><td><code>18bcdab03</code></td><td>WIP: multi upload</td></tr>
+<tr><td><code>e8ebaa7a4</code></td><td>WIP: multi upload</td></tr>
+</table></div>
 </body></html>

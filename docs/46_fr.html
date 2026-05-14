@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>#46 : BankAccount.kt [FR]</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333}h2{margin-top:2em;border-bottom:1px solid #ddd;padding-bottom:.2em}a{color:#0366d6;text-decoration:none}.meta{background:#f0f0f0;border-radius:6px;padding:1em;margin:1em 0;font-size:.9em}.code-block{background:#f8f8f8;border:1px solid #ddd;border-radius:4px;padding:.5em;margin:.5em 0;overflow-x:auto}.code-block pre{margin:0;font-family:'Consolas',monospace;font-size:.85em;line-height:1.5}.commentary{margin:1em 0;line-height:1.7;background:#fff;padding:.5em 1em;border-radius:6px;border-left:4px solid #ddd}code{background:#e8e8e8;border-radius:3px;padding:.1em .3em;font-size:.9em}.nav{font-size:.9em;color:#888;margin-bottom:1em}table{border-collapse:collapse;width:100%;margin:1em 0;font-size:.9em}th,td{border:1px solid #ddd;padding:.5em;text-align:left}th{background:#f0f0f0}.diagram{background:#f8f8f8;border:1px solid #ddd;border-radius:4px;padding:.8em;font-family:'Consolas',monospace;font-size:.85em;white-space:pre}</style>
+</head>
+<body>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index de documentation</a> · <a href="file-index.html">← Index des fichiers</a> · <a href="45.html">← Précédent</a> · <a href="47.html">Suivant →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/plugins/org.projectforge.plugins.banking/src/main/kotlin/org/projectforge/plugins/banking/BankAccount.kt" target="_blank" title="Voir la source sur GitHub">📄 source</a></div>
+<h1>#46 : <code>BankAccount.kt</code></h1>
+<div class="meta"><code>plugins/org.projectforge.plugins.banking/src/main/kotlin/org/projectforge/plugins/banking/BankAccount.kt</code> <p><strong>Chemin :</strong> <code>./plugins/.../BankAccount.kt</code> · <strong>Type :</strong> DTO REST Kotlin · <strong>Lignes :</strong> 65 · <strong>Source :</strong> <a href="https://github.com/micromata/projectforge/blob/9ed5fbe0f/plugins/org.projectforge.plugins.banking/src/main/kotlin/org/projectforge/plugins/banking/BankAccount.kt">GitHub</a></p> <span style="color:#888">65 lignes · 36 code · 24 commentaires · 5 vides</span></div>
+
+<h2>Ce qu'il fait</h2>
+<div class="commentary"><p>Un <strong>objet de transfert de données REST</strong> pour les comptes bancaires — fait le pont entre l'entité <a href="48.html">BankAccountDO</a> (#48) et le format JSON de l'API REST. Étend <code>BaseDTO&lt;BankAccountDO&gt;</code> qui mappe automatiquement les champs simples (nom, iban, bic, etc.) entre DO et DTO. La conversion manuelle gère les 6 <strong>listes d'accès</strong> qui sont stockées sous forme d'<strong>entiers CSV</strong> dans la base de données mais exposées sous forme de <strong>tableaux JSON structurés</strong> dans l'API.</p></div>
+
+<div class="diagram">API JSON                                     Base de données (DO)
+  "fullAccessGroups": [                        fullAccessGroupIds = "12,45,78"
+    {"id": 12, "name": "Finance"},
+    {"id": 45, "name": "Admins"}
+  ]                        copyFrom() ▼
+                            copyTo()   ▲
+  "fullAccessUsers": [                         fullAccessUserIds = "3,7"
+    {"id": 3, "name": "Alice"},
+    {"id": 7, "name": "Bob"}
+  ]</div>
+
+<h2>6 listes d'accès</h2>
+<table>
+<tr><th>Niveau d'accès</th><th>Champ Groupes</th><th>Champ Utilisateurs</th><th>Stocké comme</th></tr>
+<tr><td>Accès complet</td><td><code>fullAccessGroups</code></td><td><code>fullAccessUsers</code></td><td><code>fullAccessGroupIds</code> / <code>fullAccessUserIds</code></td></tr>
+<tr><td>Lecture seule</td><td><code>readonlyAccessGroups</code></td><td><code>readonlyAccessUsers</code></td><td><code>readonlyAccessGroupIds</code> / <code>readonlyAccessUserIds</code></td></tr>
+<tr><td>Minimal</td><td><code>minimalAccessGroups</code></td><td><code>minimalAccessUsers</code></td><td><code>minimalAccessGroupIds</code> / <code>minimalAccessUserIds</code></td></tr>
+</table>
+
+<h2>Flux de conversion</h2>
+<div class="code-block"><pre><span style="color:#888">// Réponse API : DO → DTO</span>
+45 override fun copyFrom(src: BankAccountDO) {
+46   super.copyFrom(src)                    <span style="color:#888">← auto-copie : nom, iban, bic, etc.</span>
+47   fullAccessGroups = Group.toGroupList(src.fullAccessGroupIds)  <span style="color:#888">← "12,45,78" → [Group, Group]</span>
+49   readonlyAccessGroups = Group.toGroupList(src.readonlyAccessGroupIds)
+50   ...
+53 }
+
+<span style="color:#888">// Requête API : DTO → DO</span>
+56 override fun copyTo(dest: BankAccountDO) {
+57   super.copyTo(dest)
+58   dest.fullAccessGroupIds = Group.toLongList(fullAccessGroups)  <span style="color:#888">← [Group, Group] → "12,45,78"</span>
+60   ...
+64 }</pre></div>
+
+<h2>Paquet physique vs logique</h2>
+<div class="commentary"><p>Le fichier se trouve dans <code>plugins/.../banking/BankAccount.kt</code> mais déclare <code>package org.projectforge.rest.dto</code> — le DTO réside avec le code source du plugin mais appartient au paquet des DTO REST. Ce modèle maintient les DTO colocalisés avec leurs modules plugin tout en partageant un espace de noms avec tous les autres DTO pour la cohérence de la sérialisation API.</p></div>
+
+<div class="nav" style="margin-top:2em;padding-top:1em;border-top:1px solid #ddd"><a href="48.html">← #48 : BankAccountDO.kt</a> · <a href="50.html">#50 : BankAccountPagesRest.kt →</a></div>
+</body>
+</html>

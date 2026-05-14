@@ -1,104 +1,14 @@
-<!DOCTYPE html>
-<html lang="en">
-<head><meta charset="UTF-8"><title>#951: RechnungDao.kt</title>
-<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:2em;color:#444}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}</style></head>
-<body>
-<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="950.html">← Prev</a> · <a href="952.html">Next →</a></div>
-<h1>#951: <code>RechnungDao.kt</code></h1>
-<div class="meta">Type: DAO / Service · Purpose: Data access and business logic for outgoing invoices (Rechnungen) · Source: projectforge-business/src/main/kotlin/org/projectforge/business/fibu/RechnungDao.kt</div>
-<div class="c">Core Spring <code>@Service</code> for outgoing invoice management. Extends <code>BaseDao&lt;RechnungDO&gt;</code> to provide CRUD operations, payment status filtering, invoice numbering, maturity calculation, cost assignment loading, and history integration for child positions and cost assignments.</div>
-<h2>Key Methods</h2>
-<table>
-<tr><th>Method</th><th>Description</th></tr>
-<tr><td><code>years</code></td><td>Returns all years with invoices via SELECT MIN/MAX datum</td></tr>
-<tr><td><code>buildStatistik(list)</code></td><td>Builds <code>RechnungsStatistik</code> from invoice list (with currency conversion)</td></tr>
-<tr><td><code>calculateFaelligkeit(rechnung, days)</code></td><td>Computes maturity date from invoice date + payment term</td></tr>
-<tr><td><code>setKunde(rechnung, kundeNummer)</code></td><td>Links a customer to an invoice by customer number</td></tr>
-<tr><td><code>setProjekt(rechnung, projektId)</code></td><td>Links a project to an invoice</td></tr>
-<tr><td><code>nextNumber</code> / <code>getNextNumber(rechnung)</code></td><td>Gets the next sequential invoice number (starts at 1000)</td></tr>
-</table>
-<h2>Selection & Filtering Architecture</h2>
-<p>The <code>select(filter)</code> method implements a sophisticated two-phase filtering:</p>
-<ol>
-<li><strong>Database phase:</strong> Converts search filter to <code>RechnungListFilter</code>, builds a <code>QueryFilter</code> with date restrictions and period-of-performance criteria, ordered by datum/number descending</li>
-<li><strong>In-memory phase:</strong> Uses <code>RechnungCache</code> to determine per-invoice payment status (<code>RechnungInfo.isBezahlt</code>, <code>isUeberfaellig</code>), filtering by listType: ALL, UNPAID, PAID, or OVERDUE</li>
-</ol>
-<h2>Validation (onInsertOrModify)</h2>
-<p>Extensive business rule enforcement:</p>
-<ul>
-<li><strong>Credit notes</strong> (<code>GUTSCHRIFTSANZEIGE_DURCH_KUNDEN</code>) must not have an invoice number</li>
-<li><strong>Regular invoices</strong> without GEPLANT status must have a sequential invoice number; new invoices get the next number assigned</li>
-<li>Duplicate invoice numbers are rejected (uses <code>FIND_OTHER_BY_NUMMER</code> named query)</li>
-<li><strong>Payment amount</strong> is rounded to 2 decimal places (HALF_UP)</li>
-<li><strong>Empty trailing positions</strong> (new, empty) are automatically removed</li>
-<li><strong>At least one position required</strong></li>
-<li>PAID status requires a non-zero <code>zahlBetrag</code></li>
-<li>A customer, project, or customer text reference is required</li>
-<li><code>AuftragAndRechnungDaoHelper.onSaveOrModify()</code> is called for shared order/invoice logic</li>
-</ul>
-<h2>Invoice Lifecycle: Planned → Active</h2>
-<p>When an invoice transitions from <code>GEPLANT</code> (planned) to any other status:
-- A sequential number is assigned
-- The current date is set as <code>datum</code>
-- The payment target is computed from <code>zahlungsZielInTagen</code></p>
-<h2>History Integration</h2>
-<p><code>addOwnHistoryEntries()</code> loads history for child <code>RechnungsPositionDO</code> and grandchild <code>KostZuweisungDO</code> records. <code>getHistoryPropertyPrefix()</code> provides contextual labels: position numbers for positions, and "kost #index" for cost assignments.</p>
-<h2>Dependencies</h2>
-<table>
-<tr><th>Dependency</th><th>Role</th></tr>
-<tr><td><code>KundeDao</code></td><td>Customer lookup</td></tr>
-<tr><td><code>ProjektDao</code></td><td>Project lookup; initializes ProjektManagerGroup for Hibernate Search</td></tr>
-<tr><td><code>RechnungCache</code></td><td>Payment status caching (updated on insert/modify)</td></tr>
-<tr><td><code>CurrencyConversionService</code></td><td>Multi-currency support in statistics</td></tr>
-<tr><td><code>ConfigurationService</code></td><td>System configuration for statistics</td></tr>
-</table>
-<h2>Source Code (abridged)</h2>
-<pre>@Service
-open class RechnungDao : BaseDao&lt;RechnungDO&gt;(RechnungDO::class.java) {
-    @Autowired private lateinit var rechnungCache: RechnungCache
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>#951: SecurityUpdateEventTest.java</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.lang{font-size:.85em;color:#888;float:right}.lang a{color:#888;text-decoration:none;padding:0 .3em}.lang a.active{color:#0366d6;font-weight:600;text-decoration:underline}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}.missing{background:#fff3cd;border:1px solid #ffc107;padding:.5em 1em;margin:1em 0;border-radius:4px}</style></head>
+<body><div class="lang"><a href="951.html" class="active">EN</a> · <a href="951_de.html">DE</a> · <a href="951_ru.html">RU</a> · <a href="951_fr.html">FR</a> · <a href="951_es.html">ES</a></div>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="947.html">← Prev</a> · <a href="952.html">Next →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/kotlin/org/projectforge/business/fibu/InvoicingQuotaConfiguration.kt" target="_blank" title="View source on GitHub">📄 source</a></div>
+<h1>#951: <code>SecurityUpdateEventTest.java</code></h1>
+<div class="meta"><code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/InvoicingQuotaConfiguration.kt</code> Test - Security, <code>projectforge-commons/src/test/java/org/projectforge/security/SecurityUpdateEventTest.java</code> <span style="color:#888">73 lines · 10 code · 58 comments · 5 blank</span></div>
+<div class="c">Java unit test for security update events. Not present in the `fix/vite-eslint-upgrade` branch.</div>
 
-    override fun select(filter: BaseSearchFilter): List&lt;RechnungDO&gt; {
-        val myFilter = if (filter is RechnungListFilter) filter
-                       else RechnungListFilter(filter)
-        val queryFilter = createQueryFilterWithDateRestriction(myFilter)
-        queryFilter.addOrder(desc("datum")).addOrder(desc("nummer"))
-        createCriterionForPeriodOfPerformance(myFilter)
-            .ifPresent { queryFilter.add(it) }
-        val list = select(queryFilter)
-        if (myFilter.isShowAll || myFilter.deleted) return list
-        val result = mutableListOf&lt;RechnungDO&gt;()
-        for (rechnung in list) {
-            val info = rechnungCache.getRechnungInfo(rechnung.id)
-                      ?: RechnungInfo(rechnung)
-            when {
-                myFilter.isShowUnbezahlt && !info.isBezahlt -> result.add(rechnung)
-                myFilter.isShowBezahlt && info.isBezahlt -> result.add(rechnung)
-                myFilter.isShowUeberFaellig && info.isUeberfaellig -> result.add(rechnung)
-            }
-        }
-        return result
-    }
-
-    override fun onInsertOrModify(obj: RechnungDO, op: OperationType) {
-        // Invoice lifecycle: GEPLANT -> active transition
-        // Sequential numbering, duplicate check
-        // Validation: credit notes, payment amount, customer reference
-        // Position cleanup, recalculation, UI status XML
-    }
-}</pre>
-<h2>Git History</h2>
-<div class="hist"><pre>868d6abb7 2025 -> 2026
-6be9c2b84 WIP: currency conversion with Claude Code.
-63081666f Source file headers: 2024-> 2025.
-db2599ab8 History in orderbook, invoices and projects.
-18bf92219 WIP: History entries handling.
-c9508769a Clone of invoices.
-2d324f2bb Finance: incoming invoices fixed.
-b47c21af6 Refactored caching and calculations with invoices.
-1b50060c3 BaseDao: get->find, save->insert, getList->select.
-b095e6f7d Big change of Transaction handling.
-4c04cfd65 MAJOR-CHANGE! Integer id's to Long id's.
-5bafe7941 @Repository -> @Service. @Transactional removed.
-f2f7cff74 Migration stuff... (file created)</pre></div>
-</body>
-</html>
+<h2>File Status</h2>
+<div class="c"><b>Note:</b> This file does not exist in the <code>fix/vite-eslint-upgrade</code> branch. It may have been removed, renamed, or not yet migrated from the original codebase.</div>
+<h3>Domain Context</h3>
+<p>These test files cover the security module of <code>projectforge-commons</code>: access control (checker, filter, type, exception), security headers, logging, update events, SMS gateways (Sipgate, SMPP), system messages, user rights, and WebAuthn/FIDO2 support.</p>
+<h2>Git History</h2><div class="hist"><pre>No git history available (file not present in fix/vite-eslint-upgrade branch).</pre></div>
+</body></html>

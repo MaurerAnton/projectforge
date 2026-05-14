@@ -1,45 +1,40 @@
 <!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>#119</title>
 <style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333}a{color:#0366d6}.meta{font-size:.9em;margin:1em 0}.nav{font-size:.9em;color:#888;margin-bottom:1em}.commentary{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}code{background:#f0f0f0;padding:0 .2em;border-radius:2px}</style></head>
 <body>
-<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="118.html">← Prev</a> · <a href="120.html">Next →</a></div>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="118.html">← Prev</a> · <a href="120.html">Next →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/plugins/org.projectforge.plugins.datatransfer/src/test/kotlin/org/projectforge/plugins/datatransfer/DataTransferNotificationTest.kt" target="_blank" title="View source on GitHub">📄 source</a></div>
 
-<h1>#119: <code>DataTransferPublicAccessTest.kt</code></h1>
-<div class="meta"><strong>Path:</strong> <code>plugins/...datatransfer/src/test/kotlin/.../DataTransferPublicAccessTest.kt</code> · <strong>Lines:</strong> 227 · <strong>Type:</strong> Kotlin JUnit 5 integration test</div>
+<h1>#119: <code>DataTransferNotificationTest.kt</code></h1>
+<div class="meta"><code>plugins/org.projectforge.plugins.datatransfer/src/test/kotlin/org/projectforge/plugins/datatransfer/DataTransferNotificationTest.kt</code> <strong>Path:</strong> <code>plugins/...datatransfer/src/test/kotlin/.../DataTransferNotificationTest.kt</code> · <strong>Lines:</strong> 108 · <strong>Type:</strong> Kotlin JUnit 5 unit test (no Spring context) <span style="color:#888">108 lines · 80 code · 22 comments · 6 blank</span></div>
 
 <div class="commentary">
-<p><strong>Integration test for the public (external) DataTransfer REST layer</strong> — the most comprehensive DataTransfer test at 227 lines. Tests the anonymous access flow: external link → login → upload/download/delete → logout, using mocked HTTP requests and JCR files.</p>
+<p><strong>Pure unit test for the observer notification recipient logic</strong> — verifies <em>who</em> gets notified for each event type. Unlike <a href="117.html">DataTransferNotificationMailTest</a> (which tests the full mail pipeline), this test isolates the recipient selection algorithm. Does not extend <code>AbstractTestBase</code> — runs without Spring context, making it fast.</p>
 </div>
 
 <div class="commentary">
-<h3>Components under test</h3>
+<h3>Test method: <code>registerRecipientsTest()</code></h3>
+<p>Uses a helper <code>testAudit(uploadUserId, byUserId, eventType, observerIds, expected)</code> that:</p>
+<ol>
+<li>Creates mock <code>PFUserDO</code> objects for uploader, the user performing the action, and observers</li>
+<li>Simulates an audit event by calling the notification logic directly</li>
+<li>Asserts that only the <strong>expected</strong> set of observer IDs receives a notification</li>
+</ol>
+</div>
+
+<div class="commentary">
+<h3>Notification rules tested</h3>
 <ul>
-<li><code>DataTransferPublicSession</code> (<a href="101.html">#101</a>) — session management, brute-force protection</li>
-<li><code>DataTransferPublicPageRest</code> — returns page layout JSON for the anonymous React UI</li>
-<li><code>DataTransferPublicServicesRest</code> (<a href="100.html">#100</a>) — upload, download, delete, multiDownload endpoints</li>
-<li><code>LoginProtection</code> — brute-force time offset enforcement</li>
+<li><strong>UPLOAD by another user:</strong> all observers except the uploader should be notified (uploader already knows they uploaded)</li>
+<li><strong>UPLOAD by self:</strong> no one should be notified (observerIds = [1,2,3], uploadUserId = 1, byUserId = 1 → expected = [2,3])</li>
+<li><strong>DELETE by observer themselves:</strong> the deleting observer should not receive a notification about their own action</li>
+<li><strong>DOWNLOAD by external user:</strong> all observers should be notified (external user is not an observer)</li>
+<li><strong>RENAME:</strong> observers are notified, uploader excluded if they're the one renaming</li>
 </ul>
+<p>The invariant: you never get notified about your own actions — only other people's activity triggers notifications.</p>
 </div>
 
 <div class="commentary">
-<h3>Test scenarios (~10 test methods)</h3>
-<ul>
-<li><strong>Login with valid credentials:</strong> creates an area with <code>external_download_enabled=true</code>, <code>externalAccessToken</code>, <code>externalPassword</code>, calls <code>DataTransferPublicSession.login()</code> — verifies session contains area data</li>
-<li><strong>Login with wrong password:</strong> verifies <code>LoginProtection</code> increments failed attempts, and after repeated failures the time offset kicks in</li>
-<li><strong>Brute-force lockout:</strong> after enough failures, <code>login()</code> returns <code>LOGIN_TIME_OFFSET</code> status — verified by calling login 3+ times faster than the offset window</li>
-<li><strong>Personal box excluded from public access:</strong> <code>isPersonalBox()</code> areas always return <code>LoginResultStatus.FAILED</code> — the paranoia check in <code>checkDataBaseEntry()</code></li>
-<li><strong>Upload:</strong> mocks <code>MultipartFile</code> (Spring's uploaded file wrapper), calls upload REST endpoint, verifies file ID appears in <code>ownedFiles</code> list</li>
-<li><strong>Download:</strong> uploads a file as external user, then downloads it — verifies <code>InputStreamResource</code> content matches</li>
-<li><strong>Delete own file:</strong> verifies <code>isOwnerOfFile()</code> returns true, and delete succeeds</li>
-<li><strong>Cannot delete someone else's file:</strong> external user2 tries to delete user1's upload — verifies <code>isOwnerOfFile()</code> returns false</li>
-<li><strong>Multi-download:</strong> upload 3 files, download all as ZIP — verifies <code>ZipInputStream</code> contains all 3 entries</li>
-<li><strong>Session fixation:</strong> verifies that after login, the <code>JSESSIONID</code> changes (old session invalidated, new session created with transferred area data)</li>
-</ul>
-</div>
-
-<div class="commentary">
-<h3>Mocked HTTP layer</h3>
-<p>Uses Mockito to mock <code>HttpServletRequest</code> and <code>HttpSession</code> — critical because <a href="101.html">DataTransferPublicSession</a> stores data directly in HTTP session attributes. The mock session simulates <code>getSession(false)</code>, <code>getSession(true)</code>, <code>getAttribute("transferAreas")</code>, <code>setAttribute()</code>, and <code>invalidate()</code> — all exercised in the session fixation test.</p>
-<p>Also mocks <code>MultipartFile</code> for upload tests and <code>HttpServletResponse</code> + <code>ServletOutputStream</code> → <code>ByteArrayOutputStream</code> for download content capture.</p>
+<h3>Design note</h3>
+<p>This is a <strong>unit test</strong> (no database, no JCR, no Spring) that tests just the notification recipient logic. The <code>testAudit</code> helper directly calls the notification method with arranged inputs. The actual <code>DataTransferNotificationJob</code> + mail rendering is tested in <a href="117.html">DataTransferNotificationMailTest</a>. This separation makes the notification logic test fast (milliseconds vs. seconds for integration tests).</p>
 </div>
 
 </body></html>

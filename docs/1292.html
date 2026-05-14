@@ -1,60 +1,24 @@
-<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>1292</title>
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>#1292: AbstractBaseDO.kt</title>
 <style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:2em;color:#444}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}</style></head>
-<body><div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="1291.html">← Prev</a> · <a href="1293.html">Next →</a></div>
-<h1>1292: <code>ConfigurationDO.kt</code></h1>
-<div class="meta">JPA Entity, projectforge-business/.../configuration/entities/ConfigurationDO.kt</div>
-<div class="c">Hibernate ORM entity mapped to <code>T_CONFIGURATION</code>. Stores typed configuration parameters using separate columns per type (string, long, float), with a <code>configurationType</code> discriminator and type-safety assertions on access.</div>
-
-<h2>Architecture &amp; Role</h2>
-<p><code>ConfigurationDO</code> is a JPA entity extending <code>DefaultBaseDO</code> (which provides <code>id</code>, <code>created</code>, <code>lastUpdate</code>, <code>deleted</code>). It uses Hibernate Search annotations (<code>@Indexed</code>, <code>@FullTextField</code>) and has an <code>@AUserRightId("ADMIN_CORE")</code> annotation for access control. Each row is uniquely constrained on <code>parameter</code>.</p>
-
-<h3>Type System</h3>
-<p>Rather than storing all values as strings, the entity has three physical columns:</p>
+<body><div class="nav"><a href="https://maureranton.github.io/projectforge/">&#8592; Index</a> &#183; <a href="file-index.html">&#8592; File index</a> &#183; <a href="1291.html">&#8592; Prev</a> &#183; <a href="1293.html">Next &#8594;</a></div>
+<h1>#1292: <code>AbstractBaseDO.kt</code></h1>
+<div class="meta"><code>projectforge-business/src/main/kotlin/org/projectforge/framework/persistence/entities/AbstractBaseDO.kt</code> Base Entity Superclass, projectforge-business/src/main/kotlin/org/projectforge/framework/persistence/entities/AbstractBaseDO.kt <span style="color:#888">189 lines · 101 code · 70 comments · 18 blank</span></div>
+<div class="c">The <code>@MappedSuperclass</code> base for all domain objects. Implements <code>ExtendedBaseDO&lt;I&gt;</code> and provides core entity infrastructure: ID property, <code>created</code>/<code>lastUpdate</code> timestamps, <code>deleted</code> flag for soft-delete, <code>createdBy</code>/<code>lastUpdateBy</code> user references, and a <code>copyValuesFrom()</code> method delegating to <code>CandHMaster</code>. Also provides <code>toString()</code> via JSON serialization.</div>
+<h3>Core Fields</h3>
 <table>
-<tr><th>Column</th><th>Java Type</th><th>Used By</th></tr>
-<tr><td><code>stringValue</code> (4000 chars)</td><td>String?</td><td>STRING, TEXT, BOOLEAN, TIME_ZONE</td></tr>
-<tr><td><code>longValue</code></td><td>Long?</td><td>LONG, INTEGER, CALENDAR</td></tr>
-<tr><td><code>floatValue</code> (18,5)</td><td>BigDecimal?</td><td>FLOAT, PERCENT</td></tr>
+<tr><th>Field</th><th>Type</th><th>Description</th></tr>
+<tr><td><code>id</code></td><td><code>I</code></td><td>Primary key (abstract, implemented by subclass)</td></tr>
+<tr><td><code>created</code></td><td><code>Date?</code></td><td>Creation timestamp</td></tr>
+<tr><td><code>lastUpdate</code></td><td><code>Date?</code></td><td>Last modification timestamp</td></tr>
+<tr><td><code>deleted</code></td><td><code>Boolean</code></td><td>Soft-delete flag</td></tr>
+<tr><td><code>createdBy</code></td><td><code>Long?</code></td><td>FK to creating user</td></tr>
+<tr><td><code>lastUpdateBy</code></td><td><code>Long?</code></td><td>FK to last modifying user</td></tr>
 </table>
-<p>Each typed getter/setter validates that the entity's <code>configurationType</code> is compatible before allowing access. Compatibility allows some type aliases (e.g., STRING can read TEXT/BOOLEAN/TIME_ZONE; LONG can read CALENDAR; FLOAT can read PERCENT).</p>
-
-<h3>Transient Convenience Properties</h3>
-<table>
-<tr><th>Property</th><th>Maps To</th><th>Description</th></tr>
-<tr><td><code>value</code></td><td>Collection (read-only)</td><td>Polymorphic getter that returns the appropriate typed value based on <code>configurationType</code>. Setter accepts only Strings.</td></tr>
-<tr><td><code>timeZone / timeZoneId</code></td><td><code>stringValue</code></td><td>TimeZone object or its ID string.</td></tr>
-<tr><td><code>calendarId</code></td><td><code>longValue</code></td><td>Calendar reference ID.</td></tr>
-<tr><td><code>booleanValue</code></td><td><code>stringValue</code></td><td>Boolean parsed from <code>"true"</code> / <code>"false"</code>.</td></tr>
-<tr><td><code>i18nKey</code></td><td>N/A (computed)</td><td>Full i18n key: <code>administration.configuration.param.&lt;param&gt;</code></td></tr>
-<tr><td><code>descriptionI18nKey</code></td><td>N/A (computed)</td><td>Description key: <code>...param.&lt;param&gt;.description</code></td></tr>
-</table>
-
-<h3>Type Mutability Rules</h3>
-<p>The <code>configurationType</code> setter and <code>setType()</code> method enforce that a type can only be changed to a compatible type (STRING ↔ TEXT/BOOLEAN/TIME_ZONE, LONG ↔ CALENDAR, FLOAT ↔ PERCENT). Cross-type changes throw <code>UnsupportedOperationException</code>. <code>internalSetConfigurationType()</code> bypasses checks and clears incompatible columns.</p>
-
-<h3>Named Queries</h3>
-<p><code>FIND_BY_PARAMETER = "from ConfigurationDO where parameter = :parameter"</code></p>
-
-<h2>Git History</h2><div class="hist"><pre>868d6abb7 2025 -> 2026
+<h2>Git History</h2><div class="hist"><pre>
+868d6abb7 2025 -> 2026
 63081666f Source file headers: 2024-> 2025.
-5f9bbfbd3 Fix typos in projectforge-business directory
-40e721b9c VCardUtils
-43453fcaf Migration stuff in progress...
-e4f9ca1be Migration stuff in progress...
-efb1954bd Migration stuff in progress...
-4c04cfd65 MAJOR-CHANGE! Migration of integer id's to Long id's.
-c04fb0d51 Migration stuff in progress...
-06828f490 Migration stuff in progress...
-b6092df09 Copyright 2023 -> 2024
-ab45d51fa Copyright 2001-2022 -> 2001-2023.
-5f7ef41b8 Copyright 2021 -> 2022
-cf80afb28 Removing of tenancy functionality finished.
-0ab100d21 Configuration refactored (GlobalConfiguration removed).
-c0f2b9de0 Tenants functionality removed everywhere.
-ceb63e8a1 Source code header: (C) 2001-2021.
-7c79f1922 Copyright of source header -> 2020.
-8675a1dbe Declared all Kotlin JPA entities/properties as open for lazy loading.
-af35917ac More code cleanup
-510e8d796 Heavy WIP: NamedQueries everywhere...
-3ae96bc81 ConfigurationDO.java -> ConfigurationDO.kt</pre></div>
+a582dad74 Migration stuff in progress... (all tests of all packages: OK).
+b60319f30 Migration stuff in progress... (all tests of all packages: OK).
+6b6a77efc Migration stuff in progress...
+</pre></div>
 </body></html>

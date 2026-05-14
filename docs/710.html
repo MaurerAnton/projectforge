@@ -1,75 +1,95 @@
 <!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>#710</title>
 <style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:2em;color:#444}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}.warn{background:#fff3cd;border-left:3px solid #ffc107;padding:.5em 1em;margin:1em 0}.tip{background:#d4edda;border-left:3px solid #28a745;padding:.5em 1em;margin:1em 0}</style></head>
-<body><div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="709.html">← Prev</a> · <a href="711.html">Next →</a></div>
-<h1>#710: <code>XStreamMarshallingStrategy.java</code></h1>
-<div class="meta">XStream marshalling strategy — factory that wires Hibernate proxy-aware XPath marshalling into XStream's tree serialization pipeline, <code>projectforge-business/src/main/java/org/projectforge/framework/persistence/xstream/XStreamMarshallingStrategy.java</code></div>
-<div class="c">Extends XStream's <code>ReferenceByXPathMarshallingStrategy</code> to serve as the top-level plumbing that connects the Hibernate proxy-aware marshaller to XStream's serialization engine. This is the strategy class that XStream is configured to use — it overrides the factory method <code>createMarshallingContext()</code> to replace the default XPath marshaller with <a href="707.html">HibernateProxyXPathMarshaller</a>, injecting Hibernate proxy awareness into every XStream serialization operation. This is the single configuration point that makes the entire XStream+Hibernate bridge layer operational. Without this strategy, none of the converter, mapper, or marshaller classes in this package would be activated during XStream serialization.</div>
+<body><div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="709.html">← Prev</a> · <a href="711.html">Next →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/java/org/projectforge/framework/persistence/xstream/ProxyIdRefMarshaller.java" target="_blank" title="View source on GitHub">📄 source</a></div>
+<h1>#710: <code>ProxyIdRefMarshaller.java</code></h1>
+<div class="meta"><code>projectforge-business/src/main/java/org/projectforge/framework/persistence/xstream/ProxyIdRefMarshaller.java</code> XStream marshaller — ID-based reference marshaller with CGLIB proxy stripping, Hibernate proxy unwrapping, and circular reference prevention, <code>projectforge-business/src/main/java/org/projectforge/framework/persistence/xstream/ProxyIdRefMarshaller.java</code> <span style="color:#888">91 lines · 54 code · 24 comments · 13 blank</span></div>
+<div class="c">Extends XStream's <code>ReferenceByIdMarshaller</code> to provide robust entity graph serialization with three layers of proxy handling: (1) strips Spring CGLIB <code>Enhancer</code> proxies by walking the superclass chain, (2) unwraps Hibernate proxies via <a href="706.html">HibernateProxyHelper.get()</a>, and (3) assigns incremental numeric IDs to every mutable object and writes ID/IDREF references when the same object is encountered again. This prevents infinite recursion from bidirectional JPA associations and ensures that entity identity (database ID) is preserved in the serialized XML — the same entity appearing in multiple association paths is serialized only once, with subsequent appearances rendered as <code>&lt;entity reference="3"/&gt;</code>. This is the most sophisticated proxy-aware marshaller in the ProjectForge XStream bridge layer.</div>
 
 <h2>Architecture</h2>
 
 <h3>Class Hierarchy</h3>
-<pre>MarshallingStrategy (interface)
-  └── AbstractTreeMarshallingStrategy
-       ├── ReferenceByXPathMarshallingStrategy  (XPath-based circular reference handling)
-       │    └── XStreamMarshallingStrategy       (this class — swaps in HibernateProxyXPathMarshaller)
-       └── ReferenceByIdMarshallingStrategy      (ID/IDREF-based circular reference handling)
-            └── ProxyIdRefMarshallingStrategy     (<a href="709.html">#709</a> — swaps in ProxyIdRefMarshaller)</pre>
+<pre>TreeMarshaller
+  └── AbstractReferenceMarshaller       (adds object reference tracking)
+       ├── ReferenceByXPathMarshaller   (<a href="707.html">#707</a> — XPath-based references)
+       └── ReferenceByIdMarshaller      (ID/IDREF-based references)
+            └── ProxyIdRefMarshaller    (this class — adds proxy stripping + CGLIB handling)</pre>
 
-<h3>Constructor</h3>
-<pre>public XStreamMarshallingStrategy(int mode) {
-    super(mode);
+<h3>Fields</h3>
+<table>
+<tr><th>Field</th><th>Type</th><th>Purpose</th></tr>
+<tr><td><code>references</code></td><td><code>ObjectIdDictionary</code></td><td>Tracks every object that has been serialized, mapping object identity → generated ID. Used to detect circular/duplicate references.</td></tr>
+<tr><td><code>idGenerator</code></td><td><code>IDGenerator</code></td><td>Generates unique sequential IDs. Defaults to <code>SequenceGenerator(1)</code> producing IDs "1", "2", "3", ...</td></tr>
+<tr><td><code>classMapper</code></td><td><code>Mapper</code></td><td>Cached reference to the XStream class mapper (not the <code>mapper</code> from the superclass, which shadows it).</td></tr>
+<tr><td><code>log</code></td><td><code>org.slf4j.Logger</code></td><td>Static SLF4J logger for debug-level tracing of marshalled objects.</td></tr>
+</table>
+
+<h3>Constructors</h3>
+<p>Two constructor overloads:</p>
+<ol>
+  <li><strong>Full constructor:</strong> Accepts <code>HierarchicalStreamWriter</code>, <code>ConverterLookup</code>, <code>Mapper</code>, and <code>IDGenerator</code>. Allows custom ID generation strategies.</li>
+  <li><strong>Convenience constructor:</strong> Omits the <code>IDGenerator</code> parameter and defaults to <code>SequenceGenerator(1)</code> — produces sequential numeric IDs starting at 1.</li>
+</ol>
+
+<h3>convertAnother(Object item) — Core Algorithm</h3>
+<p>This is the overridden method where all proxy handling and reference tracking happens. It replaces XStream's default <code>convertAnother()</code> with proxy-aware logic:</p>
+
+<ol>
+  <li><strong>CGLIB Enhancer stripping (lines ~56-59):</strong>
+    <pre>Class&lt;?&gt; targetClass = item.getClass();
+while (Enhancer.isEnhanced(targetClass)) {
+    targetClass = targetClass.getSuperclass();
 }</pre>
-<p>Accepts an XPath reference mode constant (<code>RELATIVE</code>, <code>ABSOLUTE</code>, <code>SINGLE_NODE</code>, etc.) and passes it to the superclass. The mode controls how XPath expressions are generated for back-references in circular entity graphs.</p>
+    Walks up the superclass chain stripping Spring CGLIB proxies (created by <code>@Transactional</code>, <code>@Cacheable</code>, etc.). <code>Enhancer.isEnhanced()</code> returns true for CGLIB-generated subclasses. This is done <em>before</em> converter lookup so the correct entity converter is selected.</li>
 
-<h3>createMarshallingContext() — The Factory Method</h3>
-<pre>@Override
-protected TreeMarshaller createMarshallingContext(
-    HierarchicalStreamWriter writer,
-    ConverterLookup converterLookup,
-    Mapper mapper)
-{
-    return new HibernateProxyXPathMarshaller(writer, converterLookup, mapper, RELATIVE);
+  <li><strong>Converter lookup (line ~61):</strong>
+    <pre>Converter converter = converterLookup.lookupConverterForType(targetClass);</pre>
+    Finds the appropriate XStream converter for the real (un-proxied) entity class.</li>
+
+  <li><strong>Hibernate proxy unwrapping (line ~62):</strong>
+    <pre>Object realItem = HibernateProxyHelper.get(item);</pre>
+    Uses <a href="706.html">HibernateProxyHelper</a> to unwrap Hibernate lazy-loading proxies. After this step, <code>realItem</code> is the actual entity instance with no proxy wrappers.</li>
+
+  <li><strong>Immutable value type fast path (lines ~64-66):</strong>
+    <pre>if (classMapper.isImmutableValueType(realItem.getClass())) {
+    converter.marshal(item, writer, this);
 }</pre>
+    Strings, integers, dates, enums, and other immutable types are marshalled directly without ID tracking. This avoids polluting the reference dictionary with values that can never form circular references.</li>
 
-<p>This is the single overridden method — a textbook Template Method pattern. The superclass <code>ReferenceByXPathMarshallingStrategy</code> calls <code>createMarshallingContext()</code> whenever it needs a <code>TreeMarshaller</code> to serialize an object graph. Instead of returning the default <code>ReferenceByXPathMarshaller</code>, this override returns a <a href="707.html">HibernateProxyXPathMarshaller</a> instance.</p>
+  <li><strong>Duplicate reference detection (lines ~67-70):</strong>
+    <pre>Object idOfExistingReference = references.lookupId(realItem);
+if (idOfExistingReference != null) {
+    writer.addAttribute("reference", idOfExistingReference.toString());
+    return;
+}</pre>
+    Checks the <code>ObjectIdDictionary</code> to see if <code>realItem</code> has already been serialized. If so, writes a <code>reference</code> attribute (e.g., <code>reference="3"</code>) pointing to the earlier serialization by its generated ID. This is the mechanism that prevents infinite recursion in bidirectional associations — when XStream traverses back to a parent from a child, it finds the parent already in the dictionary and emits a reference instead of re-serializing.</li>
 
-<div class="warn"><strong>Hardcoded RELATIVE mode:</strong> Despite the constructor accepting a <code>mode</code> parameter, the <code>createMarshallingContext()</code> override hardcodes <code>RELATIVE</code> rather than using the instance's mode. This means the constructor parameter is effectively ignored for marshaller creation. If a different XPath mode were needed, this class would need modification or a subclass with a different override.</div>
+  <li><strong>First-time serialization (lines ~71-81):</strong>
+    <pre>String newId = idGenerator.next(realItem);
+writer.addAttribute("id", newId);
+references.associateId(realItem, newId);
+converter.marshal(realItem, writer, this);</pre>
+    Generates a new unique ID, stores it in the reference dictionary, writes it as an <code>id</code> attribute on the XML element, then delegates to the converter for full serialization. The item is now registered so future encounters will hit step 5.</li>
+</ol>
+
+<h3>ObjectIdDictionary</h3>
+<p>XStream's <code>ObjectIdDictionary</code> is an identity-based map (uses <code>System.identityHashCode()</code> and <code>==</code> comparison, not <code>.equals()</code>). This is critical because JPA entities often implement <code>equals()</code> based on database ID, which may be null for transient entities. Identity-based tracking ensures each object instance is tracked uniquely regardless of its <code>equals()</code> implementation.</p>
+
+<div class="warn"><strong>Hibernate proxy identity caveat:</strong> If two different Hibernate proxy instances wrap the same underlying entity (possible when the entity is loaded through different sessions or associations), the <code>ObjectIdDictionary</code> would see them as different objects (different identity hashes) even after <code>HibernateProxyHelper.get()</code>. This can cause the same database row to be serialized twice with different generated IDs. This is a known limitation of identity-based tracking — the alternative (value-based tracking using database IDs) would require special handling for transient entities.</div>
 
 <h2>Integration Points</h2>
 <ul>
-  <li><strong>XStream configuration:</strong> Set on an XStream instance via <code>xstream.setMarshallingStrategy(new XStreamMarshallingStrategy(ReferenceByXPathMarshallingStrategy.RELATIVE))</code>. This is typically done once during application startup when configuring the XStream instance for XML export.</li>
-  <li><strong>Creates:</strong> <a href="707.html">HibernateProxyXPathMarshaller</a> as the marshaller for all serialization operations.</li>
-  <li><strong>Sibling strategy:</strong> <a href="709.html">ProxyIdRefMarshallingStrategy</a> — provides the same proxy-aware marshalling but using ID/IDREF attributes instead of XPath references. Both strategies serve the same purpose but use different XML reference mechanisms. The application can choose between them based on XML format preferences.</li>
-  <li><strong>References JIRA XSTR-226:</strong> The source comment links to the Codehaus JIRA issue that documented the original XStream/Hibernate proxy incompatibility.</li>
+  <li><strong>Created by:</strong> The <a href="709.html">ProxyIdRefMarshallingStrategy</a>, which overrides <code>createMarshallingContext()</code> to instantiate this marshaller instead of the default <code>ReferenceByIdMarshaller</code>.</li>
+  <li><strong>Alternative to:</strong> <a href="707.html">HibernateProxyXPathMarshaller</a> — this uses ID/IDREF attributes while the other uses XPath expressions. Both are valid approaches; the choice depends on which <code>MarshallingStrategy</code> is configured.</li>
+  <li><strong>Depends on:</strong> <a href="706.html">HibernateProxyHelper</a> for Hibernate proxy unwrapping. Uses Spring Framework's <code>Enhancer</code> for CGLIB proxy detection (compile dependency on <code>spring-core</code>).</li>
 </ul>
 
-<h2>Strategy Comparison: XPath vs. ID/IDREF</h2>
-<table>
-<tr><th></th><th><code>XStreamMarshallingStrategy</code> (this class)</th><th><a href="709.html">ProxyIdRefMarshallingStrategy</a></th></tr>
-<tr><td>Reference mechanism</td><td>XPath expressions (e.g., <code>reference="../../task"</code>)</td><td>ID/IDREF attributes (e.g., <code>id="1"</code>, <code>reference="1"</code>)</td></tr>
-<tr><td>Depends on document structure</td><td>Yes — XPath paths break if XML structure changes</td><td>No — IDs are document-structure independent</td></tr>
-<tr><td>Human readability</td><td>Lower — XPath paths are structural, not semantic</td><td>Higher — sequential numeric IDs are easy to follow</td></tr>
-<tr><td>Proxy unwrapping</td><td>In marshaller only (<a href="707.html">HibernateProxyXPathMarshaller</a>)</td><td>In marshaller (<a href="708.html">ProxyIdRefMarshaller</a>) + CGLIB stripping</td></tr>
-<tr><td>Spring CGLIB support</td><td>No</td><td>Yes (strips <code>Enhancer</code> proxies)</td></tr>
-</table>
-
-<h2>How the Entire Bridge Layer Fits Together</h2>
-<p>When XStream serializes a JPA entity graph in ProjectForge, the following pipeline executes:</p>
-<ol>
-  <li><strong><code>XStreamMarshallingStrategy</code></strong> (this class) is invoked to create a marshalling context.</li>
-  <li>It instantiates <strong><a href="707.html">HibernateProxyXPathMarshaller</a></strong> as the tree marshaller.</li>
-  <li>As the marshaller traverses the object graph, it calls <code>convertAnother()</code>, which unwraps <strong>HibernateProxy</strong> instances before delegating to XStream's reference tracking.</li>
-  <li>When XStream needs to convert a specific class, <strong><a href="704.html">HibernateMapper</a></strong> resolves the class name (substituting proxy names with real entity names, and Hibernate collection names with JDK collection names).</li>
-  <li>When XStream encounters a <code>PersistentCollection</code>, <strong><a href="702.html">HibernateCollectionConverter</a></strong> forces initialization and delegates to the appropriate JDK collection converter.</li>
-  <li>When XStream encounters a <code>HibernateProxy</code>, <strong><a href="705.html">HibernateProxyConverter</a></strong> unwraps it to the real entity before serialization.</li>
-</ol>
-
-<h3>Design Decisions & Gotchas</h3>
+<h2>Design Decisions & Gotchas</h2>
 <ul>
-  <li><strong>Template Method pattern:</strong> The strategy uses the Template Method pattern — the superclass defines the algorithm (how to marshal an object graph), and this subclass provides the specific <code>TreeMarshaller</code> implementation. This is the canonical XStream extension point for custom marshalling behavior.</li>
-  <li><strong>RELATIVE mode hardcode:</strong> The hardcoded <code>RELATIVE</code> in <code>createMarshallingContext()</code> means the constructor's <code>mode</code> parameter is vestigial. This is likely an oversight or a deliberate decision to ensure proxy-aware marshalling always uses relative XPaths regardless of what callers pass. In practice, <code>RELATIVE</code> is the most robust mode for entity graphs because entity hierarchies can shift during refactoring.</li>
-  <li><strong>Minimal implementation:</strong> This class is only ~20 lines — the real work is delegated to <a href="707.html">HibernateProxyXPathMarshaller</a>. This is a good example of the Single Responsibility Principle: the strategy's job is to wire components together, not to implement marshalling logic.</li>
-  <li><strong>No converters or mappers registered here:</strong> This strategy only deals with the marshaller. Converters (<a href="702.html">HibernateCollectionConverter</a>, <a href="705.html">HibernateProxyConverter</a>) and mappers (<a href="703.html">HibernateCollectionsMapper</a>, <a href="704.html">HibernateMapper</a>) are registered separately on the XStream instance. The strategy does not know about them — they operate independently at their respective layers.</li>
+  <li><strong>Spring CGLIB dependency:</strong> The import of <code>org.springframework.cglib.proxy.Enhancer</code> creates a hard dependency on Spring Framework, which is acceptable since ProjectForge is a Spring application. However, this class would not work outside a Spring context without modification.</li>
+  <li><strong>Immutable fast path:</strong> The <code>classMapper.isImmutableValueType()</code> check is an important optimization. Without it, every string literal, integer, and date in the entity graph would be assigned an ID and added to the reference dictionary, massively bloating memory usage and XML output.</li>
+  <li><strong>Debug logging:</strong> The SLF4J debug statement logs each marshalled object class. In production, this should be at TRACE level to avoid log spam during large entity graph exports.</li>
+  <li><strong>ID collision potential:</strong> <code>SequenceGenerator(1)</code> produces IDs within a single marshalling context. If two separate <code>ProxyIdRefMarshaller</code> instances serialize different object graphs within the same XML document (unlikely but theoretically possible with XStream's <code>MarshallingContext</code> nesting), IDs could collide. This is not a practical concern because each marshalling context uses its own marshaller instance.</li>
+  <li><strong>classMapper shadowing:</strong> Both this class and the superclass have a <code>mapper</code> field. The two-argument constructor sets <code>this.classMapper</code> but the three-argument constructor sets both. The code consistently uses <code>this.classMapper</code> for the locally stored reference, avoiding confusion with the inherited field.</li>
 </ul>
 
 <h2>Git History</h2><div class="hist"><pre>868d6abb7 2025 -> 2026
@@ -79,6 +99,10 @@ ab45d51fa Copyright 2001-2022 -> 2001-2023.
 5f7ef41b8 Copyright 2021 -> 2022
 ceb63e8a1 Source code header: (C) 2001-2021.
 7c79f1922 Copyright of source header -> 2020.
+32f634b88 Optimize imports
+000ca723d Remove pointless boolean expressions (business)
 dd5ca38ac CopyRight of all java file-header updated or created.
+a954d7f7d Changes from Java 9 branch
+a5bbdca6a Change logger to slf4j
 9ebb88522 Initial commit</pre></div>
 </body></html>

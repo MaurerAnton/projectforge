@@ -1,14 +1,39 @@
-<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>File #75: DataTransferAuditDao.kt</title>
-<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333}a{color:#0366d6;text-decoration:none}.meta{background:#f0f0f0;border-radius:6px;padding:1em;margin:1em 0;font-size:.9em}.commentary{margin:1em 0;background:#fff;padding:.5em 1em;border-radius:6px;border-left:4px solid #ddd}code{background:#e8e8e8;border-radius:3px;padding:.1em .3em;font-size:.9em}.nav{font-size:.9em;color:#888;margin-bottom:1em}</style></head>
-<body>
-<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="74.html">← Prev</a> · Next →</div>
-<h1>File #75: <code>DataTransferAuditDao.kt</code></h1>
-<div class="meta"><p><strong>Path:</strong> <code>./plugins/datatransfer/.../DataTransferAuditDao.kt</code> · <strong>Source:</strong> <a href="https://github.com/micromata/projectforge/blob/9ed5fbe0f/plugins/org.projectforge.plugins.datatransfer/src/main/kotlin/org/projectforge/plugins/datatransfer/DataTransferAuditDao.kt">GitHub</a></p></div>
-<div class="commentary"><p>Audit log DAO for data transfer events. Records every file upload, download, and delete. Key features:</p>
-<ul><li><strong>Batched notifications:</strong> <code>removeFromQueue()</code> marks audit entries as notified in chunks of 50.</li>
-<li><strong>10-minute debounce:</strong> <code>internalGetQueuedEntriesByAreaId()</code> returns null if any non-download event is newer than 10 minutes — prevents notification spam during bulk uploads.</li>
-<li><strong>Download filtering:</strong> Download events bypass notifications (<code>downloadEventTypes</code> exclude DOWNLOAD/DOWNLOAD_MULTI/DOWNLOAD_ALL) — only uploads and deletes trigger alerts.</li>
-<li><strong>Access-aware queries:</strong> <code>getEntriesByAreaId()</code> checks user access before returning audit data — personal box owners can't see each other's audit logs.</li>
-<li><strong>Cleanup:</strong> <code>deleteOldEntries()</code> purges old audit records by timestamp.</li></ul></div>
-<div class="nav" style="margin-top:2em;padding-top:1em;border-top:1px solid #ddd"><a href="74.html">← #74</a> · <a href="file-index.html">File index</a></div>
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>#75: DataTransferAreaDao.kt</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:2em;color:#444}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.lang{font-size:.85em;color:#888;float:right}.lang a{color:#888;text-decoration:none;padding:0 .3em}.lang a.active{color:#0366d6;font-weight:600;text-decoration:underline}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}.warn{background:#fff3cd;border-left:3px solid #ffc107;padding:.5em 1em;margin:1em 0}.tip{background:#d4edda;border-left:3px solid #28a745;padding:.5em 1em;margin:1em 0}</style></head>
+<body><div class="lang"><a href="75.html" class="active">EN</a> · <a href="75_de.html">DE</a> · <a href="75_ru.html">RU</a> · <a href="75_fr.html">FR</a> · <a href="75_es.html">ES</a></div>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="74.html">← Prev</a> · <a href="76.html">Next →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/plugins/org.projectforge.plugins.datatransfer/src/main/kotlin/org/projectforge/plugins/datatransfer/DataTransferAreaDao.kt" target="_blank">📄 source</a></div>
+<h1>#75: <code>DataTransferAreaDao.kt</code></h1>
+<div class="meta"><code>plugins/org.projectforge.plugins.datatransfer/src/main/kotlin/org/projectforge/plugins/datatransfer/DataTransferAreaDao.kt</code> · Data Access Object (DAO) · 388 lines · 291 code · 58 comments · 39 blank</div>
+<div class="c">
+<p>Part of the <strong>Data Transfer plugin</strong>. Data Access Object (DAO).</p>
+<p>Data access layer for class entities. class is defined in package &lt;code&gt;org.projectforge.plugins.datatransfer&lt;/code&gt;.</p>
+<h3>Structure</h3>
+<p><code>DataTransferAreaDao</code> — <em>open class</em> : BaseDao&lt;DataTransferAreaDO&gt;(DataTransferAreaDO::class.java), AttachmentsEventListener.</p>
+<p><strong>Key dependencies:</strong> <code>jakarta.annotation.PostConstruct</code>, <code>jakarta.servlet.http.HttpServletRequest</code>, <code>org.projectforge.business.PfCaches</code>, <code>org.projectforge.business.configuration.DomainService</code>, <code>org.projectforge.business.user.service.UserService</code>, <code>org.projectforge.common.DataSizeConfig</code>, <code>org.projectforge.common.StringHelper</code>, <code>org.projectforge.framework.access.AccessException</code></p>
+</div>
+<h2>Design Decisions</h2>
+<ul>
+<li>Extends ProjectForge's BaseDao for typed CRUD, Hibernate Search full-text queries, and transaction management.</li>
+<li>Uses the Hibernate Search DSL with entity-specific field paths for performance-optimized filtering.</li>
+</ul>
+<h2>Gotchas & Pitfalls</h2>
+<div class="warn">
+<ul>
+<li>Lazy-loaded collections throw LazyInitializationException outside active Hibernate sessions. Use @Transactional or Hibernate.initialize().</li>
+</ul>
+</div>
+<h2>Git History</h2>
+<div class="hist"><table>
+<tr><th>Commit</th><th>Description</th></tr>
+<tr><td><code>868d6abb7</code></td><td>2025 -&gt; 2026 (minor edit, license header update)</td></tr>
+<tr><td><code>98f6d080c</code></td><td>Sanity check of data transfer and JCR finished. (minor edit, license header update)</td></tr>
+<tr><td><code>ddf02927d</code></td><td>Migration stuff in progress... (minor edit, updated imports)</td></tr>
+<tr><td><code>b3782c8a8</code></td><td>Migration stuff in progress... (minor edit, updated imports)</td></tr>
+<tr><td><code>5989b32fd</code></td><td>BaseDao: mechanism of onChangeLister refactored. (minor edit, method changes)</td></tr>
+<tr><td><code>1b50060c3</code></td><td>BaseDao: renamed: get -&gt; find, save -&gt; insert, getList -&gt; select, load -&gt; select</td></tr>
+<tr><td><code>2a8ea2076</code></td><td>Migration stuff in progress... BaseDao refactored (not yet finished) internal* methods renamed.</td></tr>
+<tr><td><code>3aeda5ef5</code></td><td>Big change: all save|update|...InTrans renamed (InTrans removed). PfPesistenceContext as param not needed anymore (ThreadLocal is used instead). (all tests of all packages: OK).</td></tr>
+<tr><td><code>67805f2fc</code></td><td>ThreadLocalUserContext.user -&gt; ThreadLocalUserContext.loggedInUser (renamed for avoiding mis-understandings in code).</td></tr>
+<tr><td><code>1135ccbca</code></td><td>Persistence: functions renamed: *NewTrans -&gt; *InTrans</td></tr>
+</table></div>
 </body></html>

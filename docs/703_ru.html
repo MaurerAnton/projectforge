@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>#703 [RU]</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:2em;color:#444}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}.warn{background:#fff3cd;border-left:3px solid #ffc107;padding:.5em 1em;margin:1em 0}.tip{background:#d4edda;border-left:3px solid #28a745;padding:.5em 1em;margin:1em 0}</style>
+</head>
+<body>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Индекс</a> · <a href="file-index.html">← Индекс файлов</a> · <a href="702.html">← Предыдущий</a> · <a href="704.html">Следующий →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/java/org/projectforge/framework/persistence/utils/ReflectionToString.java" target="_blank" title="Просмотреть исходный код на GitHub">📄 исходник</a></div>
+<h1>#703: <code>ReflectionToString.java</code></h1>
+<div class="meta"><code>projectforge-business/src/main/java/org/projectforge/framework/persistence/utils/ReflectionToString.java</code> Утилита Java — Hibernate-совместимый построитель <code>toString()</code> на основе рефлексии, <code>projectforge-business/src/main/java/org/projectforge/framework/persistence/utils/ReflectionToString.java</code> <span style="color:#888">118 строк · 82 кода · 28 комментариев · 8 пустых</span></div>
+<div class="c">Расширяет Apache Commons Lang3 <code>ReflectionToStringBuilder</code> для создания безопасного, читаемого вывода <code>toString()</code> для JPA-сущностей. Обрабатывает ленивые прокси Hibernate, неинициализированные коллекции, ID <code>BaseDO</code>, метки <code>DisplayNameCapable</code> и объекты <code>TimeZone</code> без вызова <code>LazyInitializationException</code>. Единая статическая точка входа <code>ReflectionToString.asString(obj)</code> используется во всей кодовой базе везде, где требуется отладочный/логовый вывод доменных объектов.</div>
+
+<h2>Архитектура</h2>
+
+<h3>Иерархия классов</h3>
+<p><code>ReflectionToString</code> расширяет <code>org.apache.commons.lang3.builder.ReflectionToStringBuilder</code> (Apache Commons Lang3). Внутренне <code>ReflectionToStringBuilder</code> использует Java-рефлексию для обхода всех объявленных полей объекта (и его суперклассов), добавляя каждую пару имя/значение поля в <code>ToStringBuilder</code>. Этот класс переопределяет три ключевых метода для внедрения Hibernate-совместимости.</p>
+
+<table>
+<tr><th>Метод</th><th>Цель переопределения</th></tr>
+<tr><td><code>ReflectionToString(Object)</code> (конструктор)</td><td>Проверяет, инициализирован ли корневой объект через <code>Hibernate.isInitialized()</code>. Если нет, передает синтетическую строку вида <code>"Lazy" + className + "@" + identityHash</code> вместо реального прокси, предотвращая <code>LazyInitializationException</code> с самого начала.</td></tr>
+<tr><td><code>append(String, Object)</code></td><td>Ядро Hibernate-безопасной логики. Перед добавлением каждого значения поля проверяет <code>Hibernate.isInitialized()</code> и применяет специализированное форматирование в зависимости от типа значения.</td></tr>
+<tr><td><code>accept(Field)</code></td><td>Отфильтровывает поля, значения которых являются неинициализированными прокси Hibernate. Вместо того чтобы молча пропускать, вызывает <code>append()</code> напрямую (который отобразит информацию о прокси) и возвращает <code>false</code>, чтобы суперкласс не обрабатывал поле дважды.</td></tr>
+</table>
+
+<h3>Дерево решений по обработке значений в append()</h3>
+<p>Когда вызывается <code>append(fieldName, object)</code>, применяется следующая логика по порядку:</p>
+<ol>
+  <li><strong>Null:</strong> передается суперклассу (отображает <code>&lt;null&gt;</code>).</li>
+  <li><strong>Не инициализировано Hibernate:</strong>
+    <ul>
+      <li>Если <code>BaseDO</code> — извлекает идентификатор через <code>HibernateUtils.getIdentifier()</code>; отображает числовой или строковый ID (или <code>"&lt;id&gt;"</code>, если null).</li>
+      <li>Иначе — отображает строковый литерал <code>"LazyCollection"</code>.</li>
+    </ul>
+  </li>
+  <li><strong>Инициализировано и <code>DisplayNameCapable</code>:</strong> делегирует приватному <code>myToString()</code>, который отображает <code>"id:displayName"</code> для объектов <code>BaseDO</code> или только отображаемое имя для объектов не-DO.</li>
+  <li><strong>Инициализировано и <code>BaseDO</code>:</strong> отображает только ID сущности.</li>
+  <li><strong><code>Collection</code>:</strong> перебирает элементы, вызывает <code>myToString()</code> для каждого, форматирует как <code>[el1, el2, ...]</code>. Избегает стандартного <code>toString()</code> коллекции, который рекурсивно вызывал бы <code>ReflectionToString</code> для каждого элемента и потенциально раздувал вывод.</li>
+  <li><strong><code>TimeZone</code>:</strong> отображает строку ID часового пояса (например, <code>"Europe/Berlin"</code>) вместо полного <code>TimeZone.toString()</code>.</li>
+  <li><strong>Иначе:</strong> передается суперклассу.</li>
+</ol>
+
+<h3>Логика приватного myToString(Object)</h3>
+<p>Особые случаи: <code>null</code> → <code>"&lt;null&gt;"</code>, затем объекты <code>DisplayNameCapable</code> (с префиксом ID для <code>BaseDO</code>), объекты <code>BaseDO</code> (только ID), и в конце — возврат к <code>obj.toString()</code> для всех остальных типов.</p>
+
+<h3>Обходной путь для Javassist</h3>
+<div class="warn">Когда <code>append()</code> встречает неинициализированный объект <code>BaseDO</code>, он вызывает <code>HibernateUtils.getIdentifier()</code> вместо использования собственного <code>getId()</code> прокси. Комментарий в исходном коде отмечает, что это "обходной путь для ошибки Javassist" — прокси Javassist (используемые Hibernate) могут давать некорректное поведение при вызове методов на неинициализированных прокси, поэтому предпочтительнее использовать утилиту фреймворка для извлечения ID напрямую из метаданных прокси.</div>
+
+<h2>Точки интеграции</h2>
+<ul>
+  <li>Используется как реализация <code>toString()</code> по умолчанию в <code>BaseDO</code> и его подклассах (каждый доменный объект в ProjectForge).</li>
+  <li>Потребляется операторами логирования во всем бизнес-слое — любой <code>log.debug("entity: {}", entity)</code> вызовет этот форматтер через <code>toString()</code> сущности.</li>
+  <li>Зависит от <code>HibernateUtils.getIdentifier()</code> для безопасного извлечения ID из прокси.</li>
+  <li>Полагается на Apache Commons Lang3 <code>ReflectionToStringBuilder</code> для каркаса цикла рефлексии.</li>
+</ul>
+
+<h2>Проектные решения и подводные камни</h2>
+<ul>
+  <li><strong>Производительность:</strong> toString на основе рефлексии по своей сути медленный. Это приемлемо, поскольку используется только для отладочного/логового вывода, никогда в горячих путях кода. Фильтр <code>accept()</code> предотвращает погружение в неинициализированные ленивые ассоциации, которые могли бы вызвать запросы к базе данных.</li>
+  <li><strong>Неинициализированные коллекции:</strong> Метод <code>accept()</code> вызывает <code>getValue(field)</code>, что принудительно обращается к полю. Если поле содержит неинициализированную <code>PersistentCollection</code>, <code>Hibernate.isInitialized()</code> возвращает false, и поле обрабатывается встроенно — загрузки базы данных не происходит.</li>
+  <li><strong>Циклические ссылки:</strong> Обработка коллекций в <code>append()</code> использует <code>myToString()</code> (который отображает ID/отображаемые имена) вместо <code>toString()</code> на элементах коллекции. Это предотвращает бесконечную рекурсию, когда сущности имеют двунаправленные отношения <code>@OneToMany</code>/<code>@ManyToOne</code>.</li>
+  <li><strong>Особый случай TimeZone:</strong> Стандартный <code>TimeZone.toString()</code> в Java выдает длинный вывод с деталями смещения. Это переопределение извлекает только ID, сохраняя вывод кратким.</li>
+</ul>
+
+<h2>История Git</h2><div class="hist"><pre>868d6abb7 2025 -> 2026
+63081666f Заголовки исходных файлов: 2024-> 2025.
+b6092df09 Авторские права 2023 -> 2024
+ab45d51fa Авторские права 2001-2022 -> 2001-2023.
+5f7ef41b8 Авторские права 2021 -> 2022
+ceb63e8a1 Заголовок исходного кода: (C) 2001-2021.
+a6a7aece4 Оптимизация импортов
+b78b870bd ShortDisplayNameCapable -> DisplayNameCapable.
+7c79f1922 Авторские права в заголовке исходника -> 2020.
+73a9755df Дополнительная очистка кода: - Объединены блоки catch, выполняющие одни и те же действия
+32f634b88 Оптимизация импортов
+000ca723d Удаление бессмысленных логических выражений (бизнес)
+dd5ca38ac Обновлены или созданы авторские права во всех заголовках java-файлов.
+f979e8a42 MGC-UPDATE: Обновление до версии 3.0.0-SNAPSHOT
+9ebb88522 Начальный коммит</pre></div>
+</body>
+</html>

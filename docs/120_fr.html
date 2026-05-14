@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>#120 [FR]</title>
+<style>
+body {
+    font-family: system-ui, sans-serif;
+    max-width: 960px;
+    margin: 2em auto;
+    padding: 0 1em;
+    background: #fafafa;
+    color: #222;
+    line-height: 1.6
+}
+h1 {
+    border-bottom: 2px solid #333
+}
+a {
+    color: #0366d6
+}
+.meta {
+    font-size: .9em;
+    margin: 1em 0
+}
+.nav {
+    font-size: .9em;
+    color: #888;
+    margin-bottom: 1em
+}
+.commentary {
+    border-left: 3px solid #ddd;
+    padding: .5em 1em;
+    margin: 1em 0;
+    background: #fff
+}
+code {
+    background: #f0f0f0;
+    padding: 0 .2em;
+    border-radius: 2px
+}
+</style>
+</head>
+<body>
+
+<div class="nav">
+<a href="https://maureranton.github.io/projectforge/">← Index</a> · 
+<a href="file-index.html">← Index des fichiers</a> · 
+<a href="119.html">← Précédent</a> · 
+<a href="121.html">Suivant →</a> · 
+<a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/plugins/org.projectforge.plugins.datatransfer/src/test/kotlin/org/projectforge/plugins/datatransfer/DataTransferPublicAccessTest.kt" target="_blank" title="Voir la source sur GitHub">📄 source</a>
+</div>
+
+<h1>#120 : <code>DataTransferPublicAccessTest.kt</code></h1>
+<div class="meta">
+<code>plugins/org.projectforge.plugins.datatransfer/src/test/kotlin/org/projectforge/plugins/datatransfer/DataTransferPublicAccessTest.kt</code> 
+<strong>Chemin :</strong> <code>plugins/...datatransfer/src/test/kotlin/.../DataTransferPublicAccessTest.kt</code> · 
+<strong>Lignes :</strong> 227 · 
+<strong>Type :</strong> Test d'intégration Kotlin JUnit 5 
+<span style="color:#888">227 lignes · 177 code · 24 commentaires · 26 vides</span>
+</div>
+
+<div class="commentary">
+<p><strong>Test d'intégration pour la couche REST publique (externe) DataTransfer</strong> — le test DataTransfer le plus complet avec 227 lignes. Teste le flux d'accès anonyme : lien externe → connexion → téléversement/téléchargement/suppression → déconnexion, en utilisant des requêtes HTTP mockées et des fichiers JCR.</p>
+</div>
+
+<div class="commentary">
+<h3>Composants testés</h3>
+<ul>
+<li><code>DataTransferPublicSession</code> (<a href="101.html">#101</a>) — gestion de session, protection contre le brute-force</li>
+<li><code>DataTransferPublicPageRest</code> — renvoie le JSON de mise en page pour l'interface React anonyme</li>
+<li><code>DataTransferPublicServicesRest</code> (<a href="100.html">#100</a>) — endpoints de téléversement, téléchargement, suppression, téléchargement multiple</li>
+<li><code>LoginProtection</code> — application du décalage temporel anti-brute-force</li>
+</ul>
+</div>
+
+<div class="commentary">
+<h3>Scénarios de test (~10 méthodes de test)</h3>
+<ul>
+<li><strong>Connexion avec identifiants valides :</strong> crée une zone avec <code>external_download_enabled=true</code>, <code>externalAccessToken</code>, <code>externalPassword</code>, appelle <code>DataTransferPublicSession.login()</code> — vérifie que la session contient les données de la zone</li>
+<li><strong>Connexion avec mot de passe erroné :</strong> vérifie que <code>LoginProtection</code> incrémente les tentatives échouées, et qu'après échecs répétés le décalage temporel s'active</li>
+<li><strong>Blocage par brute-force :</strong> après suffisamment d'échecs, <code>login()</code> retourne le statut <code>LOGIN_TIME_OFFSET</code> — vérifié en appelant login 3 fois ou plus plus rapidement que la fenêtre de décalage</li>
+<li><strong>Boîte personnelle exclue de l'accès public :</strong> les zones <code>isPersonalBox()</code> retournent toujours <code>LoginResultStatus.FAILED</code> — le contrôle de paranoïa dans <code>checkDataBaseEntry()</code></li>
+<li><strong>Téléversement :</strong> mocke <code>MultipartFile</code> (wrapper de fichier téléversé Spring), appelle l'endpoint REST de téléversement, vérifie que l'ID du fichier apparaît dans la liste <code>ownedFiles</code></li>
+<li><strong>Téléchargement :</strong> téléverse un fichier en tant qu'utilisateur externe, puis le télécharge — vérifie que le contenu de <code>InputStreamResource</code> correspond</li>
+<li><strong>Suppression de son propre fichier :</strong> vérifie que <code>isOwnerOfFile()</code> retourne true, et que la suppression réussit</li>
+<li><strong>Impossible de supprimer le fichier d'autrui :</strong> l'utilisateur externe2 tente de supprimer le téléversement de l'utilisateur1 — vérifie que <code>isOwnerOfFile()</code> retourne false</li>
+<li><strong>Téléchargement multiple :</strong> téléverse 3 fichiers, télécharge tout en ZIP — vérifie que <code>ZipInputStream</code> contient les 3 entrées</li>
+<li><strong>Fixation de session :</strong> vérifie qu'après connexion, le <code>JSESSIONID</code> change (ancienne session invalidée, nouvelle session créée avec les données de zone transférées)</li>
+</ul>
+</div>
+
+<div class="commentary">
+<h3>Couche HTTP mockée</h3>
+<p>Utilise Mockito pour simuler <code>HttpServletRequest</code> et <code>HttpSession</code> — critique car <a href="101.html">DataTransferPublicSession</a> stocke les données directement dans les attributs de session HTTP. La session mockée simule <code>getSession(false)</code>, <code>getSession(true)</code>, <code>getAttribute("transferAreas")</code>, <code>setAttribute()</code>, et <code>invalidate()</code> — tous utilisés dans le test de fixation de session.</p>
+<p>Mocke également <code>MultipartFile</code> pour les tests de téléversement et <code>HttpServletResponse</code> + <code>ServletOutputStream</code> → <code>ByteArrayOutputStream</code> pour la capture du contenu téléchargé.</p>
+</div>
+
+</body>
+</html>

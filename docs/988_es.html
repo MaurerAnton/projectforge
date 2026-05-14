@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>#988: EmployeeSalaryImportService.kt [ES]</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:2em;color:#444}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}</style>
+</head>
+<body>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Índice</a> · <a href="file-index.html">← Índice de archivos</a> · <a href="987.html">← Anterior</a> · <a href="989.html">Siguiente →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/kotlin/org/projectforge/business/fibu/datev/EmployeeSalaryImportService.kt" target="_blank" title="Ver fuente en GitHub">📄 fuente</a></div>
+
+<h1>#988: <code>EmployeeSalaryImportService.kt</code></h1>
+
+<div class="meta"><code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/datev/EmployeeSalaryImportService.kt</code> 
+  <strong>Tipo:</strong> Servicio Spring (orquestación de importación)<br>
+  <strong>Paquete:</strong> <code>org.projectforge.business.fibu.datev</code><br>
+  <strong>Ruta real:</strong> <code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/datev/EmployeeSalaryImportService.kt</code><br>
+  <strong>Nota:</strong> El archivo <strong>no</strong> existe en la ruta solicitada (<code>.../excelimport/...</code>). Reside en el subpaquete <code>datev</code>. La documentación a continuación refleja la fuente real.
+ <span style="color:#888">139 líneas · 101 código · 25 comentarios · 13 en blanco</span></div>
+
+<div class="c">
+  <p>Servicio de orquestación para el pipeline de <strong>importación de salarios de empleados</strong>. Sigue el mismo ciclo de vida de importación de tres fases (importar → conciliar → confirmar) establecido por <code>DatevImportService</code>. Coordina entre <code>EmployeeSalaryExcelImporter</code> (análisis), <code>EmployeeSalaryDao</code> (persistencia) y <code>EmployeeSalaryService</code> (búsqueda).</p>
+</div>
+
+<h2>Arquitectura</h2>
+
+<h3>Dependencias</h3>
+<table>
+  <tr><th>Dependencia</th><th>Rol</th></tr>
+  <tr><td><code>EmployeeSalaryExcelImporter</code></td><td>Analiza el libro de Excel en <code>ImportStorage&lt;EmployeeSalaryDO&gt;</code></td></tr>
+  <tr><td><code>EmployeeSalaryService</code></td><td>Busca salarios existentes por mes para la conciliación</td></tr>
+  <tr><td><code>EmployeeSalaryDao</code></td><td>Confirmación masiva y control de acceso</td></tr>
+</table>
+
+<h2>Ciclo de vida de importación</h2>
+
+<h3>Fase 1: Importar</h3>
+<p><code>importData(inputStream, filename, year, month)</code> — abre un <code>ExcelWorkbook</code>, crea un <code>ImportStorage</code>, delega en <code>EmployeeSalaryExcelImporter.doImport()</code>. Devuelve el almacenamiento poblado.</p>
+
+<h3>Fase 2: Conciliar</h3>
+<p><code>reconcile(storage, sheetName, year, month)</code> — busca salarios existentes para el año/mes dado a través de <code>employeeSalaryService.selectByMonth()</code>, luego empareja cada elemento importado con un registro existente en la BD por ID de empleado. Establece <code>oldValue</code>, <code>id</code> y la marca de tiempo <code>created</code> en el elemento para la fase de confirmación. Establece el estado en <code>RECONCILED</code>.</p>
+
+<h3>Fase 3: Confirmar</h3>
+<p><code>commit(storage, sheetName)</code> — requiere estado <code>RECONCILED</code>. Recoge los elementos seleccionados, copia el <code>id</code> existente de <code>oldValue</code> para las actualizaciones, y confirma masivamente a través de <code>employeeSalaryDao.insertOrUpdate()</code> en bloques de 50. Establece el estado en <code>IMPORTED</code>.</p>
+
+<h2>Control de acceso</h2>
+<p><code>checkLoggedinUserRight()</code> delega en <code>employeeSalaryDao.checkLoggedInUserInsertAccess()</code>, que verifica que el usuario tenga el derecho de inserción para salarios de empleados.</p>
+
+<h2>Tamaño del bloque de inserción</h2>
+<p><code>SALARY_INSERT_BLOCK_SIZE = 50</code> — controla el tamaño del lote para las operaciones de persistencia.</p>
+
+<h2>Historial de Git</h2>
+<div class="hist"><pre>
+868d6abb7 2025 -> 2026
+63081666f Encabezados de archivos fuente: 2024 -> 2025.
+1012e347a Trabajo de migración en curso... (todas las pruebas de todos los paquetes: OK).
+</pre></div>
+
+</body>
+</html>

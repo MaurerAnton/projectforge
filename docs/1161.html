@@ -1,62 +1,10 @@
-<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>1161</title>
-<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:2em;color:#444}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}</style></head>
-<body><div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="1160.html">← Prev</a> · <a href="1162.html">Next →</a></div>
-<h1>1161: <code>VacationService.kt</code></h1>
-<div class="meta">Service, projectforge-business/src/main/kotlin/org/projectforge/business/vacation/service/VacationService.kt</div>
-<div class="c">Core business logic for vacation management: statistics calculation, remaining leave carry-over, conflict detection, validation, and average working time analysis.</div>
-
-<h2>Architecture</h2>
-<p><code>VacationService</code> is the central orchestrator of vacation business logic. It coordinates <code>VacationDao</code>, <code>EmployeeDao</code>, <code>EmployeeService</code>, <code>RemainingLeaveDao</code>, <code>LeaveAccountEntryDao</code>, <code>ConfigurationService</code>, and the <code>ConflictingVacationsCache</code>. All complex calculations (working days, remaining leave, annual leave proration) live here, keeping the DAO focused on persistence and access control.</p>
-
-<h3>Vacation Statistics Engine</h3>
-<p><code>getVacationStats(employee, year, ...)</code> is the central computation method. It runs in a transaction (to allow <code>RemainingLeaveDao</code> writes) and builds a <code>VacationStats</code> object containing:</p>
-<ul>
-<li><code>vacationDaysInYearFromContract</code> — annual leave entitlement from employee contract (prorated for mid-year joins/leaves via <code>getAnnualLeaveDays</code>)</li>
-<li><code>vacationDaysInProgressAndApproved</code> — sum of working days for IN_PROGRESS + APPROVED non-special entries</li>
-<li><code>remainingLeaveFromPreviousYear</code> — carried vacation days from the prior year (calculated recursively for year-1 if not yet persisted)</li>
-<li><code>allocatedDaysInOverlapPeriod</code> — vacation days consumed between Jan 1 and the end of the carry-over period (e.g. March 31)</li>
-<li><code>specialVacationDaysApproved/InProgress</code> — separate tracking for special leave</li>
-<li><code>leaveAccountEntries</code> — manual adjustments from leave account</li>
-</ul>
-
-<h3>Remaining Leave Carry-Over</h3>
-<p>The overlap period (January 1 to <code>ConfigurationService.getEndOfCarryVacationOfPreviousYear(year)</code>, typically March 31) defines when carried vacation from the previous year can be used. After this date, carried days are lost. <code>allocatedDaysInOverlapPeriod</code> subtracts vacation taken in this window from the carried balance.</p>
-
-<h3>Annual Leave Proration</h3>
-<p><code>getAnnualLeaveDays(employee, year)</code> adjusts the full-year entitlement based on join/leave dates. If the employee joined in the given year, only months from the join month to December count (a month counts if joined by the 14th). If the employee left in the given year, only months from January to the leave month count (counts if left on/after the 15th). The result is rounded with HALF_UP to full days.</p>
-
-<h3>Working Days Calculation</h3>
-<p>The companion object's <code>getVacationDays(startDate, endDate, halfDayBegin, halfDayEnd, periodBegin, periodEnd)</code> computes the number of working days in a vacation period using <code>PFDayUtils.getNumberOfWorkingDays()</code>. Half-day flags subtract 0.5 from the first/last day. If a period boundary trims the vacation range, the corresponding half-day flag is disabled (it no longer applies at the boundary).</p>
-
-<h3>Conflict Detection</h3>
-<p><code>getVacationOverlaps(vacation)</code> checks whether all substitutes (replacement + otherReplacements) have overlapping vacations during the requested period. It calls <code>checkConflict()</code> which iterates day-by-day through the vacation period: for each day, if every substitute also has a vacation, a conflict is flagged. The result is cached in <code>ConflictingVacationsCache</code>.</p>
-
-<h3>Validation</h3>
-<p><code>validate(vacation, dbVacation, throwException)</code> delegates to <code>VacationValidator.validate()</code> which checks for business rule violations (insufficient remaining leave, date consistency, etc.). Returns an optional error key.</p>
-
-<h3>Average Working Time</h3>
-<p><code>getAverageWorkingTimeStats(user, startOfWorkContract, date)</code> computes average working hours per working day over the last 3 months, used for students and employees with flexible hours. It iterates monthly time sheet reports via <code>EmployeeService.getReportOfMonth()</code>.</p>
-
-<h2>Design Rationale</h2>
-<p>Statistics calculation is transactional to ensure that the first calculation of remaining leave for a given year is atomically persisted (avoiding race conditions). The recursive call pattern for previous-year stats ensures carry-over is always computed from the source year before being consumed. Working days are computed via <code>PFDayUtils</code> rather than simple date subtraction to account for weekends and holidays. The day-by-day conflict check is O(n*m) but bounded by the vacation period length (typically &lt;30 days) and the number of substitutes (&lt;10), making it acceptable for on-demand computation.</p>
-
-<h2>Git History</h2><div class="hist"><pre>868d6abb7 2025 -> 2026
-600951ee0 2025 -> 2026
-7cdc06ad7 MonthlyEmployeeReport[Week] -> Kotlin
-da0ea4cd9 MonthlyEmployeeReport[Week] -> Kotlin
-63081666f Source file headers: 2024-> 2025.
-199c26801 Source file headers: 2024-> 2025.
-5f9bbfbd3 Fix typos in projectforge-business directory
-11887386f Fix typos in projectforge-business directory
-4ae4f3ea3 Bugfixes while going-live...
-c9f2747eb Bugfixes while going-live...
-4942c854d Migration stuff in progress...
-edc4ed4e2 Migration stuff in progress...
-d83512ee3 Migration stuff in progress...
-58591400f Migration stuff in progress...
-50f788c06 Migration stuff in progress...
-bea8346dd Migration stuff in progress...
-b71b5073d Migration stuff in progress... (all tests OK)
-7a9f110ce Migration stuff in progress... (all tests OK)
-</pre></div>
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>#1161: EmphasizedLogSupport</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.lang{font-size:.85em;color:#888;float:right}.lang a{color:#888;text-decoration:none;padding:0 .3em}.lang a.active{color:#0366d6;font-weight:600;text-decoration:underline}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}</style></head>
+<body><div class="lang"><a href="1161.html" class="active">EN</a> · <a href="1161_de.html">DE</a> · <a href="1161_ru.html">RU</a> · <a href="1161_fr.html">FR</a> · <a href="1161_es.html">ES</a></div>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="1160.html">← Prev</a> · <a href="1162.html">Next →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/kotlin/org/projectforge/common/EmphasizedLogSupport.kt" target="_blank" title="View source on GitHub">📄 source</a></div>
+<h1>#1161: <code>EmphasizedLogSupport.kt</code></h1>
+<div class="meta"><code>projectforge-business/src/main/kotlin/org/projectforge/common/EmphasizedLogSupport.kt</code> Enum class, projectforge-business/src/main/kotlin/org/projectforge/common/EmphasizedLogSupport.kt <span style="color:#888">148 lines · 95 code · 34 comments · 19 blank</span></div>
+<div class="c">Logging support</div>
+<h2>Git History</h2><div class="hist"><pre>868d6abb7 2025 -&gt; 2026
+48a93dedb Colored console log. UserGroupCache export for debugging and comparing work now. CollectionUtil improved. KotlinStringExtension.shortenMiddle() added.</pre></div>
 </body></html>

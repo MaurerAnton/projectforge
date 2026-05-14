@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>#920: EmployeeCache.kt [RU]</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:2em;color:#444}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}</style>
+</head>
+<body>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Индекс</a> · <a href="file-index.html">← Индекс файлов</a> · <a href="919.html">← Назад</a> · <a href="921.html">Вперёд →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/kotlin/org/projectforge/business/fibu/EmployeeCache.kt" target="_blank" title="Просмотреть исходник на GitHub">📄 исходник</a></div>
+<h1>#920: <code>EmployeeCache.kt</code></h1>
+<div class="meta"><code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/EmployeeCache.kt</code> Тип: Spring-компонент / Кэш · Назначение: Кэш всех сотрудников в памяти с вычисленными зависимыми от времени атрибутами · Путь: <code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/EmployeeCache.kt</code> <span style="color:#888">209 строк · 143 кода · 43 комментария · 23 пустых</span></div>
+<div class="c">Высокопроизводительный кэш, который хранит снимок всех неудалённых сотрудников вместе с их текущими <code>status</code>, <code>annualLeave</code> и <code>weeklyWorkingHours</code> — вычисленными из записей <code>EmployeeValidSinceAttrDO</code>. Расширяет <code>AbstractCache</code>, который предоставляет инфраструктуру обновления/истечения срока действия. Предоставляется как синглтон <code>@Component</code>, доступный через <code>EmployeeCache.instance</code>.</div>
+
+<h2>Архитектура и дизайн</h2>
+
+<h3>Хранилище кэша</h3>
+<p>Внутренний <code>employeeMap</code> представляет собой <code>Map&lt;Long, EmployeeDO&gt;</code> с ключом по первичному ключу сотрудника в БД. Он <strong>не синхронизирован</strong> — запись происходит только во время <code>refresh()</code> и атомарно заменяется через присваивание. Доступ только для чтения из нескольких потоков безопасен, так как каждый refresh создаёт новый экземпляр карты.</p>
+
+<h3>Стратегия обновления</h3>
+<p>Метод <code>refresh()</code> (вызываемый <code>AbstractCache</code> / <code>CacheHelper</code> с синхронизацией) выполняется в изолированной транзакции только для чтения:</p>
+<ol>
+<li><strong>Загрузить всех неудалённых сотрудников:</strong> <code>from EmployeeDO t where deleted=false</code></li>
+<li><strong>Применить записи STATUS:</strong> Запросить последние записи <code>validSinceEff</code> типа <code>STATUS</code>, сгруппированные по ID сотрудника, взяв первую запись в каждой группе.</li>
+<li><strong>Применить записи ANNUAL_LEAVE:</strong> Та же группировка — определяет дни ежегодного отпуска, действительные на сегодня.</li>
+<li><strong>Применить записи WEEKLY_HOURS:</strong> Та же группировка — определяет еженедельные рабочие часы.</li>
+<li><strong>Заменить карту:</strong> Итоговая карта присваивается <code>this.employeeMap</code>.</li>
+</ol>
+
+<h3>Разрешение зависимых от времени атрибутов</h3>
+<p>Метод <code>getLatestValidSinceEntries(type)</code> выполняет JPQL-запрос с сортировкой по <code>employee.id, validSince DESC</code>, затем группирует по ID сотрудника с помощью Kotlin <code>groupBy</code>. Выбирается <strong>первый элемент</strong> каждой группы (самый последний <code>validSince</code>). В комментарии к исходному коду отмечается, что подход на основе подзапроса (<code>SELECT MAX(validSince)</code>) не сработал в PostgreSQL из-за пропущенных записей, что привело к использованию этого подхода с группировкой после запроса.</p>
+
+<h3>Ключевые методы запросов</h3>
+<table>
+<tr><th>Метод</th><th>Описание</th></tr>
+<tr><td><code>getEmployee(id)</code></td><td>Возвращает кэшированного сотрудника, разрешая поле <code>user</code> через <code>UserGroupCache</code>, если оно не инициализировано.</td></tr>
+<tr><td><code>getEmployeeIfNotInitialized(emp)</code></td><td>Проверяет <code>HibernateUtils.isFullyInitialized()</code>; если сущность загружена не полностью, извлекает кэшированную версию.</td></tr>
+<tr><td><code>getEmployeeByUserId(userId)</code></td><td>Обратный поиск — находит сотрудника по связанному ID пользователя.</td></tr>
+<tr><td><code>getEmployeeIdByUserId(userId)</code></td><td>Обратный поиск, возвращающий только ID сотрудника (избегает полной загрузки сущности).</td></tr>
+<tr><td><code>getUser(employee)</code></td><td>Вспомогательный метод разрешения <code>PFUserDO</code> через <code>UserGroupCache</code>.</td></tr>
+<tr><td><code>getUserByEmployee(employeeId)</code></td><td>Разрешает пользователя по ID сотрудника, проходя через кэшированного сотрудника.</td></tr>
+<tr><td><code>setTimeDependentAttrs(employee)</code></td><td>Изменяет <code>status</code>, <code>annualLeave</code> и <code>weeklyWorkingHours</code> заданного <code>EmployeeDO</code> из кэшированных значений. Используется слоем DAO для заполнения транзиентных полей.</td></tr>
+<tr><td><code>findByStaffNumber(staffNumber)</code></td><td>Ищет сотрудника по табельному номеру (перегружен для <code>Int</code> и <code>String</code>).</td></tr>
+</table>
+
+<h3>Именованный запрос</h3>
+<p>Объект-компаньон определяет <code>queryAllValidSinceValues</code> — строку JPQL, используемую <code>getLatestValidSinceEntries()</code>:</p>
+<pre>SELECT t FROM EmployeeValidSinceAttrDO t
+WHERE t.type=:type AND t.deleted=false
+ORDER BY t.employee.id, t.validSince DESC</pre>
+
+<h2>История Git</h2>
+<div class="hist"><pre>868d6abb7 2025 -> 2026
+6a32032d6 Hibernate.isInitialized(obj) -> HibernateUtils.isFullyInitialized(obj).
+28efde264 Employee: weeklyWorkingHours теперь как зависимый от времени атрибут. eintritt/austritt: timestamp -> date
+63081666f Заголовки исходных файлов: 2024-> 2025.
+4ae4f3ea3 Исправления ошибок во время запуска...
+50c3b7b46 Миграция в процессе... (все тесты всех пакетов: OK).
+4942c854d Миграция в процессе...
+d394f410f Миграция в процессе... (все тесты всех пакетов: OK).
+b71b5073d Миграция в процессе... (все тесты всех пакетов: OK).
+ffb18cf8f Миграция в процессе...
+1012e347a Миграция в процессе... (все тесты всех пакетов: OK).
+2e9839891 Миграция в процессе...
+ba2479571 Миграция в процессе...
+b3293f0cc PersistenceService/Context: улучшена обработка статистики.
+b5dc26e24 Миграция в процессе... (все тесты всех пакетов: OK).
+b0efaddc2 Миграция в процессе... (все тесты всех пакетов: OK).
+c14b18a48 Миграция в процессе... (все тесты всех пакетов: OK).</pre></div>
+</body>
+</html>

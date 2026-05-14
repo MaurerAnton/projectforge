@@ -1,5 +1,80 @@
-<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>#262</title><style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333}a{color:#0366d6}.meta{font-size:.9em;margin:1em 0}.nav{font-size:.9em;color:#888;margin-bottom:1em}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}</style></head>
-<body><div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="261.html">← Prev</a> · <a href="263.html">Next →</a></div>
-<h1>#262: <code>SkillMatrixServicesRest.kt</code></h1>
-<div class="meta"><strong>REST controller</strong> for extra skill matrix services. Provides endpoints: statistics (total skills, top skills, skills per department, skill gaps), matrix view data (cross-tab: employees × skills with ratings), and export to Excel. Separate from <a href="259.html">SkillEntryPagesRest</a> (CRUD) — this is the analytics/reporting layer.</div>
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>#262: SkillMatrixPrivacyProtectionJob.kt</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:2em;color:#444}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.lang{font-size:.85em;color:#888;float:right}.lang a{color:#888;text-decoration:none;padding:0 .3em}.lang a.active{color:#0366d6;font-weight:600;text-decoration:underline}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}</style></head>
+<body><div class="lang"><a href="262.html" class="active">EN</a> · <a href="262_de.html">DE</a> · <a href="262_ru.html">RU</a> · <a href="262_fr.html">FR</a> · <a href="262_es.html">ES</a></div>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="2705.html">← Prev</a> · <a href="3187.html">Next →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/plugins/org.projectforge.plugins.skillmatrix/src/main/kotlin/org/projectforge/plugins/skillmatrix/SkillMatrixPrivacyProtectionJob.kt" target="_blank" title="View source on GitHub">📄 source</a></div>
+<h1>#262: <code>SkillMatrixPrivacyProtectionJob.kt</code></h1>
+<div class="meta"><code>plugins/org.projectforge.plugins.skillmatrix/src/main/kotlin/org/projectforge/plugins/skillmatrix/SkillMatrixPrivacyProtectionJob.kt</code> Type: Kotlin · Role: Plugin Registration · Source: plugins/org.projectforge.plugins.skillmatrix/src/main/kotlin/org/projectforge/plugins/skillmatrix/SkillMatrixPrivacyProtectionJob.kt <span style="color:#888">79 lines · 44 code · 26 comments · 9 blank</span></div>
+<div class="c">Scheduled/system job for SkillMatrixPrivacyProtection. Implements periodic maintenance or sanity-check logic executed by the PF job scheduler.</div>
+<h2>Code Structure</h2>
+<p>Annotations: <code>PostConstruct</code>, <code>micromata</code>, <code>Service</code>, <code>author</code>, <code>Autowired</code></p>
+<p>Classes: <code>SkillMatrixPrivacyProtectionJob</code></p>
+<p>Supertype(s): <code>IPrivacyProtectionJob</code></p>
+<p>Functions (2): <code>postConstruct</code>, <code>execute</code></p>
+<p>Properties (6): <code>persistenceService</code>, <code>purgeCronPrivacyProtectionJob</code>, <code>userDao</code>, <code>date</code>, <code>lastUpdate</code>, <code>counter</code></p>
+<p>Imports: 9 packages</p>
+<p>Package: <code>org.projectforge.plugins.skillmatrix</code></p>
+<h2>Source Code (abridged)</h2>
+<pre>
+package org.projectforge.plugins.skillmatrix
+
+import jakarta.annotation.PostConstruct
+import mu.KotlinLogging
+import org.projectforge.business.privacyprotection.CronPrivacyProtectionJob
+import org.projectforge.business.privacyprotection.IPrivacyProtectionJob
+import org.projectforge.business.user.UserDao
+import org.projectforge.framework.persistence.jpa.PfPersistenceService
+import org.projectforge.framework.time.PFDateTime
+import org.springframework.beans.factory.annotation.Autowired
+import org.springframework.stereotype.Service
+
+private val log = KotlinLogging.logger {}
+
+/**
+ *
+ * @author Kai Reinhard (k.reinhard@micromata.de)
+ */
+@Service
+class SkillMatrixPrivacyProtectionJob : IPrivacyProtectionJob {
+    @Autowired
+    private lateinit var persistenceService: PfPersistenceService
+
+    @Autowired
+    private lateinit var purgeCronPrivacyProtectionJob: CronPrivacyProtectionJob
+
+    @Autowired
+    private lateinit var userDao: UserDao
+
+    @PostConstruct
+    private fun postConstruct() {
+        purgeCronPrivacyProtectionJob.register(this)
+    }
+
+    override fun execute() {
+        val date = PFDateTime.now().minusMonths(3L)
+        log.info(&quot;Purge skill matrix entries of leavers (deleted/deactivated users with lastUpdate &lt; ${date.isoString}Z)...&quot;)
+
+        userDao.selectAll(checkAccess = false).forEach { user -&gt;
+            if (user.deactivated || user.deleted) {
+                val lastUpdate = user.lastUpdate
+                if (lastUpdate != null &amp;&amp; lastUpdate &lt; date.utilDate) {
+                    val counter = persistenceService.runInTransaction { context -&gt;
+                        context.executeNamedUpdate(
+                            SkillEntryDO.DELETE_ALL_OF_USER, Pair(&quot;userId&quot;, user.id)
+                        )
+                    }
+                    if (counter &gt; 0) {
+                        log.info { &quot;Deleted $counter entries of the skill matrix of user &#x27;${user.username}&#x27; with id ${user.id}.&quot; }
+                    }
+                }
+            }
+        }
+        log.info(&quot;Purging of skill matrix entries done.&quot;)
+    }
+}</pre>
+
+<h2>Git History</h2><div class="hist"><pre>868d6abb7 2025 -&gt; 2026
+63081666f Source file headers: 2024-&gt; 2025.
+1b50060c3 BaseDao: renamed: get -&gt; find, save -&gt; insert, getList -&gt; select, load -&gt; select
+2a8ea2076 Migration stuff in progress... BaseDao refactored (not yet finished) internal* methods renamed.
+108ecf629 !!!!! Big change of Transaction handling: Re-uses PfPersistenceContext as much as possible (not yet finished). Tests doesn&#x27;t yet run. readonly-Transactions in PfPersistenceService removed, write-operations of PfPersistenceService removed.</pre></div>
 </body></html>

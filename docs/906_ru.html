@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<title>#906: AuftragsRechnungCache.kt [RU]</title>
+<style>
+body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}
+h1{border-bottom:2px solid #333;padding-bottom:.3em}
+h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}
+h3{margin-top:2em;color:#444}
+a{color:#0366d6}
+.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}
+.nav{font-size:.9em;color:#888;margin-bottom:1em}
+.meta{font-size:.9em;margin:1em 0;color:#555}
+code{background:#f0f0f0;padding:0 .2em;font-size:.93em}
+pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}
+table{border-collapse:collapse;width:100%;margin:1em 0}
+th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}
+th{background:#f5f5f5;font-weight:600}
+.hist{font-size:.85em;color:#555}
+</style>
+</head>
+<body>
+
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Индекс</a> · <a href="file-index.html">← Индекс файлов</a> · <a href="905.html">← Назад</a> · <a href="907.html">Вперёд →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/kotlin/org/projectforge/business/fibu/AuftragsRechnungCache.kt" target="_blank" title="Просмотреть исходный код на GitHub">📄 исходник</a></div>
+
+<h1>#906: <code>AuftragsRechnungCache.kt</code></h1>
+
+<div class="meta"><code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/AuftragsRechnungCache.kt</code> 
+  <strong>Тип:</strong> Spring-компонент (AbstractCache) &middot;
+  <strong>Назначение:</strong> Кэширует привязку позиций счетов к позициям заказов &middot;
+  <strong>Пакет:</strong> <code>org.projectforge.business.fibu</code><br>
+  <strong>Путь к исходнику:</strong> <code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/AuftragsRechnungCache.kt</code>
+ <span style="color:#888">171 строка · 102 строки кода · 52 комментария · 17 пустых строк</span></div>
+
+<div class="c">
+  Кэш в памяти, который сопоставляет позиции счетов (<code>RechnungPosInfo</code>) с соответствующими позициями заказов и самими заказами. Это обеспечивает быстрый поиск для книги заказов, чтобы отобразить, какие счета привязаны к каждому заказу, а также для просмотра счёта, чтобы показать, какие заказы покрыты. Обрабатывает циклическую зависимость с <code>AuftragsCache</code> путём двукратного запуска обоих кэшей при инициализации (механизм флага "ready").
+</div>
+
+<h2>Архитектура и дизайн</h2>
+
+<h3>Иерархия классов</h3>
+<p>Расширяет <code>AbstractCache</code>, который предоставляет жизненный цикл <code>refresh()</code>/<code>setExpired()</code>/<code>forceReload()</code>. Зарегистрирован как Spring <code>@Component</code>.</p>
+
+<h3>Зависимости</h3>
+<table>
+  <tr><th>Зависимость</th><th>Тип</th><th>Роль</th></tr>
+  <tr><td><code>AuftragsCache</code></td><td>Компонент</td><td>Предоставляет сопоставление заказ-позиция; взаимное обновление при инициализации</td></tr>
+  <tr><td><code>RechnungCache</code></td><td>Компонент</td><td>Предоставляет объекты <code>RechnungInfo</code> и <code>RechnungPosInfo</code></td></tr>
+  <tr><td><code>RechnungDao</code></td><td>DAO</td><td>Зарегистрирован для <code>BaseDOModifiedListener</code> для инвалидации кэша при изменениях в счетах</td></tr>
+  <tr><td><code>RechnungJdbcService</code></td><td>Сервис</td><td>Быстрый JDBC-запрос для привязки позиций счетов к позициям заказов</td></tr>
+</table>
+
+<h3>Внутренние структуры данных</h3>
+<table>
+  <tr><th>Карта</th><th>Ключ</th><th>Значение</th><th>Назначение</th></tr>
+  <tr><td><code>invoicePositionMapByAuftragId</code></td><td><code>Long</code> (ID заказа)</td><td><code>MutableSet&lt;Long&gt;</code> (ID позиций счёта)</td><td>Поиск ID позиций счёта по заказу</td></tr>
+  <tr><td><code>invoicePositionMapByAuftragsPositionId</code></td><td><code>Long</code> (ID позиции заказа)</td><td><code>MutableSet&lt;RechnungPosInfo&gt;</code></td><td>Поиск позиций счёта по позиции заказа</td></tr>
+  <tr><td><code>invoicePositionMapByRechnungId</code></td><td><code>Long</code> (ID счёта)</td><td><code>MutableSet&lt;RechnungPosInfo&gt;</code></td><td>Поиск связанных с заказом позиций счёта по счёту</td></tr>
+</table>
+
+<h3>Жизненный цикл и инициализация</h3>
+<p><code>@PostConstruct init()</code> регистрирует два слушателя:</p>
+<ul>
+  <li><strong><code>rechnungListener</code></strong> — <code>BaseDOModifiedListener&lt;RechnungDO&gt;</code>, который вызывает <code>setExpired()</code> при вставке или изменении счёта. Это гарантирует актуальность кэша при создании, редактировании или удалении счетов.</li>
+  <li><strong><code>auftragsCacheListener</code></strong> — <code>CacheListener</code>, зарегистрированный на <code>AuftragsCache</code>. Реализует шаблон взаимного обновления: когда <code>AuftragsCache</code> завершает своё обновление, этот слушатель обнаруживает это и запускает второй цикл обновления для обоих кэшей для разрешения перекрёстных ссылок.</li>
+</ul>
+
+<h3>Шаблон взаимного обновления (разрешение циклической зависимости)</h3>
+<p><code>AuftragsCache</code> и <code>AuftragsRechnungCache</code> зависят от данных друг друга. Решение использует флаг <code>ready</code>:</p>
+<ol>
+  <li>Сначала выполняется <code>AuftragsCache.refresh()</code> — данные этого кэша всё ещё пусты</li>
+  <li>Срабатывает <code>onAfterCacheRefresh</code>, устанавливает <code>ready = true</code>, отменяет регистрацию слушателя</li>
+  <li>Выполняется <code>AuftragsRechnungCache.forceReload()</code> — теперь доступны данные <code>AuftragsCache</code></li>
+  <li>Снова выполняется <code>AuftragsCache.forceReload()</code> — теперь доступны данные этого кэша</li>
+  <li>Оба кэша полностью заполнены</li>
+</ol>
+
+<h3>Публичные методы</h3>
+
+<h4><code>getRechnungsPosInfoByAuftragId(auftragId: Long?): List&lt;RechnungPosInfo&gt;?</code></h4>
+<p>Возвращает позиции счетов, привязанные к заданному заказу. Результаты сортируются по номеру счёта, затем по номеру позиции. Возвращает <code>null</code>, если <code>auftragId</code> равен null. Вызывает <code>checkRefresh()</code> для запуска ленивого заполнения кэша при необходимости.</p>
+
+<h4><code>getRechnungsPosInfosByAuftragsPositionId(auftragsPositionId: Long?): Set&lt;RechnungPosInfo&gt;?</code></h4>
+<p>Возвращает позиции счетов, привязанные к конкретной позиции заказа. Возвращает <code>null</code> для нулевого ввода.</p>
+
+<h3>Логика обновления</h3>
+<p><code>refresh()</code> запрашивает <code>rechnungJdbcService.selectRechnungsPositionenWithAuftragPosition()</code> для получения необработанного набора результатов JDBC (быстрее, чем JPA для этой массовой операции), затем:</p>
+<ul>
+  <li>Перебирает все связи позиция счёта — позиция заказа</li>
+  <li>Пропускает удалённые записи и нулевые ссылки, логируя ошибки для отсутствующих позиций заказов</li>
+  <li>Заполняет три карты на основе <code>TreeSet</code> (автосортировка) для каждого измерения</li>
+  <li>Атомарно присваивает новые карты полям экземпляра</li>
+  <li>Логирует продолжительность инициализации в секундах</li>
+</ul>
+
+<h3>Инвалидация</h3>
+<p>Когда любой <code>RechnungDO</code> вставляется или изменяется, <code>rechnungListener</code> вызывает <code>setExpired()</code>. Следующий вызов публичного геттера запустит <code>checkRefresh()</code> → <code>refresh()</code>, лениво перестраивая сопоставление кэша.</p>
+
+<h2>Связанные классы</h2>
+<ul>
+  <li><strong>Пир:</strong> <code>AuftragsCache</code> — партнёр по взаимному обновлению; предоставляет <code>getOrderInfoByPositionId()</code></li>
+  <li><strong>Пир:</strong> <code>RechnungCache</code> — предоставляет <code>getRechnungInfo()</code> и <code>ensureRechnungPosInfo()</code></li>
+  <li><strong>Сервис:</strong> <code>RechnungJdbcService</code> — сырой JDBC-запрос для производительности</li>
+  <li><strong>Данные:</strong> <code>RechnungPosInfo</code> — объект значения, представляющий позицию счёта в кэше</li>
+  <li><strong>Фреймворк:</strong> <code>AbstractCache</code> — базовый класс, предоставляющий <code>checkRefresh()</code>/<code>setExpired()</code>/<code>forceReload()</code></li>
+</ul>
+
+<h2>История Git</h2>
+<div class="hist"><pre>
+868d6abb7 2025 -> 2026
+51d352133 Рефакторинг обработки AuftragsCache / AuftragsRechnungsCache (циклическое использование разрешено путём двукратного запуска кэшей при инициализации)
+63081666f Заголовки исходных файлов: 2024-> 2025.
+22ccc4877 WIP: Скриптинг
+884ff2c70 Добавлено отладочное сообщение (отсутствующие счета дебиторов в заказах только в продакшене).
+c9508769a Клонирование счетов.
+d02c8a770 Работа над миграцией в процессе...
+ff2cc4cfa Работа над миграцией в процессе... (все тесты всех пакетов: OK).
+f31e8064e Работа над миграцией в процессе...
+2e9839891 Работа над миграцией в процессе...
+973fbf518 Работа над миграцией в процессе...
+ba2479571 Работа над миграцией в процессе...
+b3293f0cc PersistenceService/Context: улучшена обработка статистики.
+b47c21af6 Рефакторинг кэширования и расчётов со счетами (ещё не завершено)
+</pre></div>
+
+</body>
+</html>

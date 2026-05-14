@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<title>#907: AuftragsStatistik.kt [RU]</title>
+<style>
+body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}
+h1{border-bottom:2px solid #333;padding-bottom:.3em}
+h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}
+h3{margin-top:2em;color:#444}
+a{color:#0366d6}
+.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}
+.nav{font-size:.9em;color:#888;margin-bottom:1em}
+.meta{font-size:.9em;margin:1em 0;color:#555}
+code{background:#f0f0f0;padding:0 .2em;font-size:.93em}
+pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}
+table{border-collapse:collapse;width:100%;margin:1em 0}
+th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}
+th{background:#f5f5f5;font-weight:600}
+.hist{font-size:.85em;color:#555}
+</style>
+</head>
+<body>
+
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Индекс</a> · <a href="file-index.html">← Индекс файлов</a> · <a href="906.html">← Назад</a> · <a href="908.html">Вперёд →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/kotlin/org/projectforge/business/fibu/AuftragsStatistik.kt" target="_blank" title="Просмотреть исходник на GitHub">📄 исходник</a></div>
+
+<h1>#907: <code>AuftragsStatistik.kt</code></h1>
+
+<div class="meta"><code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/AuftragsStatistik.kt</code> 
+  <strong>Тип:</strong> Класс данных (Serializable) &middot;
+  <strong>Назначение:</strong> Агрегирует финансовую статистику по набору заказов &middot;
+  <strong>Пакет:</strong> <code>org.projectforge.business.fibu</code><br>
+  <strong>Путь к исходнику:</strong> <code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/AuftragsStatistik.kt</code>
+ <span style="color:#888">129 строк · 72 кода · 44 комментария · 13 пустых</span></div>
+
+<div class="c">
+  Класс-аккумулятор, реализующий <code>Serializable</code>, который суммирует денежные значения и подсчитывает количество по нескольким экземплярам <code>AuftragDO</code>. Используется в книге заказов и представлениях прогнозов для отображения агрегированных показателей воронки. Делегирует расчёт по каждому заказу методу <code>AuftragsCache.getOrderInfo()</code>, который возвращает объект <code>OrderInfo</code> с предварительно вычисленными суммами. Предоставляет отдельные сводки по категориям: привлечение (потенциал), заказы в работе, выставленные счета, ещё не выставленные счета и подлежащие выставлению, а также соответствующие счётчики.
+</div>
+
+<h2>Архитектура и дизайн</h2>
+
+<h3>Поля</h3>
+
+<table>
+  <tr><th>Поле</th><th>Тип</th><th>Описание</th></tr>
+  <tr><td><code>nettoSum</code></td><td><code>BigDecimal</code> (private set)</td><td>Общая сумма нетто по всем заказам</td></tr>
+  <tr><td><code>akquiseSum</code></td><td><code>BigDecimal</code> (private set)</td><td>Сумма только по заказам в статусе привлечения/потенциала</td></tr>
+  <tr><td><code>beauftragtSum</code></td><td><code>BigDecimal</code> (private set)</td><td>Сумма только по заказанным/порученным позициям (LOI, BEAUFTRAGT, ESKALATION)</td></tr>
+  <tr><td><code>invoicedSum</code></td><td><code>BigDecimal</code> (private set)</td><td>Сумма уже выставленных счетов по всем заказам</td></tr>
+  <tr><td><code>notYetInvoicedSum</code></td><td><code>BigDecimal</code> (private set)</td><td>Разница между суммой нетто и суммой выставленных счетов (открытый остаток)</td></tr>
+  <tr><td><code>toBeInvoiced</code></td><td><code>BigDecimal</code> (private set)</td><td>Сумма по завершённым заказам, ещё не полностью выставленным или с недостигнутыми вехами оплаты</td></tr>
+  <tr><td><code>counter</code></td><td><code>Int</code> (private set)</td><td>Общее количество учтённых заказов</td></tr>
+  <tr><td><code>counterAkquise</code></td><td><code>Int</code> (private set)</td><td>Количество заказов с суммой привлечения > 0</td></tr>
+  <tr><td><code>counterBeauftragt</code></td><td><code>Int</code> (private set)</td><td>Количество заказов с суммой поручения > 0</td></tr>
+  <tr><td><code>counterNotYetInvoiced</code></td><td><code>Int</code> (private set)</td><td>Количество заказов с ещё не выставленной суммой > 0</td></tr>
+  <tr><td><code>counterToBeInvoiced</code></td><td><code>Int</code> (private set)</td><td>Количество заказов с суммой к выставлению > 0</td></tr>
+  <tr><td><code>counterInvoiced</code></td><td><code>Int</code> (private set)</td><td>Количество заказов с выставленной суммой > 0</td></tr>
+</table>
+
+<h3>Инициализация</h3>
+<p>Все суммы инициализируются значением <code>BigDecimal.ZERO</code>, а все счётчики — значением <code>0</code> в блоке <code>init</code>.</p>
+
+<h3>Основной метод: <code>add(auftrag: AuftragDO)</code></h3>
+<p>Для каждого заказа получает <code>OrderInfo</code> через <code>WicketSupport.get(AuftragsCache::class.java).getOrderInfo(auftrag)</code>. <code>OrderInfo</code> содержит предварительно вычисленные разбивки (<code>akquiseSum</code>, <code>commissionedNetSum</code>, <code>notYetInvoicedSum</code>, <code>toBeInvoicedSum</code>, <code>invoicedSum</code>, <code>netSum</code>). Для каждой суммы > <code>BigDecimal.ZERO</code> аккумулятор статистики увеличивает соответствующий счётчик и добавляет сумму с помощью <code>NumberHelper.add()</code> (безопасное сложение BigDecimal, обрабатывающее null-значения).</p>
+
+<h3>Расчётная семантика</h3>
+<ul>
+  <li><strong>notYetInvoicedSum</strong> — представляет открытые суммы: общая сумма нетто минус уже выставленные счета. Это сумма, которая ещё должна быть выставлена.</li>
+  <li><strong>toBeInvoiced</strong> — более узкое подмножество: только заказы со статусом <code>ABGESCHLOSSEN</code> (завершён), но ещё не <code>vollstaendigFakturiert</code> (полностью выставлены) или с недостигнутыми графиками платежей. Представляет кандидатов для немедленного выставления счёта.</li>
+  <li><strong>akquiseSum</strong> — по заказам в статусах воронки (POTENZIAL, IN_ERSTELLUNG, GELEGT)</li>
+  <li><strong>beauftragtSum</strong> — по заказам, которые фактически поручены (LOI, BEAUFTRAGT, ESKALATION)</li>
+</ul>
+
+<h3>Сериализация</h3>
+<p>Реализует <code>Serializable</code> с <code>serialVersionUID = -5486964211679100585L</code> для сериализации страниц Wicket. Модификатор <code>private set</code> для всех полей обеспечивает доступ на чтение извне, предотвращая прямое изменение (только метод <code>add()</code> изменяет состояние).</p>
+
+<h2>Связанные классы</h2>
+<ul>
+  <li><strong>Создаётся:</strong> <code>AuftragDao</code> — создаёт и заполняет эту статистику из списков заказов</li>
+  <li><strong>Агрегирует:</strong> <code>AuftragDO</code> — отдельные заказы, которые суммируются</li>
+  <li><strong>Делегирует:</strong> <code>AuftragsCache</code> — предоставляет <code>OrderInfo</code> для каждого заказа с предварительно вычисленными разбивками</li>
+  <li><strong>Использует:</strong> <code>NumberHelper.add()</code> — безопасное сложение BigDecimal</li>
+  <li><strong>Использует:</strong> <code>WicketSupport</code> — поиск Spring-бина для <code>AuftragsCache</code></li>
+</ul>
+
+<h2>История Git</h2>
+<div class="hist"><pre>
+868d6abb7 2025 -> 2026
+63081666f Заголовки исходных файлов: 2024-> 2025.
+42dc9fa16 Заказы: упорядочено -> поручено.
+87dd5b87c Рефакторинг AuftragsCache, миграционные материалы... (все тесты OK)
+f88994f41 Миграционные материалы в процессе...
+b6092df09 Авторское право 2023 -> 2024
+ab45d51fa Авторское право 2001-2022 -> 2001-2023.
+9a65e1bc0 AuftragDO: рефакторинг статистики (ещё не выставлено, к выставлению, выставлено и т.д.)
+f80509d49 OrderBook: улучшена статистика и значения к выставлению.
+013c514bd AuftragsCache для гораздо лучшей производительности представления списка книги заказов.
+</pre></div>
+
+</body>
+</html>

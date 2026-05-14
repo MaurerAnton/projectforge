@@ -1,32 +1,91 @@
 <!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>#717</title>
 <style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:2em;color:#444}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}.warn{background:#fff3cd;border-left:3px solid #ffc107;padding:.5em 1em;margin:1em 0}.tip{background:#d4edda;border-left:3px solid #28a745;padding:.5em 1em;margin:1em 0}</style></head>
-<body><div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="716.html">← Prev</a> · <a href="718.html">Next →</a></div>
-<h1>#717: <code>RowHolder.java</code></h1>
-<div class="meta">Data Holder, projectforge-business/src/main/java/org/projectforge/framework/renderer/RowHolder.java</div>
-<div class="c">Simple bean representing a table row as a list of CellHolder objects. Used by the XSL-FO / PDF rendering pipeline to compose tabular data row-by-row.</div>
+<body><div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="716.html">← Prev</a> · <a href="718.html">Next →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/java/org/projectforge/framework/renderer/PdfRenderer.java" target="_blank" title="View source on GitHub">📄 source</a></div>
+<h1>#717: <code>PdfRenderer.java</code></h1>
+<div class="meta"><code>projectforge-business/src/main/java/org/projectforge/framework/renderer/PdfRenderer.java</code> Spring Service / PDF Rendering Engine, projectforge-business/src/main/java/org/projectforge/framework/renderer/PdfRenderer.java <span style="color:#888">177 lines · 115 code · 41 comments · 21 blank</span></div>
+<div class="c">Central PDF rendering service. Accepts an XSL-FO stylesheet, a Groovy/XML template, and a data map, then produces a PDF byte array using Apache FOP with XSLT transformation and Groovy preprocessing.</div>
 
-<h2>Structure</h2>
-<table>
-<tr><th>Field</th><th>Type</th><th>Default</th><th>Description</th></tr>
-<tr><td><code>cells</code></td><td><code>List&lt;CellHolder&gt;</code></td><td>Empty ArrayList</td><td>Ordered list of cells in this row</td></tr>
-</table>
+<h2>Architecture &amp; Processing Pipeline</h2>
+<p><code>PdfRenderer</code> is a Spring <code>@Service</code> with a single public method <code>render(String stylesheet, String groovyXml, Map&lt;String, Object&gt; data)</code>. The rendering pipeline proceeds in four stages:</p>
 
-<h3>API</h3>
+<h3>1. Data Enrichment</h3>
+<p>Before any transformation, the data map is enriched with standard template variables:</p>
 <ul>
-<li><code>addCell(CellHolder cell)</code> — Appends a cell to the row</li>
-<li><code>getCells()</code> — Returns the cell list (direct reference, mutable)</li>
+<li><code>createdLabel</code> — localized "created" string</li>
+<li><code>loggedInUser</code> — the current PFUserDO</li>
+<li><code>baseDir</code> — resource directory path from ConfigurationService</li>
+<li><code>logoFile</code> — full path to the configured logo image</li>
+<li><code>appId</code> / <code>appVersion</code> — from ProjectForgeVersion constants</li>
+<li><code>organization</code> — from Configuration (falling back to appId)</li>
 </ul>
 
-<p>Works in tandem with <code>CellHolder</code> (#712). A table is built by creating <code>RowHolder</code> instances and adding <code>CellHolder</code> objects to each. No validation on column count consistency between rows; no row-level attributes (style, height, etc.). Minimal wrapper around <code>ArrayList&lt;CellHolder&gt;</code>.</p>
+<h3>2. FOP Configuration</h3>
+<p>Apache FOP is configured with:</p>
+<ul>
+<li>A <code>FopFactory</code> instantiated with the font resource directory URI</li>
+<li>An <code>FOUserAgent</code> for user-agent-level settings</li>
+<li>A <code>Fop</code> object targeting <code>MIME_PDF</code> output to a <code>ByteArrayOutputStream</code></li>
+<li>Note: Commented-out code shows a previous attempt at <code>setFontBaseURL()</code> which was removed</li>
+</ul>
+
+<h3>3. Groovy Template Preprocessing</h3>
+<p>The XML template (<code>groovyXml</code>) goes through two Groovy Engine passes:</p>
+<ol>
+<li><code>preprocessGroovyXml()</code> — preprocesses the template</li>
+<li><code>executeTemplate()</code> — executes the Groovy template with the data map to produce final XML</li>
+</ol>
+
+<h3>4. XSLT Transformation + FOP Rendering</h3>
+<ul>
+<li>The XSLT stylesheet is loaded from resources via <code>ConfigurationService.getResourceAsInputStream()</code></li>
+<li>A <code>Transformer</code> is created with parameters from the data map</li>
+<li>The Groovy-generated XML is fed as <code>StreamSource</code> input</li>
+<li>The result is piped as <code>SAXResult</code> through FOP's default handler, producing PDF bytes</li>
+</ul>
+
+<h2>Error Handling</h2>
+<p>Exceptions are caught and wrapped:</p>
+<table>
+<tr><th>Exception</th><th>Handling</th></tr>
+<tr><td><code>FOPException</code></td><td>Logged and wrapped in <code>RuntimeException</code></td></tr>
+<tr><td><code>TransformerException</code></td><td>Logged and wrapped in <code>RuntimeException</code></td></tr>
+<tr><td><code>IOException</code> (closing BAOS)</td><td>Logged and wrapped in <code>RuntimeException</code></td></tr>
+</table>
+<p>The <code>finally</code> block closes the <code>ByteArrayOutputStream</code> and uses <code>IOUtils.closeQuietly()</code> for the XSLT input stream. After closing, <code>baos.toByteArray()</code> is called — note this works because <code>ByteArrayOutputStream.close()</code> is a no-op.</p>
+
+<h2>Spring Integration</h2>
+<ul>
+<li><code>@Service</code> — auto-detected Spring bean</li>
+<li><code>@Autowired</code> — <code>ConfigurationService</code> injected</li>
+<li><code>@Value("${projectforge.export.logoFile}")</code> — logo file name from application properties</li>
+<li>Lazy initialization of <code>fontResourcePath</code> via <code>getFontResourcePath()</code></li>
+</ul>
+
+<h2>Dependencies</h2>
+<ul>
+<li><strong>Apache FOP</strong>: <code>FopFactory</code>, <code>Fop</code>, <code>FOUserAgent</code>, <code>FOPException</code></li>
+<li><strong>JAXP XSLT</strong>: <code>TransformerFactory</code>, <code>Transformer</code>, <code>StreamSource</code>, <code>SAXResult</code></li>
+<li><strong>Internal</strong>: <code>ConfigurationService</code>, <code>GroovyEngine</code>, <code>Configuration</code>, <code>ProjectForgeVersion</code>, <code>ThreadLocalUserContext</code></li>
+<li><strong>Commons IO</strong>: <code>IOUtils.closeQuietly()</code></li>
+<li><strong>Commons Lang3</strong>: <code>StringUtils.defaultString()</code></li>
+</ul>
 
 <h2>Git History</h2><div class="hist"><pre>868d6abb7 2026-01-01 2025 -> 2026
 63081666f 2025-01-01 Source file headers: 2024-> 2025.
+5f9bbfbd3 2024-12-27 Fix typos in projectforge-business directory
+67805f2fc 2024-10-08 ThreadLocalUserContext.user -> ThreadLocalUserContext.loggedInUser (renamed for avoiding mis-understandings in code).
 b6092df09 2024-01-09 Copyright 2023 -> 2024
 ab45d51fa 2023-01-01 Copyright 2001-2022 -> 2001-2023.
 5f7ef41b8 2022-02-18 Copyright 2021 -> 2022
+867476f85 2021-04-19 ConfigurationService -> Kotlin (not yet tested).
 ceb63e8a1 2021-03-08 Source code header: (C) 2001-2021.
+4f5a06d6f 2020-05-01 AppVersion removed. Git information added to ProjectForgeVersion.
 7c79f1922 2020-01-03 Copyright of source header -> 2020.
 73a9755df 2019-10-11 More code cleanup ...
+000ca723d 2019-10-07 Remove pointless boolean expressions (business)
+7e3232e60 2019-08-17 New versions of fop and batik. Jar hell of logging frameworks...
 dd5ca38ac 2019-06-07 CopyRight of all java file-header updated or created.
+a5bbdca6a 2017-12-04 Change logger to slf4j
+f979e8a42 2017-11-20 MGC-UPDATE: Update auf Version 3.0.0-SNAPSHOT
 9ebb88522 2016-07-18 Initial commit</pre></div>
 </body></html>

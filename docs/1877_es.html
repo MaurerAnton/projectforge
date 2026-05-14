@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>#1877: CSVWriter.java [ES]</title>
+<style>
+body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}
+h1{border-bottom:2px solid #333;padding-bottom:.3em}
+h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}
+h3{margin-top:2em;color:#444}
+a{color:#0366d6}
+.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}
+.nav{font-size:.9em;color:#888;margin-bottom:1em}
+.lang{font-size:.85em;color:#888;float:right}
+.lang a{color:#888;text-decoration:none;padding:0 .3em}
+.lang a.active{color:#0366d6;font-weight:600;text-decoration:underline}
+.meta{font-size:.9em;margin:1em 0;color:#555}
+code{background:#f0f0f0;padding:0 .2em;font-size:.93em}
+pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}
+table{border-collapse:collapse;width:100%;margin:1em 0}
+th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}
+th{background:#f5f5f5;font-weight:600}
+.hist{font-size:.85em;color:#555}
+.warn{background:#fff3cd;border-left:3px solid #ffc107;padding:.5em 1em;margin:1em 0}
+.tip{background:#d4edda;border-left:3px solid #28a745;padding:.5em 1em;margin:1em 0}
+</style>
+</head>
+<body>
+<div class="lang"><a href="1877.html">EN</a> · <a href="1877_de.html">DE</a> · <a href="1877_ru.html">RU</a> · <a href="1877_fr.html">FR</a> · <a href="1877_es.html" class="active">ES</a></div>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Índice</a> · <a href="file-index.html">← Índice de archivos</a> · <a href="1876.html">← Anterior</a> · <a href="1878.html">Siguiente →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-common/src/main/java/org/projectforge/common/CSVWriter.java" target="_blank" title="Ver fuente en GitHub">📄 fuente</a></div>
+<h1>#1877: <code>CSVWriter.java</code></h1>
+<div class="meta"><code>projectforge-common/src/main/java/org/projectforge/common/CSVWriter.java</code> Clase de utilidad — paquete org.projectforge.common, projectforge-common/src/main/java/org/projectforge/common/CSVWriter.java <span style="color:#888">176 líneas · 100 código · 54 comentarios · 22 en blanco</span></div>
+<div class="c">Escritor de salida CSV que formatea datos en archivos de texto delimitados por punto y coma. Complemento de CSVParser — proporciona una API fluida de tipo builder para escribir filas CSV con comillas adecuadas. Soporta sobrecargas de <code>write()</code> tipadas para cadenas (con escape de comillas dobles), enteros largos, fechas (formato ISO 8601) y objetos genéricos. Carácter separador, final de línea y formato de fecha configurables. Se utiliza para exportaciones de datos de ProjectForge (listas de direcciones, exportaciones de hojas de tiempo, informes financieros).</div>
+<h2>Arquitectura</h2>
+<div class="c">
+<h3>Importaciones</h3>
+<ul>
+<li><code>java.io.PrintWriter</code> / <code>java.io.Writer</code> — Salida de texto</li>
+<li><code>java.text.DateFormat</code> / <code>SimpleDateFormat</code> — Formateo de fechas para columnas de fecha CSV</li>
+<li><code>java.util.Date</code> — Tipo de valor de fecha</li>
+<li><code>java.util.TimeZone</code> — Zona horaria UTC para formateo de fechas</li>
+</ul>
+
+<h3>Configuración</h3>
+<table>
+<tr><th>Configuración</th><th>Valor por defecto</th><th>Método setter</th></tr>
+<tr><td>Separador CSV</td><td><code>';'</code> (punto y coma — convención europea)</td><td><code>setCsvSeparator(char)</code></td></tr>
+<tr><td>Final de línea</td><td><code>"\n"</code> (nueva línea Unix)</td><td><code>setCr(String)</code></td></tr>
+<tr><td>Formato de fecha</td><td><code>"yyyy-MM-dd HH:mm:ss.SSS"</code></td><td><code>setDateFormat(DateFormat)</code></td></tr>
+<tr><td>Zona horaria de fecha</td><td>UTC</td><td>Codificada en el constructor</td></tr>
+</table>
+
+<h3>API fluida de tipo Builder</h3>
+<p>Todos los métodos <code>write()</code> devuelven <code>this</code> (la instancia de CSVWriter), permitiendo encadenamiento de métodos:</p>
+<pre>csvWriter.write("Nombre").write("Edad").write(42L).writeEndOfLine();</pre>
+
+<h3>Sobrecargas de escritura específicas por tipo</h3>
+
+<table>
+<tr><th>Método</th><th>Formateo</th><th>Comillas</th></tr>
+<tr><td><code>write(String s)</code></td><td>Cadena sin procesar con escape de <code>"</code> a <code>""</code> (duplicación)</td><td>Siempre envuelto en <code>"..."</code> — sigue las reglas de comillas RFC 4180</td></tr>
+<tr><td><code>write(long value)</code></td><td>Salida numérica directa mediante <code>PrintWriter.print()</code></td><td>Ninguna — los números no llevan comillas</td></tr>
+<tr><td><code>write(Date value)</code></td><td>Formateado mediante <code>dateFormat.format()</code> en UTC</td><td>Envuelto en comillas — las fechas pueden contener espacios o caracteres especiales</td></tr>
+<tr><td><code>write(Object value)</code></td><td>Alternativa: <code>String.valueOf(value)</code></td><td>Ninguna — los objetos genéricos no llevan comillas (riesgoso para objetos con comas/comillas)</td></tr>
+</table>
+
+<h3>Algoritmo de comillas (escritura de cadenas)</h3>
+<p>El método <code>write(String)</code> implementa el escape CSV adecuado según RFC 4180:</p>
+<ol>
+<li>Genera el separador si no es la primera entrada en la fila (gestionado por <code>writeSeparator()</code> con el indicador <code>firstEntry</code>)</li>
+<li>Genera una comilla doble de apertura (<code>"</code>)</li>
+<li>Itera a través de cada carácter de la cadena</li>
+<li>Si el carácter es una comilla doble (<code>"</code>), lo genera dos veces (<code>""</code>) — la secuencia de escape CSV estándar</li>
+<li>Genera todos los demás caracteres tal cual</li>
+<li>Genera una comilla doble de cierre (<code>"</code>)</li>
+</ol>
+
+<h3>Escritura de líneas</h3>
+<ul>
+<li><code>writeLine(Object[] values)</code> — Escribe todos los valores del array, luego llama a <code>writeEndOfLine()</code></li>
+<li><code>writeEndOfLine()</code> — Genera el final de línea configurado (<code>\n</code> por defecto) y restablece <code>firstEntry = true</code></li>
+</ul>
+
+<h3>Lógica del separador (writeSeparator)</h3>
+<p>El indicador booleano <code>firstEntry</code> rastrea si estamos al inicio de una línea:
+<ul>
+<li>Si <code>firstEntry == true</code>: se establece a false (primera celda — no se necesita separador)</li>
+<li>Si <code>firstEntry == false</code>: genera el carácter separador antes del valor de la celda</li>
+</ul>
+Este es un patrón clásico de seguimiento de estado para salida delimitada.</p>
+
+<h3>Integración con CSVParser</h3>
+<p>CSVWriter define <code>DEFAULT_CSV_SEPARATOR_CHAR = ';'</code> como una constante pública, a la que CSVParser hace referencia para garantizar un separador predeterminado coherente entre el lector y el escritor.</p>
+
+<h3>Comparación con bibliotecas CSV modernas</h3>
+<p>Esta implementación es intencionalmente mínima en comparación con Apache Commons CSV u OpenCSV:
+<ul>
+<li>Sin mapeo de encabezados (eso lo gestiona <code>CSVParser.parseHeadCols()</code>)</li>
+<li>Sin conversión automática de tipos (los llamadores formatean los valores antes de escribir)</li>
+<li>Sin optimizaciones de streaming/archivos grandes (escribe directamente en un Writer)</li>
+<li>Sin soporte para diferentes estrategias de comillas (todas las cadenas tienen comillas; los números nunca)</li>
+</ul>
+La simplicidad refleja su origen como una herramienta creada específicamente para la exportación de datos de ProjectForge, no una biblioteca CSV de propósito general.</p>
+
+<div class="warn">El método <code>write(Object)</code> NO pone comillas en la salida — llama a <code>String.valueOf(value)</code> y escribe directamente. Si el <code>toString()</code> del objeto devuelve una cadena que contiene comas, punto y coma o nuevas líneas, el CSV resultante estará mal formado. Esto es aceptable porque se espera que los llamadores utilicen las sobrecargas específicas de tipo.</div>
+
+<div class="tip">La salida de fecha utiliza la <strong>zona horaria UTC</strong> — las fechas se normalizan a UTC antes de formatear. Esta es una elección deliberada para el intercambio de datos: evita la ambigüedad de zona horaria en las exportaciones. El formato <code>"yyyy-MM-dd HH:mm:ss.SSS"</code> es similar a ISO 8601 pero utiliza un separador de espacio en lugar de 'T'.</div>
+</div>
+<h2>Historial de Git</h2><div class="hist"><pre>868d6abb7 2025 -> 2026
+63081666f Encabezados de archivos fuente: 2024 -> 2025.
+a73905c14 Corregir errores tipográficos en directorios projectforge*/ Encontrado con codespell
+b6092df09 Copyright 2023 -> 2024
+ab45d51fa Copyright 2001-2022 -> 2001-2023.
+5f7ef41b8 Copyright 2021 -> 2022
+ceb63e8a1 Encabezado de código fuente: (C) 2001-2021.
+7c79f1922 Copyright del encabezado fuente -> 2020.</pre></div>
+</body>
+</html>

@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>#2761: webauthn-json.js [RU]</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:2em;color:#444}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.lang{font-size:.85em;color:#888;float:right}.lang a{color:#888;text-decoration:none;padding:0 .3em}.lang a.active{color:#0366d6;font-weight:600;text-decoration:underline}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}</style>
+</head>
+<body>
+<div class="lang"><a href="2761.html">EN</a> · <a href="2761_de.html">DE</a> · <a href="2761_ru.html" class="active">RU</a> · <a href="2761_fr.html">FR</a> · <a href="2761_es.html">ES</a></div>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Индекс</a> · <a href="file-index.html">← Индекс файлов</a> · <a href="2760.html">← Пред.</a> · <a href="2762.html">След. →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-webapp/src/utilities/webauthn-json.js" target="_blank" title="Просмотр исходного кода на GitHub">📄 исходник</a></div>
+<h1>#2761: <code>webauthn-json.js</code></h1>
+<div class="meta"><code>projectforge-webapp/src/utilities/webauthn-json.js</code> Сторонняя библиотека WebAuthn (включена в проект) · <code>projectforge-webapp/src/utilities/webauthn-json.js</code> <span style="color:#888">190 строк · 179 кода · 7 комментариев · 4 пустых</span></div>
+<div class="c">Включённая в проект копия библиотеки <code>webauthn-json</code> (лёгкая клиентская обёртка WebAuthn), адаптированная для использования в потоке аутентификации U2F/FIDO2 в ProjectForge. Эта библиотека упрощает Web Authentication API, обрабатывая преобразование между нативными объектами учётных данных на основе <code>ArrayBuffer</code> и их JSON-сериализуемыми представлениями — критически важный мост, поскольку учётные данные WebAuthn используют бинарные буферы, которые не выживают при <code>JSON.stringify</code>. Файл включает в себя кодировщик base64url, рекурсивный преобразователь типов на основе схемы и всеобъемлющую схему типов, определяющую формы <code>PublicKeyCredentialCreationOptions</code> и <code>PublicKeyCredentialRequestOptions</code>.</div>
+<h2>Архитектура</h2>
+<h3>Структура модуля (объединён в один файл)</h3>
+<p>Файл включает в себя четыре концептуальных модуля из npm-пакета <code>webauthn-json</code>:</p>
+<p><strong>Кодировщик Base64url</strong> — <code>base64urlToBuffer</code> и <code>bufferToBase64url</code> преобразуют экземпляры <code>ArrayBuffer</code> в URL-безопасные строки base64 и обратно. Поскольку <code>rawId</code>, <code>challenge</code> и <code>user.id</code> в WebAuthn являются бинарными значениями <code>ArrayBuffer</code>, они должны быть закодированы как строки base64url для JSON-передачи на сервер.</p>
+<p><strong>Рекурсивный преобразователь схем</strong> — Функция <code>convert</code> является движком. Она обходит дерево схемы с тремя типами узлов: <code>"copy"</code> (передать без изменений), <code>"convert"</code> (применить функцию преобразования, например, кодирование base64url) и <code>Object</code>/<code>Array</code> (рекурсивно обработать дочерние элементы). Поля схемы также могут объявлять хуки <code>deriveFn</code>, которые вычисляют значения из входных данных, и флаги <code>required</code>/<code>optional</code> для валидации.</p>
+<p><strong>Определения схем</strong> — Объявлены как простые JS-объекты: <code>credentialCreationOptions</code>, <code>publicKeyCredentialWithAttestation</code> (для регистрации), <code>credentialRequestOptions</code> и <code>publicKeyCredentialWithAssertion</code> (для аутентификации). Каждая схема определяет, какие поля копируются, преобразуются, выводятся или являются необязательными.</p>
+<p><strong>Публичный API</strong> — Четыре функции: <code>create(requestJSON)</code> вызывает <code>navigator.credentials.create()</code> с преобразованными параметрами; <code>get(requestJSON)</code> вызывает <code>navigator.credentials.get()</code>; <code>schema</code> экспортирует определения схем; <code>supported()</code> определяет доступность WebAuthn.</p>
+<h3>Связь с webauthn.js</h3>
+<p>Этот файл предоставляет высокоуровневый подход на основе схем. Сопутствующий файл <code>webauthn.js</code> (файл #2762) предоставляет низкоуровневую, написанную вручную альтернативу, которую используют фактические компоненты аутентификации ProjectForge. Оба существуют в кодовой базе, поскольку интеграция WebAuthn исследовалась через несколько подходов — подход с включённой библиотекой и подход с ручной реализацией — прежде чем остановиться на пользовательской реализации в <code>webauthn.js</code>.</p>
+<h2>История Git</h2>
+<div class="hist"><table>
+<tr><th>Коммит</th><th>Что изменилось</th></tr>
+<tr><td><code>5865c2cd1</code></td><td>Добавлен весь файл <code>webauthn-json.js</code> из 190 строк одним коммитом. Это была первоначальная работа над WebAuthn: включённая библиотека <code>webauthn-json</code> была добавлена в качестве эталонной реализации, пока команда изучала клиентскую интеграцию WebAuthn. В начале файла указано <code>eslint-disable</code>, что означает, что он рассматривался как внешний код, не подлежащий правилам линтинга проекта.</td></tr>
+</table></div>
+</body>
+</html>

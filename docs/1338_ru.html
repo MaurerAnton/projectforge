@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>#1338 [RU]</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:2em;color:#444}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}</style>
+</head>
+<body>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Индекс</a> · <a href="file-index.html">← Индекс файлов</a> · <a href="1337.html">← Пред.</a> · <a href="1339.html">След. →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/kotlin/org/projectforge/framework/persistence/metamodel/EntityInfo.kt" target="_blank" title="Просмотреть исходник на GitHub">📄 исходник</a></div>
+<h1>#1338: <code>EntityInfo.kt</code></h1>
+<div class="meta"><code>projectforge-business/src/main/kotlin/org/projectforge/framework/persistence/metamodel/EntityInfo.kt</code> Мета-модель сущности — Мета-модель JPA Persistence, <code>projectforge-business/src/main/kotlin/org/projectforge/framework/persistence/metamodel/EntityInfo.kt</code> <span style="color:#888">111 строк · 71 код · 27 комментариев · 13 пустых</span></div>
+<div class="c">Обёртка над JPA <code>EntityType</code>, обеспечивающая интроспективный доступ к метаданным сущности: обнаружение свойств, проверка аннотаций, поиск длины столбцов и проверки персистентности. Используется подсистемой импорта и уровнем персистентности для динамического сопоставления импортированных данных со свойствами JPA-сущностей.</div>
+
+<h2>Архитектура</h2>
+
+<h3>Дизайн класса</h3>
+<p><code>EntityInfo</code> оборачивает JPA <code>EntityType&lt;*&gt;</code> и с готовностью заполняет список объектов <code>EntityPropertyInfo</code> для каждого атрибута JPA, имеющего <code>javaMember</code>. Он служит мостом между мета-моделью JPA и потребностями ProjectForge в рефлексии времени выполнения.</p>
+
+<h3>Параметры конструктора</h3>
+<table>
+<tr><th>Параметр</th><th>Тип</th><th>Назначение</th></tr>
+<tr><td><code>entityClass</code></td><td><code>Class&lt;*&gt;</code></td><td>Java/Kotlin класс сущности</td></tr>
+<tr><td><code>name</code></td><td><code>String</code></td><td>Имя сущности (обычно имя JPA-сущности)</td></tr>
+<tr><td><code>entityType</code></td><td><code>EntityType&lt;*&gt;</code></td><td>Тип мета-модели JPA, предоставляющий доступ к атрибутам</td></tr>
+<tr><td><code>tableName</code></td><td><code>String?</code></td><td>Необязательное имя таблицы базы данных</td></tr>
+</table>
+
+<h3>Основные методы</h3>
+<table>
+<tr><th>Метод</th><th>Возврат</th><th>Описание</th></tr>
+<tr><td><code>getIdProperty()</code></td><td><code>String?</code></td><td>Возвращает имя ID-свойства (первое свойство, помеченное как ID)</td></tr>
+<tr><td><code>isPersistedProperty(property: KCallable)</code></td><td><code>Boolean</code></td><td>Проверяет, соответствует ли вызываемый объект Kotlin персистентному атрибуту JPA</td></tr>
+<tr><td><code>isPersistedProperty(propertyName: String)</code></td><td><code>Boolean</code></td><td>Проверяет по имени свойства</td></tr>
+<tr><td><code>getPropertyInfo(propertyName)</code></td><td><code>EntityPropertyInfo?</code></td><td>Извлекает полные метаданные свойства</td></tr>
+<tr><td><code>getPropertiesWithAnnotation(annotationClass)</code></td><td><code>List&lt;EntityPropertyInfo&gt;</code></td><td>Находит все свойства, имеющие определённую аннотацию</td></tr>
+<tr><td><code>getColumnAnnotation(propertyName)</code></td><td><code>Column?</code></td><td>Извлекает аннотацию JPA <code>@Column</code></td></tr>
+<tr><td><code>getColumnLength(propertyName)</code></td><td><code>Int?</code></td><td>Извлекает длину столбца из <code>@Column(length=...)</code>; логирует предупреждение при сбоях для DO-сущностей</td></tr>
+</table>
+
+<h3>Интеграция с рефлексией Kotlin</h3>
+<p>Класс поддерживает как поиск свойств по строке, так и рефлексию Kotlin (<code>KCallable</code>, <code>KMutableProperty1</code>). Перегрузки <code>isPersistedProperty</code> позволяют вызывающим сторонам проверять, соответствует ли свойство Kotlin столбцу JPA, что необходимо для автоматического сопоставления свойств в подсистеме импорта.</p>
+
+<h3>Кэширование длины столбца</h3>
+<p><code>getColumnLength()</code> использует внутренний набор <code>columnWithoutLength</code> для предотвращения повторных сообщений лога, когда свойство не имеет аннотации <code>@Column</code>. Свойства, оканчивающиеся на "DO", логируются на уровне ERROR, остальные — на уровне INFO — предполагается, что DO-сущности имеют полные JPA-аннотации.</p>
+
+<h3>Связи</h3>
+<ul>
+<li><strong>EntityPropertyInfo</strong>: Создаётся для каждого атрибута JPA во время <code>init</code></li>
+<li><strong>EntityType</strong>: Источник мета-модели JPA (обычно <code>AbstractManagedType</code> от Hibernate)</li>
+<li><strong>Подсистема импорта</strong>: Используется импортёрами для проверки соответствия полей структуре сущности</li>
+<li><strong>HibernateSearchMeta</strong>: Дополняет это, предоставляя метаданные индекса Hibernate Search</li>
+</ul>
+
+<h2>История Git</h2><div class="hist"><pre>868d6abb7 2025 -> 2026
+63081666f Заголовки исходных файлов: 2024 -> 2025.
+bbc198d03 Миграция в процессе... (все тесты всех пакетов: OK).
+e801b0336 Миграция в процессе...
+efee0def3 Миграция в процессе...
+eb4e16a33 Миграция в процессе...
+ca4cb86c8 Миграция в процессе...
+e4545c8e1 Миграция в процессе...
+7f86d3730 Миграция в процессе...
+d476c7b0d Миграция в процессе...
+067a4cbb1 Миграция в процессе...
+67ce75fe9 Миграция в процессе...</pre></div>
+</body>
+</html>

@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="es"><head><meta charset="utf-8"><title>#733 [ES]</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333}h2{margin-top:1.5em}a{color:#0366d6}.meta{font-size:.9em;margin:1em 0}.nav{font-size:.9em;color:#888;margin-bottom:1em}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}code{background:#f0f0f0;padding:0 .2em}</style></head>
+<body>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Índice</a> · <a href="file-index.html">← Índice de archivos</a> · <a href="732.html">← Anterior</a> · <a href="734.html">Siguiente →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/java/org/projectforge/framework/utils/GZIPHelper.java" target="_blank" title="Ver fuente en GitHub">📄 fuente</a></div>
+
+<h1>#733: <code>GZIPHelper.java</code></h1>
+<div class="meta"><code>projectforge-business/src/main/java/org/projectforge/framework/utils/GZIPHelper.java</code> <strong>Líneas:</strong> 81 · <strong>Tipo:</strong> Utilidad Java — <code>org.projectforge.framework.utils</code> <span style="color:#888">81 líneas · 45 código · 30 comentarios · 6 en blanco</span></div>
+
+<div class="c"><h2>Propósito</h2>
+<p>Comprime y descomprime cadenas usando <strong>codificación GZIP + Base64</strong>. Resuelve dos problemas: (1) algunos campos de base de datos tienen longitud de caracteres limitada (ej. <code>VARCHAR(4000)</code>), y (2) almacenar grandes blobs JSON en columnas de base de datos desperdicia espacio. Esta utilidad comprime la cadena con GZIP, luego <strong>codifica en Base64</strong> el resultado binario para que pueda almacenarse como una cadena simple en una columna <code>VARCHAR</code> o <code>TEXT</code> de la base de datos. La descompresión invierte el proceso: decodificar Base64 → descomprimir GZIP → cadena original.</p>
+<p><strong>¿Por qué Base64 después de GZIP?</strong> GZIP produce bytes binarios — no son seguros para almacenar en columnas de base de datos basadas en texto (que usan codificaciones de caracteres como UTF-8 que pueden interpretar ciertos valores de bytes como caracteres de control). Base64 convierte datos binarios en una cadena ASCII pura (usando 64 caracteres seguros: A-Z, a-z, 0-9, +, /) — garantizada segura para cualquier almacenamiento de texto.</p></div>
+
+<div class="c"><h2>API — dos métodos</h2>
+<h3><code>compress(String str) → String</code></h3>
+<p>Toma cualquier cadena (segura para nulos — devuelve nulo para entrada nula/vacía). Envuelve XML de preferencias de usuario, blobs de configuración JSON y campos de texto grandes para almacenamiento en base de datos. Algoritmo:
+<ol><li><code>str.getBytes()</code> — convierte a bytes del juego de caracteres predeterminado de la plataforma. <strong>Advertencia:</strong> usa el juego de caracteres predeterminado de la JVM (típicamente UTF-8 en sistemas modernos pero podría ser diferente en configuraciones heredadas). Si la cadena original contiene caracteres no ASCII, diferentes JVM podrían producir resultados comprimidos diferentes</li>
+<li>Envuelve en <code>GZIPOutputStream</code> — la implementación GZIP estándar de Java (RFC 1952)</li>
+<li>Cierra el flujo GZIP — esto <strong>vacia</strong> los datos comprimidos al <code>ByteArrayOutputStream</code> subyacente</li>
+<li>Codifica los bytes comprimidos a cadena Base64 mediante <a href="724.html">Base64Helper.encodeObject()</a> — devuelve la cadena Base64</li></ol>
+<strong>Manejo de errores:</strong> En caso de IOException, registra el error a nivel ERROR y devuelve <code>null</code>. Quien llama debe manejar el nulo — la mayoría de los llamantes tratan el nulo igual que una cadena vacía.</p>
+
+<h3><code>uncompress(String base64ByteArray) → String</code></h3>
+<p>Invierte <code>compress()</code>. Toma una cadena comprimida codificada en Base64, devuelve la original. Algoritmo:
+<ol><li><code>Base64Helper.decodeObject(base64ByteArray)</code> — decodifica Base64 a bytes sin procesar (<strong>conversión de Object a byte[]</strong> — note la conversión no verificada. El método <code>decodeObject</code> devuelve <code>Object</code> por compatibilidad histórica con XStream)</li>
+<li>Envuelve en <code>GZIPInputStream</code> — descomprime los datos GZIP</li>
+<li>Usa <code>IOUtils.copy(gzip, out)</code> (Apache Commons IO) para transmitir los datos descomprimidos a un <code>ByteArrayOutputStream</code></li>
+<li><code>out.toString()</code> — convierte los bytes de vuelta a cadena usando el juego de caracteres predeterminado de la plataforma (la misma suposición de juego de caracteres que compress)</li></ol>
+<strong>Manejo de errores:</strong> Captura tanto <code>IOException</code> como <code>ClassNotFoundException</code> (este último de <code>Base64Helper.decodeObject()</code> que usa deserialización de objetos Java internamente — un <strong>posible problema de seguridad</strong> si se pasan datos Base64 maliciosos). Devuelve <code>null</code> en cualquier error.</p></div>
+
+<div class="c"><h2>Uso en ProjectForge</h2>
+<p>Usado por dos componentes clave:</p>
+<ul>
+<li><strong>Preferencias de usuario (<a href="606.html">UserXmlPreferencesService</a>):</strong> El XML de preferencias de usuario puede volverse bastante grande (especialmente configuraciones de vista de calendario con múltiples calendarios, colores personalizados y filtros guardados). Antes de almacenar en la base de datos, el XML se comprime mediante <code>GZIPHelper.compress()</code> y se almacena como una cadena Base64 en la entidad <code>UserPrefDO</code>. Al cargar, <code>uncompress()</code> restaura el XML original</li>
+<li><strong>Registro de auditoría / registro de eventos:</strong> La columna <code>external_access_logs</code> en <code>t_plugin_datatransfer_area</code> (ver <a href="105.html">#105</a>) almacena una lista serializada en JSON de eventos de acceso. Con acceso externo frecuente, esta cadena podría exceder el límite de <code>VARCHAR(10000)</code> — la compresión GZIP reduce su tamaño significativamente</li>
+</ul>
+<p>Notablemente, esto <strong>no</strong> se usa para el almacenamiento BLOB de clave de licencia (<a href="144.html">LicenseDO</a>) — los archivos binarios usan columnas <code>BLOB</code> directas de JDBC, no compresión de texto.</p></div>
+
+<div class="c"><h2>Decisiones de diseño clave y problemas</h2>
+<ul>
+<li><strong>Juego de caracteres predeterminado de la plataforma:</strong> Ambos métodos usan <code>str.getBytes()</code> y <code>out.toString()</code> sin especificar un juego de caracteres. Esto significa que el ciclo de compresión solo está garantizado si compress y uncompress se ejecutan en la <strong>misma JVM</strong>. Si los datos comprimidos se mueven a un servidor diferente con un juego de caracteres predeterminado diferente, la cadena descomprimida podría corromperse. En la práctica, todas las JVM modernas usan UTF-8 por defecto (desde Java 18), por lo que esto rara vez es un problema en producción</li>
+<li><strong>Sobrecarga de Base64:</strong> GZIP típicamente comprime texto al 20-30% del tamaño original, pero la codificación Base64 agrega ~33% de sobrecarga (3 bytes binarios → 4 caracteres Base64). Resultado neto: comprimido+Base64 es típicamente 25-40% del tamaño original. Esto significa que es útil para cadenas de más de ~2KB donde la compresión domina la sobrecarga de Base64</li>
+<li><strong>Manejo de nulos:</strong> Ambos métodos devuelven <code>null</code> para entrada nula — los llamantes no necesitan verificar previamente. Pero los llamantes <strong>sí</strong> necesitan manejar devoluciones nulas (cuando la compresión/descompresión falla) — tratar el nulo como cadena vacía es típico</li>
+<li><strong>Sin problemas de seguridad de hilos:</strong> Toda la E/S es a través de objetos locales <code>ByteArrayInputStream/OutputStream</code> — sin estado compartido, completamente seguro para hilos</li>
+<li><strong>ClassNotFoundException en uncompress:</strong> Esto es un <strong>olor a código</strong> — <code>Base64Helper.decodeObject()</code> usa <code>ObjectInputStream</code> de Java, que puede deserializar objetos Java arbitrarios (una <a href="https://owasp.org/www-community/vulnerabilities/Deserialization_of_untrusted_data">vulnerabilidad de seguridad conocida</a>). Si un atacante puede inyectar datos Base64 que se pasen a <code>uncompress()</code>, potencialmente podría ejecutar código arbitrario. En la práctica, los datos solo provienen de la base de datos y son generados por <code>compress()</code>, por lo que la superficie de ataque se limita a escenarios de compromiso de la base de datos</li></ul></div>
+
+</body></html>

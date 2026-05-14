@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>#1313 [ES]</title>
+<style>
+body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}
+h1{border-bottom:2px solid #333;padding-bottom:.3em}
+h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}
+h3{margin-top:2em;color:#444}
+a{color:#0366d6}
+.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}
+.nav{font-size:.9em;color:#888;margin-bottom:1em}
+.meta{font-size:.9em;margin:1em 0;color:#555}
+code{background:#f0f0f0;padding:0 .2em;font-size:.93em}
+pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}
+table{border-collapse:collapse;width:100%;margin:1em 0}
+th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}
+th{background:#f5f5f5;font-weight:600}
+.hist{font-size:.85em;color:#555}
+</style>
+</head>
+<body>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Índice</a> · <a href="file-index.html">← Índice de archivos</a> · <a href="1312.html">← Anterior</a> · <a href="1314.html">Siguiente →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/kotlin/org/projectforge/framework/persistence/history/HistoryService.kt" target="_blank" title="Ver fuente en GitHub">📄 fuente</a></div>
+<h1>#1313: <code>HistoryService.kt</code></h1>
+<div class="meta"><code>projectforge-business/src/main/kotlin/org/projectforge/framework/persistence/history/HistoryService.kt</code> Servicio principal, projectforge-business/.../persistence/history/HistoryService.kt <span style="color:#888">426 líneas · 315 código · 87 comentarios · 24 en blanco</span></div>
+<div class="c">Fachada principal para cargar, fusionar, guardar y eliminar entradas de historial, incluido el seguimiento de cambios a nivel de atributo. También maneja la resolución de entidades con verificación de acceso y la adición de comentarios de usuario.</div>
+
+<h2>Arquitectura y Rol</h2>
+<p><code>HistoryService</code> es un <code>@Service</code> singleton que une el acceso a datos de bajo nivel (<code>HistoryEntryDO</code>/<code>HistoryEntryAttrDO</code>) con los convertidores de la capa de presentación. Gestiona el ciclo de vida completo: creación de entradas de historial a través de adaptadores <code>BaseDao</code>, carga con recursión de objetos incrustados, adición de comentarios de usuario y eliminación forzada.</p>
+
+<h3>Métodos Clave</h3>
+<table>
+<tr><th>Método</th><th>Descripción</th></tr>
+<tr><td><code>mergeHistoryEntries(loadContext, entries)</code></td><td>Fusiona entradas en el contexto de carga, deduplicando por ID.</td></tr>
+<tr><td><code>findEntryAndEntityById(id, checkAccess?)</code></td><td>Carga una entrada de historial + su entidad objetivo, verificando acceso de selección y actualización. Devuelve <code>EntryInfo</code> con la clase de entidad, DAO y banderas de acceso.</td></tr>
+<tr><td><code>appendUserComment(id, comment, checkAccess?)</code></td><td>Añade un comentario de usuario con marca de tiempo a una entrada de historial. Antepone la fecha ISO y el nombre de usuario si el comentarista difiere del modificador original.</td></tr>
+<tr><td><code>loadHistory(baseDO, baseDao?)</code></td><td>Punto de entrada para cargar todo el historial de una entidad dada. Crea un nuevo <code>HistoryLoadContext</code> e invoca el cargador recursivo.</td></tr>
+<tr><td><code>loadAndMergeHistory(entityClass, entityIds, loadContext)</code></td><td>Carga recursivamente el historial para un conjunto de IDs de entidad, siguiendo relaciones <code>@OneToMany</code> para cargar el historial de entidades incrustadas/hijas. Usa reflexión para leer colecciones hijas reales de las entidades cargadas.</td></tr>
+<tr><td><code>insertUpdateHistoryEntry(entity, property, class, oldVal, newVal)</code></td><td>Crea una entrada de cambio de un solo atributo a través de <code>HistoryBaseDaoAdapter</code>. Verifica usuario demo/restringido antes de escribir.</td></tr>
+<tr><td><code>forceDeletion(historyEntry)</code></td><td>Elimina físicamente una entrada de historial y todos sus atributos (para purga de entidades estilo GDPR).</td></tr>
+<tr><td><code>save(em/historyEntry, attrs?)</code></td><td>Persiste una nueva entrada de historial con atributos opcionales, estableciendo <code>modifiedBy</code> y <code>modifiedAt</code>.</td></tr>
+</table>
+
+<h3>Resolución de Objetos Incrustados</h3>
+<p>El método privado <code>processAndMergeHistory()</code> escanea los atributos de las entradas de historial en busca de nombres de propiedad <code>@OneToMany</code>, extrae IDs de entidad tanto del campo <code>value</code> (añadido) como de <code>oldValue</code> (eliminado), y carga recursivamente el historial de esas entidades incrustadas. También usa reflexión sobre las entidades padre reales cargadas para encontrar hijos actualmente asignados que podrían no aparecer en los diffs del historial.</p>
+
+<h3>Clase Interna: EntryInfo</h3>
+<p>Tipo de retorno para <code>findEntryAndEntityById()</code>. Empaqueta el <code>HistoryEntryDO</code> sin procesar, la clase de entidad resuelta, su <code>BaseDao</code>, la instancia de entidad cargada y los booleanos de acceso de lectura/escritura.</p>
+
+<h2>Historial Git</h2><div class="hist"><pre>868d6abb7 2025 -> 2026
+3808112aa t_pf_history.user_comment varchar(2000) -> varchar(10000), appendUserComment añade marca de tiempo.
+749bdd1cd HistoryEntry: usuario puede añadir comentarios de usuario a las entradas de historial.
+398ac8947 Comentarios de historial: edición preparada.
+b7861b2ff Direcciones: eliminación forzada corregida (después de migración mgc).
+63081666f Encabezados de archivos fuente: 2024 -> 2025.
+d9d0cc1bf WIP: almacenamiento de libro de órdenes.
+bbc198d03 Migración en progreso... (todas las pruebas OK).
+9e3c523c7 Migración en progreso... (todas las pruebas OK).
+55972f36a Migración en progreso...
+f189d3418 Migración en progreso... (todas las pruebas OK).
+d18c899b5 Refactorización de entradas de historial.
+b79a1edca Migración en progreso... (todas las pruebas OK).
+e3fe7c42b Migración en progreso... (todas las pruebas OK).
+5989b32fd BaseDao: mecanismo onChangeListener refactorizado.
+87aaf6a5a BaseDao refactorizado, métodos internal* renombrados.
+e4f9ca1be Migración en progreso...
+67805f2fc ThreadLocalUserContext.user -> loggedInUser (renombrado).
+cb03dc74f Migración en progreso... (todas las pruebas OK).
+68be78d38 Migración en progreso... (todas las pruebas OK).
+85b4e1175 PfPersistenceService: query renombrado a executeQuery.
+b095e6f7d Gran cambio en el manejo de transacciones: PfPersistenceContext.
+95afd297d Migración en progreso...
+eaa4d9d3a HistoryService -> HistoryFormatService
+57f08f175 HistoryService soporta adaptadores registrados (adaptador User).
+f3ed38265 HistoryService (visualización de entradas) mejorado.
+5f7ef41b8 Copyright 2021 -> 2022
+c0f2b9de0 Funcionalidad de Tenants eliminada en todas partes.
+ceb63e8a1 Encabezado de código fuente: (C) 2001-2021.
+8b60b4c0a wip: adjuntos
+365059990 HistoryService e I18nEnum: corrección para valores enum desconocidos.
+7c79f1922 Copyright del encabezado fuente -> 2020.
+8d164f4ad AbstractRest, AbstractDORest, AbstractDTORest refactorizados.
+f1e8cca68 HistoryService soporta operaciones de inserción.
+05244ff19 Encabezados de Copyright creados.
+bd3a3e824 Módulo projectforge-jax-rs renombrado a projectforge-rest.
+0475167da PFUserDO: Revisión de código.
+b4f102fe5 Tiempo atrás (legible para humanos) para entradas de historial.
+2b7abdf0e Error tipográfico: modfied -> modified.
+8116fa842 Serialización JSON: camel case.
+b0fd52b9f menú movido de jax-rs a business.
+895414c05 Kotlin: refactorizado lateinit.
+be8f793fc Auto-layout: refactorización.
+91accbd15 Auto-layout: refactorización.
+298e24d04 Traducción del tipo de operación.
+7b4263462 Corrección de error en traducción automática de nombres de propiedad.
+57009fbe8 Traducción automática de valores I18nEnum en entradas de historial.
+cc2c470f9 HistoryEntry: diffEntries como lista de historyEntry.
+03d2d150d Nuevo servicio rest rs/&lt;entity&gt;/history/id</pre></div>
+</body>
+</html>

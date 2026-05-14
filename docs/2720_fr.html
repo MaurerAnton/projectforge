@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>2720: FullCalendarPanel.jsx [FR]</title>
+<style>
+body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}
+h1{border-bottom:2px solid #333;padding-bottom:.3em}
+h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}
+h3{margin-top:1.5em;color:#444;font-size:1em}
+a{color:#0366d6}
+.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}
+.nav{font-size:.9em;color:#888;margin-bottom:1em}
+.lang{font-size:.85em;color:#888;float:right}
+.lang a{color:#888;text-decoration:none;padding:0 .3em}
+.lang a.active{color:#0366d6;font-weight:600;text-decoration:underline}
+.meta{font-size:.9em;margin:1em 0;color:#555}
+code{background:#f0f0f0;padding:0 .2em;font-size:.93em}
+pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}
+table{border-collapse:collapse;width:100%;margin:1em 0}
+th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}
+th{background:#f5f5f5;font-weight:600}
+.hist{font-size:.85em;color:#555}
+pre.diff{background:#fff;font-size:.82em;max-height:300px;overflow-y:auto}
+</style>
+</head>
+<body>
+<div class="lang"><a href="2720.html">EN</a> · <a href="2720_de.html">DE</a> · <a href="2720_ru.html">RU</a> · <a href="2720_fr.html" class="active">FR</a> · <a href="2720_es.html">ES</a></div>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← Index des fichiers</a> · <a href="625.html">← Précédent</a> · <a href="3131.html">Suivant →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-webapp/src/containers/panel/calendar/FullCalendarPanel.jsx" target="_blank" title="Voir la source sur GitHub">📄 source</a></div>
+<h1>#2720: <code>FullCalendarPanel.jsx</code></h1>
+<div class="meta"><code>projectforge-webapp/src/containers/panel/calendar/FullCalendarPanel.jsx</code> Composant React, <code>projectforge-webapp/src/containers/panel/calendar/FullCalendarPanel.jsx</code> <span style="color:#888">521 lignes · 450 code · 38 commentaires · 33 vides</span></div>
+<div class="c"><strong>Objectif :</strong> Application web React : FullCalendarPanel.jsx. FullCalendarPanel.jsx fait partie de l'application open-source de gestion de projet ProjectForge.</div>
+<h2>Source (100 premières lignes)</h2>
+<pre>import React, { useEffect, useMemo, useRef, useState } from 'react';
+import PropTypes from 'prop-types';
+import FullCalendar from '@fullcalendar/react';
+import '@fortawesome/fontawesome-free/css/all.css';
+import deLocale from '@fullcalendar/core/locales/de';
+import dayGridPlugin from '@fullcalendar/daygrid';
+import timeGridPlugin from '@fullcalendar/timegrid';
+import interactionPlugin from '@fullcalendar/interaction';
+import listPlugin from '@fullcalendar/list';
+import bootstrapPlugin from '@fullcalendar/bootstrap';
+import { useSelector } from 'react-redux'; // un plugin !
+import { createPopper } from '@popperjs/core';
+import { Outlet, useNavigate } from 'react-router';
+import LoadingContainer from '../../../components/design/loading-container';
+import { fetchJsonGet, fetchJsonPost } from '../../../utilities/rest';
+import CalendarEventTooltip from './CalendarEventTooltip';
+import './FullCalendarPanel.scss';
+
+/*
+TODO:
+ - Gestion des événements récurrents.
+*/
+
+function FullCalendarPanel({
+    activeCalendars,
+    timesheetUserId = null,
+    showBreaks = false,
+    defaultDate = null,
+    defaultView = 'timeGridWeek',
+    translations,
+    gridSize = 30,
+    firstHour = 8,
+    vacationGroups = [],
+    vacationUsers = [],
+    topHeight = '0px',
+    alternateHoursBackground = true,
+}) {
+    const locale = useSelector((state) =&gt; state.authentication.user.locale) || 'fr';
+    const firstDayOfWeek = useSelector((state) =&gt; state.authentication.user.firstDayOfWeekSunday0) || 0;
+    const timeNotation = useSelector((state) =&gt; state.authentication.user.timeNotation) || 'H24';
+    const [queryString] = useState(window.location.search);
+    const [currentHoverEvent, setCurrentHoverEvent] = useState(null);
+    const [loading, setLoading] = useState(false);
+    let initialDate = defaultDate;
+    if (defaultDate &amp;&amp; defaultView === 'dayGridMonth' &amp;&amp; !initialDate.endsWith('01')) {
+        // Fullcalendar a besoin du jour du mois pour afficher comme date de début, pas le début du
+        // de la première semaine avec le jour du mois précédent :
+        let date = new Date(initialDate);
+        date = new Date(date.getFullYear(), date.getMonth() + 1, 1);
+        initialDate = Date.toIsoDateString(date);
+    }
+    const [currentState, setCurrentState] = useState({
+        date: initialDate,
+        view: defaultView,
+    });
+    const activeCalendarsRef = useRef(activeCalendars);
+    const timesheetUserIdRef = useRef(timesheetUserId);
+    const showBreaksRef = useRef(showBreaks);
+
+    const tooltipRef = useRef(undefined);
+    const popperRef = useRef(undefined);
+
+    const calendarRef = useRef();
+
+    const navigate = useNavigate();
+
+    const refetch = (currentApi) =&gt; {
+        if (!currentApi) {
+            // console.log('currentApi pas encore disponible');
+            return;
+        }
+        activeCalendarsRef.current = activeCalendars;
+        timesheetUserIdRef.current = timesheetUserId;
+        showBreaksRef.current = showBreaks;
+        currentApi.refetchEvents();
+    };
+
+    const firstUpdate = useRef(true);
+
+    useEffect(() =&gt; {
+        if (firstUpdate.current) {
+            firstUpdate.current = false;
+            return;
+        }
+        const currentApi = calendarRef?.current?.getApi();
+        // eslint-disable-next-line max-len
+        // console.log('refetch', activeCalendars, timesheetUserId, vacationGroups, vacationUsers);
+        refetch(currentApi);
+    }, [activeCalendars, timesheetUserId, showBreaks, vacationGroups, vacationUsers]);
+
+    useEffect(() =&gt; {
+        const currentApi = calendarRef?.current?.getApi();
+        if (!currentApi) {
+            // console.log('currentApi pas encore disponible');
+            return;
+        }
+        if (queryString !== window.location.search) {
+            const newQueryParams = new URLSearchParams(window.location.search);
+            const queryParams = new URLSearchParams(queryString);
+            const dateChanged = newQueryParams.get('gotoDate') !== undefined &amp;&amp; queryParams.get('gotoDate') !== newQueryParams.get('gotoDate');</pre>
+<h2>Historique Git</h2>
+<div class="hist">
+<pre>bf988bc6d Élimination de 43 vulnérabilités npm : react-scripts→Vite, ESLint 9, nettoyage des dépendances, corrections de bugs
+b2137d403 Correction de la navigation du calendrier : utilisation de >= pour la limite exclusive activeEnd
+e81e7e839 Boîte de dialogue modale sur la page du calendrier (feuilles de temps, congés, événements, etc.) corrigée : prend désormais en charge la fermeture via ÉCHAP et le clic en dehors de la modale.
+3490f27f1 correction de la page du calendrier et de la feuille de temps
+f867698d3 wip : mise à niveau des versions des packages</pre>
+<h3>bf988bc6d</h3><div class="c"><strong>Élimination de 43 vulnérabilités npm : react-scripts→Vite, ESLint 9, nettoyage des dépendances, corrections de bugs</strong><pre class="diff">bf988bc6d14252863c2a7a54c409c947fb9feb7b
+diff --git a/projectforge-webapp/src/containers/panel/calendar/FullCalendarPanel.jsx b/projectforge-webapp/src/containers/panel/calendar/FullCalendarPanel.jsx
+index a66f36ea3..1f615af46 100644
+--- a/projectforge-webapp/src/containers/panel/calendar/FullCalendarPanel.jsx
++++ b/projectforge-webapp/src/containers/panel/calendar/FullCalendarPanel.jsx
+@@ -8,7 +8,7 @@ import timeGridPlugin from '@fullcalendar/timegrid';
+ import interactionPlugin from '@fullcalendar/interaction';
+ import listPlugin from '@fullcalendar/list';
+ import bootstrapPlugin from '@fullcalendar/bootstrap';
+-import { connect } from 'react-redux'; // a plugin!
++import { useSelector } from 'react-redux'; // a plugin!
+ import { createPopper } from '@popperjs/core';
+ import { Outlet, useNavigate } from 'react-router';
+ import LoadingContainer from '../../../components/design/loading-container';
+@@ -25,19 +25,19 @@ function FullCalendarPanel({
+     activeCalendars,
+     timesheetUserId = null,
+     showBreaks = false,
+-    locale = 'en',
+-    firstDayOfWeek = 0,
+     defaultDate = null,
+     defaultView = 'timeGridWeek',
+     translations,
+     gridSize = 30,
+     firstHour = 8,
+-    timeNotation = 'H24',
+     vacationGroups = [],
+     vacationUsers = [],
+     topHeight = '0px',
+     alternateHoursBackground = true,
+ }) {
++    const locale = useSelector((state) =&gt; state.authentication.user.locale) || 'en';
++    const firstDayOfWeek = useSelector((state) =&gt; state.authentication.user.firstDayOfWeekSunday0) || 0;
++    const timeNotation = useSelector((state) =&gt; state.authentication.user.timeNotation) || 'H24';
+     const [queryString] = useState(window.location.search);
+     const [currentHoverEvent, setCurrentHoverEvent] = useState(null);
+     const [loading, setLoading] = useState(false);
+@@ -518,10 +518,4 @@ FullCalendarPanel.propTypes = {
+     alternateHoursBackground: PropTypes.bool,
+ };
+ 
+-const mapStateToProps = ({ authentication }) =&gt; ({
+-    firstDayOfWeek: authentication.user.firstDayOfWeekSunday0,
+-    timeNotation: authentication.user.timeNotation,
+-    locale: authentication.user.locale,
+-});
+-
+-export default connect(mapStateToProps)(FullCalendarPanel);
++export default FullCalendarPanel;</pre></div><h3>b2137d403</h3><div class="c"><strong>Correction de la navigation du calendrier : utilisation de >= pour la limite exclusive activeEnd</strong><pre class="diff">b2137d403ef3ff78452116247009096ad860896b
+diff --git a/projectforge-webapp/src/containers/panel/calendar/FullCalendarPanel.jsx b/projectforge-webapp/src/containers/panel/calendar/FullCalendarPanel.jsx
+index 55fc240e3..a66f36ea3 100644
+--- a/projectforge-webapp/src/containers/panel/calendar/FullCalendarPanel.jsx
++++ b/projectforge-webapp/src/containers/panel/calendar/FullCalendarPanel.jsx
+@@ -110,7 +110,7 @@ function FullCalendarPanel({
+                 const viewStart = Date.toIsoDateString(currentApi.view.activeStart);
+                 const viewEnd = Date.toIsoDateString(currentApi.view.activeEnd);
+                 // console.log(date, viewStart, viewEnd, date &lt; viewStart);
+-                if (date &lt; viewStart || date &gt; viewEnd) {
++                if (date &lt; viewStart || date &gt;= viewEnd) {
+                     // console.log('gotoDate', date);
+                     currentApi.gotoDate(date);
+                     refetchTriggerd = true;</pre></div><h3>e81e7e839</h3><div class="c"><strong>Boîte de dialogue modale sur la page du calendrier (feuilles de temps, congés, événements, etc.) corrigée : prend désormais en charge la fermeture via ÉCHAP et le clic en dehors de la modale.</strong><pre class="diff">e81e7e8391fc2dccafd0e6f3fa954c9629423656
+diff --git a/projectforge-webapp/src/containers/panel/calendar/FullCalendarPanel.jsx b/projectforge-webapp/src/containers/panel/calendar/FullCalendarPanel.jsx
+index 3fef4e376..55fc240e3 100644
+--- a/projectforge-webapp/src/containers/panel/calendar/FullCalendarPanel.jsx
++++ b/projectforge-webapp/src/containers/panel/calendar/FullCalendarPanel.jsx
+@@ -9,7 +9,6 @@ import interactionPlugin from '@fullcalendar/interaction';
+ import listPlugin from '@fullcalendar/list';
+ import bootstrapPlugin from '@fullcalendar/bootstrap';
+ import { connect } from 'react-redux'; // a plugin!
+-import classNames from 'classnames';
+ import { createPopper } from '@popperjs/core';
+ import { Outlet, useNavigate } from 'react-router';
+ import LoadingContainer from '../../../components/design/loading-container';
+@@ -243,7 +242,7 @@ function FullCalendarPanel({
+             navigate(`/react/calendar/timesheet/edit?startDate=${event.start.getTime() / 1000}&amp;endDate=${event.end.getTime() / 1000}`);
+         } else if (category === 'timesheet-stats') {
+             // Ne rien faire
+-        } else if (category === 'vaction') {
++        } else if (category === 'vacation') {
+             navigate(`/react/calendar/vacation/edit/${id}?returnToCaller=%2Freact%2Fcalendar`);
+         } else if (category === 'address') {
+             // la date de début est envoyée au serveur et est nécessaire pour les événements en série afin de détecter le</pre></div><h3>3490f27f1</h3><div class="c"><strong>correction de la page du calendrier et de la feuille de temps</strong><pre class="diff">3490f27f105c220263fa22ff716d907beb75c5a5
+diff --git a/projectforge-webapp/src/containers/panel/calendar/FullCalendarPanel.jsx b/projectforge-webapp/src/containers/panel/calendar/FullCalendarPanel.jsx
+index b86001836..3fef4e376 100644
+--- a/projectforge-webapp/src/containers/panel/calendar/FullCalendarPanel.jsx
++++ b/projectforge-webapp/src/containers/panel/calendar/FullCalendarPanel.jsx
+@@ -1,4 +1,5 @@
+ import React, { useEffect, useMemo, useRef, useState } from 'react';
++import PropTypes from 'prop-types';
+ import FullCalendar from '@fullcalendar/react';
+ import '@fortawesome/fontawesome-free/css/all.css';
+ import deLocale from '@fullcalendar/core/locales/de';
+@@ -8,25 +9,36 @@ import interactionPlugin from '@fullcalendar/interaction';
+ import listPlugin from '@fullcalendar/list';
+ import bootstrapPlugin from '@fullcalendar/bootstrap';
+ import { connect } from 'react-redux'; // a plugin!
++import classNames from 'classnames';
+ import { createPopper } from '@popperjs/core';
+-import { Route } from 'react-router';
++import { Outlet, useNavigate } from 'react-router';
+ import LoadingContainer from '../../../components/design/loading-container';
+ import { fetchJsonGet, fetchJsonPost } from '../../../utilities/rest';
+ import CalendarEventTooltip from './CalendarEventTooltip';
+-import history from '../../../utilities/history';
+-import FormModal from '../../page/form/FormModal';
++import './FullCalendarPanel.scss';
+ 
+ /*
+ TODO:
+  - Gestion des événements récurrents.
+ */
+ 
+-function FullCalendarPanel(options) {
+-    const {
+-        activeCalendars, timesheetUserId, showBreaks, locale, firstDayOfWeek,
+-        defaultDate, defaultView, match, translations, gridSize, firstHour,
+-        timeNotation, vacationGroups, vacationUsers, topHeight, alternateHoursBackground,
+-    } = options;
++function FullCalendarPanel({
++    activeCalendars,
++    timesheetUserId = null,
++    showBreaks = false,
++    locale = 'en',
++    firstDayOfWeek = 0,
++    defaultDate = null,
++    defaultView = 'timeGridWeek',
++    translations,
++    gridSize = 30,
++    firstHour = 8,
++    timeNotation = 'H24',
++    vacationGroups = [],
++    vacationUsers = [],
++    topHeight = '0px',
++    alternateHoursBackground = true,
++}) {
+     const [queryString] = useState(window.location.search);
+     const [currentHoverEvent, setCurrentHoverEvent] = useState(null);
+     const [loading, setLoading] = useState(false);
+@@ -51,9 +63,7 @@ function FullCalendarPanel(options) {
+ 
+     const calendarRef = useRef();</pre></div><h3>f867698d3</h3><div class="c"><strong>wip : mise à niveau des versions des packages</strong><pre class="diff">f867698d30e539955cc1dd9aacc4986234ff36f2
+diff --git a/projectforge-webapp/src/containers/panel/calendar/FullCalendarPanel.jsx b/projectforge-webapp/src/containers/panel/calendar/FullCalendarPanel.jsx
+index 68a0688d1..b86001836 100644
+--- a/projectforge-webapp/src/containers/panel/calendar/FullCalendarPanel.jsx
++++ b/projectforge-webapp/src/containers/panel/calendar/FullCalendarPanel.jsx
+@@ -9,7 +9,7 @@ import listPlugin from '@fullcalendar/list';
+ import bootstrapPlugin from '@fullcalendar/bootstrap';
+ import { connect } from 'react-redux'; // a plugin!
+ import { createPopper } from '@popperjs/core';
+-import { Route } from 'react-router-dom';
++import { Route } from 'react-router';
+ import LoadingContainer from '../../../components/design/loading-container';
+ import { fetchJsonGet, fetchJsonPost } from '../../../utilities/rest';
+ import CalendarEventTooltip from './CalendarEventTooltip';
+@@ -476,7 +476,7 @@ function FullCalendarPanel(options) {
+                 eventMouseLeave={closePopOver}
+             /&gt;
+             &lt;Route
+-                path={`${match.url}/:category/:type/:id?`}
++                path={`${match.url}/:category/:type/:id?/:tab?`}
+                 render={(props) =&gt; &lt;FormModal baseUrl={match.url} {...props} /&gt;}
+             /&gt;
+         &lt;/LoadingContainer&gt;</pre></div>
+</div>
+</body>
+</html>

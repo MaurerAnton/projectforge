@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>#1874: Version.java [ES]</title>
+<style>
+body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}
+h1{border-bottom:2px solid #333;padding-bottom:.3em}
+h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}
+h3{margin-top:2em;color:#444}
+a{color:#0366d6}
+.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}
+.nav{font-size:.9em;color:#888;margin-bottom:1em}
+.lang{font-size:.85em;color:#888;float:right}
+.lang a{color:#888;text-decoration:none;padding:0 .3em}
+.lang a.active{color:#0366d6;font-weight:600;text-decoration:underline}
+.meta{font-size:.9em;margin:1em 0;color:#555}
+code{background:#f0f0f0;padding:0 .2em;font-size:.93em}
+pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}
+table{border-collapse:collapse;width:100%;margin:1em 0}
+th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}
+th{background:#f5f5f5;font-weight:600}
+.hist{font-size:.85em;color:#555}
+.warn{background:#fff3cd;border-left:3px solid #ffc107;padding:.5em 1em;margin:1em 0}
+.tip{background:#d4edda;border-left:3px solid #28a745;padding:.5em 1em;margin:1em 0}
+</style>
+</head>
+<body>
+<div class="lang"><a href="1874.html">EN</a> · <a href="1874_de.html">DE</a> · <a href="1874_ru.html">RU</a> · <a href="1874_fr.html">FR</a> · <a href="1874_es.html" class="active">ES</a></div>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Índice</a> · <a href="file-index.html">← Índice de archivos</a> · <a href="1873.html">← Anterior</a> · <a href="1875.html">Siguiente →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-common/src/main/java/org/projectforge/Version.java" target="_blank" title="Ver fuente en GitHub">📄 fuente</a></div>
+<h1>#1874: <code>Version.java</code></h1>
+<div class="meta"><code>projectforge-common/src/main/java/org/projectforge/Version.java</code> Clase de dominio — paquete org.projectforge, projectforge-common/src/main/java/org/projectforge/Version.java <span style="color:#888">314 líneas · 223 código · 63 comentarios · 28 en blanco</span></div>
+<div class="c">Clase de representación y comparación de números de versión semántica. Analiza cadenas de versión en formatos <code>#.#.#.#</code> con sufijos opcionales <code>b{beta}</code>, <code>rc{candidato-a-lanzamiento}</code> y <code>-SNAPSHOT</code>. Implementa <code>Comparable&lt;Version&gt;</code> para un orden correcto (lanzamiento > RC > beta, con subcomparación numérica). Se utiliza en todo ProjectForge para comprobaciones de compatibilidad de complementos y versionado de migraciones de base de datos.</div>
+<h2>Arquitectura</h2>
+<div class="c">
+<h3>Importaciones</h3>
+<ul>
+<li><code>java.io.Serializable</code> — Las versiones se serializan (p. ej., almacenadas en registros de versión de complementos en la base de datos)</li>
+<li><code>org.apache.commons.lang3.StringUtils</code> — División de cadenas para analizar componentes de versión punteados</li>
+<li><code>org.slf4j.Logger</code> — Registro mediante SLF4J (registro de errores para cadenas de versión mal formadas)</li>
+</ul>
+
+<h3>Jerarquía de clases</h3>
+<p><code>Version implements Comparable&lt;Version&gt;, Serializable</code></p>
+<ul>
+<li><strong>Comparable</strong>: Habilita el orden natural — las versiones se pueden ordenar en listas, usar en TreeSet, comparar con operadores <code>&lt;</code>/<code>&gt;</code> en Kotlin</li>
+<li><strong>Serializable</strong>: Números de versión persistibles (serialVersionUID = 1446772593211999270L)</li>
+</ul>
+
+<h3>Componentes de la versión</h3>
+<table>
+<tr><th>Componente</th><th>Campo</th><th>Valor predeterminado/sin establecer</th><th>Ejemplo</th></tr>
+<tr><td>Lanzamiento principal</td><td><code>majorRelease</code></td><td>0</td><td>3.5.4.2 → major=3</td></tr>
+<tr><td>Lanzamiento menor</td><td><code>minorRelease</code></td><td>0</td><td>3.5.4.2 → minor=5</td></tr>
+<tr><td>Nivel de parche</td><td><code>patchLevel</code></td><td>0</td><td>3.5.4.2 → patch=4</td></tr>
+<tr><td>Número de compilación</td><td><code>buildNumber</code></td><td>0</td><td>3.5.4.2 → build=2</td></tr>
+<tr><td>Versión beta</td><td><code>betaVersion</code></td><td><code>Integer.MAX_VALUE</code> (no beta)</td><td>3.5b2 → beta=2</td></tr>
+<tr><td>Versión RC</td><td><code>releaseCandidateVersion</code></td><td><code>Integer.MAX_VALUE</code> (no RC)</td><td>3.5rc1 → rc=1</td></tr>
+<tr><td>Indicador de snapshot</td><td><code>snapshot</code></td><td>false</td><td>3.5-SNAPSHOT</td></tr>
+</table>
+
+<h3>Formato de análisis</h3>
+<p>El constructor de cadena acepta estos patrones (no distingue entre mayúsculas y minúsculas para los sufijos):</p>
+<ul>
+<li><strong>Simple</strong>: <code>"3"</code> → major=3</li>
+<li><strong>Dos partes</strong>: <code>"3.5"</code> → major=3, minor=5</li>
+<li><strong>Tres partes</strong>: <code>"3.5.4"</code> → major=3, minor=5, patch=4</li>
+<li><strong>Completo</strong>: <code>"3.5.4.2"</code> → major=3, minor=5, patch=4, build=2</li>
+<li><strong>Beta</strong>: <code>"3.5b2"</code> o <code>"3.5b"</code> → beta=2 o beta=0</li>
+<li><strong>Candidato a lanzamiento</strong>: <code>"3.5rc1"</code> o <code>"3.5rc"</code> → rc=1 o rc=0</li>
+<li><strong>Snapshot</strong>: <code>"3.5-SNAPSHOT"</code> o <code>"3.5-snapshot"</code> → snapshot=true</li>
+<li><strong>Combinado</strong>: <code>"3.5.4.2b2-SNAPSHOT"</code></li>
+</ul>
+
+<h3>Lógica de comparación (compareTo)</h3>
+<p>La comparación sigue una jerarquía estricta:</p>
+<ol>
+<li>Lanzamiento principal → Lanzamiento menor → Nivel de parche → Número de compilación (comparación numérica)</li>
+<li><strong>Lanzamiento vs. Prelanzamiento</strong>: Si las versiones difieren en el estado de prelanzamiento:
+   <ul>
+   <li>El lanzamiento normal es MAYOR que RC</li>
+   <li>RC es MAYOR que beta</li>
+   <li>Beta es MENOR que el lanzamiento normal</li>
+   </ul></li>
+<li>Si ambos son RC: comparar números de versión RC</li>
+<li>Si ambos son beta: comparar números de versión beta</li>
+</ol>
+<p>Este orden garantiza: <code>3.5b1 &lt; 3.5rc1 &lt; 3.5</code> — fundamental para determinar si se necesita una migración de base de datos o una actualización de complemento.</p>
+
+<h3>Manejo especial: marcador de posición de Gradle</h3>
+<p>El método <code>parseInt()</code> detecta el token no expandido de Gradle <code>"gradle.version"</code> y lo trata como 0, registrando una advertencia. Esto maneja el caso en que la información de versión se compila en un JAR durante la compilación y la propiedad de versión de Gradle aún no se ha resuelto (p. ej., en ejecuciones de prueba del IDE).</p>
+
+<h3>Formato toString()</h3>
+<ul>
+<li><code>3.5</code> (patch=0, build=0) → "3.5"</li>
+<li><code>3.5.4</code> (patch≠0, build=0) → "3.5.4"</li>
+<li><code>3.5.4.2</code> (todas las partes) → "3.5.4.2"</li>
+<li><code>3.5b2</code> (beta) → "3.5b2"</li>
+<li><code>3.5rc1</code> (RC) → "3.5rc1"</li>
+<li><code>3.5-SNAPSHOT</code> (snapshot) → "3.5-SNAPSHOT"</li>
+</ul>
+
+<div class="tip">El uso de <code>Integer.MAX_VALUE</code> como valor centinela para "no beta/RC" es una decisión de diseño elegante. Garantiza que, en la comparación numérica, una versión no beta siempre se compare como superior a cualquier versión beta (ya que MAX_VALUE es el entero más grande posible), al tiempo que permite la comparación numérica directa cuando ambas son beta/RC.</div>
+
+<div class="warn">El método <code>compareTo</code> NO considera el indicador de snapshot en el orden. Dos versiones que difieren solo por el estado de snapshot (p. ej., "3.5" vs "3.5-SNAPSHOT") se compararían como iguales. Esto puede ser intencional: los snapshots indican metadatos de tiempo de compilación en lugar de diferencias semánticas de versión.</div>
+</div>
+<h2>Historial de Git</h2><div class="hist"><pre>868d6abb7 2025 -> 2026
+63081666f Encabezados de archivos fuente: 2024 -> 2025.
+0237d5eba Serialización JSON refactorizada: se introdujeron IdOnlySerializer e IdsOnlySerializer.
+6f7e0fbc7 Trabajo de migración en curso...
+b6092df09 Derechos de autor 2023 -> 2024
+ab45d51fa Derechos de autor 2001-2022 -> 2001-2023.
+5f7ef41b8 Derechos de autor 2021 -> 2022
+ceb63e8a1 Encabezado de código fuente: (C) 2001-2021.</pre></div>
+</body>
+</html>

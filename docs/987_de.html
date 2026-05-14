@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>#987: EmployeeSalaryExcelImporter.kt [DE]</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:2em;color:#444}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}</style>
+</head>
+<body>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← Dateiindex</a> · <a href="986.html">← Vorherige</a> · <a href="988.html">Nächste →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/kotlin/org/projectforge/business/fibu/datev/EmployeeSalaryExcelImporter.kt" target="_blank" title="Quellcode auf GitHub anzeigen">📄 Quelle</a></div>
+
+<h1>#987: <code>EmployeeSalaryExcelImporter.kt</code></h1>
+
+<div class="meta"><code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/datev/EmployeeSalaryExcelImporter.kt</code> 
+  <strong>Typ:</strong> Spring Service (Importlogik)<br>
+  <strong>Paket:</strong> <code>org.projectforge.business.fibu.datev</code><br>
+  <strong>Tatsächlicher Pfad:</strong> <code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/datev/EmployeeSalaryExcelImporter.kt</code><br>
+  <strong>Hinweis:</strong> Die Datei existiert <strong>nicht</strong> unter dem angeforderten Pfad (<code>.../excelimport/...</code>). Sie befindet sich im Unterpaket <code>datev</code>. Die nachfolgende Dokumentation spiegelt die tatsächliche Quelle wider.
+ <span style="color:#888">123 Zeilen · 81 Code · 31 Kommentare · 11 leer</span></div>
+
+<div class="c">
+  <p>Importiert <strong>Mitarbeitergehälter</strong> aus einem Excel-Arbeitsblatt mit dem Namen <code>"employeeSalaries"</code>. Ordnet Mitarbeiterdatensätze anhand der <strong>Personalnummer</strong> zu. Die Validierung umfasst die Prüfung, ob der Mitarbeiter in der Datenbank existiert.</p>
+</div>
+
+<h2>Architektur</h2>
+
+<h3>Abhängigkeiten</h3>
+<table>
+  <tr><th>Abhängigkeit</th><th>Rolle</th></tr>
+  <tr><td><code>EmployeeCache</code></td><td>Schneller zwischengespeicherter Lookup nach Personalnummer</td></tr>
+  <tr><td><code>EmployeeService</code></td><td>Direkter Datenbank-Lookup bei Cache-Fehlschlag</td></tr>
+</table>
+
+<h2>Spaltenzuordnung (Enum: <code>Cols</code>)</h2>
+<table>
+  <tr><th>Enum</th><th>Kopfzeile</th><th>Validator</th><th>Zieleigenschaft</th></tr>
+  <tr><td><code>PERSONALNUMMER</code></td><td>Personalnummer</td><td>NumberValidator (>=1, erforderlich, eindeutig)</td><td>Wird für Mitarbeiter-Lookup verwendet</td></tr>
+  <tr><td><code>GESAMT_BRUTTO</code></td><td>Gesamtbrutto</td><td>Validator (erforderlich)</td><td><code>bruttoMitAgAnteil</code></td></tr>
+</table>
+<p>Die Spalte <code>GESAMT_BRUTTO</code> akzeptiert die Aliase <code>"bruttoMitAgAnteil"</code> und <code>"Gesamt-"</code>.</p>
+
+<h2>Importablauf</h2>
+<ol>
+  <li>Öffnet das Blatt mit dem Namen <code>"employeeSalaries"</code> — wirft <code>UserException</code>, falls nicht gefunden.</li>
+  <li>Registriert zwei Spalten mit Validatoren.</li>
+  <li>Analysiert das Blatt mit <code>sheet.analyze(true)</code>.</li>
+  <li>Erstellt ein <code>ImportedSheet</code> mit Logging auf Warnstufe.</li>
+  <li>Iteriert über Datenzeilen:
+    <ul>
+      <li>Erstellt <code>MyImportedElement</code> für das Änderungsverfolgung (Diff).</li>
+      <li>Erstellt <code>EmployeeSalaryDO</code> und befüllt es aus der Zeile via <code>ImportHelper.fillBean()</code>.</li>
+      <li>Sucht Mitarbeiter anhand der Personalnummer (zuerst Cache, dann Datenbank). Zeichnet einen Validierungsfehler auf, wenn nicht gefunden.</li>
+      <li>Setzt <code>year</code> und <code>month</code> im Gehaltsdatensatz.</li>
+      <li>Fügt das befüllte Element dem importierten Blatt hinzu.</li>
+    </ul>
+  </li>
+</ol>
+
+<h2>Diff-Eigenschaften</h2>
+<p><code>SALARY_DIFF_PROPERTIES = ["bruttoMitAgAnteil"]</code></p>
+
+<h2>Begleitobjekt (Companion Object)</h2>
+<p>Enthält die Blattnamenkonstante <code>NAME_OF_EXCEL_SHEET = "employeeSalaries"</code> und <code>SALARY_DIFF_PROPERTIES</code>.</p>
+
+<h2>Git-Verlauf</h2>
+<div class="hist"><pre>
+868d6abb7 2025 -> 2026
+312d5e61c Bereinigung
+63081666f Quellcodedatei-Header: 2024 -> 2025.
+1012e347a Migration in Arbeit... (alle Tests aller Pakete: OK).
+</pre></div>
+
+</body>
+</html>

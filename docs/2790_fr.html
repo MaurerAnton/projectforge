@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>#2790: AbstractAjaxCallbackWithClientsideRevert.java [FR]</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:2em;color:#444}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.lang{font-size:.85em;color:#888;float:right}.lang a{color:#888;text-decoration:none;padding:0 .3em}.lang a.active{color:#0366d6;font-weight:600;text-decoration:underline}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}</style>
+</head>
+<body>
+<div class="lang"><a href="2790.html">EN</a> · <a href="2790_de.html">DE</a> · <a href="2790_ru.html">RU</a> · <a href="2790_fr.html" class="active">FR</a> · <a href="2790_es.html">ES</a></div>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← Index des fichiers</a> · <a href="2789.html">← Précédent</a> · <a href="2791.html">Suivant →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-wicket/src/main/java/net/ftlines/wicket/fullcalendar/callback/AbstractAjaxCallbackWithClientsideRevert.java" target="_blank" title="Voir la source sur GitHub">📄 source</a></div>
+<h1>#2790 : <code>AbstractAjaxCallbackWithClientsideRevert.java</code></h1>
+<div class="meta"><code>projectforge-wicket/src/main/java/net/ftlines/wicket/fullcalendar/callback/AbstractAjaxCallbackWithClientsideRevert.java</code> Comportement Wicket abstrait (FullCalendar Ajax avec revert) · <code>projectforge-wicket/src/main/java/net/ftlines/wicket/fullcalendar/callback/AbstractAjaxCallbackWithClientsideRevert.java</code> <span style="color:#888">82 lignes · 35 code · 33 commentaires · 14 vides</span></div>
+<div class="c">Un comportement de callback Ajax abstrait pour les interactions FullCalendar nécessitant une réversion côté client en cas d'échec — spécifiquement les opérations de glisser-déposer et de redimensionnement. Lorsqu'un utilisateur glisse ou redimensionne un événement du calendrier, FullCalendar déplace/redimensionne immédiatement l'événement dans l'interface utilisateur et envoie un callback Ajax au serveur. Si le serveur rejette la modification (par exemple, en raison d'un conflit de planning ou d'une violation de règle métier), ce comportement envoie un script de réversion au client qui replace l'événement à sa position d'origine. Le mécanisme utilise une combinaison d'écouteurs de callback Ajax Wicket (onSuccess/onFailure) et d'un attribut de données jQuery pour communiquer la décision d'acceptation/rejet du serveur à la logique de réversion côté client.</div>
+<h2>Architecture</h2>
+<h3>Protocole de validation en deux phases</h3>
+<p>FullCalendar implémente des mises à jour optimistes de l'interface utilisateur : l'événement se déplace immédiatement lors du glisser, et le serveur peut accepter (rien ne change) ou rejeter (l'événement revient à sa position d'origine). Cette classe implémente le côté serveur de ce protocole :</p>
+<ol>
+<li>Lors de la requête Ajax, <code>onEvent(AjaxRequestTarget)</code> est appelé — la sous-classe implémente la logique métier et retourne <code>true</code> (accepter) ou <code>false</code> (rejeter)</li>
+<li>Le résultat est stocké dans un attribut de données jQuery sur le document : <code>$.data(document, '{uuid}', {boolean})</code></li>
+<li>En cas de succès Ajax, le script de succès lit l'attribut de données — s'il est faux, il exécute le script de réversion (fourni par la méthode abstraite <code>getRevertScript()</code>)</li>
+<li>En cas d'échec Ajax (erreur réseau, exception serveur), le script de réversion s'exécute toujours</li>
+<li>L'attribut de données est nettoyé après évaluation</li>
+</ol>
+<h3>Canal d'état basé sur UUID</h3>
+<p>Un UUID aléatoire (préfixé par <code>"u"</code>) identifie l'instance du callback. Cet UUID est utilisé comme clé de données jQuery pour stocker le résultat booléen. Cela évite les collisions d'état global lorsque plusieurs instances de calendrier ou plusieurs types de callback sont présents sur la même page. L'UUID est généré une fois dans l'initialiseur de champ et persiste pendant toute la durée de vie du comportement.</p>
+<h3>Intégration des écouteurs de callback Ajax</h3>
+<p><code>updateAjaxAttributes()</code> est surchargé pour ajouter deux écouteurs :
+<ul>
+<li><code>onSuccess</code> — exécute le script de succès qui déclenche conditionnellement la réversion</li>
+<li><code>onFailure</code> — exécute inconditionnellement le script de réversion (les erreurs réseau/serveur entraînent toujours une réversion)</li>
+</ul>
+</p>
+<h3>Contrat de la sous-classe</h3>
+<p>Les sous-classes concrètes doivent implémenter :
+<ul>
+<li><code>getRevertScript()</code> — retourne l'expression JavaScript FullCalendar qui replace l'événement dans son état d'origine (par exemple, <code>$('#calendar').fullCalendarExt('revertEvent', eventId)</code>)</li>
+<li><code>onEvent(AjaxRequestTarget)</code> — la logique métier pour accepter/rejeter la modification</li>
+</ul>
+</p>
+<h2>Historique Git</h2>
+<div class="hist"><table>
+<tr><th>Commit</th><th>Ce qui a changé</th></tr>
+<tr><td><code>868d6abb7</code> à <code>ceb63e8a1</code></td><td>Six mises à jour annuelles des en-têtes de copyright. Le protocole de validation en deux phases et le canal d'état basé sur UUID sont stables — le mécanisme gère correctement le modèle de mise à jour optimiste de FullCalendar et distingue les rejets de règles métier (le serveur retourne false) des défaillances d'infrastructure (une erreur Ajax déclenche une réversion inconditionnelle).</td></tr>
+</table></div>
+</body>
+</html>

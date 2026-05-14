@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>#735 [DE]</title>
+<style>
+body {
+    font-family: system-ui, sans-serif;
+    max-width: 960px;
+    margin: 2em auto;
+    padding: 0 1em;
+    background: #fafafa;
+    color: #222;
+    line-height: 1.6
+}
+h1 {
+    border-bottom: 2px solid #333
+}
+h2 {
+    margin-top: 1.5em
+}
+a {
+    color: #0366d6
+}
+.meta {
+    font-size: .9em;
+    margin: 1em 0
+}
+.nav {
+    font-size: .9em;
+    color: #888;
+    margin-bottom: 1em
+}
+.c {
+    border-left: 3px solid #ddd;
+    padding: .5em 1em;
+    margin: 1em 0;
+    background: #fff
+}
+code {
+    background: #f0f0f0;
+    padding: 0 .2em
+}
+pre {
+    background: #f5f5f5;
+    padding: .5em;
+    margin: .5em 0;
+    border-radius: 3px;
+    font-size: .85em;
+    overflow-x: auto
+}
+</style>
+</head>
+<body>
+
+<div class="nav">
+<a href="https://maureranton.github.io/projectforge/">← Index</a> · 
+<a href="file-index.html">← Datei-Index</a> · 
+<a href="734.html">← Vorherige</a> · 
+<a href="736.html">Nächste →</a> · 
+<a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/java/org/projectforge/framework/utils/IntRanges.java" target="_blank" title="Quellcode auf GitHub ansehen">📄 Quelle</a>
+</div>
+
+<h1>#735: <code>IntRanges.java</code></h1>
+<div class="meta">
+<code>projectforge-business/src/main/java/org/projectforge/framework/utils/IntRanges.java</code> 
+<strong>Zeilen:</strong> 54 · 
+<strong>Autor:</strong> Kai Reinhard · 
+<strong>Typ:</strong> Java — erweitert <code>Ranges&lt;Integer&gt;</code> · 
+<strong>Interface</strong> <code>org.projectforge.framework.utils</code> 
+<span style="color:#888">54 Zeilen · 15 Code · 34 Kommentare · 5 leer</span>
+</div>
+
+<div class="c">
+<h2>Zweck</h2>
+<p>Stellt eine <strong>Vereinigung von Integer-Intervallen</strong> dar – parst Zeichenketten wie <code>"1,3-5,10-15,20"</code> in eine strukturierte Menge von Bereichen und Einzelwerten und stellt dann <code>doesMatch(value)</code> zur Prüfung der Zugehörigkeit bereit. Dies ist die Integer-Spezialisierung der generischen abstrakten Basisklasse <code>Ranges&lt;T&gt;</code> (<a href="742.html">#742</a>).</p>
+<p>Der konkrete Anwendungsfall ist die <strong>Filterung nach Wochennummern in Zeiterfassungsblättern</strong>. Wenn ein Administrator konfiguriert „Zeiterfassungsblätter für Wochen 1-5, 10 und 20-25 anzeigen“, wird diese Konfigurationszeichenkette an <code>new IntRanges("1-5,10,20-25")</code> übergeben, und die Wochennummer jedes Zeiterfassungseintrags wird mit <code>ranges.doesMatch(weekNumber)</code> getestet. Dies ist einfacher und lesbarer als die Erstellung komplexer SQL-<code>WHERE week IN (...)</code>-Klauseln, insbesondere wenn die Bereichsliste pro Benutzer konfigurierbar ist.</p>
+</div>
+
+<div class="c">
+<h2>Klassenhierarchie</h2>
+<pre>Ranges&lt;T extends Comparable&lt;T&gt;&gt;  (abstrakt, 176 Zeilen)
+  └── IntRanges erweitert Ranges&lt;Integer&gt;  (54 Zeilen, diese Datei)</pre>
+<p><code>Ranges</code> übernimmt die gesamte Parsing-Logik – Aufteilung an Kommas/Strichpunkten (<code>separatorChars = ";,"</code>), Erkennung von Bindestrichen als Bereichsbegrenzer (<code>rangesSeparatorChar = '-'</code>) und Erstellung einer Liste von <code>Range&lt;T&gt;</code>-Objekten plus isolierten Werten. <code>IntRanges</code> stellt lediglich die konkrete Methode <code>parseValue(String)</code> bereit, die eine Zeichenkette in einen Integer umwandelt – dies ist das Template-Method-Muster: Die abstrakte Basis definiert den Algorithmus, die Unterklasse definiert die Typkonvertierung.</p>
+</div>
+
+<div class="c">
+<h2>Der Parsing-Algorithmus (in der Basisklasse <code>Ranges</code>)</h2>
+<p>Bei Eingabe <code>"1-5,10,20-25"</code>:</p>
+<ol>
+<li>Aufteilung an <code>,</code> oder <code>;</code> → <code>["1-5", "10", "20-25"]</code></li>
+<li>Für jeden Teil wird geprüft, ob er <code>-</code> enthält:
+<ul><li>Wenn ja: Aufteilung an <code>-</code>, beide Seiten parsen → <code>Range(1, 5)</code> oder <code>Range(20, 25)</code></li>
+<li>Wenn nein: Als Einzelwert parsen → <code>10</code> zur <code>values</code>-Liste hinzufügen</li></ul></li>
+</ol>
+<p>Die Methode <code>doesMatch(value)</code> testet gegen alle Bereiche (mittels <code>Range.doesMatch()</code>, das <code>min <= value <= max</code> prüft) und alle Einzelwerte (mittels <code>Comparable.compareTo()</code> für exakte Übereinstimmung). Ein Flag <code>nullRangeMatchesAlways</code> steuert das Verhalten, wenn keine Bereiche/Werte angegeben sind (Standard: <code>false</code> – nichts stimmt überein).</p>
+</div>
+
+<div class="c">
+<h2>Wichtige Design-Details</h2>
+<ul>
+<li><strong>Trennzeichen:</strong> Sowohl Komma (<code>,</code>) als auch Strichpunkt (<code>;</code>) werden akzeptiert – gnädige Verarbeitung von kopiert-eingefügten Eingaben aus verschiedenen Quellen</li>
+<li><strong>Negative Zahlen:</strong> Das Parsing unterstützt negative Ganzzahlen (z. B. <code>"-5--1"</code> bedeutet „von -5 bis -1“), da <code>Integer.valueOf()</code> das Minuszeichen verarbeitet. Der Bindestrich als Bereichstrenner kollidiert mit dem negativen Vorzeichen, aber der Parser prüft auf zwei aufeinanderfolgende Bindestriche (<code>--</code>) als Bereich mit negativen Grenzen</li>
+<li><strong>Toleranz gegenüber Leerzeichen:</strong> Der Parser entfernt Leerzeichen um Werte, sodass <code>"1 - 5, 10"</code> genauso funktioniert wie <code>"1-5,10"</code></li>
+<li><strong>Umgang mit Duplikaten:</strong> Das mehrmalige Hinzufügen desselben Werts oder überlappender Bereiche ist erlaubt – <code>doesMatch()</code> gibt beim ersten Treffer <code>true</code> zurück, sodass Duplikate keine falschen Ergebnisse verursachen, aber etwas Speicher verschwenden</li>
+<li><strong>Einfachheit auf 54 Zeilen:</strong> Die gesamte Datei besteht nur aus einem Konstruktor, der <code>super(rangesString)</code> aufruft, und einer 3-zeiligen Überschreibung von <code>parseValue()</code>. Die gesamte Komplexität lebt in der abstrakten Basis <code>Ranges</code> – dies ist die ideale Verwendung von Vererbung: Die Unterklasse liefert nur die typspezifische Konvertierung, sonst nichts</li></ul>
+</div>
+
+<div class="c">
+<h2>Verwendung im Codebestand</h2>
+<p>Hauptsächlich verwendet im <strong>Zeiterfassungsmodul</strong> zur Filterung nach Wochennummern. Der Zeiterfassungsfilter (<a href="598.html">#598</a>) ermöglicht das Filtern nach Wochennummern – der Administrator oder Benutzer gibt einen Bereichsausdruck wie <code>"1-10, 15, 20-25"</code> ein, der in eine <code>IntRanges</code>-Instanz geparst wird. Bei der Anzeige von Zeiterfassungsblättern wird die Wochennummer jedes Eintrags gegen die Bereiche getestet, um die Sichtbarkeit zu bestimmen. Das <code>Serializable</code>-Interface (von <code>Ranges</code> geerbt) ermöglicht das Speichern der Bereiche in Benutzervoreinstellungen (XML).</p>
+</div>
+
+</body>
+</html>

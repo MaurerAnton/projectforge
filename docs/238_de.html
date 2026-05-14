@@ -1,0 +1,144 @@
+<!DOCTYPE html><html lang="de"><head><meta charset="utf-8"><title>#238: MerlinExecutionPageRest.kt [DE]</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:2em;color:#444}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.lang{font-size:.85em;color:#888;float:right}.lang a{color:#888;text-decoration:none;padding:0 .3em}.lang a.active{color:#0366d6;font-weight:600;text-decoration:underline}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}</style></head>
+<body><div class="lang"><a href="238.html">EN</a> · <a href="238_de.html" class="active">DE</a> · <a href="238_ru.html">RU</a> · <a href="238_fr.html">FR</a> · <a href="238_es.html">ES</a></div>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← Dateiindex</a> · <a href="537.html">← Vorherige</a> · <a href="3050.html">Nächste →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/plugins/org.projectforge.plugins.merlin/src/main/kotlin/org/projectforge/plugins/merlin/rest/MerlinExecutionPageRest.kt" target="_blank" title="Quelle auf GitHub anzeigen">📄 Quelle</a></div>
+<h1>#238: <code>MerlinExecutionPageRest.kt</code></h1>
+<div class="meta"><code>plugins/org.projectforge.plugins.merlin/src/main/kotlin/org/projectforge/plugins/merlin/rest/MerlinExecutionPageRest.kt</code> Typ: Kotlin · Rolle: Plugin-Registrierung · Quelle: plugins/org.projectforge.plugins.merlin/src/main/kotlin/org/projectforge/plugins/merlin/rest/MerlinExecutionPageRest.kt <span style="color:#888">415 Zeilen · 355 Code · 34 Kommentare · 26 leer</span></div>
+<div class="c">REST-API-Endpunkt für MerlinExecution. Verarbeitet HTTP-Anfragen und gibt JSON-Antworten für das React-Frontend zurück.</div>
+<h2>Codestruktur</h2>
+<p>Annotationen: <code>Valid</code>, <code>RequestBody</code>, <code>GetMapping</code>, <code>PathVariable</code>, <code>Autowired</code>, <code>return</code>, <code>RequestMapping</code>, <code>RestController</code>, <code>PostMapping</code>, <code>RequestParam</code></p>
+<p>Klassen: <code>MerlinExecutionPageRest</code></p>
+<p>Supertyp(en): <code>AbstractDynamicPageRest</code></p>
+<p>Funktionen (12): <code>execute</code>, <code>serialExecution</code>, <code>validate</code>, <code>downloadSerialExecutionTemplate</code>, <code>getForm</code>, <code>createSerialExcelDownloadMenu</code>, <code>createInputElement</code>, <code>hasEditAccess</code>, <code>getUserPref</code>, <code>getFieldId</code>, <code>addUsers</code>, <code>registerColumn</code></p>
+<p>Eigenschaften (51): <code>merlinTemplateDao</code>, <code>merlinHandler</code>, <code>merlinRunner</code>, <code>merlinPagesRest</code>, <code>userPrefService</code>, <code>userService</code>, <code>employeeService</code>, <code>executionData</code>, <code>userPref</code>, <code>errors</code>, <code>filename</code>, <code>wordBytes</code>, <code>download</code>, <code>pdfResult</code>, <code>filename</code>, <code>zipFilename</code>, <code>zipByteArray</code>, <code>validationErrors</code>, <code>stats</code>, <code>inputVariables</code>, <code>inputData</code>, <code>filename</code>, <code>excel</code>, <code>logViewerMenuItem</code>, <code>id</code>...</p>
+<p>Importe: 30 Pakete</p>
+<p>Paket: <code>org.projectforge.plugins.merlin.rest</code></p>
+<h2>Quellcode (gekürzt)</h2>
+<pre>
+package org.projectforge.plugins.merlin.rest
+
+import de.micromata.merlin.excel.ExcelSheet
+import de.micromata.merlin.word.templating.VariableType
+import jakarta.servlet.http.HttpServletRequest
+import jakarta.validation.Valid
+import mu.KotlinLogging
+import org.projectforge.business.fibu.EmployeeService
+import org.projectforge.business.user.UserGroupCache
+import org.projectforge.business.user.service.UserPrefService
+import org.projectforge.business.user.service.UserService
+import org.projectforge.common.FormatterUtils
+import org.projectforge.framework.i18n.translate
+import org.projectforge.framework.persistence.user.api.ThreadLocalUserContext
+import org.projectforge.framework.utils.NumberHelper
+import org.projectforge.menu.MenuItem
+import org.projectforge.menu.MenuItemTargetType
+import org.projectforge.plugins.merlin.*
+import org.projectforge.rest.admin.LogViewerPageRest
+import org.projectforge.rest.config.Rest
+import org.projectforge.rest.config.RestUtils
+import org.projectforge.rest.core.AbstractDynamicPageRest
+import org.projectforge.rest.core.PagesResolver
+import org.projectforge.rest.core.RestResolver
+import org.projectforge.rest.dto.FormLayoutData
+import org.projectforge.rest.dto.PostData
+import org.projectforge.ui.*
+import org.springframework.beans.factory.annotation.Autowired
+import org.springframework.http.HttpStatus
+import org.springframework.http.ResponseEntity
+import org.springframework.web.bind.annotation.*
+import org.springframework.web.multipart.MultipartFile
+
+private val log = KotlinLogging.logger {}
+
+@RestController
+@RequestMapping(&quot;${Rest.URL}/merlinexecution&quot;)
+class MerlinExecutionPageRest : AbstractDynamicPageRest() {
+
+    @Autowired
+    private lateinit var merlinTemplateDao: MerlinTemplateDao
+
+    @Autowired
+    private lateinit var merlinHandler: MerlinHandler
+
+    @Autowired
+    private lateinit var merlinRunner: MerlinRunner
+
+    @Autowired
+    private lateinit var merlinPagesRest: MerlinPagesRest
+
+    @Autowired
+    private lateinit var userPrefService: UserPrefService
+
+    @Autowired
+    private lateinit var userService: UserService
+
+    @Autowired
+    private lateinit var employeeService: EmployeeService
+
+    /**
+     * Wird aufgerufen, wenn der Benutzer seinen observeStatus ändern möchte.
+     */
+    @PostMapping(&quot;execute&quot;)
+    fun execute(@Valid @RequestBody postData: PostData&lt;MerlinExecutionData&gt;): ResponseEntity&lt;*&gt; {
+        MerlinPlugin.ensureUserLogSubscription()
+        val executionData = postData.data
+        log.info(&quot;Benutzer möchte &#x27;${executionData.name}&#x27; ausführen...&quot;)
+        // Eingabewerte als Benutzereinstellung speichern:
+        val userPref = getUserPref(executionData.id)
+        userPref.inputVariables = executionData.inputVariables
+        userPref.pdfFormat = executionData.pdfFormat
+        val errors = validate(executionData)
+        if (!errors.isNullOrEmpty()) {
+            return ResponseEntity(ResponseAction(validationErrors = errors), HttpStatus.NOT_ACCEPTABLE)
+        }
+        val result = merlinRunner.executeTemplate(executionData.id, executionData.inputVariables)
+        var filename = result.first
+        val wordBytes = result.second
+        var download = wordBytes
+        if (executionData.pdfFormat) {
+            try {
+                val pdfResult = merlinRunner.convertToPdf(wordBytes, filename)
+                filename = pdfResult.filename
+                download = pdfResult.content
+            } catch (ex: Throwable) {
+                // Stackoverflow kann auftreten.
+                log.error(&quot;Fehler beim Konvertieren in PDF (Rückfall auf docx): ${ex.message}&quot;, ex)
+            }
+        }
+        return RestUtils.downloadFile(filename, download)
+    }
+
+    @PostMapping(&quot;serialExecution/{id}&quot;)
+    fun serialExecution(
+        @PathVariable(&quot;id&quot;, required = true) id: Long,
+        @RequestParam(&quot;file&quot;) file: MultipartFile
+    ): ResponseEntity&lt;*&gt; {
+        MerlinPlugin.ensureUserLogSubscription()
+        val filename = file.originalFilename
+        log.info {
+            &quot;Benutzer versucht, eine serielle Ausführungsdatei hochzuladen: id=&#x27;$id&#x27;, dateiname=&#x27;$filename&#x27;, größe=${
+                FormatterUtils.formatBytes(
+                    file.size
+                )
+            }.&quot;
+        }
+        val result = file.inputStream.use { inputStream -&gt;
+            merlinRunner.serialExecuteTemplate(id, filename ?: &quot;unbenannt.xlsx&quot;, inputStream)
+                ?: throw IllegalArgumentException(&quot;Serielle Excel-Datei kann nicht ausgeführt werden.&quot;)
+        }
+        val zipFilename = result.first
+        val zipByteArray = result.second
+        return RestUtils.downloadFile(zipFilename, zipByteArray)
+    }
+
+    private fun validate(data: MerlinExecutionData): List&lt;ValidationError&gt;? {
+        val validationErrors = mutableListOf&lt;ValidationError&gt;()
+        val stats = merlinHandler.analyze(data.id).statistics
+// ... (gekürzt, insgesamt 393 Zeilen)</pre>
+
+<h2>Git-Verlauf</h2><div class="hist"><pre>868d6abb7 2025 -> 2026
+420ce7f24 Merlin-Korrektur für den Export der Mitarbeiterliste für die serielle Funktion.
+bf998d85f BankingServicesRest, DataTransferPublicServicesRest, MerlinExecutionPageRest, ButlerServicet: stream.use (Streams wurden zuvor nicht geschlossen?)
+63081666f Quelldatei-Header: 2024 -> 2025.
+e80642c81 Migration läuft... (alle Tests aller Pakete: OK).</pre></div>
+</body></html>

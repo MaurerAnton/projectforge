@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>#930 : EmployeeServiceSupport.kt [FR]</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:2em;color:#444}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}</style>
+</head>
+<body>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← Index des fichiers</a> · <a href="929.html">← Précédent</a> · <a href="931.html">Suivant →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/kotlin/org/projectforge/business/fibu/EmployeeServiceSupport.kt" target="_blank" title="Voir la source sur GitHub">📄 source</a></div>
+<h1>#930 : <code>EmployeeServiceSupport.kt</code></h1>
+<div class="meta"><code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/EmployeeServiceSupport.kt</code> Type : Service Spring (interne) · Objectif : Implémentation interne d'EmployeeService — validation, persistance et logique de recherche pour les attributs dépendants du temps · Chemin : <code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/EmployeeServiceSupport.kt</code> <span style="color:#888">418 lignes · 304 code · 88 commentaires · 26 vides</span></div>
+<div class="c">Le moteur d'implémentation derrière <code>EmployeeService</code>. Marqué <code>internal</code> — non accessible en dehors du package <code>fibu</code>. Contient toute la logique réelle pour interroger, valider, insérer, mettre à jour, supprimer logiquement et restaurer les entrées <code>EmployeeValidSinceAttrDO</code>. Résout également les valeurs d'attribut actuelles (congés annuels, heures hebdomadaires, statut) à partir des entrées de période de validité.</div>
+
+<h2>Architecture &amp; Conception</h2>
+
+<h3>Dépendances</h3>
+<table>
+<tr><th>Dépendance</th><th>Rôle</th></tr>
+<tr><td><code>BaseDOPersistenceService</code></td><td>Opérations CRUD génériques (<code>insert</code>, <code>update</code>, <code>markAsDeleted</code>, <code>undelete</code>) avec support de vérification d'accès.</td></tr>
+<tr><td><code>EmployeeCache</code></td><td>Invalidé après chaque mutation (<code>setExpired()</code>) pour forcer le rafraîchissement du cache.</td></tr>
+<tr><td><code>EmployeeDao</code></td><td>Recherche d'entité et délégation de vérification d'accès (<code>checkLoggedInUserSelectAccess</code>, <code>checkLoggedInUserInsertAccess</code>, <code>checkLoggedInUserUpdateAccess</code>).</td></tr>
+<tr><td><code>PfPersistenceService</code></td><td>Exécution directe de requêtes pour les recherches et validations <code>ValidSinceAttr</code>.</td></tr>
+</table>
+
+<h3>Méthodes de requête</h3>
+<ul>
+<li><strong><code>findValidSinceAttr(id, expectedType, checkAccess)</code></strong> — Recherche simple d'entité par ID avec validation de type optionnelle (lève <code>IllegalArgumentException</code> en cas de non-concordance de type).</li>
+<li><strong><code>selectAllValidSinceAttrs(employee, type, deleted, checkAccess)</code></strong> — Requête principale : récupère tous les <code>ValidSinceAttr</code> pour un employé, éventuellement filtrés par type et statut de suppression. Triés par <code>validSince DESC</code>.</li>
+<li><strong><code>selectAnnualLeaveDayEntries()</code></strong> / <strong><code>selectWeeklyWorkingHoursEntries()</code></strong> — Raccourcis pratiques filtrant par type <code>ANNUAL_LEAVE</code> ou <code>WEEKLY_HOURS</code>. Disponibles avec les paramètres <code>employeeId</code> ou <code>EmployeeDO</code>.</li>
+</ul>
+
+<h3>Résolution d'entrée active (<code>getActiveEntry</code>)</h3>
+<p>La méthode <code>getActiveEntry(entries, validAtDate)</code> résout un problème métier clé : étant donné une liste d'entrées <code>ValidSinceAttr</code> avec des dates <code>validSince</code>, trouver celle qui est actuellement applicable à un moment donné. Algorithme :</p>
+<ol>
+<li>Parcourir toutes les entrées non supprimées.</li>
+<li>Pour chaque entrée où <code>validAtDate >= entry.validSince</code>, comparer avec la meilleure trouvée jusqu'à présent.</li>
+<li>Sélectionner l'entrée avec le <strong>plus récent</strong> <code>validSince</code> qui est encore avant/à la date de référence.</li>
+</ol>
+<p>Cela permet les recherches historiques — demander « quel était le congé annuel pour l'employé X à la date Y » — ce qui est essentiel pour des rapports précis.</p>
+
+<h3>Logique de validation (<code>validate</code>)</h3>
+<p>Avant l'insertion ou la mise à jour, le système vérifie si une autre entrée <code>ValidSinceAttr</code> existe avec la même combinaison <code>(employee, type, validSince)</code> :</p>
+<ul>
+<li><strong>Nouvelle entrée (id==null) :</strong> Utilise la requête nommée <code>FIND_BY_TYPE_AND_DATE</code>.</li>
+<li><strong>Entrée existante :</strong> Utilise <code>FIND_OTHER_BY_TYPE_AND_DATE</code> (exclut l'ID actuel).</li>
+<li><strong>Réutilisation d'entrée supprimée :</strong> Si une entrée supprimée avec le même <code>validSince</code> existe, elle est retournée pour réutilisation plutôt que de lever une exception. Cela gère le scénario UX où les utilisateurs ne peuvent pas voir les entrées supprimées mais tentent d'en ajouter une nouvelle qui entrerait en conflit — le système restaure silencieusement et met à jour l'enregistrement existant à la place.</li>
+<li>Si un doublon non supprimé existe, lève une <code>IllegalArgumentException</code>.</li>
+</ul>
+
+<h3>Opérations CRUD</h3>
+<ul>
+<li><strong><code>insert()</code></strong> — Valide, puis soit insère une nouvelle entrée, soit restaure une entrée existante (logique de réutilisation). Expire toujours le cache de l'employé.</li>
+<li><strong><code>insertValidSinceAttr()</code></strong> — Fabrique pratique : crée <code>EmployeeValidSinceAttrDO</code>, définit tous les champs et insère.</li>
+<li><strong><code>updateValidSinceAttr()</code></strong> — Mise à jour complexe avec sémantique de copie : valide, marque potentiellement l'entrée existante comme supprimée et restaure/modifie une entrée précédemment supprimée avec la date cible.</li>
+<li><strong><code>markValidSinceAttrAsDeleted()</code></strong> — Valide, puis supprime logiquement avec vérification d'accès.</li>
+<li><strong><code>undeleteValidSinceAttr()</code></strong> — Valide, puis restaure avec vérification d'accès.</li>
+</ul>
+
+<h3>Accesseurs de valeurs concrètes</h3>
+<ul>
+<li><strong><code>getEmployeeStatus()</code></strong> — Sélectionne les entrées STATUS, obtient l'entrée active, convertit la valeur en énumération <code>EmployeeStatus</code> via <code>safeValueOf()</code>. Enregistre une erreur si une valeur de statut inconnue est rencontrée.</li>
+<li><strong><code>getAnnualLeaveDays()</code></strong> — Sélectionne les entrées ANNUAL_LEAVE, obtient l'entrée active, convertit en <code>BigDecimal</code>.</li>
+<li><strong><code>getWeeklyWorkingHours()</code></strong> — Sélectionne les entrées WEEKLY_HOURS, obtient l'entrée active, convertit en <code>BigDecimal</code>.</li>
+</ul>
+<p>Tous retournent null si l'employé ou validAtDate est null (pour la compatibilité des tests avec CallAllPagesTest/Wicket).</p>
+
+<h2>Historique Git</h2>
+<div class="hist"><pre>868d6abb7 2025 -> 2026
+28efde264 Employee : weeklyWorkingHours maintenant comme attr. dépendant du temps. eintritt/austritt : timestamp -> date
+63081666f En-têtes de fichiers source : 2024 -> 2025.
+5f9bbfbd3 Correction de fautes de frappe dans le répertoire projectforge-business
+4ae4f3ea3 Corrections de bugs lors de la mise en production...
+b5dc26e24 Migration en cours... (tous les tests de tous les packages : OK).
+b0efaddc2 Migration en cours... (tous les tests de tous les packages : OK).
+6aca64431 Migration en cours... (tous les tests de tous les packages : OK).</pre></div>
+</body>
+</html>

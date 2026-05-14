@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>#894 [DE]</title>
+<style>
+body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}
+h1{border-bottom:2px solid #333;padding-bottom:.3em}
+h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}
+h3{margin-top:2em;color:#444}
+a{color:#0366d6}
+.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}
+.nav{font-size:.9em;color:#888;margin-bottom:1em}
+.meta{font-size:.9em;margin:1em 0;color:#555}
+code{background:#f0f0f0;padding:0 .2em;font-size:.93em}
+pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}
+table{border-collapse:collapse;width:100%;margin:1em 0}
+th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}
+th{background:#f5f5f5;font-weight:600}
+.hist{font-size:.85em;color:#555}
+</style>
+</head>
+<body>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← Dateiindex</a> · <a href="893.html">← Vorherige</a> · <a href="895.html">Nächste →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/kotlin/org/projectforge/business/fibu/AuftragFilter.kt" target="_blank" title="Quelle auf GitHub anzeigen">📄 Quelle</a></div>
+
+<h1>#894: <code>AuftragFilter.kt</code></h1>
+
+<div class="meta"><code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/AuftragFilter.kt</code> 
+<p><strong>Typ:</strong> Suchfilter-Klasse</p>
+<p><strong>Paket:</strong> <code>org.projectforge.business.fibu</code></p>
+<p><strong>Vollständiger Pfad:</strong> <code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/AuftragFilter.kt</code></p>
+ <span style="color:#888">201 Zeilen · 135 Code · 45 Kommentare · 21 leer</span></div>
+
+<div class="c">
+<p>Hauptsuchfilter für das Auftragsbuch. Erweitert <code>BaseSearchFilter</code>, implementiert <code>Serializable</code> und <code>SearchFilterWithPeriodOfPerformance</code>. Unterstützt das Filtern von Aufträgen nach Benutzerzuweisung, Datumsbereichen, Leistungszeitraum, Auftragsstatus, Positionstyp (<code>AuftragsPositionsArt</code>), Positionszahlungsart, Rechnungsstatus und Projektzugehörigkeit. Wird sowohl vom Backend-DAO für Datenbankabfragen als auch vom Frontend für programmatische Ergebnisfilterung über <code>match()</code> verwendet.</p>
+</div>
+
+<h2>Klassendefinition</h2>
+<pre>@XStreamAlias("AuftragFilter")
+class AuftragFilter @JvmOverloads constructor(filter: BaseSearchFilter? = null) : BaseSearchFilter(filter),
+    Serializable, SearchFilterWithPeriodOfPerformance</pre>
+
+<h2>Filtereigenschaften</h2>
+<table>
+<tr><th>Eigenschaft</th><th>Typ</th><th>Standard</th><th>Beschreibung</th></tr>
+<tr><td><code>user</code></td><td><code>PFUserDO?</code></td><td>null</td><td>Filter nach zugewiesenem Benutzer (Projektleiter, Bereichsleiter, Vertriebsmitarbeiter oder Ansprechpartner)</td></tr>
+<tr><td><code>startDate</code></td><td><code>LocalDate?</code></td><td>null</td><td>Filter nach Erstellungsdatum (von)</td></tr>
+<tr><td><code>endDate</code></td><td><code>LocalDate?</code></td><td>null</td><td>Filter nach Erstellungsdatum (bis)</td></tr>
+<tr><td><code>periodOfPerformanceStartDate</code></td><td><code>LocalDate?</code></td><td>null</td><td>Untere Grenze des Leistungszeitraums</td></tr>
+<tr><td><code>periodOfPerformanceEndDate</code></td><td><code>LocalDate?</code></td><td>null</td><td>Obere Grenze des Leistungszeitraums</td></tr>
+<tr><td><code>auftragsStatuses</code></td><td><code>MutableList&lt;AuftragsStatus&gt;</code></td><td>leer</td><td>Filter nach Auftrags-/Positionsstatuswerten</td></tr>
+<tr><td><code>auftragsPositionsArten</code></td><td><code>ArrayList&lt;AuftragsPositionsArt&gt;</code></td><td>leer</td><td>Filter nach Positionstypkategorien</td></tr>
+<tr><td><code>auftragFakturiertFilterStatus</code></td><td><code>AuftragFakturiertFilterStatus?</code></td><td>ALLE</td><td>Filter nach Rechnungsstatus (ALLE / ZU_FAKTURIEREN / FAKTURIERT / NICHT_FAKTURIERT)</td></tr>
+<tr><td><code>auftragsPositionsPaymentType</code></td><td><code>AuftragsPositionsPaymentType?</code></td><td>null</td><td>Filter nach Positionszahlungsart (null = alle)</td></tr>
+<tr><td><code>projectList</code></td><td><code>Collection&lt;ProjektDO&gt;?</code></td><td>null</td><td>Filter nach Projektzugehörigkeit</td></tr>
+</table>
+
+<h2>Match-Methoden (Programmatische Filterung)</h2>
+
+<h3><code>match(auftrag): Boolean</code></h3>
+<p>Prüft, ob ein Auftrag alle aktiven Filter passiert. Auswertung in folgender Reihenfolge:</p>
+<ol>
+<li><code>matchUser</code> — Benutzerzuweisung</li>
+<li>Erstellungsdatumsbereich (<code>erfassungsDatum</code> gegen <code>startDate</code>/<code>endDate</code>)</li>
+<li>Überlappung des Leistungszeitraums</li>
+<li><code>matchProjectList</code> — Projektzugehörigkeit</li>
+<li><code>matchAuftragsStatus</code> — Statusabgleich</li>
+<li><code>matchAuftragsPositionsArten</code> — Positionsartabgleich</li>
+</ol>
+<p>Kurzschluss: Gibt sofort <code>false</code> beim ersten nicht übereinstimmenden Kriterium zurück.</p>
+
+<h3><code>matchUser(auftrag): Boolean</code></h3>
+<p>Gibt <code>true</code> zurück, wenn der <code>user</code> des Filters null ist oder wenn die Benutzer-ID mit einer der folgenden übereinstimmt: <code>projectManager.id</code>, <code>headOfBusinessManager.id</code>, <code>contactPerson.id</code> oder <code>salesManager.id</code>.</p>
+
+<h3><code>matchProjectList(auftrag): Boolean</code></h3>
+<p>Gibt <code>true</code> zurück, wenn <code>projectList</code> null oder leer ist, oder wenn die <code>projekt.id</code> des Auftrags in der Liste gefunden wird.</p>
+
+<h3><code>matchAuftragsStatus(auftrag): Boolean</code></h3>
+<p>Gibt <code>true</code> zurück, wenn <code>auftragsStatuses</code> leer ist, oder wenn der <code>status</code> des Auftrags übereinstimmt, oder wenn der Status einer nicht gelöschten Position übereinstimmt.</p>
+
+<h3><code>matchAuftragsPositionsArten(auftrag): Boolean</code></h3>
+<p>Gibt <code>true</code> zurück, wenn <code>auftragsPositionsArten</code> leer ist, oder wenn eine nicht gelöschte Position eine passende <code>art</code> hat.</p>
+
+<h2>Filterung nach Rechnungsstatus</h2>
+<p><code>filterFakturiert(list): List&lt;AuftragDO&gt;</code> — Filtert eine Ergebnisliste nach Rechnungsstatus unter Verwendung von <code>AuftragsCache</code>:</p>
+<table>
+<tr><th>Status</th><th>Bedingung</th></tr>
+<tr><td><code>ALLE</code> oder null</td><td>Keine Filterung</td></tr>
+<tr><td><code>ZU_FAKTURIEREN</code></td><td><code>orderInfo.toBeInvoiced == true</code></td></tr>
+<tr><td><code>FAKTURIERT</code></td><td><code>orderInfo.isVollstaendigFakturiert == true</code></td></tr>
+<tr><td><code>NICHT_FAKTURIERT</code></td><td><code>orderInfo.notYetInvoicedSum > BigDecimal.ZERO</code></td></tr>
+</table>
+
+<h2>Zurücksetzen</h2>
+<p><code>reset()</code> löscht alle Filterfelder und gibt <code>this</code> für flüssige Verkettung zurück.</p>
+
+<h2>Git-Verlauf</h2>
+<div class="hist"><pre>868d6abb7 2025 -> 2026
+26f08992e WIP: Auftragsprognose und Momentaufnahmen.
+7b32b554a WIP: Prognose von Aufträgen... AuftragFilter umgestaltet.
+63081666f Quelltextdatei-Header: 2024 -> 2025.
+9c633d4ce AuftragDao/AuftragFilter: zu fakturieren und vollständig fakturiert korrigiert.
+9aff90908 Migration in Arbeit...
+3f25c773a Migration in Arbeit...
+67ce75fe9 Migration in Arbeit...
+fba4da3f5 ForecastExport jetzt für Skripte nutzbar. AuftragFilter.projectList hinzugefügt...
+b6092df09 Copyright 2023 -> 2024
+ab45d51fa Copyright 2001-2022 -> 2001-2023.
+9a65e1bc0 AuftragDO: Statistik umgestaltet (noch nicht fakturiert, zu fakturieren, fakturiert usw.)
+013c514bd AuftragsCache für deutlich bessere Leistung der Auftragslistenansicht.
+9ec78f80a AuftragDO/AuftragFilter: gelöschte Positionen und Zahlungspläne für zu fakturierende Aufträge ignorieren.
+5f7ef41b8 Copyright 2021 -> 2022
+ceb63e8a1 Quelltextkopf: (C) 2001-2021.
+d89920003 Auftragsbuchfilter "zu fakturieren" hinzugefügt.
+78b436d9e Ersetzen von Instanzen von java.util.date und java.sql.Date durch java.time.LocalDate
+7c79f1922 Copyright des Quelltextkopfs -> 2020.
+b0a4e8463 aufräumen
+9448cfc6e AuftragDao: JPA
+706ed61a0 AuftragDao -> JPA
+bf525ef55 AuftragFilter.java -> Kotlin</pre></div>
+</body>
+</html>

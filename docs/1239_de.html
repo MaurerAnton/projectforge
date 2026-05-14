@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>#1239 [DE]</title>
+<style>
+body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}
+h1{border-bottom:2px solid #333;padding-bottom:.3em}
+h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}
+h3{margin-top:2em;color:#444}
+a{color:#0366d6}
+.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}
+.nav{font-size:.9em;color:#888;margin-bottom:1em}
+.meta{font-size:.9em;margin:1em 0;color:#555}
+code{background:#f0f0f0;padding:0 .2em;font-size:.93em}
+pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}
+table{border-collapse:collapse;width:100%;margin:1em 0}
+th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}
+th{background:#f5f5f5;font-weight:600}
+.hist{font-size:.85em;color:#555}
+</style>
+</head>
+<body>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← Dateiindex</a> · <a href="1238.html">← Vorherige</a> · <a href="1240.html">Nächste →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/kotlin/org/projectforge/framework/persistence/api/QueryFilter.kt" target="_blank" title="Quelle auf GitHub anzeigen">📄 Quelle</a></div>
+<h1>#1239: <code>QueryFilter.kt</code></h1>
+<div class="meta"><code>projectforge-business/src/main/kotlin/org/projectforge/framework/persistence/api/QueryFilter.kt</code> Query-Builder — Persistenz / Datenbank-Abfrage-Engine, <code>projectforge-business/src/main/kotlin/org/projectforge/framework/persistence/api/QueryFilter.kt</code> <span style="color:#888">382 Zeilen · 258 Code · 75 Kommentare · 49 leer</span></div>
+<div class="c">Die zentrale Datenbankabfragespezifikation für ProjectForge. Sammelt <code>DBPredicate</code>-Objekte, Sortiereigenschaften, Joins, Volltextsuchdirektiven, Historien-Suchparameter und Paginierungssteuerungen. Erkennt automatisch, welche Abfragestrategie verwendet werden soll (JPA Criteria API für indizierte Felder, Hibernate Search Volltext für nicht indizierte, Ergebnislisten-Filterung als Fallback). Dient als Brücke zwischen der Ausgabe von <code>MagicFilterProcessor</code> und der Abfrageausführung von <code>BaseDao</code>/<code>DBFilter</code>.</div>
+
+<h2>Architektur</h2>
+
+<h3>Automatische Erkennung der Abfragestrategie</h3>
+<p>QueryFilter sammelt Prädikate, ohne die Ausführungsstrategie festzulegen. Die Klassen <code>BaseDao</code> und <code>DBFilter</code> bestimmen zur Abfragezeit, welcher Ansatz verwendet wird:
+- <strong>Criteria API</strong> (JPA): Für indizierte/typisierte Prädikate auf persistenten Feldern
+- <strong>Hibernate Search</strong> (Volltext): Für <code>DBPredicate.FullSearch</code> unter Verwendung des Lucene-Index
+- <strong>Ergebnislisten-Filterung</strong>: Als letztes Mittel für Prädikate, die nicht in SQL/HQL ausgedrückt werden können</p>
+
+<h3>Kernfelder</h3>
+<table>
+<tr><th>Feld</th><th>Typ</th><th>Standard</th><th>Zweck</th></tr>
+<tr><td><code>predicates</code></td><td><code>MutableList&lt;DBPredicate&gt;</code></td><td>leer</td><td>Gesammelte Suchbedingungen</td></tr>
+<tr><td><code>joinList</code></td><td><code>MutableList&lt;DBJoin&gt;</code></td><td>leer</td><td>JPA-Joins für den Zugriff auf verschachtelte Eigenschaften</td></tr>
+<tr><td><code>sortProperties</code></td><td><code>MutableList&lt;SortProperty&gt;</code></td><td>leer</td><td>Sortierreihenfolge-Spezifikation</td></tr>
+<tr><td><code>fullTextSearchFields</code></td><td><code>Array&lt;String&gt;?</code></td><td><code>null</code></td><td>Felder, die für Volltextabfragen durchsucht werden sollen</td></tr>
+<tr><td><code>fulltextSearchString</code></td><td><code>String?</code></td><td><code>null</code></td><td>Die Volltext-Abfragezeichenfolge</td></tr>
+<tr><td><code>deleted</code></td><td><code>Boolean?</code></td><td><code>null</code></td><td>Soft-Delete-Filter (null = alle anzeigen)</td></tr>
+<tr><td><code>maxRows</code></td><td><code>Int</code></td><td>50.000</td><td>Maximale Anzahl zurückgegebener Zeilen</td></tr>
+<tr><td><code>limitResultSize</code></td><td><code>Int</code></td><td><code>Int.MAX_VALUE</code></td><td>Workaround-Limit für veraltete UITable-Seiten</td></tr>
+<tr><td><code>sortAndLimitMaxRowsWhileSelect</code></td><td><code>Boolean</code></td><td><code>true</code></td><td>Ob die Begrenzung in der DB-Abfrage erfolgt</td></tr>
+<tr><td><code>entityGraphName</code></td><td><code>String?</code></td><td><code>null</code></td><td>JPA-Entity-Graph für Fetch-Optimierung</td></tr>
+<tr><td><code>autoWildcardSearch</code></td><td><code>Boolean</code></td><td><code>false</code></td><td>Automatisches Anhängen von Platzhaltern an Suchzeichenfolgen</td></tr>
+<tr><td><code>extended</code></td><td><code>MutableMap&lt;String, Any&gt;</code></td><td>leer</td><td>Erweiterungsvariablen-Map</td></tr>
+</table>
+
+<h3>Historien-Suchfelder</h3>
+<p>Delegiert an das interne <code>DBHistorySearchParams</code>-Objekt:
+<table>
+<tr><th>Feld</th><th>Typ</th><th>Zweck</th></tr>
+<tr><td><code>searchHistory</code></td><td><code>String?</code></td><td>Hibernate-Envers-Verlaufseintragstypen, die durchsucht werden sollen</td></tr>
+<tr><td><code>modifiedFrom</code></td><td><code>PFDateTime?</code></td><td>Untere Grenze für den Änderungszeitstempel</td></tr>
+<tr><td><code>modifiedTo</code></td><td><code>PFDateTime?</code></td><td>Obere Grenze für den Änderungszeitstempel</td></tr>
+<tr><td><code>modifiedByUserId</code></td><td><code>Long?</code></td><td>Filter nach dem Benutzer, der den Eintrag geändert hat</td></tr>
+</table>
+
+<h3>Joins</h3>
+<p><code>createJoin(attr, joinType, fetch, parent)</code> fügt der Join-Liste einen <code>DBJoin</code> hinzu und unterstützt:
+- Verschachtelte Eigenschaftspfade (z. B. <code>"order.positions"</code>)
+- INNER/LEFT/FETCH-Join-Typen
+- Optionalen Eltern-Alias für Unter-Joins</p>
+
+<h3>Prädikat-Factory-Methoden (Begleiter)</h3>
+<table>
+<tr><th>Methode</th><th>Rückgabe</th><th>Zweck</th></tr>
+<tr><td><code>eq(field, value)</code></td><td><code>DBPredicate.Equal</code></td><td>Gleichheitsvergleich</td></tr>
+<tr><td><code>ne(field, value)</code></td><td><code>DBPredicate.NotEqual</code></td><td>Ungleichheitsvergleich</td></tr>
+<tr><td><code>like(field, value)</code></td><td><code>DBPredicate.Like</code></td><td>SQL LIKE mit optionalem automatischem Platzhalter</td></tr>
+<tr><td><code>between(field, from, to)</code></td><td><code>DBPredicate.Between</code></td><td>Bereichssuche (inklusive)</td></tr>
+<tr><td><code>ge/gt/le/lt(field, value)</code></td><td><code>DBPredicate.GreaterEqual</code> usw.</td><td>Vergleichsoperatoren</td></tr>
+<tr><td><code>interval(field, from, to)</code></td><td><code>DBPredicate</code></td><td>Flexibler Bereich: between, ge oder le, je nachdem welche Grenzen angegeben sind</td></tr>
+<tr><td><code>isNull(field)</code></td><td><code>DBPredicate.IsNull</code></td><td>NULL-Prüfung</td></tr>
+<tr><td><code>isNotNull(field)</code></td><td><code>DBPredicate.IsNotNull</code></td><td>NOT NULL-Prüfung</td></tr>
+<tr><td><code>isIn(field, values)</code></td><td><code>DBPredicate.IsIn</code></td><td>IN-Klausel für Sammlungen</td></tr>
+<tr><td><code>not(matcher)</code></td><td><code>DBPredicate.Not</code></td><td>Negations-Wrapper</td></tr>
+<tr><td><code>and(vararg matchers)</code></td><td><code>DBPredicate.And</code></td><td>Konjunktion</td></tr>
+<tr><td><code>or(vararg matchers)</code></td><td><code>DBPredicate.Or</code></td><td>Disjunktion</td></tr>
+<tr><td><code>taskSearch(field, taskId, recursive)</code></td><td><code>DBPredicate</code></td><td>Aufgabenbaum-Suche (mit Nachkommen-Erweiterung, wenn rekursiv)</td></tr>
+</table>
+
+<h3>Zeitraum-Komfort</h3>
+<p><code>setYearAndMonth(dateField, year, month)</code> erstellt ein <code>between</code>-Prädikat für einen bestimmten Jahres-/Monatszeitraum. Wenn <code>month &lt;= 0</code>, wird der gesamte Jahresbereich verwendet.</p>
+
+<h3>Legacy-Filter-Kompatibilität</h3>
+<p>Der Konstruktor akzeptiert einen optionalen <code>BaseSearchFilter</code> für die Abwärtskompatibilität. Er kopiert <code>searchFields</code>, <code>deleted</code>, <code>searchString</code>, <code>modifiedSince</code>, <code>modifiedByUserId</code> und <code>maxRows</code> aus dem Legacy-Filter.</p>
+
+<h3>Filter-Finalisierung</h3>
+<p><code>createDBFilter(): DBFilter</code> materialisiert den angesammelten Zustand in ein <code>DBFilter</code>-Objekt und fügt das implizite <code>deleted</code>-Prädikat hinzu, falls es nicht bereits vorhanden ist. Dies ist der Punkt, an dem der QueryFilter in seine endgültige ausführbare Form konvertiert wird.</p>
+
+<h2>Git-Verlauf</h2><div class="hist"><pre>868d6abb7 2025 -> 2026
+7ff207016 AddressPagesRest: Warnung vor doppelten Einträgen beim Hinzufügen neuer Adressen.
+bb42bd659 QueryFilter.like: Korrektur des Parameters autoWildcardSearch (wurde ignoriert)
+fc0d7f60e DBFullTextResultIterator: Blockgröße 100 -> 10_000 für viel bessere Leistung., QueryFilter-Limit ist jetzt 50_000 statt 10_000.
+63081666f Quellcode-Dateiköpfe: 2024 -> 2025.
+2d324f2bb Finanzen: Eingehende Rechnungen korrigiert.
+d9c9b6184 WIP: Workaround für Adressseiten-Rest ohne Paginierung.
+04c38072b AddressDao: Select optimiert, WIP: Paginierung.
+b71b5073d Migration in Arbeit... (alle Tests aller Pakete: OK).
+3264694a8 Migration in Arbeit... (alle Tests aller Pakete: OK).
+314408ee0 Migration in Arbeit... (alle Tests aller Pakete: OK).
+4000abf4e Migration in Arbeit...
+e66d5f5f7 Migration in Arbeit... TaskTree -> Kotlin und läuft jetzt im isolierten Entity-Manager
+4c04cfd65 GROSSE-ÄNDERUNG! Migration von Integer-IDs zu Long-IDs (inkl. Fremdschlüssel usw.)
+06828f490 Migration in Arbeit...
+b6092df09 Copyright 2023 -> 2024
+ab45d51fa Copyright 2001-2022 -> 2001-2023.
+267283973 PROJECTFORGE-3730: Validierungsmeldung für Listenseiten anzeigen, wenn die Ergebnisliste aufgrund von maxRows in QueryFilter abgeschnitten wurde.
+5f7ef41b8 Copyright 2021 -> 2022
+351392830 DataTransfer: Suche nach persönlichen Boxen auf der Listenseite.
+c0f2b9de0 Mandanten-Funktionalität überall entfernt (ungtestet).
+ceb63e8a1 Quellcode-Kopfzeile: (C) 2001-2021.
+ac71ed08d AbstractListForm: maxRows/pageSize korrigiert.
+4ac8f0f48 BaseSearchFilter/QueryFilter/AbstractListForm: pageSize vs. maxRows.
+b209e00ba PFDay.from -> from, fromOrNow, fromOrNull, PFDateTime.from -> from, fromOrNow, fromOrNull
+ae7140482 React: MagicCheckboxInput implementiert, gelöschte Einträge in der Liste werden jetzt mit Durchstreichung dekoriert.
+611b20d4e WIP: java.sql.Date -> LocalDate.
+7c79f1922 Copyright der Quellkopfzeile -> 2020.
+3ce3f701e CalendarUtils entfernt.
+967cc1cbc Korrigiert: EmployeeReport, BuchungssatzDao, AccountingRecord{Edit|List}Form, EmployeeSalary{Edit|List}Form, MonthlyEmployeeReport*, PostausgangsListForm, PosteingangsListForm, MonthConverter. Monate sind jetzt 1-basiert: 1-Januar, ..., 12-Dezember.
+d5742e60c Hotfix QueryFilter.
+00d48b950 BuchungssatzDao, QueryFilter: max rows des Ergebnissatzes auf 100.000 erweitert.
+b7bdea161 Unterstützung von filter.searchFields hinzugefügt.
+34357d266 QueryFilter: NPE-Korrektur.
+73895b7df WIP: CustomResultFilter...
+1165d1557 WIP Adressen und CustomResultFilter eingeführt.
+c50c528ce QueryFilter.toString()
+b0a4e8463 aufräumen
+d36fe6ad9 Schweres WIP: Refactoring
+9896ea5c5 WIP: Session -> EntityManager...
+a5206d947 WIP: DBJoin
+14af0e09e DBAlias -> DBJoin.
+66d9e3a30 WiP: DBQuery* und QueryFilter: Aliase....
+efb8e0b16 WiP: DBQuery* und QueryFilter: Aliase....
+a9f7fb127 WiP: DBQuery* und QueryFilter...
+7998890ea WiP: DBQuery* und QueryFilter...
+351bde48b WiP: DBQuery* und QueryFilter...
+d32649da3 WIP: DBQuery*, QueryFilter und Predicates umgestaltet....
+3d1a2711a WiP: DBQuery* und QueryFilter...
+20d64abbb WiP: DBQuery* und QueryFilter...
+7959dc2e0 WiP: DBQuery* und QueryFilter...
+a59e59eb1 WiP: DBQuery* und QueryFilter...
+5e65f6b22 WiP: DBQuery*
+a48f5a193 WIP: JPA...
+76a8fb69d Hibernate.Restrictions -> PF.QueryFilter</pre></div>
+</body>
+</html>

@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>#1876 : CSVParser.java [FR]</title>
+<style>
+body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}
+h1{border-bottom:2px solid #333;padding-bottom:.3em}
+h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}
+h3{margin-top:2em;color:#444}
+a{color:#0366d6}
+.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}
+.nav{font-size:.9em;color:#888;margin-bottom:1em}
+.lang{font-size:.85em;color:#888;float:right}
+.lang a{color:#888;text-decoration:none;padding:0 .3em}
+.lang a.active{color:#0366d6;font-weight:600;text-decoration:underline}
+.meta{font-size:.9em;margin:1em 0;color:#555}
+code{background:#f0f0f0;padding:0 .2em;font-size:.93em}
+pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}
+table{border-collapse:collapse;width:100%;margin:1em 0}
+th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}
+th{background:#f5f5f5;font-weight:600}
+.hist{font-size:.85em;color:#555}
+.warn{background:#fff3cd;border-left:3px solid #ffc107;padding:.5em 1em;margin:1em 0}
+.tip{background:#d4edda;border-left:3px solid #28a745;padding:.5em 1em;margin:1em 0}
+</style>
+</head>
+<body>
+<div class="lang"><a href="1876.html">EN</a> · <a href="1876_de.html">DE</a> · <a href="1876_ru.html">RU</a> · <a href="1876_fr.html" class="active">FR</a> · <a href="1876_es.html">ES</a></div>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← Index des fichiers</a> · <a href="1875.html">← Précédent</a> · <a href="1877.html">Suivant →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-common/src/main/java/org/projectforge/common/CSVParser.java" target="_blank" title="Voir le code source sur GitHub">📄 source</a></div>
+<h1>#1876 : <code>CSVParser.java</code></h1>
+<div class="meta"><code>projectforge-common/src/main/java/org/projectforge/common/CSVParser.java</code> Classe utilitaire — package org.projectforge.common, projectforge-common/src/main/java/org/projectforge/common/CSVParser.java <span style="color:#888">342 lignes · 248 code · 57 commentaires · 37 vides</span></div>
+<div class="c">Analyseur CSV (valeurs séparées par des virgules) personnalisé avec une architecture d'analyseur lexical/analyseur syntaxique écrite à la main. Lit à partir d'un <code>java.io.Reader</code> et tokenise les données CSV caractère par caractère, prenant en charge les champs entre guillemets, les sauts de ligne intégrés dans les cellules entre guillemets, les guillemets doubles échappés (convention <code>""</code>), les séparateurs de champ configurables, le mappage des noms de colonnes d'en-tête et la détection BOM UTF-8. Écrit par Kai Reinhard et H. Spiewok (2005), il est antérieur et évite les dépendances externes de bibliothèque CSV.</div>
+<h2>Architecture</h2>
+<div class="c">
+<h3>Importations</h3>
+<ul>
+<li><code>java.io.IOException</code> / <code>java.io.Reader</code> — Entrée de flux de caractères</li>
+<li><code>java.util.ArrayList</code>, <code>HashMap</code>, <code>List</code>, <code>Map</code> — Stockage des résultats et indexation des colonnes d'en-tête</li>
+<li><code>org.apache.commons.lang3.StringUtils</code> — Vérification de chaîne vide dans les messages d'erreur</li>
+<li><code>org.slf4j.Logger</code> — Journalisation des erreurs</li>
+</ul>
+
+<h3>Architecture de l'analyseur — Analyseur lexical écrit à la main</h3>
+<p>Plutôt que d'utiliser des expressions régulières ou un générateur d'analyseur, CSVParser implémente un <strong>analyseur lexical caractère par caractère</strong> avec un tampon de réinjection. Cette conception privilégie le contrôle sur la gestion des erreurs et les performances pour le sous-ensemble spécifique de formatage CSV utilisé par ProjectForge.</p>
+
+<h3>Composants principaux</h3>
+
+<h4>Énumération Type</h4>
+<pre>enum Type { EOF, EOL, CHAR }</pre>
+<p>Types de jetons : Fin de fichier, Fin de ligne ou données de caractère. Cela pilote la machine à états de l'analyseur.</p>
+
+<h4>Gestion du flux de caractères</h4>
+<ul>
+<li><strong>Tampon de réinjection</strong> : Un <code>int[]</code> de 5 éléments (<code>pushbackBuffer</code>) avec suivi d'index — permet l'anticipation et le retour en arrière sans support Reader pour <code>mark()</code>/<code>reset()</code></li>
+<li><strong>read()</strong> : Renvoie le caractère suivant du tampon de réinjection (le cas échéant) ou du Reader sous-jacent. Suit les numéros de ligne sur <code>\n</code></li>
+<li><strong>unread(int)</strong> : Réinjecte un caractère dans le tampon, en ajustant les compteurs de ligne/colonne</li>
+<li><strong>nextToken()</strong> : Tokeniseur principal — renvoie le Type suivant (EOF, EOL, CHAR) et définit <code>cval</code> pour les jetons de caractère. Gère <code>\r\n</code> (CRLF Windows) comme un seul jeton EOL</li>
+</ul>
+
+<h4>Gestion de la BOM UTF-8</h4>
+<p><code>skipBOM()</code> est appelée lors de la construction pour détecter et ignorer un marqueur d'ordre d'octets UTF-8 (<code>\uFEFF</code>) au début du fichier. Si aucune BOM n'est présente, le premier caractère est réinjecté (unread). Cela permet une analyse correcte des fichiers CSV exportés depuis Microsoft Excel, qui inclut une BOM pour les fichiers UTF-8.</p>
+
+<h4>Analyse des cellules (parseCell)</h4>
+<p>La logique principale d'analyse CSV gère ces cas :</p>
+<table>
+<tr><th>Cas</th><th>Comportement</th></tr>
+<tr><td>Cellule sans guillemets</td><td>Les caractères sont accumulés jusqu'au séparateur ou à la fin de ligne</td></tr>
+<tr><td>Cellule entre guillemets (<code>"..."</code>)</td><td>Les caractères entre guillemets sont accumulés ; les guillemets doivent être correctement fermés</td></tr>
+<tr><td>Guillemet échappé (<code>""</code>)</td><td>Deux guillemets doubles consécutifs dans une cellule entre guillemets représentent un caractère de guillemet littéral</td></tr>
+<tr><td>Saut de ligne intégré</td><td>Les sauts de ligne dans les cellules entre guillemets sont conservés (valeurs de cellule multilignes)</td></tr>
+<tr><td>Espace blanc final</td><td>Les espaces blancs après le guillemet fermant sont ignorés ; attend un séparateur ou une fin de ligne ensuite</td></tr>
+<tr><td>Guillemet non fermé</td><td>Lève une RuntimeException avec un message d'erreur descriptif incluant le numéro de ligne/colonne</td></tr>
+</table>
+
+<h4>Analyse de ligne (parseLine)</h4>
+<p>Lit les cellules jusqu'à la fin de ligne ou la fin de fichier, en les collectant dans une <code>List&lt;String&gt;</code>. Renvoie null à la fin du fichier (pas une liste vide — les appelants peuvent distinguer la fin du fichier des lignes vides).</p>
+
+<h4>Support des colonnes d'en-tête (parseHeadCols / getCell)</h4>
+<p>Pour les fichiers CSV avec une ligne d'en-tête, <code>parseHeadCols()</code> lit la première ligne et construit une <code>colMap : Map&lt;String, Integer&gt;</code> mappant les noms de colonnes à leur index positionnel. Les appels ultérieurs à <code>getCell(List&lt;String&gt;, nomcolonne)</code> récupèrent les valeurs par nom de colonne plutôt que par position. Cela permet un accès aux colonnes nommées à la manière d'Excel.</p>
+
+<h3>Messages d'erreur</h3>
+<p>Trois constantes d'erreur distinctes fournissent des diagnostics spécifiques :</p>
+<pre>
+ERROR_UNEXPECTED_QUOTATIONMARK = "Guillemet inattendu \" (uniquement autorisé dans les cellules entre guillemets)."
+ERROR_QUOTATIONMARK_MISSED_AT_END_OF_CELL = "Guillemet \" manquant à la fin de la cellule."
+ERROR_DELIMITER_OR_NEW_LINE_EXPECTED_AFTER_QUOTATION_MARK = "Délimiteur ou nouvelle ligne attendu après le guillemet."
+ERROR_UNEXPECTED_CHARACTER_AFTER_QUOTATION_MARK = "Caractère inattendu après le guillemet."
+</pre>
+<p>Chaque message est enrichi des numéros de ligne et de colonne via <code>createMessage()</code>.</p>
+
+<h3>Intégration avec CSVWriter</h3>
+<p>CSVParser utilise <code>CSVWriter.DEFAULT_CSV_SEPARATOR_CHAR</code> (<code>';'</code> — point-virgule) comme séparateur par défaut. C'est la convention CSV européenne (Microsoft Excel dans les paramètres régionaux allemands utilise le CSV délimité par des points-virgules). Le séparateur est configurable via <code>setCsvSeparatorChar()</code>.</p>
+
+<h3>Limitations de conception</h3>
+<ul>
+<li><strong>Pas de flux continu</strong> : Chaque appel à <code>parseLine()</code> lit une ligne et renvoie toutes les cellules — adapté aux fichiers de taille modérée mais pas aux très gros CSV (plusieurs Go)</li>
+<li><strong>Tampon de réinjection fixe</strong> : La réinjection de 5 caractères limite l'anticipation ; suffisant pour les motifs d'échappement CSV mais pas pour l'analyse générale</li>
+<li><strong>Pas de conversion de type</strong> : Toutes les valeurs sont renvoyées sous forme de chaînes ; les appelants doivent analyser les nombres, les dates, etc.</li>
+<li><strong>Point-virgule par défaut</strong> : Utilise la convention CSV européenne ; doit être explicitement modifié pour les fichiers séparés par des virgules</li>
+<li><strong>Gestion des erreurs</strong> : Utilise des RuntimeExceptions plutôt que des exceptions vérifiées ou une récupération d'erreur — une entrée malformée interrompt l'analyse</li>
+</ul>
+
+<div class="tip">Cette implémentation personnalisée a été écrite en 2005, bien avant qu'Apache Commons CSV (publié en 2014) ou OpenCSV ne soient largement disponibles. À l'époque, le JDK n'avait pas de support CSV intégré. Le code a été maintenu avec des améliorations progressives : gestion de la BOM (commit 2024), support des champs entre guillemets multilignes et corrections de fautes de frappe via codespell.</div>
+</div>
+<h2>Historique Git</h2><div class="hist"><pre>868d6abb7 2025 -> 2026
+161d71602 WIP : CSVParser : caractères BOM.
+dfb2378df WIP : CSVParser : multilignes etc.
+63081666f En-têtes de fichiers source : 2024 -> 2025.
+a73905c14 Correction de fautes de frappe dans les répertoires projectforge*/ Trouvé via codespell
+a72903e36 *.java, *.kt : StringBuffer -> StringBuilder.
+b6092df09 Copyright 2023 -> 2024
+ab45d51fa Copyright 2001-2022 -> 2001-2023.</pre></div>
+</body>
+</html>

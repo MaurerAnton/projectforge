@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head><meta charset="UTF-8"><title>#997: Kost2Dao.kt [RU]</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:2em;color:#444}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}</style></head>
+<body>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Индекс</a> · <a href="file-index.html">← Индекс файлов</a> · <a href="996.html">← Назад</a> · <a href="998.html">Вперёд →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/kotlin/org/projectforge/business/fibu/kost/Kost2Dao.kt" target="_blank" title="Просмотреть исходный код на GitHub">📄 исходник</a></div>
+<h1>#997: <code>Kost2Dao.kt</code></h1>
+<div class="meta"><code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/kost/Kost2Dao.kt</code> Тип: DAO / Сервис · Назначение: Доступ к данным для сущностей центра затрат Kost2 · Исходник: projectforge-business/src/main/kotlin/org/projectforge/business/fibu/kost/Kost2Dao.kt <span style="color:#888">218 строк · 149 кода · 47 комментариев · 22 пустых</span></div>
+<div class="c">Spring <code>@Service</code>, управляющий операциями сохранения для сущностей <code>Kost2DO</code>. Расширяет <code>BaseDao</code>, предоставляя логику CRUD, поиска и валидации. Обрабатывает привязку к проекту, назначение типа затрат, обеспечение уникальности и обновление кэша после сохранения.</div>
+<h2>Ключевые методы</h2>
+<table>
+<tr><th>Метод</th><th>Описание</th></tr>
+<tr><td><code>setProjekt(kost2, projektId)</code></td><td>Привязывает Kost2 к проекту и копирует его nummernkreis/bereich/teilbereich</td></tr>
+<tr><td><code>setKost2Art(kost2, kost2ArtId)</code></td><td>Устанавливает Kost2Art (тип затрат) для записи Kost2</td></tr>
+<tr><td><code>getKost2(kostString)</code></td><td>Ищет Kost2 по форматированной строке (например, "5.123.45.67")</td></tr>
+<tr><td><code>getKost2(nk, b, tb, art)</code></td><td>Ищет Kost2 по отдельным числовым компонентам</td></tr>
+<tr><td><code>getActiveKost2(nk, b, tb)</code></td><td>Возвращает активные записи Kost2 для заданного 6-значного префикса</td></tr>
+<tr><td><code>getActiveKost2(projekt)</code></td><td>Удобный метод: активные записи Kost2 для проекта</td></tr>
+</table>
+<h2>Архитектура выбора / фильтрации</h2>
+<p>Переопределение <code>select(filter)</code> выполняет двухфазный запрос:</p>
+<ol>
+<li><strong>Запрос к БД:</strong> Использует <code>QueryFilter</code> с объединением по <code>kost2Art</code>, упорядоченный по всем числовым компонентам</li>
+<li><strong>Фильтрация в памяти:</strong> Фильтрует по <code>effectiveKostentraegerStatus</code> (который может наследовать статус ENDED от связанного проекта). Поддерживает: ACTIVE, NONACTIVE, ENDED, NOT_ENDED и ALL</li>
+</ol>
+<h2>Валидация (onInsertOrModify)</h2>
+<ul>
+<li>Если связан <code>Projekt</code>, проверяет, что nummernkreis/bereich/teilbereich Kost2 соответствуют компонентам ID проекта</li>
+<li>Nummmernkreis 4 или 5 требует назначения проекта</li>
+<li>Проверяет на дубликаты записей Kost2 (коллизия бизнес-ключа) с помощью именованных запросов</li>
+</ul>
+<h2>Зависимости</h2>
+<ul>
+<li><code>ProjektDao</code> — для поиска и валидации проекта</li>
+<li><code>Kost2ArtDao</code> — для назначения типа затрат</li>
+<li><code>KostCache</code> — обновляется через <code>afterInsertOrModify</code> после каждого сохранения</li>
+<li>Право доступа: <code>UserRightId.FIBU_COST_UNIT</code></li>
+</ul>
+<h2>Исходный код (сокращён)</h2>
+<pre>@Service
+open class Kost2Dao : BaseDao&lt;Kost2DO&gt;(Kost2DO::class.java) {
+    @Autowired private lateinit var projektDao: ProjektDao
+    @Autowired private lateinit var kost2ArtDao: Kost2ArtDao
+    @Autowired private lateinit var kostCache: KostCache
+
+    override fun select(filter: BaseSearchFilter): List&lt;Kost2DO&gt; {
+        val myFilter = if (filter is KostFilter) filter else KostFilter(filter)
+        val queryFilter = QueryFilter(myFilter).apply { createJoin("kost2Art") }
+        val allKost2 = select(queryFilter)
+        return when {
+            myFilter.isActive -> allKost2.filter {
+                it.effectiveKostentraegerStatus == ACTIVE || it.effectiveKostentraegerStatus == null
+            }
+            myFilter.isNonActive -> allKost2.filter { it.effectiveKostentraegerStatus == NONACTIVE }
+            myFilter.isEnded -> allKost2.filter { it.effectiveKostentraegerStatus == ENDED }
+            myFilter.isNotEnded -> allKost2.filter { it.effectiveKostentraegerStatus != ENDED }
+            else -> allKost2
+        }
+    }
+}</pre>
+<h2>История Git</h2>
+<div class="hist"><pre>868d6abb7 2025 -> 2026
+8239a53ee Kost2: Реализовано виртуальное наследование статуса от ProjektDO
+63081666f Заголовки исходных файлов: 2024 -> 2025.
+770891c57 Исправление ошибки CandH:CollectionHandler
+d394f410f Миграционные изменения (все тесты OK).
+d67bce18b Миграционные изменения в процессе...
+5989b32fd BaseDao: рефакторинг onChangeLister.
+1b50060c3 BaseDao: get->find, save->insert, getList->select, load->select
+3aeda5ef5 Большое изменение: InTrans удалён, PfPersistenceContext как ThreadLocal.
+85b4e1175 PfPersistenceService: query -> executeQuery.
+b095e6f7d Большое изменение обработки транзакций.
+4c04cfd65 КАРДИНАЛЬНОЕ ИЗМЕНЕНИЕ! Integer id заменены на Long id.
+5bafe7941 @Repository -> @Service. @Transactional удалён.
+f2f7cff74 Миграционные изменения в процессе... (файл создан)</pre></div>
+</body>
+</html>

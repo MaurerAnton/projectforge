@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>#987: EmployeeSalaryExcelImporter.kt [RU]</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:2em;color:#444}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}</style>
+</head>
+<body>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Индекс</a> · <a href="file-index.html">← Индекс файлов</a> · <a href="986.html">← Пред.</a> · <a href="988.html">След. →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/kotlin/org/projectforge/business/fibu/datev/EmployeeSalaryExcelImporter.kt" target="_blank" title="Просмотреть исходный код на GitHub">📄 Исходник</a></div>
+
+<h1>#987: <code>EmployeeSalaryExcelImporter.kt</code></h1>
+
+<div class="meta"><code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/datev/EmployeeSalaryExcelImporter.kt</code> 
+  <strong>Тип:</strong> Spring-сервис (логика импорта)<br>
+  <strong>Пакет:</strong> <code>org.projectforge.business.fibu.datev</code><br>
+  <strong>Фактический путь:</strong> <code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/datev/EmployeeSalaryExcelImporter.kt</code><br>
+  <strong>Примечание:</strong> Файл <strong>не</strong> существует по запрошенному пути (<code>.../excelimport/...</code>). Он находится в подпакете <code>datev</code>. Документация ниже отражает фактический исходный код.
+ <span style="color:#888">123 строки · 81 код · 31 комментарий · 11 пустых</span></div>
+
+<div class="c">
+  <p>Импортирует <strong>зарплаты сотрудников</strong> из листа книги Excel с именем <code>"employeeSalaries"</code>. Сопоставляет записи сотрудников по <strong>табельному номеру</strong> (Personalnummer), проверка включает подтверждение существования сотрудника в базе данных.</p>
+</div>
+
+<h2>Архитектура</h2>
+
+<h3>Зависимости</h3>
+<table>
+  <tr><th>Зависимость</th><th>Роль</th></tr>
+  <tr><td><code>EmployeeCache</code></td><td>Быстрый кэшированный поиск по табельному номеру</td></tr>
+  <tr><td><code>EmployeeService</code></td><td>Прямой поиск в базе данных при промахе кэша</td></tr>
+</table>
+
+<h2>Сопоставление столбцов (Перечисление: <code>Cols</code>)</h2>
+<table>
+  <tr><th>Перечисление</th><th>Заголовок</th><th>Валидатор</th><th>Целевое свойство</th></tr>
+  <tr><td><code>PERSONALNUMMER</code></td><td>Personalnummer</td><td>NumberValidator (>=1, обязательно, уникально)</td><td>Используется для поиска сотрудника</td></tr>
+  <tr><td><code>GESAMT_BRUTTO</code></td><td>Gesamtbrutto</td><td>Валидатор (обязательно)</td><td><code>bruttoMitAgAnteil</code></td></tr>
+</table>
+<p>Столбец <code>GESAMT_BRUTTO</code> принимает псевдонимы <code>"bruttoMitAgAnteil"</code> и <code>"Gesamt-"</code>.</p>
+
+<h2>Поток импорта</h2>
+<ol>
+  <li>Открывает лист с именем <code>"employeeSalaries"</code> — выбрасывает <code>UserException</code>, если не найден.</li>
+  <li>Регистрирует два столбца с валидаторами.</li>
+  <li>Анализирует лист с помощью <code>sheet.analyze(true)</code>.</li>
+  <li>Создаёт <code>ImportedSheet</code> с логированием уровня предупреждений.</li>
+  <li>Перебирает строки данных:
+    <ul>
+      <li>Создаёт <code>MyImportedElement</code> для отслеживания различий.</li>
+      <li>Создаёт <code>EmployeeSalaryDO</code> и заполняет из строки через <code>ImportHelper.fillBean()</code>.</li>
+      <li>Ищет сотрудника по табельному номеру (сначала кэш, затем база данных). Фиксирует ошибку валидации, если не найден.</li>
+      <li>Устанавливает <code>год</code> и <code>месяц</code> в записи о зарплате.</li>
+      <li>Добавляет заполненный элемент в импортированный лист.</li>
+    </ul>
+  </li>
+</ol>
+
+<h2>Свойства для сравнения (Diff)</h2>
+<p><code>SALARY_DIFF_PROPERTIES = ["bruttoMitAgAnteil"]</code></p>
+
+<h2>Объект-компаньон</h2>
+<p>Содержит константу имени листа <code>NAME_OF_EXCEL_SHEET = "employeeSalaries"</code> и <code>SALARY_DIFF_PROPERTIES</code>.</p>
+
+<h2>История Git</h2>
+<div class="hist"><pre>
+868d6abb7 2025 -> 2026
+312d5e61c Очистка
+63081666f Заголовки исходных файлов: 2024 -> 2025.
+1012e347a Миграция в процессе... (все тесты всех пакетов: OK).
+</pre></div>
+
+</body>
+</html>

@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>#735 [FR]</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333}h2{margin-top:1.5em}a{color:#0366d6}.meta{font-size:.9em;margin:1em 0}.nav{font-size:.9em;color:#888;margin-bottom:1em}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}code{background:#f0f0f0;padding:0 .2em}pre{background:#f5f5f5;padding:.5em;margin:.5em 0;border-radius:3px;font-size:.85em;overflow-x:auto}</style>
+</head>
+<body>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← Index des fichiers</a> · <a href="734.html">← Précédent</a> · <a href="736.html">Suivant →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/java/org/projectforge/framework/utils/IntRanges.java" target="_blank" title="Voir la source sur GitHub">📄 source</a></div>
+
+<h1>#735: <code>IntRanges.java</code></h1>
+<div class="meta"><code>projectforge-business/src/main/java/org/projectforge/framework/utils/IntRanges.java</code> <strong>Lignes :</strong> 54 · <strong>Auteur :</strong> Kai Reinhard · <strong>Type :</strong> Java — étend <code>Ranges&lt;Integer&gt;</code> · <strong>interface</strong> <code>org.projectforge.framework.utils</code> <span style="color:#888">54 lignes · 15 code · 34 commentaires · 5 vides</span></div>
+
+<div class="c"><h2>Objectif</h2>
+<p>Représente une <strong>union d'intervalles entiers</strong> — analyse des chaînes comme <code>"1,3-5,10-15,20"</code> en un ensemble structuré de plages et de valeurs individuelles, puis fournit <code>doesMatch(valeur)</code> pour tester l'appartenance. Il s'agit de la spécialisation entière de la classe de base abstraite générique <code>Ranges&lt;T&gt;</code> (<a href="742.html">#742</a>).</p>
+<p>Le cas d'utilisation concret est le <strong>filtrage des numéros de semaine dans les feuilles de temps</strong>. Lorsqu'un administrateur configure « afficher les feuilles de temps pour les semaines 1-5, 10 et 20-25 », cette chaîne de configuration est passée à <code>new IntRanges("1-5,10,20-25")</code>, et le numéro de semaine de chaque entrée de feuille de temps est testé avec <code>plages.doesMatch(numeroSemaine)</code>. C'est plus simple et plus lisible que de construire des clauses SQL complexes <code>WHERE semaine IN (...)</code>, surtout lorsque la liste de plages est configurable par utilisateur.</p></div>
+
+<div class="c"><h2>Hiérarchie de classes</h2>
+<pre>Ranges&lt;T extends Comparable&lt;T&gt;&gt;  (abstraite, 176 lignes)
+  └── IntRanges étend Ranges&lt;Integer&gt;  (54 lignes, ce fichier)</pre>
+<p><code>Ranges</code> gère toute la logique d'analyse — découpage sur virgules/points-virgules (<code>separatorChars = ";,"</code>), détection des traits d'union comme délimiteurs de plage (<code>rangesSeparatorChar = '-'</code>), et construction d'une liste d'objets <code>Range&lt;T&gt;</code> plus des valeurs isolées. <code>IntRanges</code> fournit uniquement la méthode concrète <code>parseValue(String)</code> qui convertit une chaîne en Integer — c'est le modèle Template Method : la classe de base abstraite définit l'algorithme, la sous-classe définit la conversion de type.</p></div>
+
+<div class="c"><h2>L'algorithme d'analyse (dans la classe de base <code>Ranges</code>)</h2>
+<p>Étant donné l'entrée <code>"1-5,10,20-25"</code> :</p>
+<ol>
+<li>Découpage sur <code>,</code> ou <code>;</code> → <code>["1-5", "10", "20-25"]</code></li>
+<li>Pour chaque partie, vérifier si elle contient <code>-</code> :
+<ul><li>Si oui : découper sur <code>-</code>, analyser les deux côtés → <code>Range(1, 5)</code> ou <code>Range(20, 25)</code></li>
+<li>Si non : analyser comme valeur unique → ajouter <code>10</code> à la liste <code>values</code></li></ul></li>
+</ol>
+<p>La méthode <code>doesMatch(valeur)</code> teste toutes les plages (en utilisant <code>Range.doesMatch()</code> qui vérifie <code>min <= valeur <= max</code>) et toutes les valeurs individuelles (en utilisant <code>Comparable.compareTo()</code> pour une correspondance exacte). Un indicateur <code>nullRangeMatchesAlways</code> contrôle le comportement lorsqu'aucune plage/valeur n'est spécifiée (par défaut <code>false</code> — rien ne correspond).</p></div>
+
+<div class="c"><h2>Détails clés de conception</h2>
+<ul>
+<li><strong>Caractères séparateurs :</strong> La virgule (<code>,</code>) et le point-virgule (<code>;</code>) sont tous deux acceptés — gestion élégante des entrées copiées-collées de différentes sources</li>
+<li><strong>Nombres négatifs :</strong> L'analyse prend en charge les entiers négatifs (par exemple <code>"-5--1"</code> signifie « de -5 à -1 ») car <code>Integer.valueOf()</code> gère le signe moins. Le trait d'union comme séparateur de plage entre en conflit avec le signe négatif, mais l'analyseur vérifie la présence de deux traits d'union consécutifs (<code>--</code>) comme une plage avec des bornes négatives</li>
+<li><strong>Tolérance aux espaces :</strong> L'analyseur supprime les espaces autour des valeurs, donc <code>"1 - 5, 10"</code> fonctionne comme <code>"1-5,10"</code></li>
+<li><strong>Gestion des doublons :</strong> L'ajout de la même valeur ou d'une plage qui se chevauche plusieurs fois est autorisé — <code>doesMatch()</code> retourne <code>true</code> dès la première correspondance, donc les doublons ne provoquent pas de résultats incorrects mais gaspillent un peu de mémoire</li>
+<li><strong>Simplicité en 54 lignes :</strong> Le fichier entier n'est qu'un constructeur qui appelle <code>super(chaînePlages)</code> et une redéfinition de <code>parseValue()</code> de 3 lignes. Toute la complexité réside dans la classe de base abstraite <code>Ranges</code> — c'est l'utilisation idéale de l'héritage : la sous-classe fournit uniquement la conversion spécifique au type, rien d'autre</li></ul></div>
+
+<div class="c"><h2>Utilisation dans la base de code</h2>
+<p>Principalement utilisé dans le <strong>module des feuilles de temps</strong> pour le filtrage des numéros de semaine. Le filtre des feuilles de temps (<a href="598.html">#598</a>) permet de filtrer par numéros de semaine — l'administrateur ou l'utilisateur saisit une expression de plage comme <code>"1-10, 15, 20-25"</code>, qui est analysée en une instance <code>IntRanges</code>. Lors de l'affichage des feuilles de temps, le numéro de semaine de chaque entrée est testé par rapport aux plages pour déterminer la visibilité. L'interface <code>Serializable</code> (héritée de <code>Ranges</code>) permet d'enregistrer les plages dans le XML des préférences utilisateur.</p></div>
+
+</body></html>

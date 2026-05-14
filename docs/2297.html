@@ -1,165 +1,26 @@
-<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>#2297</title>
-<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}.hist{font-size:.85em;color:#555}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}</style></head>
-<body><div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="2296.html">← Prev</a> · <a href="2298.html">Next →</a></div>
-<h1>#2297: <code>SipgateContactService.kt</code></h1>
-<div class="meta">REST Service, <code>projectforge-rest/src/main/kotlin/org/projectforge/rest/sipgate/SipgateContactService.kt</code> (148 lines)</div>
-<div class="c">Source file: SipgateContactService.kt - rest service in ProjectForge REST module.</div>
-<h2>Source Code</h2><pre>/////////////////////////////////////////////////////////////////////////////
-//
-// Project ProjectForge Community Edition
-//         www.projectforge.org
-//
-// Copyright (C) 2001-2026 Micromata GmbH, Germany (www.micromata.com)
-//
-// ProjectForge is dual-licensed.
-//
-// This community edition is free software; you can redistribute it and/or
-// modify it under the terms of the GNU General Public License as published
-// by the Free Software Foundation; version 3 of the License.
-//
-// This community edition is distributed in the hope that it will be useful,
-// but WITHOUT ANY WARRANTY; without even the implied warranty of
-// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General
-// Public License for more details.
-//
-// You should have received a copy of the GNU General Public License along
-// with this program; if not, see http://www.gnu.org/licenses/.
-//
-/////////////////////////////////////////////////////////////////////////////
-
-package org.projectforge.rest.sipgate
-
-import org.projectforge.business.address.AddressDO
-import org.projectforge.business.sipgate.SipgateContact
-import org.projectforge.business.sipgate.SipgateContactSyncDO
-import org.projectforge.framework.utils.NumberHelper
-import org.springframework.stereotype.Service
-import kotlin.reflect.KMutableProperty
-
-/**
- * @author K. Reinhard (k.reinhard@micromata.de)
- */
-// Must be open for mocking in tests.
-@Service
-open class SipgateContactService :
-  AbstractSipgateEntityService&lt;SipgateContact&gt;("/contacts", "Contact", ContactListData::class.java) {
-
-  override fun setId(obj: SipgateContact, id: String) {
-    obj.id = id
-  }
-
-  override fun getLogInfo(entity: SipgateContact): String {
-    return "contact '${entity.name}' (id=${entity.id})"
-  }
-
-  companion object {
-    /**
-     * Sipgate sends numbers such as fax-home etc. as type other (annoying).
-     * This method tries to re-assign numbers from type other by comparing the numbers with
-     * the optional given address and/or given syncDO.
-     */
-    fun fixNumbers(
-      contact: SipgateContact,
-      address: AddressDO? = null,
-      syncInfo: SipgateContactSyncDO.SyncInfo? = null
-    ) {
-      contact.numbers?.filter { it.isOtherType() }?.forEach { otherNumber -&gt;
-        val number = NumberHelper.extractPhonenumber(otherNumber.number)
-        if (number.isNullOrBlank()) {
-          return@forEach
-        }
-        if (checkNumber(syncInfo, AddressDO::privatePhone, number, address?.privatePhone)) {
-          otherNumber.setHomeType()
-          return@forEach
-        } else if (checkNumber(syncInfo, AddressDO::mobilePhone, number, address?.mobilePhone)) {
-          otherNumber.setCellType()
-          return@forEach
-        } else if (checkNumber(syncInfo, AddressDO::businessPhone, number, address?.businessPhone)) {
-          otherNumber.setWorkType()
-          return@forEach
-        } else if (checkNumber(syncInfo, AddressDO::fax, number, address?.fax)) {
-          otherNumber.setFaxWorkType()
-          return@forEach
-        } else if (checkNumber(syncInfo, AddressDO::privateMobilePhone, number, address?.privateMobilePhone)) {
-          otherNumber.setCellHomeType()
-          return@forEach
-        }
-      }
-    }
-
-    /**
-     * Sipgate sometimes sends emails without type field.
-     * This method tries to assign email types by comparing the email addresses with
-     * the corresponding fields in the local address.
-     *
-     * Example: If Sipgate returns {"email":"test@example.com"} without type,
-     * and address.email == "test@example.com", then we set type = WORK.
-     * This prevents the sync logic from detecting false changes.
-     */
-    fun fixEmails(
-      contact: SipgateContact,
-      address: AddressDO? = null,
-      syncInfo: SipgateContactSyncDO.SyncInfo? = null
-    ) {
-      contact.emails?.filter { it.type == null }?.forEach { emailWithoutType -&gt;
-        val email = emailWithoutType.email?.trim()?.lowercase()
-        if (email.isNullOrBlank()) {
-          return@forEach
-        }
-        if (checkEmail(syncInfo, AddressDO::email, email, address?.email)) {
-          emailWithoutType.type = SipgateContact.EmailType.WORK
-          return@forEach
-        } else if (checkEmail(syncInfo, AddressDO::privateEmail, email, address?.privateEmail)) {
-          emailWithoutType.type = SipgateContact.EmailType.HOME
-          return@forEach
-        }
-      }
-    }
-
-    private fun checkNumber(
-      syncInfo: SipgateContactSyncDO.SyncInfo?,
-      field: KMutableProperty&lt;*&gt;,
-      number: String?,
-      addressNumber: String?
-    ): Boolean {
-      return number == NumberHelper.extractPhonenumber(addressNumber) ||
-          syncInfo != null &amp;&amp; syncInfo.fieldsInfo[field.name] == SipgateContactSyncDO.SyncInfo.hash(number)
-    }
-
-    /**
-     * Checks if an email address matches a specific field in the local address.
-     *
-     * Returns true if:
-     * 1. The email matches the corresponding address field (e.g., email matches address.email), OR
-     * 2. The syncInfo indicates this email was previously associated with this field
-     *
-     * This helps identify which type (WORK/HOME) should be assigned to emails without type.
-     *
-     * @param syncInfo The sync information containing field hashes from the last sync
-     * @param field The address field to check (e.g., AddressDO::email or AddressDO::privateEmail)
-     * @param email The email address from the contact (normalized: trimmed and lowercase)
-     * @param addressEmail The email address from the local address
-     * @return true if the email matches this field, false otherwise
-     */
-    private fun checkEmail(
-      syncInfo: SipgateContactSyncDO.SyncInfo?,
-      field: KMutableProperty&lt;*&gt;,
-      email: String?,
-      addressEmail: String?
-    ): Boolean {
-      return email == addressEmail?.trim()?.lowercase() ||
-          syncInfo != null &amp;&amp; syncInfo.fieldsInfo[field.name] == SipgateContactSyncDO.SyncInfo.hash(email)
-    }
-  }
-}</pre>
-<h2>Git History</h2><div class="hist"><pre>868d6abb7 2025 -&gt; 2026
-a7308c9a9  Fix Sipgate sync: Prevent full re-sync due to missing email types
-63081666f Source file headers: 2024-&gt; 2025.
-b6092df09 Copyright 2023 -&gt; 2024
-eafdb76c0 WIP Sipgate.
-e3b79281f WIP Sipgate.
-bf69e2063 WIP Sipgate.
-ba49742ab WIP Sipgate.
-278c450c3 WIP Sipgate.
-8ce73b6eb WIP Sipgate.</pre></div>
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="utf-8"><title>#2297: CalendarSubscriptionServiceRest.kt</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333}a{color:#0366d6}.meta{background:#f0f0f0;border-radius:6px;padding:1em;margin:1em 0;font-size:.9em}.commentary{margin:.8em 0;background:#fff;padding:.5em 1em;border-radius:6px;border-left:4px solid #ddd;line-height:1.7}table{border-collapse:collapse;width:100%;margin:.8em 0;font-size:.9em}th,td{border:1px solid #ddd;padding:.4em .6em}th{background:#f0f0f0}code{background:#e8e8e8;border-radius:3px;padding:.1em .3em;font-size:.9em}.nav{font-size:.9em;color:#888;margin-bottom:1em}.history{background:#fffbe6;border-radius:6px;padding:1em;margin:1em 0;font-size:.9em;border-left:4px solid #ffc107}</style></head>
+<body><div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="2296.html">← Prev</a> · <a href="2298.html">Next →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-rest/src/main/kotlin/org/projectforge/rest/pub/CalendarSubscriptionServiceRest.kt" target="_blank" title="View source on GitHub">📄 source</a></div>
+<h1>#2297: <code>CalendarSubscriptionServiceRest.kt</code></h1>
+<div class="meta"><code>projectforge-rest/src/main/kotlin/org/projectforge/rest/pub/CalendarSubscriptionServiceRest.kt</code> <p><strong>Path:</strong> <code>projectforge-rest/src/main/kotlin/org/projectforge/rest/pub/CalendarSubscriptionServiceRest.kt</code> · <strong>Type:</strong> Kotlin class</p><p><strong>Purpose:</strong> Part of the ProjectForge pub module.</p><p><strong>Source:</strong> <a href="https://github.com/micromata/projectforge/blob/develop/projectforge-rest/src/main/kotlin/org/projectforge/rest/pub/CalendarSubscriptionServiceRest.kt">GitHub</a></p> <span style="color:#888">352 lines total</span></div>
+<div class="history"><table><tr><th>Commit</th><th>Date</th><th>Message</th></tr><tr><td><code>868d6abb</code></td><td></td><td>2025 -&amp;gt; 2026</td></tr>
+<tr><td><code>63081666</code></td><td></td><td>Source file headers: 2024-&amp;gt; 2025.</td></tr>
+<tr><td><code>a73905c1</code></td><td></td><td>Fix typos in projectforge*/ directories Found via codespell See c3b0602a893</td></tr>
+<tr><td><code>c193e828</code></td><td></td><td>Ical4j: migration stuff... (all tests OK)</td></tr>
+<tr><td><code>61966790</code></td><td></td><td>Ical4j: migration stuff...</td></tr>
+<tr><td><code>b71b5073</code></td><td></td><td>Migration stuff in progress... (all tests of all packages: OK).</td></tr>
+<tr><td><code>b79a1edc</code></td><td></td><td>Migration stuff in progress... (all tests of all packages: OK).</td></tr>
+<tr><td><code>1b50060c</code></td><td></td><td>BaseDao: renamed: get -&amp;gt; find, save -&amp;gt; insert, getList -&amp;gt; select, load -&amp;gt; select</td></tr>
+<tr><td><code>2a8ea207</code></td><td></td><td>Migration stuff in progress... BaseDao refactored (not yet finished) internal* methods renamed.</td></tr>
+<tr><td><code>67805f2f</code></td><td></td><td>ThreadLocalUserContext.user -&amp;gt; ThreadLocalUserContext.loggedInUser (renamed for avoiding mis-unde</td></tr>
+</table></div>
+<h2>What it does</h2>
+<div class="commentary"><p>REST controller extending <code>Map&lt;String</code>. Exposes endpoints: <code>exportCalendar()</code>, <code>readEventsFromCalendars()</code>, <code>readTimesheets()</code>, <code>readHolidays()</code>, <code>readWeeksOfYear()</code>. Key methods: <code>exportCalendar()</code>, <code>getTimesheetUser()</code>, <code>readEventsFromCalendars()</code>, <code>readTimesheets()</code>, <code>readHolidays()</code>. Package: <code>org.projectforge.rest.pub</code>. Patterns: REST controller, request mapping, dependency injection, companion object, lateinit DI.</p></div>
+<h2>Key takeaways</h2>
+<div class="commentary"><ul><li><strong>10 commits</strong> (sample): <code>868d6abb</code>: 2025 -&amp;gt; 2026; <code>63081666</code>: Source file headers: 2024-&amp;gt; 2025.; <code>a73905c1</code>: Fix typos in projectforge*/ directories Found via .</li>
+<li><strong>REST endpoint:</strong> Returns SDUI <code>UILayout</code> responses consumed by the React frontend via the dynamic page framework.</li>
+<li><strong>Spring-managed:</strong> Dependencies injected via <code>@Autowired lateinit</code> — standard ProjectForge pattern.</li></ul></div>
+<div class="nav" style="margin-top:2em"><a href="2296.html">← Prev</a> · <a href="2298.html">Next →</a></div>
 </body></html>

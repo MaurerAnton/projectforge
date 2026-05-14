@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<title>#860: CalendarFilter.kt — ProjectForge Docs [RU]</title>
+<style>
+body { font-family: system-ui, sans-serif; max-width: 960px; margin: 2em auto; padding: 0 1em; background: #fafafa; color: #222; line-height: 1.6; }
+h1 { border-bottom: 2px solid #333; padding-bottom: 0.3em; }
+h2 { margin-top: 2.5em; border-bottom: 1px solid #ddd; padding-bottom: 0.2em; color: #333; }
+h3 { margin-top: 2em; color: #444; }
+a { color: #0366d6; }
+.c { border-left: 3px solid #ddd; padding: .5em 1em; margin: 1em 0; background: #fff; }
+.nav { font-size: .9em; color: #888; margin-bottom: 1em; }
+.meta { font-size: .9em; margin: 1em 0; color: #555; }
+code { background: #f0f0f0; padding: 0 .2em; font-size: .93em; }
+pre { background: #f5f5f5; padding: .8em 1em; border: 1px solid #ddd; border-radius: 4px; overflow-x: auto; font-size: .88em; line-height: 1.4; }
+table { border-collapse: collapse; width: 100%; margin: 1em 0; }
+th, td { border: 1px solid #ddd; padding: .5em .8em; text-align: left; font-size: .9em; }
+th { background: #f5f5f5; font-weight: 600; }
+.hist { font-size: .85em; color: #555; }
+</style>
+</head>
+<body>
+
+<p class="nav">
+<a href="https://maureranton.github.io/projectforge/">← Индекс</a> ·
+<a href="file-index.html">← Индекс файлов</a> ·
+<a href="859.html">← Предыдущий</a> ·
+<a href="861.html">Следующий →</a>
+</p>
+
+<h1>#860: <code>CalendarFilter.kt</code></h1>
+
+<div class="meta"><code>projectforge-business/src/main/kotlin/org/projectforge/business/calendar/CalendarFilter.kt</code> 
+<strong>Тип:</strong> Класс Kotlin (модель данных)<br>
+<strong>Назначение:</strong> Сохраняемый пользовательский фильтр календаря с настройками видимости, табеля учета времени и отпусков<br>
+<strong>Путь к исходнику:</strong> <code>projectforge-business/src/main/kotlin/org/projectforge/business/calendar/CalendarFilter.kt</code><br>
+<strong>Расширяет:</strong> <code>AbstractFavorite</code> (предоставляет <code>name: String?</code> и <code>id: Long?</code>)
+ <span style="color:#888">252 строки · 135 кода · 92 комментария · 25 пустых</span></div>
+
+<div class="c">
+<p>
+<code>CalendarFilter</code> — это основной пользовательский объект конфигурации для календаря ProjectForge. Он расширяет систему избранного, позволяя пользователям создавать именованные профили фильтров, переключаться между ними и сохранять свои настройки. Каждый фильтр управляет тем, какие календари отображаются, какие скрыты, какой календарь используется по умолчанию для новых записей, видимостью табелей учета времени (для конкретного пользователя), записями об отпусках (по группе или пользователю), выделением перерывов и параметрами отображения, такими как размер сетки и первый видимый час дня. Класс также включает глубокое копирование, очистку при сериализации и поддержку миграции из старого календаря на базе Wicket (ProjectForge v6).
+</p>
+</div>
+
+<h2>Параметры конструктора</h2>
+
+<table>
+<tr><th>Параметр</th><th>Тип</th><th>По умолчанию</th><th>Описание</th></tr>
+<tr>
+  <td><code>name</code></td>
+  <td><code>String?</code></td>
+  <td><code>null</code></td>
+  <td>Человекочитаемое имя фильтра (унаследовано от <code>AbstractFavorite</code>).</td>
+</tr>
+<tr>
+  <td><code>id</code></td>
+  <td><code>Long?</code></td>
+  <td><code>null</code></td>
+  <td>Идентификатор фильтра в базе данных (унаследован от <code>AbstractFavorite</code>).</td>
+</tr>
+<tr>
+  <td><code>defaultCalendarId</code></td>
+  <td><code>Long?</code></td>
+  <td><code>null</code></td>
+  <td>Новые записи календаря будут считаться принадлежащими этому календарю. Если null, вместо этого открывается страница создания табеля учета времени.</td>
+</tr>
+<tr>
+  <td><code>gridSize</code></td>
+  <td><code>Int</code></td>
+  <td><code>15</code></td>
+  <td>Размер шага сетки в минутах. Должен нацело делить 60.</td>
+</tr>
+<tr>
+  <td><code>firstHour</code></td>
+  <td><code>Int</code></td>
+  <td><code>8</code></td>
+  <td>Первый час дня, отображаемый в сетках недельного и дневного времени (например, 8 для 08:00).</td>
+</tr>
+<tr>
+  <td><code>otherTimesheetUsersEnabled</code></td>
+  <td><code>Boolean</code></td>
+  <td><code>false</code></td>
+  <td>Могут ли отображаться табели учета времени других пользователей.</td>
+</tr>
+<tr>
+  <td><code>timesheetUserId</code></td>
+  <td><code>Long?</code></td>
+  <td><code>null</code></td>
+  <td>Если установлено, отображать табели учета времени только для этого пользователя. Если null, табели не отображаются.</td>
+</tr>
+<tr>
+  <td><code>vacationGroupIds</code></td>
+  <td><code>Set&lt;Long?&gt;?</code></td>
+  <td><code>null</code></td>
+  <td>Будут отображаться отпуска сотрудников в этих группах.</td>
+</tr>
+<tr>
+  <td><code>vacationUserIds</code></td>
+  <td><code>Set&lt;Long?&gt;?</code></td>
+  <td><code>null</code></td>
+  <td>Будут отображаться отпуска этих конкретных сотрудников (по идентификатору пользователя).</td>
+</tr>
+<tr>
+  <td><code>showBreaks</code></td>
+  <td><code>Boolean?</code></td>
+  <td><code>null</code></td>
+  <td>Если true, пробелы между табелями учета времени в течение дня выделяются, и щелчок по пробелу позволяет создать новый табель в этом окне.</td>
+</tr>
+<tr>
+  <td><code>showPlanning</code></td>
+  <td><code>Boolean?</code></td>
+  <td><code>null</code></td>
+  <td>Пока не поддерживается. Зарезервировано для будущих функций планирования.</td>
+</tr>
+</table>
+
+<h2>Ключевые свойства</h2>
+
+<h3><code>calendarIds: MutableSet&lt;Long?&gt;</code></h3>
+<p>Все идентификаторы календарей, управляемые этим фильтром (как видимые, так и скрытые). Это основной набор календарей, о которых знает фильтр.</p>
+
+<h3><code>invisibleCalendars: MutableSet&lt;Long?&gt;</code></h3>
+<p>Подмножество <code>calendarIds</code>, которые в данный момент скрыты. Календари из <code>calendarIds</code>, отсутствующие в этом наборе, являются видимыми.</p>
+
+<h2>Публичные методы</h2>
+
+<h3><code>copyFrom(src: CalendarFilter): CalendarFilter</code></h3>
+<p>Выполняет глубокое копирование всех полей из <code>src</code> в <code>this</code>, включая копирование всего содержимого коллекций. Возвращает <code>this</code> для плавного цепочечного вызова. Наборы <code>calendarIds</code> и <code>invisibleCalendars</code> перераспределяются и заполняются значениями источника.</p>
+
+<h3><code>addCalendarId(calendarId: Long)</code></h3>
+<p>Добавляет календарь в фильтр и делает его видимым (удаляет его из <code>invisibleCalendars</code>, если он там присутствует).</p>
+
+<h3><code>removeCalendarId(calendarId: Long)</code></h3>
+<p>Удаляет календарь как из <code>calendarIds</code>, так и из <code>invisibleCalendars</code>.</p>
+
+<h3><code>setVisibility(calendarId: Long?, visible: Boolean)</code></h3>
+<p>Переключает видимость для указанного календаря. Если <code>calendarId</code> равен null (возможно при десериализации), вызов игнорируется. Вызывает <code>tidyUp()</code> после изменения.</p>
+
+<h3><code>isInvisible(calendarId: Long?): Boolean</code></h3>
+<p>Возвращает <code>true</code>, если календарь равен <code>null</code> или присутствует в <code>invisibleCalendars</code>.</p>
+
+<h3><code>tidyUp()</code></h3>
+<p>Удаляет записи из <code>invisibleCalendars</code>, которых нет в основном наборе <code>calendarIds</code>. Поддерживает синхронизацию двух наборов.</p>
+
+<h3><code>afterDeserialization()</code></h3>
+<p>Очистка после десериализации. Обрабатывает случай, когда <code>calendarIds</code> или <code>invisibleCalendars</code> могут быть null после десериализации, и удаляет любые ложные значения <code>null</code> из наборов. В конце вызывает <code>tidyUp()</code>.</p>
+
+<h3><code>isModified(other: CalendarFilter): Boolean</code></h3>
+<p>Сравнивает все поля (name, id, defaultCalendarId, timesheetUserId, gridSize, firstHour, showBreaks, showPlanning, а также все содержимое коллекций) с другим фильтром, чтобы определить, отличается ли какое-либо значение. Использует вспомогательный метод <code>isModified(col1, col2)</code> для сравнения коллекций (проверка взаимного включения ненулевых значений).</p>
+
+<h2>Приватные вспомогательные методы</h2>
+
+<h3><code>copySet(srcSet: Set&lt;Long?&gt;?): Set&lt;Long&gt;?</code></h3>
+<p>Копирует nullable набор, отфильтровывая нулевые записи. Возвращает null, если исходный набор равен null.</p>
+
+<h3><code>isModified(col1, col2)</code></h3>
+<p>Сравнивает две nullable коллекции, проверяя, что каждый ненулевой элемент col1 существует в col2 и наоборот.</p>
+
+<h2>Объект-компаньон — поддержка устаревшего кода</h2>
+
+<h3><code>copyFrom(templateEntry: TemplateEntry?): CalendarFilter</code></h3>
+<p>Фабричный метод, который преобразует устаревший <code>TemplateEntry</code> (из старой системы календаря Wicket, ProjectForge ≤v6) в новый <code>CalendarFilter</code>. Сопоставляет свойства, включая идентификаторы календарей, настройки видимости, настройки табеля учета времени и флаги перерывов/планирования. Если в старом шаблоне было включено <code>showTimesheets</code>, пользователь табеля устанавливается на текущего вошедшего в систему пользователя.</p>
+
+<h2 class="hist">История Git</h2>
+<div class="hist">
+<ul>
+<li><strong>868d6abb7</strong> 2025 → 2026</li>
+<li><strong>63081666f</strong> Заголовки исходных файлов: 2024→ 2025.</li>
+<li><strong>67805f2fc</strong> UserContext.user → loggedInUser (переименование для ясности)</li>
+<li><strong>4c04cfd65</strong> MAJOR: Миграция целочисленных идентификаторов на Long ID</li>
+<li><strong>b6092df09</strong> Авторское право 2023 → 2024</li>
+<li><strong>ab45d51fa</strong> Авторское право 2001-2022 → 2001-2023</li>
+<li><strong>38bec971a</strong> ThreadLocal → Kotlin</li>
+<li><strong>59c37d132</strong> Исправление видимых календарей при медленных соединениях</li>
+<li><strong>893e60ff7</strong> Реализованы перерывы в табелях учета времени</li>
+<li><strong>407b4c9c9</strong> Первый час дня настраивается; всплывающие подсказки</li>
+<li><strong>06a8f9eaa</strong> Дополнительные функции: обновление, ссылка на список календарей, всплывающие подсказки</li>
+<li><strong>0dceea14d</strong> Исправление NPE: нулевые идентификаторы календарей из-за (де)сериализации</li>
+<li><strong>5f7ef41b8</strong> Авторское право 2021 → 2022</li>
+<li><strong>ceb63e8a1</strong> Авторское право 2001-2021</li>
+<li><strong>7c79f1922</strong> Авторское право → 2020</li>
+<li><strong>d3a178833</strong> Отменен неправильный рефакторинг "calendar" → "datetime"</li>
+<li><strong>21d25e87e</strong> Календарь отпусков работает для групп и пользователей</li>
+<li><strong>f180ee2b4</strong> WIP: VacationCache и VacationProvider</li>
+<li><strong>4a5111739</strong> Размер сетки по умолчанию 15 (было 30)</li>
+<li><strong>009e83aaa</strong> Размер сетки 15 → 30 минут</li>
+<li><strong>a08cb441c</strong> Размер сетки настраивается</li>
+<li><strong>5dc55cb4a</strong> Выбор пользователя табеля учета времени (зависит от роли)</li>
+<li><strong>3e5dc3d34</strong> WIP: CalendarFavorites</li>
+<li><strong>88b028834</strong> Показывать значок синхронизации только если избранное изменено</li>
+<li><strong>f2b2d5e8b</strong> WIP CalendarFilter</li>
+<li><strong>73398dec9</strong> WIP: CalendarFilter</li>
+<li><strong>159f9409b</strong> Удаление нулевых значений из наборов после десериализации</li>
+<li><strong>05244ff19</strong> Создан/обновлен заголовок файла Kotlin</li>
+<li><strong>46f71e71a</strong> Перемещено в бизнес-модуль</li>
+<li><strong>bd3a3e824</strong> Переименование модуля: jax-rs → rest</li>
+<li><strong>4da4886be</strong> Видимость активных идентификаторов календарей</li>
+<li><strong>6da83b5c3</strong> WIP: CalendarFilter</li>
+<li><strong>d0665668c</strong> Сохранение activeCalendarIds</li>
+<li><strong>d27ecfa74</strong> WIP: CalendarFilter</li>
+<li><strong>7b2661bfc</strong> Календари и цвета</li>
+<li><strong>62b30ad90</strong> WIP: React календарь</li>
+<li><strong>8caaa35a0</strong> WIP: Новый React календарь</li>
+</ul>
+</div>
+
+<h2>Обоснование дизайна</h2>
+<p>
+<code>CalendarFilter</code> — это насыщенная данными модель класса, а не традиционный DTO. Он несет бизнес-логику для поддержания согласованности между двумя связанными наборами (<code>calendarIds</code> и <code>invisibleCalendars</code>) через такие методы, как <code>tidyUp()</code> и <code>afterDeserialization()</code>. Аннотации <code>@Suppress("SENSELESS_COMPARISON")</code> признают, что nullable значения <code>Long?</code> в наборах технически возможны после десериализации XML/JSON, и класс защитно очищает их. Расширяя <code>AbstractFavorite</code>, он наследует инфраструктуру именованных избранных (имя + id), позволяя пользователям создавать, именовать и переключаться между несколькими конфигурациями фильтров — ключевая функция UX календаря. Глубокое копирование через <code>copyFrom()</code> (вместо переопределения <code>clone()</code> или класса данных) дает вызывающим сторонам явный контроль над тем, когда происходят копии, избегая непреднамеренного общего изменяемого состояния. Устаревший <code>copyFrom(TemplateEntry)</code> в объекте-компаньоне инкапсулирует всю логику миграции из старого календаря Wicket, сохраняя основной класс чистым и обеспечивая обратную совместимость для существующих пользовательских настроек.
+</p>
+
+</body>
+</html>

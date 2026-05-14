@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>#1336 [FR]</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:2em;color:#444}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}</style>
+</head>
+<body>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">&#8592; Index</a> &#183; <a href="file-index.html">&#8592; Index des fichiers</a> &#183; <a href="1236.html">&#8592; Précédent</a> &#183; <a href="1238.html">Suivant &#8594;</a></div>
+<h1>#1336 : <code>PfPersistenceService.kt</code></h1>
+<div class="meta"><code>projectforge-business/src/main/kotlin/org/projectforge/framework/persistence/jpa/PfPersistenceService.kt</code> Service Spring, projectforge-business/src/main/kotlin/org/projectforge/framework/persistence/jpa/PfPersistenceService.kt <span style="color:#888">398 lignes · 268 code · 106 commentaires · 24 vides</span></div>
+<div class="c">Service de persistance central gérant le cycle de vie de l'EntityManager JPA via <code>PfPersistenceContext</code> avec suivi ThreadLocal. Fournit des méthodes pour exécuter du code dans des contextes transactionnels ou en lecture seule, en réutilisant les contextes existants lorsque c'est possible. Utilise une conception compatible avec <code>kotlinx.coroutines</code>. Suit les statistiques de connexion pour les tests et le débogage.</div>
+
+<h2>Architecture</h2>
+<h3>Gestion des contextes</h3>
+<table>
+  <tr><th>Méthode</th><th>Type de contexte</th><th>Réutilise l'existant ?</th><th>Crée une transaction ?</th></tr>
+  <tr><td><code>runInTransaction(run)</code></td><td>Transactionnel</td><td>Oui (si déjà dans ThreadLocal)</td><td>Oui (si nouveau contexte)</td></tr>
+  <tr><td><code>runInNewTransaction(run)</code></td><td>Transactionnel</td><td>Non (crée toujours un nouveau, restaure après)</td><td>Oui</td></tr>
+  <tr><td><code>runReadOnly(block)</code></td><td>Lecture seule</td><td>Oui (Transactionnel ou Lecture seule)</td><td>Non</td></tr>
+  <tr><td><code>runIsolatedReadOnly(block)</code></td><td>Lecture seule</td><td>Non (crée toujours un nouveau)</td><td>Non</td></tr>
+</table>
+
+<h3>Implémentation transactionnelle (<code>internalRunInNewTransaction</code>)</h3>
+<ol>
+  <li>Sauvegarde le contexte transactionnel actuel depuis ThreadLocal</li>
+  <li>Crée un nouveau <code>PfPersistenceContext</code> de type TRANSACTION</li>
+  <li>Le définit dans ThreadLocal via <code>PfPersistenceContextThreadLocal.setTransactional()</code></li>
+  <li>Débute la transaction : <code>em.transaction.begin()</code></li>
+  <li>Exécute le bloc ; en cas de succès : commit ; en cas d'exception : rollback</li>
+  <li>Enfin : supprime le contexte de ThreadLocal, restaure le contexte sauvegardé</li>
+</ol>
+
+<h3>Implémentation en lecture seule (<code>internalRunReadOnly</code>)</h3>
+<ol>
+  <li>Sauvegarde le contexte en lecture seule actuel</li>
+  <li>Crée un nouveau <code>PfPersistenceContext</code> de type READONLY</li>
+  <li>Définit la session Hibernate defaultReadOnly = true (pas de vidage, empêche les écritures accidentelles)</li>
+  <li>Exécute le bloc sans transaction</li>
+  <li>Enfin : supprime le contexte, restaure le contexte sauvegardé</li>
+</ol>
+
+<h3>Méthodes de requête pratiques (toutes déléguées à <code>runReadOnly</code>)</h3>
+<table>
+  <tr><th>Méthode</th><th>Paramètres</th><th>Description</th></tr>
+  <tr><td><code>find(entityClass, id)</code></td><td>classe, id, attaché, nomGraphEntité</td><td>Recherche JPA par clé primaire</td></tr>
+  <tr><td><code>selectAll(entityClass)</code></td><td>classe, attaché, modeVerrouillage, nomGraphEntité</td><td>Sélectionne toutes les entités d'un type</td></tr>
+  <tr><td><code>selectSingleResult(sql, resultClass)</code></td><td>requête, classe, params, nullAutorisé, etc.</td><td>Requête nommée/HQL retournant un seul résultat</td></tr>
+  <tr><td><code>selectNamedSingleResult(namedQuery, resultClass)</code></td><td>requête, classe, params, nullAutorisé, etc.</td><td>Praticité avec namedQuery=true</td></tr>
+  <tr><td><code>executeQuery(sql, resultClass)</code></td><td>requête, classe, params, attaché, namedQuery, etc.</td><td>Exécute une requête retournant une liste</td></tr>
+  <tr><td><code>executeNamedQuery(namedQuery, resultClass)</code></td><td>requête, classe, params, attaché, etc.</td><td>Praticité avec namedQuery=true</td></tr>
+  <tr><td><code>getNextNumber(table, attribute)</code></td><td>table, attribut, numéroDépart</td><td>SELECT MAX(attribut)+1 pour la génération d'ID</td></tr>
+</table>
+
+<h3>Support de test</h3>
+<ul>
+  <li><code>getCopyOfCurrentStateForTesting()</code> — instantané de <code>PersistenceConnectionStats</code></li>
+  <li><code>getActivitiesForTesting(oldState)</code> — différence entre les statistiques anciennes et actuelles</li>
+  <li>Paramètres <code>recordCallStats / recordCallStatsExtended</code> sur <code>runInNewTransaction</code> et <code>runIsolatedReadOnly</code></li>
+</ul>
+
+<h3>Instance singleton</h3>
+<pre>companion object {
+    lateinit var instance: PfPersistenceService; private set
+}</pre>
+<p>Défini dans <code>@PostConstruct</code> ; appelle également <code>HibernateUtils.internalInit(entityManagerFactory)</code>.</p>
+
+<h2>Historique Git</h2><div class="hist"><pre>
+868d6abb7 2025 -> 2026
+63081666f En-têtes des fichiers sources : 2024 -> 2025.
+2bcdfbbc6 WIP : stockage du carnet d'ordres.
+9aff90908 Migration en cours... (tous les tests OK).
+567ca70cd Migration en cours... spring.datasource.hikari.auto-commit=false
+1e18ea268 ehcache supprimé :-(
+f31e8064e Migration en cours...
+f570f0e53 Migration en cours... (tous les tests OK).
+50f788c06 Migration en cours...
+ba2479571 Migration en cours...
+0ceceb28f Tous les rafraîchissements de cache s'exécutent désormais dans des transactions ou contextes isolés.
+b3293f0cc PersistenceService/Context : gestion des statistiques améliorée.
+41b5c2645 Migration en cours...
+c14b18a48 Migration en cours... (tous les tests OK).
+87dd5b87c AuftragsCache refactorisé, migration... (tous les tests OK)
+b56ebe329 PersistenceCallsStats ajouté (tous les tests OK).
+4b9ffbee2 Migration en cours... (tous les tests OK).
+6f482cb81 Migration en cours... (tous les tests OK).
+9408b59d7 Migration en cours...
+a6edf511e Migration en cours... PersistenceThreadLocalStats
+b1a4bf2ac Migration en cours... (tous les tests OK).
+1564553d8 Migration en cours...
+2d2f6063e Migration en cours...
+1149aeaae Migration en cours... PfPersistenceContextThreadLocal refactorisé.
+85b4e1175 PfPersistenceService/PfPersistenceContext : query -> executeQuery.
+efb1954bd Migration en cours...
+c2e2c3449 EntityManagerUtil, PfPersistenceService/PfPersistenceContext refactorisés.
+6be167dc1 Migration en cours...
+2e8d77656 PfPersistenceService réutilise PfPersistenceContext (lecture seule/transactionnel) si disponible.
+108ecf629 !!!!! Gros changement dans la gestion des transactions : réutilisation de PfPersistenceContext.
+b095e6f7d !!!!! Gros changement dans la gestion des transactions : réutilisation de PfPersistenceContext.
+4b8dc7c21 Migration en cours...
+c6b3afb46 Migration en cours...
+7f3cf5f4f Migration en cours...
+8a9870ae7 Migration en cours...
+f2f7cff74 Migration en cours...
+b7b459e73 Migration en cours...
+923f5c64b Migration en cours...
+9d8b94352 Migration en cours...
+e7128d28c Migration en cours...
+a2f3f99b2 Migration en cours...
+d809ca82a Migration en cours...
+67ce75fe9 Migration en cours...
+e33c8b9c2 Migration en cours...
+</pre></div>
+</body>
+</html>

@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>#228: MerlinPlugin.kt [RU]</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:2em;color:#444}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.lang{font-size:.85em;color:#888;float:right}.lang a{color:#888;text-decoration:none;padding:0 .3em}.lang a.active{color:#0366d6;font-weight:600;text-decoration:underline}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}</style>
+</head>
+<body>
+<div class="lang"><a href="228.html">EN</a> · <a href="228_de.html">DE</a> · <a href="228_ru.html" class="active">RU</a> · <a href="228_fr.html">FR</a> · <a href="228_es.html">ES</a></div>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Индекс</a> · <a href="file-index.html">← Индекс файлов</a> · <a href="137.html">← Назад</a> · <a href="2717.html">Вперёд →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/plugins/org.projectforge.plugins.merlin/src/main/kotlin/org/projectforge/plugins/merlin/MerlinPlugin.kt" target="_blank" title="Просмотреть исходный код на GitHub">📄 исходник</a></div>
+<h1>#228: <code>MerlinPlugin.kt</code></h1>
+<div class="meta"><code>plugins/org.projectforge.plugins.merlin/src/main/kotlin/org/projectforge/plugins/merlin/MerlinPlugin.kt</code> Тип: Kotlin · Роль: Регистрация плагина · Исходник: plugins/org.projectforge.plugins.merlin/src/main/kotlin/org/projectforge/plugins/merlin/MerlinPlugin.kt <span style="color:#888">120 строк · 76 кода · 33 комментария · 11 пустых</span></div>
+<div class="c">Класс регистрации плагина, расширяющий AbstractPlugin. Объявляет имя модуля, регистрирует DAO, пункты меню, ресурсы i18n и логику checkAccess для плагина Merlin.</div>
+<h2>Структура кода</h2>
+<p>Аннотации: <code>author</code>, <code>micromata</code></p>
+<p>Классы: <code>MerlinPlugin</code></p>
+<p>Объекты: <code>etc</code></p>
+<p>Супертип(ы): <code>AbstractPlugin</code></p>
+<p>Функции (3): <code>initialize</code>, <code>ensureUserLogSubscription</code>, <code>createUserLogSubscriptionMenuItem</code></p>
+<p>Свойства (7): <code>merlinTemplateDao</code>, <code>menuCreator</code>, <code>attachmentsService</code>, <code>attachmentsServicesRest</code>, <code>ID</code>, <code>RESOURCE_BUNDLE_NAME</code>, <code>username</code></p>
+<p>Импорты: 18 пакетов</p>
+<p>Пакет: <code>org.projectforge.plugins.merlin</code></p>
+<h2>Исходный код (сокращён)</h2>
+<pre>
+package org.projectforge.plugins.merlin
+
+import org.projectforge.Constants
+import org.projectforge.common.logging.LogEventLoggerNameMatcher
+import org.projectforge.common.logging.LogSubscription
+import org.projectforge.framework.jcr.AttachmentsService
+import org.projectforge.framework.persistence.user.api.ThreadLocalUserContext
+import org.projectforge.menu.MenuItem
+import org.projectforge.menu.MenuItemTargetType
+import org.projectforge.menu.builder.MenuCreator
+import org.projectforge.menu.builder.MenuItemDef
+import org.projectforge.menu.builder.MenuItemDefId
+import org.projectforge.plugins.core.AbstractPlugin
+import org.projectforge.plugins.core.PluginAdminService
+import org.projectforge.plugins.merlin.rest.MerlinAttachmentsActionListener
+import org.projectforge.rest.AttachmentsServicesRest
+import org.projectforge.rest.admin.LogViewerPageRest
+import org.projectforge.rest.config.JacksonConfiguration
+import org.projectforge.rest.core.PagesResolver
+import org.projectforge.web.WicketSupport
+
+/**
+ * Инициализация вашего плагина. Зарегистрируйте все компоненты, такие как файлы i18n, объекты доступа к данным и т.д.
+ *
+ * @author Kai Reinhard (k.reinhard@micromata.de)
+ */
+class MerlinPlugin :
+    AbstractPlugin(
+        ID,
+        &quot;Merlin-Word®-Templates&quot;,
+        &quot;Плагин для шаблонов Microsoft Word® (с переменными, зависимыми переменными, а также последовательным выполнением). Полезен для контрактов, серийных документов и т.д.&quot;
+    ) {
+
+    override fun initialize() {
+        val merlinTemplateDao = WicketSupport.get(MerlinTemplateDao::class.java)
+        val menuCreator = WicketSupport.get(MenuCreator::class.java)
+        val attachmentsService = WicketSupport.get(AttachmentsService::class.java)
+        val attachmentsServicesRest = WicketSupport.get(AttachmentsServicesRest::class.java)
+        // Регистрируем:
+        register(MerlinTemplateDao::class.java, merlinTemplateDao, &quot;plugins.merlin&quot;)
+
+        // Будет отправлено клиенту, но должно игнорироваться при отправке обратно:
+        JacksonConfiguration.registerAllowedUnknownProperties(
+            MerlinVariable::class.java,
+            &quot;allowedValuesFormatted&quot;,
+            &quot;mappingMasterValues&quot;,
+        )
+
+        menuCreator.register(
+            MenuItemDefId.MISC,
+            MenuItemDef(info.id, &quot;plugins.merlin.menu&quot;, &quot;${Constants.REACT_APP_PATH}merlin&quot;)
+        )
+
+        // Всё, что связано с i18n:
+        addResourceBundle(RESOURCE_BUNDLE_NAME)
+
+        attachmentsServicesRest.register(
+            ID,
+            MerlinAttachmentsActionListener(attachmentsService, merlinTemplateDao)
+        )
+    }
+
+    companion object {
+        const val ID = PluginAdminService.PLUGIN_MERLIN_ID
+        const val RESOURCE_BUNDLE_NAME = &quot;MerlinI18nResources&quot;
+
+        fun ensureUserLogSubscription(): LogSubscription {
+            val username = ThreadLocalUserContext.loggedInUser!!.username ?: throw InternalError(&quot;Пользователь не указан&quot;)
+            return LogSubscription.ensureSubscription(
+                title = &quot;Merlin&quot;,
+                user = username,
+                create = { title, user -&gt;
+                    LogSubscription(
+                        title,
+                        user,
+                        LogEventLoggerNameMatcher(&quot;de.micromata.merlin&quot;, &quot;org.projectforge.plugins.merlin&quot;),
+                        maxSize = 10000,
+                    )
+                })
+        }
+
+        /**
+         * Также вызывает [ensureUserLogSubscription].
+         */
+        fun createUserLogSubscriptionMenuItem(): MenuItem {
+            return MenuItem(
+                &quot;logViewer&quot;,
+                i18nKey = &quot;plugins.merlin.viewLogs&quot;,
+                url = PagesResolver.getDynamicPageUrl(
+                    LogViewerPageRest::class.java,
+                    id = ensureUserLogSubscription().id
+                ),
+                type = MenuItemTargetType.REDIRECT,
+            )
+        }
+    }
+}</pre>
+
+<h2>История Git</h2><div class="hist"><pre>868d6abb7 2025 -> 2026
+63081666f Заголовки исходных файлов: 2024 -> 2025.
+3785f8347 Миграция в процессе...
+67805f2fc ThreadLocalUserContext.user -> ThreadLocalUserContext.loggedInUser (переименовано для избежания недопонимания в коде).
+b6092df09 Авторские права 2023 -> 2024</pre></div>
+</body></html>

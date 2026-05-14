@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>#15: BuildPropertiesGenerator.kt [DE]</title>
+<style>
+  body { font-family: system-ui, sans-serif; max-width: 960px; margin: 2em auto; padding: 0 1em; background: #fafafa; color: #222; line-height: 1.6; }
+  h1 { border-bottom: 2px solid #333; }
+  h2 { margin-top: 2.5em; border-bottom: 1px solid #ddd; padding-bottom: 0.2em; }
+  h3 { margin-top: 2em; }
+  a { color: #0366d6; text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  .meta { background: #f0f0f0; border-radius: 6px; padding: 1em; margin: 1em 0; font-size: 0.9em; }
+  .code-block { background: #f8f8f8; border: 1px solid #ddd; border-radius: 4px; padding: 0.5em; margin: 0.5em 0; overflow-x: auto; }
+  .code-block pre { margin: 0; font-family: 'Consolas', monospace; font-size: 0.85em; line-height: 1.5; }
+  .commentary { margin: 1em 0; line-height: 1.7; background: #fff; padding: 0.5em 1em; border-radius: 6px; border-left: 4px solid #ddd; }
+  table { border-collapse: collapse; width: 100%; margin: 1em 0; font-size: 0.9em; }
+  th, td { border: 1px solid #ddd; padding: 0.5em; text-align: left; }
+  th { background: #f0f0f0; }
+  code { background: #e8e8e8; border-radius: 3px; padding: 0.1em 0.3em; font-size: 0.9em; }
+  .nav { font-size: 0.9em; color: #888; margin-bottom: 1em; }
+  .output-sample { background: #f0f4f0; border: 1px solid #ccc; border-radius: 4px; padding: 0.5em; font-family: 'Consolas', monospace; font-size: 0.85em; }
+</style>
+</head>
+<body>
+
+<div class="nav">
+  <a href="https://maureranton.github.io/projectforge/">← Dokumentationsindex</a> ·
+  <a href="file-index.html">← Dateiindex</a> ·
+  <a href="14.html">← Vorherige</a> · Nächste → · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/buildSrc/src/main/kotlin/org.projectforge/BuildPropertiesGenerator.kt" target="_blank" title="Quelltext auf GitHub ansehen">📄 Quelle</a></div>
+
+<h1>#15: <code>BuildPropertiesGenerator.kt</code></h1>
+
+<div class="meta"><code>buildSrc/src/main/kotlin/org.projectforge/BuildPropertiesGenerator.kt</code> 
+  <p><strong>Pfad:</strong> <code>./buildSrc/src/main/kotlin/org.projectforge/BuildPropertiesGenerator.kt</code></p>
+  <p><strong>Typ:</strong> Kotlin-Klasse — benutzerdefinierte Gradle-Aufgabe</p>
+  <p><strong>Zeilen:</strong> 57</p>
+  <p><strong>Zweck:</strong> Erzeugt eine <code>build.properties</code>-Datei mit Git-Commit-Informationen, Branch, Build-Zeitstempel und Version — zur Laufzeit in die Anwendung eingebunden</p>
+  <p><strong>Quelle:</strong> <a href="https://github.com/micromata/projectforge/blob/9ed5fbe0f/buildSrc/src/main/kotlin/org.projectforge/BuildPropertiesGenerator.kt">GitHub</a></p>
+ <span style="color:#888">57 Zeilen · 48 Code · 4 Kommentare · 5 Leerzeichen</span></div>
+
+<h2>Was es tut</h2>
+
+<div class="commentary">
+  <p>Jedes Mal, wenn ProjectForge gebaut wird, führt diese Aufgabe <strong>fünf Git-Befehle</strong> aus und schreibt die Ergebnisse in eine <code>.properties</code>-Datei. Diese Datei wird dann in das JAR verpackt und zur Laufzeit gelesen, um Versionsinformationen anzuzeigen (der "Über"-Dialog, Systemstatus-Endpunkt usw.).</p>
+  <p>Die erzeugte Ausgabe sieht wie folgt aus:</p>
+  <div class="output-sample"><span style="color:#888"># Von Gradle generiert</span>
+gradle.version=<strong>8.2-SNAPSHOT</strong>
+gradle.build.date=2026-05-10
+gradle.build.timestamp=2026-05-10T12:34:56Z
+git.branch=<strong>fix/vite-eslint-upgrade</strong>
+git.commit.id.abbrev=<strong>e67067a</strong>
+git.commit.id.full=<strong>e67067aa7f00b3a6b6afc7ffe9af69718e277fc1</strong>
+git.commit.time=2026-05-10 12:30:00 +0100
+git.dirty=<strong>true</strong></div>
+  <p style="margin-top:0.5em">Das Feld <code>git.dirty=true</code> ist besonders nützlich — es zeigt an, ob der Build aus sauberen Quellen oder mit nicht festgeschriebenen Änderungen erstellt wurde.</p>
+</div>
+
+<h2>Zeile für Zeile</h2>
+
+<h3>Zeilen 1–15: Klassendeklaration</h3>
+
+<div class="code-block"><pre><span style="color:#999"> 1</span> package org.projectforge
+<span style="color:#999"> 2</span> 
+<span style="color:#999"> 3</span> import java.io.File
+<span style="color:#999"> 4</span> import java.time.OffsetDateTime
+<span style="color:#999"> 5</span> import java.time.ZoneOffset
+<span style="color:#999"> 6</span> import java.time.format.DateTimeFormatter
+<span style="color:#999"> 7</span> 
+<span style="color:#999"> 8</span> /** Generiert eine Eigenschaftendatei mit Git-Informationen sowie Gradle-Informationen */
+<span style="color:#999"> 9</span> class BuildPropertiesGenerator(
+<span style="color:#999">10</span>     private val rootDirPath: String,        // ← Projektstamm (wo .git/ lebt)
+<span style="color:#999">11</span>     private val outputFilePath: String,     // ← wohin die .properties-Datei geschrieben wird
+<span style="color:#999">12</span>     private val projectVersion: String      // ← z.B. "8.2-SNAPSHOT"
+<span style="color:#999">13</span> ) {</pre></div>
+
+<div class="commentary">
+  <p><strong>Drei Konstruktorparameter</strong> — von der Gradle-Aufgabe injiziert, die diese Klasse aufruft:</p>
+  <table>
+    <tr><th>Parameter</th><th>Quelle</th><th>Beispiel</th></tr>
+    <tr><td><code>rootDirPath</code></td><td>Gradles <code>project.rootDir</code></td><td><code>/home/dev/projectforge</code></td></tr>
+    <tr><td><code>outputFilePath</code></td><td>Konfigurierbarer Pfad im Build-Skript</td><td><code>build/resources/main/build.properties</code></td></tr>
+    <tr><td><code>projectVersion</code></td><td>Aus <a href="4.html">Konventions-Plugin</a> Zeile 18</td><td><code>8.2-SNAPSHOT</code></td></tr>
+  </table>
+  <p>Diese Klasse ist <strong>keine</strong> Gradle-<code>Aufgabe</code> — es ist eine einfache Kotlin-Klasse, die von einer Gradle-Aufgabe aufgerufen wird, die in jedem Unterprojekt in <code>build.gradle.kts</code> registriert ist.</p>
+</div>
+
+<h3>Zeilen 16–29: Die Methode <code>generate()</code> — Git-Abfrage</h3>
+
+<div class="code-block"><pre><span style="color:#999">20</span> val branch = "git rev-parse --abbrev-ref HEAD".runCommand(rootDir) ?: "unknown"
+<span style="color:#999">21</span> val commitIdFull = "git rev-parse HEAD".runCommand(rootDir) ?: "unknown"
+<span style="color:#999">22</span> val commitIdAbbrev = commitIdFull.take(7)
+<span style="color:#999">23</span> val commitTime = "git show -s --format=%ci HEAD".runCommand(rootDir) ?: "unknown"
+<span style="color:#999">24</span> val isDirty = "git status --porcelain".runCommand(rootDir)?.isNotBlank().toString()
+<span style="color:#999">25</span> val now = OffsetDateTime.now(ZoneOffset.UTC)
+<span style="color:#999">26</span> val buildDate = now.format(DateTimeFormatter.ISO_OFFSET_DATE)
+<span style="color:#999">27</span> val buildTimeStamp = now.format(DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss'Z'"))</pre></div>
+
+<div class="commentary">
+  <p>Fünf Git-Befehle, ausgeführt über <code>runCommand()</code>:</p>
+  <table>
+    <tr><th>Zeile</th><th>Git-Befehl</th><th>Zweck</th><th>Beispielausgabe</th></tr>
+    <tr><td>20</td><td><code>git rev-parse --abbrev-ref HEAD</code></td><td>Aktueller Branchname</td><td><code>fix/vite-eslint-upgrade</code></td></tr>
+    <tr><td>21</td><td><code>git rev-parse HEAD</code></td><td>Vollständiger Commit-SHA</td><td><code>e67067aa7f00...</code></td></tr>
+    <tr><td>22</td><td><code>.take(7)</code> auf dem vollständigen SHA</td><td>Kurzer Commit-SHA (7 Zeichen)</td><td><code>e67067a</code></td></tr>
+    <tr><td>23</td><td><code>git show -s --format=%ci HEAD</code></td><td>Commit-Zeitstempel</td><td><code>2026-05-10 12:30:00 +0100</code></td></tr>
+    <tr><td>24</td><td><code>git status --porcelain</code></td><td>Ist der Arbeitsbaum verschmutzt?</td><td><code>true</code> oder <code>false</code></td></tr>
+  </table>
+
+  <p><strong>Zeile 24 — Dirty-Flag:</strong> <code>git status --porcelain</code> gibt einen leeren String für einen sauberen Arbeitsbaum zurück, einen nicht leeren für einen verschmutzten. <code>.isNotBlank()</code> wandelt dies in einen Boolean um, <code>.toString()</code> in <code>"true"</code>/<code>"false"</code>. Dies ist das nützlichste Feld für die Fehlersuche: Ein Build mit <code>git.dirty=true</code> bedeutet, dass der ausgeführte Code nicht exakt mit einem Commit übereinstimmt.</p>
+
+  <p><strong>Zeilen 25–27:</strong> Build-Zeitstempel — zum Zeitpunkt des Builds erfasst, nicht zum Zeitpunkt des Commits. Verwendet <a href="https://docs.oracle.com/en/java/javase/17/docs/api/java.base/java/time/OffsetDateTime.html"><code>OffsetDateTime.now(UTC)</code></a> für eine konsistente Zeitzone.</p>
+</div>
+
+<h3>Zeilen 29–43: Dateiausgabe</h3>
+
+<div class="code-block"><pre><span style="color:#999">29</span> outputFile.parentFile.mkdirs()
+<span style="color:#999">30</span> outputFile.writeText(
+<span style="color:#999">31</span>     """
+<span style="color:#999">32</span>     # Von Gradle generiert
+<span style="color:#999">33</span>     gradle.version=$projectVersion
+<span style="color:#999">34</span>     gradle.build.date=$buildDate
+<span style="color:#999">35</span>     gradle.build.timestamp=$buildTimeStamp
+<span style="color:#999">36</span>     git.branch=$branch
+<span style="color:#999">37</span>     git.commit.id.abbrev=$commitIdAbbrev
+<span style="color:#999">38</span>     git.commit.id.full=$commitIdFull
+<span style="color:#999">39</span>     git.commit.time=$commitTime
+<span style="color:#999">40</span>     git.dirty=$isDirty
+<span style="color:#999">41</span>     """.trimIndent()
+<span style="color:#999">42</span> )</pre></div>
+
+<div class="commentary">
+  <p><strong>Zeile 29:</strong> Erstellt übergeordnete Verzeichnisse, falls sie nicht existieren — wichtig für CI, wo das Build-Ausgabeverzeichnis möglicherweise noch nicht existiert.</p>
+  <p><strong>Zeilen 31–41:</strong> Ein <a href="https://kotlinlang.org/docs/strings.html#raw-strings">Kotlin-Rohstring</a> (<code>"""</code>) mit <code>trimIndent()</code> — entfernt führende Leerzeichen aus jeder Zeile für eine saubere Ausgabe.</p>
+  <p><strong>Zeile 43:</strong> Gibt eine Bestätigung im Build-Log aus: <code>Git-Eigenschaften geschrieben nach /pfad/zu/build.properties</code>.</p>
+</div>
+
+<h3>Zeilen 46–56: <code>runCommand()</code> — der Shell-Ausführer</h3>
+
+<div class="code-block"><pre><span style="color:#999">46</span> private fun String.runCommand(workingDir: File): String? {
+<span style="color:#999">47</span>     return try {
+<span style="color:#999">48</span>         val process = ProcessBuilder(*split(" ").toTypedArray())
+<span style="color:#999">49</span>             .directory(workingDir)
+<span style="color:#999">50</span>             .redirectErrorStream(true)
+<span style="color:#999">51</span>             .start()
+<span style="color:#999">52</span>         process.inputStream.bufferedReader().readText().trim()
+<span style="color:#999">53</span>             .takeIf { process.waitFor() == 0 }
+<span style="color:#999">54</span>     } catch (e: Exception) { null }
+<span style="color:#999">55</span> }</pre></div>
+
+<div class="commentary">
+  <p><strong>Erweiterungsfunktion</strong> auf <code>String</code> — ermöglicht das Aufrufen von Git-Befehlen mit natürlicher Syntax: <code>"git rev-parse HEAD".runCommand(rootDir)</code>.</p>
+
+  <p><strong>Zeile 48:</strong> <code>ProcessBuilder(*split(" ").toTypedArray())</code> — teilt den Befehlstring durch Leerzeichen in Argumente auf. <code>ProcessBuilder</code> ist die Art und Weise der Java-Standardbibliothek, externe Prozesse zu starten.</p>
+
+  <p><strong>Zeile 49:</strong> <code>.directory(workingDir)</code> — setzt das Arbeitsverzeichnis für den Git-Befehl. Muss auf das Projektstammverzeichnis zeigen (wo <code>.git/</code> lebt).</p>
+
+  <p><strong>Zeile 50:</strong> <code>.redirectErrorStream(true)</code> — leitet stderr in stdout um. Warum? Wenn stderr getrennt und ungelesen wäre, könnte der Prozess hängen bleiben, während er darauf wartet, dass der Puffer geleert wird.</p>
+
+  <p><strong>Zeile 53:</strong> <code>.takeIf { process.waitFor() == 0 }</code> — gibt die Ausgabe nur zurück, wenn der Prozess mit dem Code 0 (Erfolg) beendet wurde. Wenn Git fehlschlägt (z.B. kein Git-Repository), wird <code>null</code> zurückgegeben → der Aufrufer verwendet <code>?: "unknown"</code> als Fallback.</p>
+
+  <p><strong>Zeile 54:</strong> <code>catch (e: Exception) { null }</code> — unterdrückt alle Ausnahmen. Wenn Git nicht installiert ist, stürzt der Build nicht ab — er erhält einfach <code>"unknown"</code>-Werte.</p>
+</div>
+
+<h2>Wo die Ausgabe verwendet wird</h2>
+
+<div class="commentary">
+  <p>Die generierte <code>build.properties</code> wird zur Laufzeit von Spring Boots <a href="https://docs.spring.io/spring-boot/docs/current/reference/html/features.html#features.external-config"><code>@PropertySource</code></a> oder der <code>application.properties</code>-Platzhalterauflösung gelesen. ProjectForge verwendet sie für:</p>
+  <ul>
+    <li><strong>Systemstatus-REST-Endpunkt:</strong> <code>GET /rs/userStatus</code> gibt <code>{ systemData: { version, buildTimestamp } }</code> zurück — das React-Frontend zeigt dies in der Fußzeile an</li>
+    <li><strong>Über-Dialog:</strong> Zeigt die Version, das Build-Datum und den Commit-SHA an</li>
+    <li><strong>Versionsprüfung:</strong> Die Anwendung vergleicht ihre Version mit der neuesten Version auf GitHub, um Administratoren über Updates zu benachrichtigen</li>
+  </ul>
+</div>
+
+<h2>Wichtige Erkenntnisse</h2>
+
+<div class="commentary">
+  <ul>
+    <li><strong>57 Zeilen, eine Aufgabe:</strong> Git abfragen und eine Eigenschaftendatei schreiben.</li>
+    <li><strong><code>git.dirty</code> ist Gold wert:</strong> Sagt Ihnen sofort, ob der Build nicht festgeschriebene Änderungen enthält.</li>
+    <li><strong>Ausfallsicher:</strong> Alle Git-Befehle fallen auf <code>"unknown"</code> zurück — der Build bricht nie ab, weil Git nicht verfügbar ist.</li>
+    <li><strong>Keine Gradle-Aufgabe:</strong> Dies ist eine einfache Kotlin-Klasse, die von einem <code>doLast { }</code>-Block in den Build-Skripten der Unterprojekte aufgerufen wird.</li>
+    <li><strong>Ein Build, eine Eigenschaftendatei:</strong> Mehrere Unterprojekte können dies aufrufen, jedes mit einem anderen <code>outputFilePath</code>.</li>
+  </ul>
+</div>
+
+<div class="nav" style="margin-top:2em; padding-top:1em; border-top:1px solid #ddd">
+  <a href="4.html">← #4: buildlogic.pf-module-conventions.gradle.kts</a> ·
+  Nächste: <a href="file-index.html">Dateiindex</a>
+</div>
+
+</body>
+</html>

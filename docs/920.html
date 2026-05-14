@@ -2,69 +2,69 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>#920: EmployeeDO.kt</title>
+<title>#920: EmployeeCache.kt</title>
 <style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:2em;color:#444}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}</style>
 </head>
 <body>
-<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="919.html">← Prev</a> · <a href="921.html">Next →</a></div>
-<h1>#920: <code>EmployeeDO.kt</code></h1>
-<div class="meta">Type: JPA Entity (Data Object) · Purpose: Represents an employee — the link between a ProjectForge user and financial/HR data · Path: <code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/EmployeeDO.kt</code></div>
-<div class="c">Central entity connecting a <code>PFUserDO</code> (user account) to financial, HR, and time-tracking data. Mapped to table <code>t_fibu_employee</code>. Implements <code>Comparable</code> (by user lastname/firstname) and <code>DisplayNameCapable</code> (delegates to user's fullname). Declared <code>open</code> for Hibernate proxy support and test mocking (VacationServiceTest).</div>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="919.html">← Prev</a> · <a href="921.html">Next →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/kotlin/org/projectforge/business/fibu/EmployeeCache.kt" target="_blank" title="View source on GitHub">📄 source</a></div>
+<h1>#920: <code>EmployeeCache.kt</code></h1>
+<div class="meta"><code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/EmployeeCache.kt</code> Type: Spring Component / Cache · Purpose: In-memory cache of all employees with computed time-dependent attributes · Path: <code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/EmployeeCache.kt</code> <span style="color:#888">209 lines · 143 code · 43 comments · 23 blank</span></div>
+<div class="c">High-performance cache that maintains a snapshot of all non-deleted employees along with their current <code>status</code>, <code>annualLeave</code>, and <code>weeklyWorkingHours</code> — computed from <code>EmployeeValidSinceAttrDO</code> entries. Extends <code>AbstractCache</code> which provides the refresh/expiry infrastructure. Exposed as a <code>@Component</code> singleton accessible via <code>EmployeeCache.instance</code>.</div>
 
 <h2>Architecture &amp; Design</h2>
 
-<h3>JPA Mapping</h3>
+<h3>Cache Storage</h3>
+<p>The internal <code>employeeMap</code> is a <code>Map&lt;Long, EmployeeDO&gt;</code> keyed by employee database PK. It is <strong>not synchronized</strong> — only written during <code>refresh()</code> and replaced atomically via assignment. Read-only access from multiple threads is safe because each refresh creates a new map instance.</p>
+
+<h3>Refresh Strategy</h3>
+<p>The <code>refresh()</code> method (called by <code>AbstractCache</code> / <code>CacheHelper</code> with synchronization) executes within an isolated read-only transaction:</p>
+<ol>
+<li><strong>Load all non-deleted employees:</strong> <code>from EmployeeDO t where deleted=false</code></li>
+<li><strong>Apply STATUS entries:</strong> Query the latest <code>validSinceEff</code> entries of type <code>STATUS</code>, grouped by employee ID, taking the first record per group.</li>
+<li><strong>Apply ANNUAL_LEAVE entries:</strong> Same grouping pattern — resolves annual leave days valid today.</li>
+<li><strong>Apply WEEKLY_HOURS entries:</strong> Same grouping — resolves weekly working hours.</li>
+<li><strong>Replace map:</strong> The final map is assigned to <code>this.employeeMap</code>.</li>
+</ol>
+
+<h3>Time-Dependent Attribute Resolution</h3>
+<p>The <code>getLatestValidSinceEntries(type)</code> method executes a JPQL query ordering by <code>employee.id, validSince DESC</code>, then groups by employee ID using Kotlin's <code>groupBy</code>. The <strong>first element</strong> of each group (most recent <code>validSince</code>) is selected. A comment in the source notes that a subquery-based approach (<code>SELECT MAX(validSince)</code>) failed under PostgreSQL with missing entries, leading to this post-query grouping approach.</p>
+
+<h3>Key Query Methods</h3>
 <table>
-<tr><th>Field</th><th>DB Column</th><th>Type</th><th>Notes</th></tr>
-<tr><td><code>user</code></td><td><code>user_id</code></td><td><code>PFUserDO (ManyToOne, LAZY)</code></td><td>Unique constraint — one user per employee. Hibernate Search indexed embedded (depth 1). Serialized as ID-only.</td></tr>
-<tr><td><code>kost1</code></td><td><code>kost1_id</code></td><td><code>Kost1DO (ManyToOne, LAZY)</code></td><td>Cost center for monthly reporting. Nullable.</td></tr>
-<tr><td><code>status</code></td><td>—</td><td><code>EmployeeStatus? (@Transient)</code></td><td>NOT persisted — set by <code>EmployeeDao</code>/<code>EmployeeCache</code> from <code>ValidSinceAttr</code>. Internal setter.</td></tr>
-<tr><td><code>annualLeave</code></td><td>—</td><td><code>BigDecimal? (@Transient)</code></td><td>NOT persisted — annual leave days from <code>ValidSinceAttr</code>. Internal setter.</td></tr>
-<tr><td><code>weeklyWorkingHours</code></td><td>—</td><td><code>BigDecimal? (@Transient)</code></td><td>NOT persisted — weekly hours from <code>ValidSinceAttr</code>. Internal setter.</td></tr>
-<tr><td><code>position</code></td><td><code>position_text</code></td><td><code>String (max 244)</code></td><td>Job title / position text. Full-text indexed.</td></tr>
-<tr><td><code>eintrittsDatum</code></td><td><code>eintritt</code></td><td><code>LocalDate?</code></td><td>Entry/start date. Generic field indexed.</td></tr>
-<tr><td><code>austrittsDatum</code></td><td><code>austritt</code></td><td><code>LocalDate?</code></td><td>Exit/quit date. Generic field indexed.</td></tr>
-<tr><td><code>abteilung</code></td><td><code>abteilung</code></td><td><code>String (max 255)</code></td><td>Division/department. Full-text indexed.</td></tr>
-<tr><td><code>staffNumber</code></td><td><code>staff_number</code></td><td><code>String (max 255)</code></td><td>Staff/personnel number. Alphanumeric sort.</td></tr>
-<tr><td><code>comment</code></td><td><code>comment</code></td><td><code>String</code></td><td>Length defined by <code>Constants.COMMENT_LENGTH</code>.</td></tr>
+<tr><th>Method</th><th>Description</th></tr>
+<tr><td><code>getEmployee(id)</code></td><td>Returns cached employee, resolving the <code>user</code> field via <code>UserGroupCache</code> if not initialized.</td></tr>
+<tr><td><code>getEmployeeIfNotInitialized(emp)</code></td><td>Checks <code>HibernateUtils.isFullyInitialized()</code>; if the entity isn't fully loaded, retrieves the cached version.</td></tr>
+<tr><td><code>getEmployeeByUserId(userId)</code></td><td>Reverse lookup — finds an employee by their associated user ID.</td></tr>
+<tr><td><code>getEmployeeIdByUserId(userId)</code></td><td>Reverse lookup returning only the employee ID (avoids full entity load).</td></tr>
+<tr><td><code>getUser(employee)</code></td><td>Resolution helper for <code>PFUserDO</code> via <code>UserGroupCache</code>.</td></tr>
+<tr><td><code>getUserByEmployee(employeeId)</code></td><td>Resolves user from employee ID, going through the cached employee.</td></tr>
+<tr><td><code>setTimeDependentAttrs(employee)</code></td><td>Mutates a given <code>EmployeeDO</code>'s <code>status</code>, <code>annualLeave</code>, and <code>weeklyWorkingHours</code> from cached values. Used by DAO layer to populate transient fields.</td></tr>
+<tr><td><code>findByStaffNumber(staffNumber)</code></td><td>Looks up employee by staff number (overloaded for <code>Int</code> and <code>String</code>).</td></tr>
 </table>
 
-<h3>Named Queries</h3>
-<ul>
-<li><code>EmployeeDO_FindByUserId</code> — <code>from EmployeeDO where user.id=:userId</code></li>
-<li><code>EmployeeDO_GetEmployeeIdByUserId</code> — <code>select id from EmployeeDO where user.id=:userId</code></li>
-<li><code>EmployeeDO_FindByLastnameAndFirstname</code> — <code>from EmployeeDO where user.lastname=:lastname and user.firstname=:firstname</code></li>
-</ul>
-
-<h3>Computed Properties</h3>
-<ul>
-<li><strong><code>displayName</code></strong> — Delegates to <code>user.getFullname()</code>. Implements <code>DisplayNameCapable</code>.</li>
-<li><strong><code>active</code></strong> — Returns true if: not deleted, entry date is not in the future, and exit date is not in the past. Based on <code>LocalDate.now()</code>.</li>
-</ul>
-
-<h3>Comparison &amp; Equality</h3>
-<ul>
-<li><strong><code>equals()</code></strong> — Based on ID equality. Other types return false.</li>
-<li><strong><code>hashCode()</code></strong> — <code>31 * id.hashCode()</code> if id is non-null; otherwise delegates to super.</li>
-<li><strong><code>compareTo()</code></strong> — Compares by <code>user.lastname</code> then <code>user.firstname</code> using <code>StringUtils.compare()</code>. Null users sort first.</li>
-</ul>
-
-<h3>Copy Values</h3>
-<p><code>copyValuesFrom()</code> override excludes <code>timeableAttributes</code> from copying. Logs a warning that timeable-attribute copy is not yet implemented.</p>
+<h3>Named Query</h3>
+<p>The companion object defines <code>queryAllValidSinceValues</code> — a JPQL string used by <code>getLatestValidSinceEntries()</code>:</p>
+<pre>SELECT t FROM EmployeeValidSinceAttrDO t
+WHERE t.type=:type AND t.deleted=false
+ORDER BY t.employee.id, t.validSince DESC</pre>
 
 <h2>Git History</h2>
 <div class="hist"><pre>868d6abb7 2025 -> 2026
-28efde264 Employee: weeklyWorkingHours now as time-dependent attr.
+6a32032d6 Hibernate.isInitialized(obj) -> HibernateUtils.isFullyInitialized(obj).
+28efde264 Employee: weeklyWorkingHours now as time-dependent attr. eintritt/austritt: timestamp -> date
 63081666f Source file headers: 2024-> 2025.
-0237d5eba Json serialization refactored: IdOnlySerializer and IdsOnlySerializer introduced.
-c8f8ed935 Declared all entities as FetchType.LAZY (was EAGER).
-4c04cfd65 MAJOR-CHANGE! Migration of integer id's to Long id's
-8bd740775 Employee: bank account, birthday, gender and address removed.
-a5a0e2b40 EmployeeDO.status will be set by timeableAttribute "status"
-a0affa511 EmployeeDO.active
-6712fba40 Employee.urlaubstage -> timed attribute for annual leave days.
-f070a11e8 Employee.birthday/eintrittsdatum/austrittsdatum: Date -> LocalDate
-8675a1dbe Declared all Kotlin JPA entities and their properties as open.
-...</pre></div>
+4ae4f3ea3 Bugfixes while going-live...
+50c3b7b46 Migration stuff in progress... (all tests of all packages: OK).
+4942c854d Migration stuff in progress...
+d394f410f Migration stuff in progress... (all tests of all packages: OK).
+b71b5073d Migration stuff in progress... (all tests of all packages: OK).
+ffb18cf8f Migration stuff in progress...
+1012e347a Migration stuff in progress... (all tests of all packages: OK).
+2e9839891 Migration stuff in progress...
+ba2479571 Migration stuff in progress...
+b3293f0cc PersistenceService/Context: stats handling improved.
+b5dc26e24 Migration stuff in progress... (all tests of all packages: OK).
+b0efaddc2 Migration stuff in progress... (all tests of all packages: OK).
+c14b18a48 Migration stuff in progress... (all tests of all packages: OK).</pre></div>
 </body>
 </html>

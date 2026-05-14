@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>#896: AuftragRight.kt [RU]</title>
+<style>
+body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}
+h1{border-bottom:2px solid #333;padding-bottom:.3em}
+h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}
+h3{margin-top:2em;color:#444}
+a{color:#0366d6}
+.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}
+.nav{font-size:.9em;color:#888;margin-bottom:1em}
+.meta{font-size:.9em;margin:1em 0;color:#555}
+code{background:#f0f0f0;padding:0 .2em;font-size:.93em}
+pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}
+table{border-collapse:collapse;width:100%;margin:1em 0}
+th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}
+th{background:#f5f5f5;font-weight:600}
+.hist{font-size:.85em;color:#555}
+</style>
+</head>
+<body>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Индекс</a> · <a href="file-index.html">← Индекс файлов</a> · <a href="895.html">← Предыдущий</a> · <a href="897.html">Следующий →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/kotlin/org/projectforge/business/fibu/AuftragRight.kt" target="_blank" title="Просмотреть исходник на GitHub">📄 исходник</a></div>
+
+<h1>#896: <code>AuftragRight.kt</code></h1>
+
+<div class="meta"><code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/AuftragRight.kt</code> 
+<p><strong>Тип:</strong> Класс прав доступа (<code>UserRightAccessCheck&lt;AuftragDO?&gt;</code>)</p>
+<p><strong>Пакет:</strong> <code>org.projectforge.business.fibu</code></p>
+<p><strong>Полный путь:</strong> <code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/AuftragRight.kt</code></p>
+ <span style="color:#888">174 строки · 113 кода · 54 комментария · 7 пустых</span></div>
+
+<div class="c">
+<p>Определяет правила контроля доступа для книги заказов (<em>Auftragsbuch</em>). Расширяет <code>UserRightAccessCheck&lt;AuftragDO?&gt;</code> и обеспечивает детальный многоуровневый контроль доступа на основе членства в группах пользователей и назначения ролей. Управляет видимостью для контактных лиц, руководителей проектов, ассистентов проектов, сотрудников контроллинга и членов финансовой группы, с особыми правилами для полностью выставленных счетов и защиты флага <code>vollstaendigFakturiert</code>.</p>
+</div>
+
+<h2>Определение класса</h2>
+<pre>class AuftragRight : UserRightAccessCheck&lt;AuftragDO?&gt;(
+    UserRightId.PM_ORDER_BOOK, UserRightCategory.PM,
+    *UserRightServiceImpl.FALSE_READONLY_PARTLYREADWRITE_READWRITE
+)</pre>
+
+<h2>Значения прав</h2>
+<p>Доступные значения: <code>FALSE</code>, <code>READONLY</code>, <code>PARTLYREADWRITE</code>, <code>READWRITE</code>.</p>
+<p><strong>Особое поведение PARTLYREADWRITE:</strong> Пользователи, являющиеся членами FIBU_ORGA_GROUPS <em>и</em> PROJECT_MANAGER/PROJECT_ASSISTANT, имеют доступ только к своим собственным проектам (назначенным через группы руководителей проектов). Выбор <code>READWRITE</code> предоставляет полный доступ ко всем заказам.</p>
+
+<h2><code>hasSelectAccess(user): Boolean</code></h2>
+<p>Возвращает <code>true</code>, если пользователь имеет право READONLY, PARTLYREADWRITE или READWRITE на идентификатор права <code>PM_ORDER_BOOK</code>. Это определяет, видна ли книга заказов как модуль вообще.</p>
+
+<h2><code>hasAccess(user, obj, oldObj, operationType): Boolean</code></h2>
+<p>Основной метод принятия решения о доступе с многоуровневыми проверками:</p>
+
+<h3>Уровень 1: Группа контроллинга</h3>
+<p>Члены <code>CONTROLLING_GROUP</code> имеют безусловный доступ SELECT. Для других типов операций переход к следующему уровню.</p>
+
+<h3>Уровень 2: Базовая проверка прав</h3>
+<ul>
+<li>SELECT: требуется READONLY, PARTLYREADWRITE или READWRITE</li>
+<li>INSERT/UPDATE/DELETE: требуется PARTLYREADWRITE или READWRITE</li>
+</ul>
+
+<h3>Уровень 3: Защита флага <code>vollstaendigFakturiert</code></h3>
+<p>Только члены <code>FINANCE_GROUP</code> могут изменять флаг <code>vollstaendigFakturiert</code> в позициях заказа:</p>
+<ul>
+<li>При INSERT: любая позиция с <code>vollstaendigFakturiert == true</code> вызывает <code>AccessException</code></li>
+<li>При UPDATE: сравнение каждой позиции с её версией в базе данных (<code>oldObj</code>), любое изменение <code>vollstaendigFakturiert</code> вызывает <code>AccessException</code></li>
+<li>Удалённые позиции пропускаются</li>
+<li>Новые добавленные позиции (без <code>dbPosition</code>) проверяются как при INSERT</li>
+</ul>
+
+<h3>Уровень 4: Доступ на основе проекта</h3>
+<p>Для пользователей, которые НЕ входят в FIBU_ORGA_GROUPS с правом READONLY/READWRITE (т.е. руководители проектов, ассистенты проектов или пользователи PARTLYREADWRITE):</p>
+<ul>
+<li><strong>Прямое назначение:</strong> Пользователь является <code>contactPerson</code> заказа → доступ предоставлен</li>
+<li><strong>Членство в проекте:</strong> Пользователь принадлежит к <code>projektManagerGroup</code> проекта, является <code>headOfBusinessManager</code> проекта или <code>salesManager</code> проекта → доступ предоставлен</li>
+<li><strong>Ограничение по полностью выставленным счетам:</strong> Если заказ <strong>полностью выставлен</strong> (<code>isVollstaendigFakturiert</code>), доступ ограничен заказами, дата окончания периода выполнения (или дата предложения как запасной вариант) которых находится в пределах <code>MAX_DAYS_OF_VISIBILITY_4_PROJECT_MANGER</code> (1800 дней ≈ 5 лет)</li>
+<li><strong>Не полностью выставлен:</strong> Предоставляется полный доступ</li>
+<li>Если ни одно из вышеперечисленных условий не выполнено, доступ запрещён</li>
+</ul>
+
+<h2>Инициализация прав групп (блок <code>init</code>)</h2>
+<table>
+<tr><th>Группа</th><th>Значения по умолчанию / Доступные значения</th></tr>
+<tr><td>FIBU_ORGA_PM_GROUPS</td><td>FALSE, READONLY, PARTLYREADWRITE, READWRITE (по умолчанию для руководителей проектов и организационных групп)</td></tr>
+<tr><td><code>PROJECT_MANAGER</code></td><td>PARTLYREADWRITE (установлено по умолчанию)</td></tr>
+<tr><td><code>PROJECT_ASSISTANT</code></td><td>FALSE, PARTLYREADWRITE</td></tr>
+<tr><td>Пользователи контроллинга</td><td>READONLY (через <code>setReadOnlyForControlling()</code>)</td></tr>
+</table>
+
+<h2>Константы</h2>
+<table>
+<tr><th>Константа</th><th>Значение</th><th>Описание</th></tr>
+<tr><td><code>MAX_DAYS_OF_VISIBILITY_4_PROJECT_MANGER</code></td><td><code>1800</code></td><td>Заказы старше ~5 лет скрыты от руководителей проектов, если полностью выставлены счета</td></tr>
+</table>
+
+<h2>История Git</h2>
+<div class="hist"><pre>868d6abb7 2025 -> 2026
+63081666f Заголовки исходных файлов: 2024-> 2025.
+61f05ce90 Работа над миграцией в процессе...
+87dd5b87c Рефакторинг AuftragsCache, работа над миграцией... (все тесты OK)
+4efcbd0fb Работа над миграцией в процессе...
+06828f490 Работа над миграцией в процессе...
+b6092df09 Авторское право 2023 -> 2024
+ab45d51fa Авторское право 2001-2022 -> 2001-2023.
+73b0be50b org.apache.commons.collections -> org.apache.commons.collections4
+d628fc93f Книга заказов: доступ для руководителя бизнес-подразделения и менеджера по продажам.
+5f7ef41b8 Авторское право 2021 -> 2022
+9aefe1981 AuftragRight: улучшена видимость для руководителей проектов для устаревших заказов.
+7429a0554 AuftragRight -> Kotlin</pre></div>
+</body>
+</html>

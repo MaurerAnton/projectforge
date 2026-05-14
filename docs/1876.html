@@ -1,10 +1,88 @@
-<!DOCTYPE html>
-<html lang="en"><head><meta charset="utf-8"><title>File #1876: VisitorbookDO.java</title>
-<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333}a{color:#0366d6}.meta{background:#f0f0f0;border-radius:6px;padding:1em;margin:1em 0;font-size:.9em}.commentary{margin:.8em 0;background:#fff;padding:.5em 1em;border-radius:6px;border-left:4px solid #ddd;line-height:1.7}table{border-collapse:collapse;width:100%;margin:.8em 0;font-size:.9em}th,td{border:1px solid #ddd;padding:.4em .6em}th{background:#f0f0f0}code{background:#e8e8e8;border-radius:3px;padding:.1em .3em;font-size:.9em}.nav{font-size:.9em;color:#888;margin-bottom:1em}.history{background:#fffbe6;border-radius:6px;padding:1em;margin:1em 0;font-size:.9em;border-left:4px solid #ffc107}</style></head>
-<body><div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="1875.html">← Prev</a> · <a href="1877.html">Next →</a></div>
-<h1>File #1876: <code>VisitorbookDO.java</code></h1>
-<div class="meta"><p><strong>Path:</strong> <code>(not found)</code> · <strong>Type:</strong> Java file</p><p><strong>Source:</strong> <a href="https://github.com/micromata/projectforge/blob/develop/(not found)">GitHub</a></p></div>
-<div class="history"><table><tr><th>Commit</th><th>Message</th></tr><tr><td><code>9ebb88522</code></td><td>2016-07-18 Initial commit</td></tr></table></div>
-<div class="commentary"><p>Part of the ProjectForge Wicket web application. Located at <code>(not found)</code>. Wicket component providing reusable UI functionality for the web layer.</p></div>
-<div class="nav" style="margin-top:2em"><a href="1875.html">← #1875</a> · <a href="1877.html">#1877 →</a></div>
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>#1876: CSVParser.java</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:2em;color:#444}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.lang{font-size:.85em;color:#888;float:right}.lang a{color:#888;text-decoration:none;padding:0 .3em}.lang a.active{color:#0366d6;font-weight:600;text-decoration:underline}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}.warn{background:#fff3cd;border-left:3px solid #ffc107;padding:.5em 1em;margin:1em 0}.tip{background:#d4edda;border-left:3px solid #28a745;padding:.5em 1em;margin:1em 0}</style></head>
+<body><div class="lang"><a href="1876.html" class="active">EN</a> · <a href="1876_de.html">DE</a> · <a href="1876_ru.html">RU</a> · <a href="1876_fr.html">FR</a> · <a href="1876_es.html">ES</a></div>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="1875.html">← Prev</a> · <a href="1877.html">Next →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-common/src/main/java/org/projectforge/common/CSVParser.java" target="_blank" title="View source on GitHub">📄 source</a></div>
+<h1>#1876: <code>CSVParser.java</code></h1>
+<div class="meta"><code>projectforge-common/src/main/java/org/projectforge/common/CSVParser.java</code> Utility class — org.projectforge.common package, projectforge-common/src/main/java/org/projectforge/common/CSVParser.java <span style="color:#888">342 lines · 248 code · 57 comments · 37 blank</span></div>
+<div class="c">Custom CSV (Comma-Separated Values) parser with a hand-written lexer/parser architecture. Reads from a <code>java.io.Reader</code> and tokenizes CSV data one character at a time, supporting quoted fields, embedded newlines within quoted cells, escaped double-quotes (<code>""</code> convention), configurable field separators, header column name mapping, and UTF-8 BOM detection. Written by Kai Reinhard and H. Spiewok (2005), this predates and avoids external CSV library dependencies.</div>
+<h2>Architecture</h2>
+<div class="c">
+<h3>Imports</h3>
+<ul>
+<li><code>java.io.IOException</code> / <code>java.io.Reader</code> — Character stream input</li>
+<li><code>java.util.ArrayList</code>, <code>HashMap</code>, <code>List</code>, <code>Map</code> — Result storage and header column indexing</li>
+<li><code>org.apache.commons.lang3.StringUtils</code> — String blank-check in error messages</li>
+<li><code>org.slf4j.Logger</code> — Error logging</li>
+</ul>
+
+<h3>Parser Architecture — Hand-Written Lexer</h3>
+<p>Rather than using regex or a parser generator, CSVParser implements a <strong>character-by-character lexer</strong> with a pushback buffer. This design prioritizes control over error handling and performance for the specific subset of CSV formatting used by ProjectForge.</p>
+
+<h3>Core Components</h3>
+
+<h4>Type Enum</h4>
+<pre>enum Type { EOF, EOL, CHAR }</pre>
+<p>Token types: End-Of-File, End-Of-Line, or character data. This drives the parser state machine.</p>
+
+<h4>Character Stream Management</h4>
+<ul>
+<li><strong>Pushback buffer</strong>: A 5-element <code>int[]</code> (<code>pushbackBuffer</code>) with index tracking — enables lookahead and backtracking without Reader support for <code>mark()</code>/<code>reset()</code></li>
+<li><strong>read()</strong>: Returns next character from pushback buffer (if any) or underlying Reader. Tracks line numbers on <code>\n</code></li>
+<li><strong>unread(int)</strong>: Pushes a character back onto the buffer, adjusting line/column counters</li>
+<li><strong>nextToken()</strong>: Core tokenizer — returns the next Type (EOF, EOL, CHAR) and sets <code>cval</code> for character tokens. Handles <code>\r\n</code> (Windows CRLF) as a single EOL token</li>
+</ul>
+
+<h4>UTF-8 BOM Handling</h4>
+<p><code>skipBOM()</code> is called during construction to detect and skip a UTF-8 Byte Order Mark (<code>\uFEFF</code>) at the start of the file. If no BOM is present, the first character is pushed back (unread). This enables correct parsing of CSV files exported from Microsoft Excel, which includes a BOM for UTF-8 files.</p>
+
+<h4>Cell Parsing (parseCell)</h4>
+<p>The core CSV parsing logic handles these cases:</p>
+<table>
+<tr><th>Case</th><th>Behavior</th></tr>
+<tr><td>Unquoted cell</td><td>Characters are accumulated until separator or EOL</td></tr>
+<tr><td>Quoted cell (<code>"..."</code>)</td><td>Characters inside quotes accumulated; quotes must be properly closed</td></tr>
+<tr><td>Escaped quote (<code>""</code>)</td><td>Two consecutive double-quotes inside a quoted cell represent one literal quote character</td></tr>
+<tr><td>Embedded newline</td><td>Newlines within quoted cells are preserved (multiline cell values)</td></tr>
+<tr><td>Trailing whitespace</td><td>Whitespace after closing quote is skipped; expects separator or EOL next</td></tr>
+<tr><td>Unterminated quote</td><td>Throws RuntimeException with descriptive error message including line/column number</td></tr>
+</table>
+
+<h4>Line Parsing (parseLine)</h4>
+<p>Reads cells until EOL or EOF, collecting them into a <code>List&lt;String&gt;</code>. Returns null at EOF (not an empty list — callers can distinguish end-of-file from empty lines).</p>
+
+<h4>Header Column Support (parseHeadCols / getCell)</h4>
+<p>For CSV files with a header row, <code>parseHeadCols()</code> reads the first line and builds a <code>colMap: Map&lt;String, Integer&gt;</code> mapping column names to their positional index. Subsequent <code>getCell(List&lt;String&gt;, colname)</code> calls retrieve values by column name rather than position. This enables Excel-like named column access.</p>
+
+<h3>Error Messages</h3>
+<p>Three distinct error constants provide specific diagnostics:</p>
+<pre>
+ERROR_UNEXPECTED_QUOTATIONMARK = "Unexpected quotation mark \" (only allowed in quoted cells)."
+ERROR_QUOTATIONMARK_MISSED_AT_END_OF_CELL = "Quotation \" missed at the end of cell."
+ERROR_DELIMITER_OR_NEW_LINE_EXPECTED_AFTER_QUOTATION_MARK = "Delimiter or new line expected after quotation mark."
+ERROR_UNEXPECTED_CHARACTER_AFTER_QUOTATION_MARK = "Unexpected character after quotation mark."
+</pre>
+<p>Each message is augmented with line and column numbers via <code>createMessage()</code>.</p>
+
+<h3>Integration with CSVWriter</h3>
+<p>CSVParser uses <code>CSVWriter.DEFAULT_CSV_SEPARATOR_CHAR</code> (<code>';'</code> — semicolon) as its default separator. This is the European CSV convention (Microsoft Excel in German locales uses semicolon-delimited CSV). The separator is configurable via <code>setCsvSeparatorChar()</code>.</p>
+
+<h3>Design Limitations</h3>
+<ul>
+<li><strong>No streaming</strong>: Each call to <code>parseLine()</code> reads one line and returns all cells — suitable for moderate-sized files but not for very large (multi-GB) CSVs</li>
+<li><strong>Fixed pushback buffer</strong>: The 5-character pushback limits lookahead; sufficient for CSV escaping patterns but not for general parsing</li>
+<li><strong>No type conversion</strong>: All values are returned as strings; callers must parse numbers, dates, etc.</li>
+<li><strong>Semicolon default</strong>: Uses European CSV convention; must be explicitly changed for comma-separated files</li>
+<li><strong>Error handling</strong>: Uses RuntimeExceptions rather than checked exceptions or error recovery — malformed input halts parsing</li>
+</ul>
+
+<div class="tip">This custom implementation was written in 2005, well before Apache Commons CSV (released 2014) or OpenCSV became widely available. At the time, the JDK had no built-in CSV support. The code has been maintained with incremental improvements: BOM handling (2024 commit), multiline quoted field support, and typo fixes via codespell.</div>
+</div>
+<h2>Git History</h2><div class="hist"><pre>868d6abb7 2025 -> 2026
+161d71602 WIP: CSVParser: BOM chars.
+dfb2378df WIP: CSVParser: multilines etc.
+63081666f Source file headers: 2024-> 2025.
+a73905c14 Fix typos in projectforge*/ directories Found via codespell
+a72903e36 *.java, *.kt: StringBuffer -> StringBuilder.
+b6092df09 Copyright 2023 -> 2024
+ab45d51fa Copyright 2001-2022 -> 2001-2023.</pre></div>
 </body></html>

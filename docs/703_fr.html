@@ -1,0 +1,77 @@
+Here is the complete HTML translated into French, with the language set to `fr`, the French language active in the switcher, and the title updated with `[FR]`.
+
+```html
+<!DOCTYPE html><html lang="fr"><head><meta charset="utf-8"><title>[FR] #703</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:2em;color:#444}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}.warn{background:#fff3cd;border-left:3px solid #ffc107;padding:.5em 1em;margin:1em 0}.tip{background:#d4edda;border-left:3px solid #28a745;padding:.5em 1em;margin:1em 0}</style></head>
+<body><div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← Index des fichiers</a> · <a href="702.html">← Précédent</a> · <a href="704.html">Suivant →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/java/org/projectforge/framework/persistence/utils/ReflectionToString.java" target="_blank" title="Voir la source sur GitHub">📄 source</a></div>
+<h1>#703 : <code>ReflectionToString.java</code></h1>
+<div class="meta"><code>projectforge-business/src/main/java/org/projectforge/framework/persistence/utils/ReflectionToString.java</code> Utilitaire Java — Constructeur <code>toString()</code> basé sur la réflexion et compatible Hibernate, <code>projectforge-business/src/main/java/org/projectforge/framework/persistence/utils/ReflectionToString.java</code> <span style="color:#888">118 lignes · 82 lignes de code · 28 commentaires · 8 lignes vides</span></div>
+<div class="c">Étend <code>ReflectionToStringBuilder</code> d'Apache Commons Lang3 pour produire une sortie <code>toString()</code> sûre et lisible pour les entités JPA. Gère les proxies paresseux Hibernate, les collections non initialisées, les IDs <code>BaseDO</code>, les étiquettes <code>DisplayNameCapable</code> et les objets <code>TimeZone</code> sans déclencher de <code>LazyInitializationException</code>. Le point d'entrée statique unique <code>ReflectionToString.asString(obj)</code> est utilisé dans toute la base de code chaque fois qu'une sortie de débogage/journalisation d'objets métier est nécessaire.</div>
+
+<h2>Architecture</h2>
+
+<h3>Hiérarchie des classes</h3>
+<p><code>ReflectionToString</code> étend <code>org.apache.commons.lang3.builder.ReflectionToStringBuilder</code> (Apache Commons Lang3). En interne, <code>ReflectionToStringBuilder</code> utilise la réflexion Java pour parcourir tous les champs déclarés d'un objet (et de ses superclasses), en ajoutant chaque paire nom/valeur de champ dans un <code>ToStringBuilder</code>. Cette classe redéfinit trois méthodes clés pour injecter la compatibilité Hibernate.</p>
+
+<table>
+<tr><th>Méthode</th><th>Objectif de la redéfinition</th></tr>
+<tr><td><code>ReflectionToString(Object)</code> (constructeur)</td><td>Vérifie si l'objet racine est initialisé via <code>Hibernate.isInitialized()</code>. Si ce n'est pas le cas, transmet une chaîne synthétique comme <code>"Lazy" + className + "@" + identityHash</code> au lieu du proxy réel, empêchant ainsi <code>LazyInitializationException</code> dès le départ.</td></tr>
+<tr><td><code>append(String, Object)</code></td><td>Le cœur de la logique compatible Hibernate. Avant d'ajouter chaque valeur de champ, vérifie <code>Hibernate.isInitialized()</code> et applique un formatage spécialisé en fonction du type de la valeur.</td></tr>
+<tr><td><code>accept(Field)</code></td><td>Filtre les champs dont les valeurs sont des proxies Hibernate non initialisés. Plutôt que de les ignorer silencieusement, appelle directement <code>append()</code> (qui affichera les informations du proxy) et renvoie <code>false</code> pour que la superclasse ne traite pas deux fois le champ.</td></tr>
+</table>
+
+<h3>Arbre de décision du traitement des valeurs dans append()</h3>
+<p>Lorsque <code>append(fieldName, object)</code> est appelé, la logique suivante s'applique dans l'ordre :</p>
+<ol>
+  <li><strong>Null :</strong> transmet à la superclasse (affiche <code>&lt;null&gt;</code>).</li>
+  <li><strong>Non initialisé par Hibernate :</strong>
+    <ul>
+      <li>Si <code>BaseDO</code> — extrait l'identifiant via <code>HibernateUtils.getIdentifier()</code> ; affiche l'ID numérique ou textuel (ou <code>"&lt;id&gt;"</code> si null).</li>
+      <li>Sinon — affiche la chaîne littérale <code>"LazyCollection"</code>.</li>
+    </ul>
+  </li>
+  <li><strong>Initialisé et <code>DisplayNameCapable</code> :</strong> délègue à la méthode privée <code>myToString()</code> qui affiche <code>"id:displayName"</code> pour les objets <code>BaseDO</code> ou simplement le nom d'affichage pour les objets non-DO.</li>
+  <li><strong>Initialisé et <code>BaseDO</code> :</strong> affiche uniquement l'ID de l'entité.</li>
+  <li><strong><code>Collection</code> :</strong> itère sur les éléments, appelle <code>myToString()</code> sur chacun, formate comme <code>[el1, el2, ...]</code>. Évite le <code>toString()</code> par défaut des collections qui appellerait récursivement <code>ReflectionToString</code> sur chaque élément et pourrait exploser la sortie.</li>
+  <li><strong><code>TimeZone</code> :</strong> affiche la chaîne d'ID du fuseau horaire (ex. <code>"Europe/Berlin"</code>) au lieu du <code>TimeZone.toString()</code> complet.</li>
+  <li><strong>Sinon :</strong> transmet à la superclasse.</li>
+</ol>
+
+<h3>Logique de myToString(Object) privée</h3>
+<p>Traitement spécial pour <code>null</code> → <code>"&lt;null&gt;"</code>, puis objets <code>DisplayNameCapable</code> (avec préfixe d'ID pour <code>BaseDO</code>), objets <code>BaseDO</code> (ID uniquement), et enfin recours à <code>obj.toString()</code> pour tous les autres types.</p>
+
+<h3>Contournement Javassist</h3>
+<div class="warn">Lorsque <code>append()</code> rencontre un objet <code>BaseDO</code> non initialisé, il appelle <code>HibernateUtils.getIdentifier()</code> plutôt que d'utiliser le propre <code>getId()</code> du proxy. Le commentaire dans la source note qu'il s'agit d'un "contournement pour un bug Jassist" — les proxies Javassist (utilisés par Hibernate) peuvent produire un comportement incorrect lors de l'appel de méthodes sur des proxies non initialisés, donc l'utilitaire du framework est préféré pour extraire l'ID directement des métadonnées du proxy.</div>
+
+<h2>Points d'intégration</h2>
+<ul>
+  <li>Utilisé comme implémentation par défaut de <code>toString()</code> dans <code>BaseDO</code> et ses sous-classes (chaque objet métier dans ProjectForge).</li>
+  <li>Consommé par les instructions de journalisation dans toute la couche métier — tout <code>log.debug("entité : {}", entité)</code> déclenchera ce formateur via le <code>toString()</code> de l'entité.</li>
+  <li>Dépend de <code>HibernateUtils.getIdentifier()</code> pour une extraction sûre de l'ID depuis les proxies.</li>
+  <li>Repose sur <code>ReflectionToStringBuilder</code> d'Apache Commons Lang3 pour le squelette de la boucle de réflexion.</li>
+</ul>
+
+<h2>Décisions de conception & Pièges</h2>
+<ul>
+  <li><strong>Performance :</strong> Le toString basé sur la réflexion est intrinsèquement lent. Cela est acceptable car il n'est utilisé que pour la sortie de débogage/journalisation, jamais dans des chemins de code critiques. Le filtre <code>accept()</code> l'empêche de descendre dans les associations paresseuses non initialisées qui déclencheraient des requêtes en base de données.</li>
+  <li><strong>Collections non initialisées :</strong> La méthode <code>accept()</code> appelle <code>getValue(field)</code> ce qui force l'accès au champ. Si le champ contient une <code>PersistentCollection</code> non initialisée, <code>Hibernate.isInitialized()</code> renvoie false et le champ est traité en ligne — aucun chargement en base de données n'a lieu.</li>
+  <li><strong>Références circulaires :</strong> Le traitement des collections dans <code>append()</code> utilise <code>myToString()</code> (qui affiche les IDs/noms d'affichage) plutôt que <code>toString()</code> sur les éléments de la collection. Cela empêche la récursion infinie lorsque les entités ont des relations bidirectionnelles <code>@OneToMany</code>/<code>@ManyToOne</code>.</li>
+  <li><strong>Cas spécial TimeZone :</strong> Le <code>TimeZone.toString()</code> par défaut de Java produit une sortie longue avec des détails de décalage. Cette redéfinition extrait uniquement l'ID, gardant la sortie concise.</li>
+</ul>
+
+<h2>Historique Git</h2><div class="hist"><pre>868d6abb7 2025 -> 2026
+63081666f En-têtes des fichiers source : 2024 -> 2025.
+b6092df09 Copyright 2023 -> 2024
+ab45d51fa Copyright 2001-2022 -> 2001-2023.
+5f7ef41b8 Copyright 2021 -> 2022
+ceb63e8a1 En-tête du code source : (C) 2001-2021.
+a6a7aece4 Optimiser les imports
+b78b870bd ShortDisplayNameCapable -> DisplayNameCapable.
+7c79f1922 Copyright de l'en-tête source -> 2020.
+73a9755df Plus de nettoyage de code : - Blocs catch fusionnés qui faisaient exactement la même chose
+32f634b88 Optimiser les imports
+000ca723d Supprimer les expressions booléennes inutiles (business)
+dd5ca38ac Copyright de tous les en-têtes de fichiers Java mis à jour ou créés.
+f979e8a42 MGC-UPDATE : Mise à jour vers la version 3.0.0-SNAPSHOT
+9ebb88522 Commit initial</pre></div>
+</body></html>

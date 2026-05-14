@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>#735 [RU]</title>
+<style>
+body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}
+h1{border-bottom:2px solid #333}
+h2{margin-top:1.5em}
+a{color:#0366d6}
+.meta{font-size:.9em;margin:1em 0}
+.nav{font-size:.9em;color:#888;margin-bottom:1em}
+.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}
+code{background:#f0f0f0;padding:0 .2em}
+pre{background:#f5f5f5;padding:.5em;margin:.5em 0;border-radius:3px;font-size:.85em;overflow-x:auto}
+</style>
+</head>
+<body>
+
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Индекс</a> · <a href="file-index.html">← Индекс файлов</a> · <a href="734.html">← Назад</a> · <a href="736.html">Вперёд →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/java/org/projectforge/framework/utils/IntRanges.java" target="_blank" title="Просмотреть исходный код на GitHub">📄 Исходник</a></div>
+
+<h1>#735: <code>IntRanges.java</code></h1>
+<div class="meta"><code>projectforge-business/src/main/java/org/projectforge/framework/utils/IntRanges.java</code> <strong>Строк:</strong> 54 · <strong>Автор:</strong> Kai Reinhard · <strong>Тип:</strong> Java — расширяет <code>Ranges&lt;Integer&gt;</code> · <strong>интерфейс</strong> <code>org.projectforge.framework.utils</code> <span style="color:#888">54 строки · 15 кода · 34 комментария · 5 пустых</span></div>
+
+<div class="c"><h2>Назначение</h2>
+<p>Представляет <strong>объединение целочисленных интервалов</strong> — преобразует строки вида <code>"1,3-5,10-15,20"</code> в структурированный набор диапазонов и отдельных значений, после чего предоставляет метод <code>doesMatch(value)</code> для проверки принадлежности. Это целочисленная специализация абстрактного базового класса <code>Ranges&lt;T&gt;</code> (<a href="742.html">#742</a>).</p>
+<p>Конкретный сценарий использования — <strong>фильтрация номеров недель в табеле учёта времени</strong>. Когда администратор настраивает «показывать табели для недель 1–5, 10 и 20–25», эта строка конфигурации передаётся в <code>new IntRanges("1-5,10,20-25")</code>, и номер недели каждой записи табеля проверяется с помощью <code>ranges.doesMatch(weekNumber)</code>. Это проще и читаемее, чем построение сложных SQL-выражений <code>WHERE week IN (...)</code>, особенно когда список диапазонов настраивается для каждого пользователя.</p></div>
+
+<div class="c"><h2>Иерархия классов</h2>
+<pre>Ranges&lt;T extends Comparable&lt;T&gt;&gt;  (абстрактный, 176 строк)
+  └── IntRanges extends Ranges&lt;Integer&gt;  (54 строки, данный файл)</pre>
+<p><code>Ranges</code> обрабатывает всю логику разбора — разделение по запятым/точкам с запятой (<code>separatorChars = ";,"</code>), обнаружение дефисов как разделителей диапазонов (<code>rangesSeparatorChar = '-'</code>) и построение списка объектов <code>Range&lt;T&gt;</code> плюс отдельных значений. <code>IntRanges</code> предоставляет только конкретный метод <code>parseValue(String)</code>, преобразующий строку в Integer — это шаблон «Шаблонный метод»: абстрактный базовый класс определяет алгоритм, а подкласс — преобразование типов.</p></div>
+
+<div class="c"><h2>Алгоритм разбора (в базовом классе <code>Ranges</code>)</h2>
+<p>Для входной строки <code>"1-5,10,20-25"</code>:</p>
+<ol>
+<li>Разделение по <code>,</code> или <code>;</code> → <code>["1-5", "10", "20-25"]</code></li>
+<li>Для каждой части проверяется наличие <code>-</code>:
+<ul><li>Если есть: разделение по <code>-</code>, разбор обеих сторон → <code>Range(1, 5)</code> или <code>Range(20, 25)</code></li>
+<li>Если нет: разбор как одиночного значения → добавление <code>10</code> в список <code>values</code></li></ul></li>
+</ol>
+<p>Метод <code>doesMatch(value)</code> проверяет все диапазоны (через <code>Range.doesMatch()</code>, который проверяет <code>min <= value <= max</code>) и все отдельные значения (через <code>Comparable.compareTo()</code> для точного совпадения). Флаг <code>nullRangeMatchesAlways</code> управляет поведением, когда не указано ни диапазонов, ни значений (по умолчанию <code>false</code> — ничего не совпадает).</p></div>
+
+<div class="c"><h2>Ключевые детали проектирования</h2>
+<ul>
+<li><strong>Символы-разделители:</strong> Принимаются как запятая (<code>,</code>), так и точка с запятой (<code>;</code>) — корректная обработка скопированных из разных источников данных</li>
+<li><strong>Отрицательные числа:</strong> Разбор поддерживает отрицательные целые числа (например, <code>"-5--1"</code> означает «от -5 до -1»), поскольку <code>Integer.valueOf()</code> обрабатывает знак минус. Дефис как разделитель диапазона конфликтует со знаком минуса, но парсер проверяет наличие двух последовательных дефисов (<code>--</code>) как диапазон с отрицательными границами</li>
+<li><strong>Устойчивость к пробелам:</strong> Парсер обрезает пробелы вокруг значений, поэтому <code>"1 - 5, 10"</code> работает так же, как <code>"1-5,10"</code></li>
+<li><strong>Обработка дубликатов:</strong> Допускается многократное добавление одного и того же значения или пересекающегося диапазона — <code>doesMatch()</code> возвращает <code>true</code> при первом совпадении, поэтому дубликаты не приводят к неверным результатам, хотя тратят небольшой объём памяти</li>
+<li><strong>Простота в 54 строки:</strong> Весь файл состоит из конструктора, вызывающего <code>super(rangesString)</code>, и переопределения <code>parseValue()</code> в 3 строки. Вся сложность находится в абстрактном базовом классе <code>Ranges</code> — это идеальное применение наследования: подкласс предоставляет только преобразование, специфичное для типа, и ничего больше</li></ul></div>
+
+<div class="c"><h2>Использование в кодовой базе</h2>
+<p>В основном используется в <strong>модуле табеля учёта времени</strong> для фильтрации по номерам недель. Фильтр табеля (<a href="598.html">#598</a>) позволяет фильтровать по номерам недель — администратор или пользователь вводит выражение диапазона, например <code>"1-10, 15, 20-25"</code>, которое разбирается в экземпляр <code>IntRanges</code>. При отображении табелей номер недели каждой записи проверяется на соответствие диапазонам для определения видимости. Интерфейс <code>Serializable</code> (унаследованный от <code>Ranges</code>) позволяет сохранять диапазоны в XML-файлах пользовательских настроек.</p></div>
+
+</body>
+</html>

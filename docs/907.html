@@ -2,62 +2,99 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>#907: CurrencyPairDO.kt</title>
-<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:2em;color:#444}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}</style>
+<title>#907: AuftragsStatistik.kt</title>
+<style>
+body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}
+h1{border-bottom:2px solid #333;padding-bottom:.3em}
+h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}
+h3{margin-top:2em;color:#444}
+a{color:#0366d6}
+.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}
+.nav{font-size:.9em;color:#888;margin-bottom:1em}
+.meta{font-size:.9em;margin:1em 0;color:#555}
+code{background:#f0f0f0;padding:0 .2em;font-size:.93em}
+pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}
+table{border-collapse:collapse;width:100%;margin:1em 0}
+th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}
+th{background:#f5f5f5;font-weight:600}
+.hist{font-size:.85em;color:#555}
+</style>
 </head>
 <body>
-<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="906.html">← Prev</a> · <a href="908.html">Next →</a></div>
 
-<h1>#907: <code>CurrencyPairDO.kt</code></h1>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="906.html">← Prev</a> · <a href="908.html">Next →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/kotlin/org/projectforge/business/fibu/AuftragsStatistik.kt" target="_blank" title="View source on GitHub">📄 source</a></div>
 
-<div class="meta">
-  <strong>Type:</strong> JPA Entity (Data Object)<br>
+<h1>#907: <code>AuftragsStatistik.kt</code></h1>
+
+<div class="meta"><code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/AuftragsStatistik.kt</code> 
+  <strong>Type:</strong> Data class (Serializable) &middot;
+  <strong>Purpose:</strong> Aggregates financial statistics across a set of orders &middot;
   <strong>Package:</strong> <code>org.projectforge.business.fibu</code><br>
-  <strong>Path:</strong> <code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/CurrencyPairDO.kt</code><br>
-  <strong>Author:</strong> Kai Reinhard (k.reinhard@micromata.de)
-</div>
+  <strong>Source path:</strong> <code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/AuftragsStatistik.kt</code>
+ <span style="color:#888">129 lines · 72 code · 44 comments · 13 blank</span></div>
 
 <div class="c">
-  <p>Represents a <strong>currency pair</strong> for foreign exchange conversion (e.g. USD → EUR). Each pair links a <strong>source currency</strong> to a <strong>target currency</strong>. The pair itself does not contain conversion rates — those are held by child <code>CurrencyConversionRateDO</code> entities with validity periods. A transient <code>rates</code> list is populated by <code>CurrencyConversionCache</code> for in-memory access.</p>
+  A <code>Serializable</code> accumulator class that summarizes monetary values and counts across multiple <code>AuftragDO</code> instances. Used in the order book and forecast views to display aggregated pipeline figures. Delegates per-order calculation to <code>AuftragsCache.getOrderInfo()</code> which returns an <code>OrderInfo</code> object with pre-computed sums. Provides separate rollups for acquisition (potential), commissioned, invoiced, not-yet-invoiced, and to-be-invoiced categories, plus corresponding counters.
 </div>
 
-<h2>Database Mapping</h2>
+<h2>Architecture &amp; Design</h2>
+
+<h3>Fields</h3>
+
 <table>
-  <tr><th>Table</th><td><code>t_fibu_currency_pair</code></td></tr>
-  <tr><th>Unique Constraint</th><td><code>(source_currency, target_currency)</code> — prevents duplicate pairs</td></tr>
-  <tr><th>Indexes</th><td><code>idx_t_fibu_currency_pair_source</code>, <code>idx_t_fibu_currency_pair_target</code></td></tr>
-  <tr><th>Annotations</th><td><code>@Indexed</code>, <code>@AUserRightId("FIBU_CURRENCY_CONVERSION")</code></td></tr>
+  <tr><th>Field</th><th>Type</th><th>Description</th></tr>
+  <tr><td><code>nettoSum</code></td><td><code>BigDecimal</code> (private set)</td><td>Total net sum across all orders</td></tr>
+  <tr><td><code>akquiseSum</code></td><td><code>BigDecimal</code> (private set)</td><td>Sum for orders in acquisition/potential state only</td></tr>
+  <tr><td><code>beauftragtSum</code></td><td><code>BigDecimal</code> (private set)</td><td>Sum for commissioned/ordered positions only (LOI, BEAUFTRAGT, ESKALATION)</td></tr>
+  <tr><td><code>invoicedSum</code></td><td><code>BigDecimal</code> (private set)</td><td>Sum of already-invoiced amounts across all orders</td></tr>
+  <tr><td><code>notYetInvoicedSum</code></td><td><code>BigDecimal</code> (private set)</td><td>Difference between net sum and invoiced sum (open remainder)</td></tr>
+  <tr><td><code>toBeInvoiced</code></td><td><code>BigDecimal</code> (private set)</td><td>Sum of amounts from completed orders not yet fully invoiced or with unreached payment milestones</td></tr>
+  <tr><td><code>counter</code></td><td><code>Int</code> (private set)</td><td>Total number of orders counted</td></tr>
+  <tr><td><code>counterAkquise</code></td><td><code>Int</code> (private set)</td><td>Number of orders with acquisition sum > 0</td></tr>
+  <tr><td><code>counterBeauftragt</code></td><td><code>Int</code> (private set)</td><td>Number of orders with commissioned sum > 0</td></tr>
+  <tr><td><code>counterNotYetInvoiced</code></td><td><code>Int</code> (private set)</td><td>Number of orders with not-yet-invoiced amount > 0</td></tr>
+  <tr><td><code>counterToBeInvoiced</code></td><td><code>Int</code> (private set)</td><td>Number of orders with to-be-invoiced amount > 0</td></tr>
+  <tr><td><code>counterInvoiced</code></td><td><code>Int</code> (private set)</td><td>Number of orders with invoiced amount > 0</td></tr>
 </table>
 
-<h2>Fields</h2>
-<table>
-  <tr><th>Field</th><th>Type</th><th>Column</th><th>Constraints</th><th>Search</th><th>Description</th></tr>
-  <tr><td><code>sourceCurrency</code></td><td><code>String?</code></td><td><code>source_currency</code></td><td>Length 3, not null</td><td>@FullTextField</td><td>ISO 4217 currency code (source)</td></tr>
-  <tr><td><code>targetCurrency</code></td><td><code>String?</code></td><td><code>target_currency</code></td><td>Length 3, not null</td><td>@FullTextField</td><td>ISO 4217 currency code (target)</td></tr>
-  <tr><td><code>comment</code></td><td><code>String?</code></td><td>—</td><td>Max <code>COMMENT_LENGTH</code></td><td>@FullTextField</td><td>Optional description</td></tr>
-  <tr><td><code>rates</code></td><td><code>MutableList&lt;CurrencyConversionRateDO&gt;?</code></td><td>—</td><td>@Transient</td><td>—</td><td>Populated by cache; not persisted</td></tr>
-</table>
+<h3>Initialization</h3>
+<p>All sums are initialized to <code>BigDecimal.ZERO</code> and all counters to <code>0</code> in the <code>init</code> block.</p>
 
-<h2>Inheritance & Interfaces</h2>
+<h3>Core Method: <code>add(auftrag: AuftragDO)</code></h3>
+<p>For each order, retrieves the <code>OrderInfo</code> via <code>WicketSupport.get(AuftragsCache::class.java).getOrderInfo(auftrag)</code>. The <code>OrderInfo</code> contains pre-computed breakdowns (<code>akquiseSum</code>, <code>commissionedNetSum</code>, <code>notYetInvoicedSum</code>, <code>toBeInvoicedSum</code>, <code>invoicedSum</code>, <code>netSum</code>). For each sum > <code>BigDecimal.ZERO</code>, the statistic accumulator increments the corresponding counter and adds the amount using <code>NumberHelper.add()</code> (safe BigDecimal addition that handles null values).</p>
+
+<h3>Calculated Semantics</h3>
 <ul>
-  <li><strong>DefaultBaseDO</strong> — provides standard DO fields (pk, created, lastUpdate, deleted, etc.)</li>
-  <li><strong>DisplayNameCapable</strong> — provides <code>displayName</code> as <code>"USD → EUR"</code></li>
+  <li><strong>notYetInvoicedSum</strong> — represents open amounts: total net sum minus what has already been invoiced. This is the amount still to be invoiced.</li>
+  <li><strong>toBeInvoiced</strong> — narrower subset: only from orders that are <code>ABGESCHLOSSEN</code> (completed) but not yet <code>vollstaendigFakturiert</code> (fully invoiced) or have unreached payment schedules. Represents immediate invoicing candidates.</li>
+  <li><strong>akquiseSum</strong> — from orders in pipeline states (POTENZIAL, IN_ERSTELLUNG, GELEGT)</li>
+  <li><strong>beauftragtSum</strong> — from orders that are actually commissioned (LOI, BEAUFTRAGT, ESKALATION)</li>
 </ul>
 
-<h2>Equality</h2>
-<p><code>equals()</code> and <code>hashCode()</code> are overridden to use the <code>id</code> field. If the id is null, falls back to the <code>DefaultBaseDO</code> implementation.</p>
+<h3>Serialization</h3>
+<p>Implements <code>Serializable</code> with <code>serialVersionUID = -5486964211679100585L</code> for Wicket page serialization. The <code>private set</code> on all fields allows read access from outside while preventing direct mutation (only <code>add()</code> modifies state).</p>
 
-<h2>Access Control</h2>
-<p>Annotated with <code>@AUserRightId("FIBU_CURRENCY_CONVERSION")</code>, linking this entity to the <code>FIBU_CURRENCY_CONVERSION</code> user right for access control checks throughout the persistence layer.</p>
+<h2>Related Classes</h2>
+<ul>
+  <li><strong>Produced by:</strong> <code>AuftragDao</code> — creates and populates this statistic from order lists</li>
+  <li><strong>Aggregates:</strong> <code>AuftragDO</code> — individual orders being summed</li>
+  <li><strong>Delegates to:</strong> <code>AuftragsCache</code> — provides per-order <code>OrderInfo</code> with pre-computed breakdowns</li>
+  <li><strong>Uses:</strong> <code>NumberHelper.add()</code> — safe BigDecimal addition</li>
+  <li><strong>Uses:</strong> <code>WicketSupport</code> — Spring bean lookup for <code>AuftragsCache</code></li>
+</ul>
 
 <h2>Git History</h2>
 <div class="hist"><pre>
 868d6abb7 2025 -> 2026
-07edc85de WIP: currency conversion with Claude Code.
-357ebee61 WIP: currency conversion with Claude Code.
-73b486107 WIP: currency conversion with Claude Code.
-bd69407de Initial revision with Claude Code.
+63081666f Source file headers: 2024-> 2025.
+42dc9fa16 Orders: ordered -> commissioned.
+87dd5b87c AuftragsCache refactored, migration stuff... (all tests OK)
+f88994f41 Migration stuff in progress...
+b6092df09 Copyright 2023 -> 2024
+ab45d51fa Copyright 2001-2022 -> 2001-2023.
+9a65e1bc0 AuftragDO: statistics refactored (not yet invoiced, to be invoiced, invoiced etc.)
+f80509d49 OrderBook: statistics and to be invoiced values improved.
+013c514bd AuftragsCache for much better performance of order book's list view.
 </pre></div>
 
 </body>

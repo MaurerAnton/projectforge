@@ -1,187 +1,22 @@
-<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>#2881</title>
-<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}.hist{font-size:.85em;color:#555}</style></head>
-<body><div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="2880.html">← Prev</a> · <a href="2882.html">Next →</a></div>
-<h1>#2881: <code>SearchPage.java</code></h1>
-<div class="meta">Java class, <code>projectforge-wicket/src/main/java/org/projectforge/web/core/SearchPage.java</code></div>
-<div class="c">Java Wicket page web core.</div>
-<h2>Git History</h2><div class="hist"><pre>868d6abb7 2025 -&gt; 2026
-63081666f Source file headers: 2024-&gt; 2025.
-4c04cfd65 MAJOR-CHANGE! Migration of integer id's to Long id's (including fk's etc.)
-b6092df09 Copyright 2023 -&gt; 2024
-ab45d51fa Copyright 2001-2022 -&gt; 2001-2023.
-5f7ef41b8 Copyright 2021 -&gt; 2022
-c0f2b9de0 Tenants functionality removed everywhere (untested).
-ceb63e8a1 Source code header: (C) 2001-2021.
-7c79f1922 Copyright of source header -&gt; 2020.
-a5bbdca6a Change logger to slf4j
-f979e8a42 MGC-UPDATE: Update auf Version 3.0.0-SNAPSHOT
-9ebb88522 Initial commit</pre></div>
-<h2>Source</h2><pre>/////////////////////////////////////////////////////////////////////////////
-//
-// Project ProjectForge Community Edition
-//         www.projectforge.org
-//
-// Copyright (C) 2001-2026 Micromata GmbH, Germany (www.micromata.com)
-//
-// ProjectForge is dual-licensed.
-//
-// This community edition is free software; you can redistribute it and/or
-// modify it under the terms of the GNU General Public License as published
-// by the Free Software Foundation; version 3 of the License.
-//
-// This community edition is distributed in the hope that it will be useful,
-// but WITHOUT ANY WARRANTY; without even the implied warranty of
-// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General
-// Public License for more details.
-//
-// You should have received a copy of the GNU General Public License along
-// with this program; if not, see http://www.gnu.org/licenses/.
-//
-/////////////////////////////////////////////////////////////////////////////
-
-package org.projectforge.web.core;
-
-import org.apache.commons.lang3.StringUtils;
-import org.apache.wicket.Component;
-import org.apache.wicket.extensions.ajax.markup.html.AjaxLazyLoadPanel;
-import org.apache.wicket.markup.head.IHeaderResponse;
-import org.apache.wicket.markup.head.JavaScriptReferenceHeaderItem;
-import org.apache.wicket.markup.html.panel.Panel;
-import org.apache.wicket.markup.repeater.RepeatingView;
-import org.apache.wicket.request.mapper.parameter.PageParameters;
-import org.projectforge.business.user.UserGroupCache;
-import org.projectforge.framework.persistence.user.entities.PFUserDO;
-import org.projectforge.web.fibu.ISelectCallerPage;
-import org.projectforge.web.registry.WebRegistry;
-import org.projectforge.web.registry.WebRegistryEntry;
-import org.projectforge.web.wicket.AbstractStandardFormPage;
-
-public class SearchPage extends AbstractStandardFormPage implements ISelectCallerPage
-{
-  private static final long serialVersionUID = -8416731462457080883L;
-
-  private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(SearchPage.class);
-
-  private final SearchForm form;
-
-  private final RepeatingView areaRepeater;
-
-  // Do not execute the search on the first call (due to performance issues):
-  private boolean refreshed = true;
-
-  public SearchPage(final PageParameters parameters)
-  {
-    this(parameters, null);
-  }
-
-  /**
-   * @param parameters
-   * @param searchString if given all areas will be searched.
-   */
-  public SearchPage(final PageParameters parameters, final String searchString)
-  {
-    super(parameters);
-    form = new SearchForm(this, searchString);
-    body.add(form);
-    form.init();
-    areaRepeater = new RepeatingView(&quot;areaRepeater&quot;);
-    body.add(areaRepeater);
-    if (StringUtils.isNotBlank(searchString) == true) {
-      // User wants to search, so show results directly:
-      refreshed = false;
-    }
-  }
-
-  @Override
-  public void cancelSelection(final String property)
-  {
-  }
-
-  @Override
-  public void select(final String property, final Object selectedValue)
-  {
-    if (&quot;userId&quot;.equals(property) == true) {
-      final PFUserDO user = UserGroupCache.getInstance().getUser((Long) selectedValue);
-      form.filter.setModifiedByUser(user);
-    } else {
-      log.error(&quot;Property '&quot; + property + &quot;' not supported for selection.&quot;);
-    }
-  }
-
-  @Override
-  public void unselect(final String property)
-  {
-    log.error(&quot;Property '&quot; + property + &quot;' not supported for unselection.&quot;);
-  }
-
-  @Override
-  protected void onBeforeRender()
-  {
-    refresh();
-    super.onBeforeRender();
-  }
-
-  @Override
-  protected void onAfterRender()
-  {
-    refreshed = false;
-    super.onAfterRender();
-  }
-
-  void refresh()
-  {
-    if (refreshed == true) {
-      // Do nothing (called twice).
-      return;
-    }
-    refreshed = true;
-    areaRepeater.removeAll();
-    if (form.filter.isEmpty() == true) {
-      return;
-    }
-    if (&quot;ALL&quot;.equals(form.filter.getArea()) == true) {
-      for (final WebRegistryEntry registryEntry : WebRegistry.getInstance().getOrderedList()) {
-        if (SearchForm.isSearchable(registryEntry.getRegistryEntry()) == true) {
-          addArea(registryEntry);
-        }
-      }
-    } else {
-      final WebRegistryEntry registryEntry = WebRegistry.getInstance().getEntry(form.filter.getArea());
-      if (registryEntry == null) {
-        log.error(&quot;Can't search in area '&quot; + form.filter.getArea()
-            + &quot;'. No such area registered in WebRegistry! No results.&quot;);
-      } else {
-        addArea(registryEntry);
-      }
-    }
-  }
-
-  private void addArea(final WebRegistryEntry webRegistryEntry)
-  {
-    @SuppressWarnings(&quot;serial&quot;)
-    final Panel panel = new AjaxLazyLoadPanel(areaRepeater.newChildId())
-    {
-      @Override
-      public final Component getLazyLoadComponent(final String id)
-      {
-        final SearchAreaPanel searchAreaPanel = new SearchAreaPanel(SearchPage.this, id, form.filter, webRegistryEntry);
-        return searchAreaPanel;
-      }
-    };
-    areaRepeater.add(panel);
-  }
-
-  @Override
-  public void renderHead(final IHeaderResponse response)
-  {
-    super.renderHead(response);
-    response.render(JavaScriptReferenceHeaderItem.forUrl(&quot;scripts/zoom.js&quot;));
-  }
-
-  @Override
-  protected String getTitle()
-  {
-    return getString(&quot;search.title&quot;);
-  }
-}</pre>
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="utf-8"><title>#2881: MyFullCalendar.java</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333}a{color:#0366d6}.meta{background:#f0f0f0;border-radius:6px;padding:1em;margin:1em 0;font-size:.9em}.commentary{margin:.8em 0;background:#fff;padding:.5em 1em;border-radius:6px;border-left:4px solid #ddd;line-height:1.7}table{border-collapse:collapse;width:100%;margin:.8em 0;font-size:.9em}th,td{border:1px solid #ddd;padding:.4em .6em}th{background:#f0f0f0}code{background:#e8e8e8;border-radius:3px;padding:.1em .3em;font-size:.9em}.nav{font-size:.9em;color:#888;margin-bottom:1em}.history{background:#fffbe6;border-radius:6px;padding:1em;margin:1em 0;font-size:.9em;border-left:4px solid #ffc107}</style></head>
+<body><div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="2880.html">← Prev</a> · <a href="2882.html">Next →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-wicket/src/main/java/org/projectforge/web/calendar/MyFullCalendar.java" target="_blank" title="View source on GitHub">📄 source</a></div>
+<h1>#2881: <code>MyFullCalendar.java</code></h1>
+<div class="meta"><code>projectforge-wicket/src/main/java/org/projectforge/web/calendar/MyFullCalendar.java</code> <p><strong>Path:</strong> <code>projectforge-wicket/src/main/java/org/projectforge/web/calendar/MyFullCalendar.java</code> · <strong>Type:</strong> Java class</p><p><strong>Purpose:</strong> Part of the ProjectForge calendar module.</p><p><strong>Source:</strong> <a href="https://github.com/micromata/projectforge/blob/develop/projectforge-wicket/src/main/java/org/projectforge/web/calendar/MyFullCalendar.java">GitHub</a></p> <span style="color:#888">50 lines total</span></div>
+<div class="history"><table><tr><th>Commit</th><th>Date</th><th>Message</th></tr><tr><td><code>868d6abb</code></td><td></td><td>2025 -&amp;gt; 2026</td></tr>
+<tr><td><code>63081666</code></td><td></td><td>Source file headers: 2024-&amp;gt; 2025.</td></tr>
+<tr><td><code>b6092df0</code></td><td></td><td>Copyright 2023 -&amp;gt; 2024</td></tr>
+<tr><td><code>ab45d51f</code></td><td></td><td>Copyright 2001-2022 -&amp;gt; 2001-2023.</td></tr>
+<tr><td><code>5f7ef41b</code></td><td></td><td>Copyright 2021 -&amp;gt; 2022</td></tr>
+<tr><td><code>ceb63e8a</code></td><td></td><td>Source code header: (C) 2001-2021.</td></tr>
+<tr><td><code>7c79f192</code></td><td></td><td>Copyright of source header -&amp;gt; 2020.</td></tr>
+<tr><td><code>9ebb8852</code></td><td></td><td>Initial commit</td></tr>
+</table></div>
+<h2>What it does</h2>
+<div class="commentary"><p>Java class extending <code>FullCalendar</code>. Key methods: <code>getConfig()</code>. Package: <code>org.projectforge.web.calendar</code>. Patterns: overrides super.</p></div>
+<h2>Key takeaways</h2>
+<div class="commentary"><ul><li><strong>8 commits</strong> (sample): <code>868d6abb</code>: 2025 -&amp;gt; 2026; <code>63081666</code>: Source file headers: 2024-&amp;gt; 2025.; <code>b6092df0</code>: Copyright 2023 -&amp;gt; 2024.</li></ul></div>
+<div class="nav" style="margin-top:2em"><a href="2880.html">← Prev</a> · <a href="2882.html">Next →</a></div>
 </body></html>

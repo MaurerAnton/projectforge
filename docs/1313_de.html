@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>#1313 [DE]</title>
+<style>
+body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}
+h1{border-bottom:2px solid #333;padding-bottom:.3em}
+h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}
+h3{margin-top:2em;color:#444}
+a{color:#0366d6}
+.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}
+.nav{font-size:.9em;color:#888;margin-bottom:1em}
+.meta{font-size:.9em;margin:1em 0;color:#555}
+code{background:#f0f0f0;padding:0 .2em;font-size:.93em}
+pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}
+table{border-collapse:collapse;width:100%;margin:1em 0}
+th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}
+th{background:#f5f5f5;font-weight:600}
+.hist{font-size:.85em;color:#555}
+</style>
+</head>
+<body>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← Dateiindex</a> · <a href="1312.html">← Vorherige</a> · <a href="1314.html">Nächste →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/kotlin/org/projectforge/framework/persistence/history/HistoryService.kt" target="_blank" title="Quelle auf GitHub ansehen">📄 Quelle</a></div>
+<h1>#1313: <code>HistoryService.kt</code></h1>
+<div class="meta"><code>projectforge-business/src/main/kotlin/org/projectforge/framework/persistence/history/HistoryService.kt</code> Kernservice, projectforge-business/.../persistence/history/HistoryService.kt <span style="color:#888">426 Zeilen · 315 Code · 87 Kommentare · 24 Leer</span></div>
+<div class="c">Primäre Fassade zum Laden, Zusammenführen, Speichern und Löschen von Verlaufseinträgen einschließlich änderungsverfolgung auf Attributebene. Behandelt auch zugriffsgeprüfte Entitätsauflösung und das Anhängen von Benutzerkommentaren.</div>
+
+<h2>Architektur &amp; Rolle</h2>
+<p><code>HistoryService</code> ist ein Singleton-<code>@Service</code>, der den low-level Datenzugriff (<code>HistoryEntryDO</code>/<code>HistoryEntryAttrDO</code>) mit den Konvertern der Darstellungsschicht verbindet. Er verwaltet den gesamten Lebenszyklus: Erstellung von Verlaufseinträgen über <code>BaseDao</code>-Adapter, Laden mit Rekursion für eingebettete Objekte, Anhängen von Benutzerkommentaren und erzwungenes Löschen.</p>
+
+<h3>Wichtige Methoden</h3>
+<table>
+<tr><th>Methode</th><th>Beschreibung</th></tr>
+<tr><td><code>mergeHistoryEntries(loadContext, entries)</code></td><td>Führt Einträge in den Ladekontext zusammen, dedupliziert nach ID.</td></tr>
+<tr><td><code>findEntryAndEntityById(id, checkAccess?)</code></td><td>Lädt einen Verlaufseintrag + seine Zielentität und prüft den Lese- und Aktualisierungszugriff. Gibt <code>EntryInfo</code> mit Entitätsklasse, DAO und Zugriffsflags zurück.</td></tr>
+<tr><td><code>appendUserComment(id, comment, checkAccess?)</code></td><td>Hängt einen zeitgestempelten Benutzerkommentar an einen Verlaufseintrag an. Fügt ISO-Datumszeit und Benutzernamen hinzu, wenn der Kommentator sich vom ursprünglichen Bearbeiter unterscheidet.</td></tr>
+<tr><td><code>loadHistory(baseDO, baseDao?)</code></td><td>Einstiegspunkt zum Laden des gesamten Verlaufs für eine bestimmte Entität. Erstellt einen neuen <code>HistoryLoadContext</code> und ruft den rekursiven Lader auf.</td></tr>
+<tr><td><code>loadAndMergeHistory(entityClass, entityIds, loadContext)</code></td><td>Lädt rekursiv den Verlauf für eine Reihe von Entitäts-IDs, folgt dabei <code>@OneToMany</code>-Beziehungen, um den Verlauf eingebetteter/Kind-Entitäten zu laden. Verwendet Reflektion, um die tatsächlichen Kind-Collection aus geladenen Entitäten zu lesen.</td></tr>
+<tr><td><code>insertUpdateHistoryEntry(entity, property, class, oldVal, newVal)</code></td><td>Erstellt einen Eintrag mit einer einzelnen Attributänderung über <code>HistoryBaseDaoAdapter</code>. Prüft Demo-/eingeschränkten Benutzer vor dem Schreiben.</td></tr>
+<tr><td><code>forceDeletion(historyEntry)</code></td><td>Löscht einen Verlaufseintrag und alle seine Attribute hart (für die Entitätsbereinigung nach DSGVO-Art).</td></tr>
+<tr><td><code>save(em/historyEntry, attrs?)</code></td><td>Persistiert einen neuen Verlaufseintrag mit optionalen Attributen und setzt <code>modifiedBy</code> und <code>modifiedAt</code>.</td></tr>
+</table>
+
+<h3>Auflösung eingebetteter Objekte</h3>
+<p>Die private Methode <code>processAndMergeHistory()</code> durchsucht die Attribute von Verlaufseinträgen nach <code>@OneToMany</code>-Eigenschaftsnamen, extrahiert Entitäts-IDs sowohl aus <code>value</code> (hinzugefügt) als auch aus <code>oldValue</code> (entfernt) und lädt rekursiv den Verlauf für diese eingebetteten Entitäten. Sie verwendet auch Reflektion auf den tatsächlich geladenen Elternentitäten, um aktuell zugewiesene Kinder zu finden, die möglicherweise nicht in den Verlaufsdiffs erscheinen.</p>
+
+<h3>Innere Klasse: EntryInfo</h3>
+<p>Rückgabetyp für <code>findEntryAndEntityById()</code>. Enthält das rohe <code>HistoryEntryDO</code>, die aufgelöste Entitätsklasse, deren <code>BaseDao</code>, die geladene Entitätsinstanz sowie boolesche Werte für Lese-/Schreibzugriff.</p>
+
+<h2>Git-Verlauf</h2>
+<div class="hist"><pre>868d6abb7 2025 -> 2026
+3808112aa t_pf_history.user_comment varchar(2000) -> varchar(10000), appendUserComment fügt Zeitstempel hinzu.
+749bdd1cd HistoryEntry: Benutzer können Benutzerkommentare an Verlaufseinträge anhängen.
+398ac8947 Verlaufskommentare: Bearbeitung vorbereitet.
+b7861b2ff Adressen: Erzwungenes Löschen korrigiert (nach mgc-Migration).
+63081666f Quelltextdatei-Header: 2024 -> 2025.
+d9d0cc1bf WIP: Orderbook-Speicher.
+bbc198d03 Migrationskram in Arbeit... (alle Tests OK).
+9e3c523c7 Migrationskram in Arbeit... (alle Tests OK).
+55972f36a Migrationskram in Arbeit...
+f189d3418 Migrationskram in Arbeit... (alle Tests OK).
+d18c899b5 Refactoring der Verlaufseinträge.
+b79a1edca Migrationskram in Arbeit... (alle Tests OK).
+e3fe7c42b Migrationskram in Arbeit... (alle Tests OK).
+5989b32fd BaseDao: onChangeListener-Mechanismus refaktoriert.
+87aaf6a5a BaseDao refaktoriert, interne* Methoden umbenannt.
+e4f9ca1be Migrationskram in Arbeit...
+67805f2fc ThreadLocalUserContext.user -> loggedInUser (umbenannt).
+cb03dc74f Migrationskram in Arbeit... (alle Tests OK).
+68be78d38 Migrationskram in Arbeit... (alle Tests OK).
+85b4e1175 PfPersistenceService: query umbenannt in executeQuery.
+b095e6f7d Große Änderung der Transaktionsverwaltung: PfPersistenceContext.
+95afd297d Migrationskram in Arbeit...
+eaa4d9d3a HistoryService -> HistoryFormatService
+57f08f175 HistoryService unterstützt registrierte Adapter (User-Adapter).
+f3ed38265 HistoryService (Anzeige von Einträgen) verbessert.
+5f7ef41b8 Copyright 2021 -> 2022
+c0f2b9de0 Mandanten-Funktionalität überall entfernt.
+ceb63e8a1 Quelltextkopf: (C) 2001-2021.
+8b60b4c0a wip: Anhänge
+365059990 HistoryService und I18nEnum: Fehlerbehebung für unbekannte Enum-Werte.
+7c79f1922 Copyright des Quelltextkopfs -> 2020.
+8d164f4ad AbstractRest, AbstractDORest, AbstractDTORest refaktoriert.
+f1e8cca68 HistoryService unterstützt Einfügeoperationen.
+05244ff19 Copyright-Header erstellt.
+bd3a3e824 Modul projectforge-jax-rs umbenannt in projectforge-rest.
+0475167da PFUserDO: Code-Review.
+b4f102fe5 Zeitangabe (menschenlesbar) für Verlaufseinträge.
+2b7abdf0e Tippfehler: modfied -> modified.
+8116fa842 JSON-Serialisierung: camelCase.
+b0fd52b9f Menü von jax-rs nach business verschoben.
+895414c05 Kotlin: lateinit refaktoriert.
+be8f793fc Auto-Layout: Refactoring.
+91accbd15 Auto-Layout: Refactoring.
+298e24d04 Übersetzung des Operationstyps.
+7b4263462 Fehlerbehebung bei der automatischen Übersetzung von Eigenschaftsnamen.
+57009fbe8 Automatische Übersetzung von I18nEnum-Werten in Verlaufseinträgen.
+cc2c470f9 HistoryEntry: diffEntries als Liste von historyEntry.
+03d2d150d Neuer REST-Service rs/&lt;entity&gt;/history/id</pre></div>
+</body>
+</html>

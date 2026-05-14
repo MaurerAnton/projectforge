@@ -1,0 +1,143 @@
+<!DOCTYPE html><html lang="fr"><head><meta charset="utf-8"><title>#310 : ProjectForgeInitializer.kt [FR]</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:2em;color:#444}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.lang{font-size:.85em;color:#888;float:right}.lang a{color:#888;text-decoration:none;padding:0 .3em}.lang a.active{color:#0366d6;font-weight:600;text-decoration:underline}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}</style></head>
+<body><div class="lang"><a href="310.html">EN</a> · <a href="310_de.html">DE</a> · <a href="310_ru.html">RU</a> · <a href="310_fr.html" class="active">FR</a> · <a href="310_es.html">ES</a></div>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← Index des fichiers</a> · <a href="4107.html">← Précédent</a> · <a href="2767.html">Suivant →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-application/src/main/kotlin/org/projectforge/setup/ProjectForgeInitializer.kt" target="_blank" title="Voir la source sur GitHub">📄 source</a></div>
+<h1>#310 : <code>ProjectForgeInitializer.kt</code></h1>
+<div class="meta"><code>projectforge-application/src/main/kotlin/org/projectforge/setup/ProjectForgeInitializer.kt</code> Type : Kotlin · Rôle : Assistant d'installation · Source : projectforge-application/src/main/kotlin/org/projectforge/setup/ProjectForgeInitializer.kt <span style="color:#888">145 lignes · 111 code · 23 commentaires · 11 vides</span></div>
+<div class="c">Fichier de code source dans <code>projectforge-application/src/main/kotlin/org/projectforge/setup/ProjectForgeInitializer.kt</code> contenant du code Kotlin pour la couche Assistant d'installation.</div>
+<h2>Structure du code</h2>
+<p>Annotations : <code>Suppress</code>, <code>JvmStatic</code></p>
+<p>Objets : <code>ProjectForgeInitializer</code></p>
+<p>Fonctions (3) : <code>initialize</code>, <code>replace</code>, <code>ensureConfigFile</code></p>
+<p>Propriétés (7) : <code>applicationHomeDir</code>, <code>emphasizedLog</code>, <code>counter</code>, <code>serverPort</code>, <code>serverAddress</code>, <code>domainService</code>, <code>jdbc</code></p>
+<p>Importations : 14 paquetages</p>
+<p>Paquetage : <code>org.projectforge.setup</code></p>
+<h2>Code source (abrégé)</h2>
+<pre>
+package org.projectforge.setup
+
+import mu.KotlinLogging
+import org.projectforge.ProjectForgeApp
+import org.projectforge.business.configuration.DomainService
+import org.projectforge.common.CanonicalFileUtils
+import org.projectforge.common.EmphasizedLogSupport
+import org.projectforge.common.StringModifier
+import org.projectforge.framework.configuration.ConfigXml
+import org.projectforge.framework.utils.NumberHelper
+import org.projectforge.plugins.core.PluginAdminService
+import org.projectforge.start.ProjectForgeApplication
+import org.projectforge.start.ProjectForgeApplication.giveUpAndSystemExit
+import org.projectforge.start.ProjectForgeHomeFinder
+import java.io.File
+import java.util.regex.Matcher
+
+private val log = KotlinLogging.logger {}
+
+object ProjectForgeInitializer {
+  @JvmStatic
+  fun initialize(setupData: SetupData?): File? {
+    val applicationHomeDir = setupData?.applicationHomeDir
+      ?: return giveUpAndSystemExit(&quot;Aucun répertoire configuré dans l'assistant.&quot;)
+
+    if (ProjectForgeHomeFinder.isProjectForgeSourceCodeRepository(applicationHomeDir)) {
+      giveUpAndSystemExit(&quot;ProjectForge ne doit pas utiliser le dépôt de code source comme répertoire personnel : $applicationHomeDir&quot;)
+    }
+
+    val emphasizedLog =
+      EmphasizedLogSupport(log, EmphasizedLogSupport.Priority.NORMAL, EmphasizedLogSupport.Alignment.LEFT)
+        .log(&quot;Vérification de l'installation de ProjectForge...&quot;)
+
+    var counter = 0
+    if (!applicationHomeDir.exists()) {
+      emphasizedLog.log(&quot;  ${++counter}. Création du répertoire : ${CanonicalFileUtils.absolutePath(applicationHomeDir)}...&quot;)
+      applicationHomeDir.mkdirs()
+      if (!applicationHomeDir.exists() &amp;&amp; !applicationHomeDir.isDirectory) {
+        emphasizedLog.log(&quot;    Erreur lors de la création du répertoire : ${CanonicalFileUtils.absolutePath(applicationHomeDir)}&quot;)
+          .logEnd()
+        giveUpAndSystemExit(&quot;Erreur lors de la création du répertoire : ${CanonicalFileUtils.absolutePath(applicationHomeDir)}&quot;)
+      }
+    }
+
+    val serverPort = if (setupData.serverPort in 1..65535) setupData.serverPort else 8080
+    val serverAddress = setupData.serverAdress
+
+    val domainService = DomainService.internalCreate(setupData.domain)
+    counter = ensureConfigFile(applicationHomeDir,
+      ProjectForgeApplication.CLASSPATH_INITIAL_PROPERTIES_FILENAME,
+      ProjectForgeApplication.PROPERTIES_FILENAME,
+      counter,
+      emphasizedLog,
+      StringModifier {
+        var result = replace(it, &quot;server.address&quot;, &quot;$serverAddress&quot;)
+        result = replace(result, &quot;server.port&quot;, &quot;$serverPort&quot;)
+        result = replace(result, &quot;projectforge.domain&quot;, domainService.domain)
+        result = replace(result, &quot;projectforge.servletContextPath&quot;, domainService.contextPath)
+        result = replace(result, &quot;projectforge.currencySymbol&quot;, setupData.currencySymbol)
+        result = replace(result, &quot;projectforge.defaultLocale&quot;, setupData.defaultLocale)
+        result = replace(result, &quot;projectforge.defaultTimeNotation&quot;, setupData.defaultTimeNotation)
+        result = replace(result, &quot;projectforge.defaultFirstDayOfWeek&quot;, setupData.defaultFirstDayOfWeek)
+        if (setupData.developmentMode) {
+          result = replace(result, &quot;projectforge.web.development.enableCORSFilter&quot;, &quot;true&quot;)
+        }
+        val jdbc = setupData.jdbcSettings
+        if (!setupData.useEmbeddedDatabase &amp;&amp; jdbc != null) {
+          result = replace(result, &quot;spring.datasource.url&quot;, jdbc.jdbcUrl)
+          result = replace(result, &quot;spring.datasource.username&quot;, jdbc.user)
+          result = replace(result, &quot;spring.datasource.password&quot;, jdbc.password)
+          result = replace(result, &quot;spring.datasource.driver-class-name&quot;, &quot;org.postgresql.Driver&quot;)
+        }
+        result = replace(result, &quot;projectforge.security.passwordPepper&quot;, NumberHelper.getSecureRandomAlphanumeric(20))
+        result = replace(
+          result,
+          &quot;projectforge.security.authenticationTokenEncryptionKey&quot;,
+          NumberHelper.getSecureRandomAlphanumeric(20)
+        )
+        result
+      }
+    )
+    ensureConfigFile(
+      applicationHomeDir,
+      ConfigXml.CLASSPATH_INITIAL_CONFIG_XML_FILE, ConfigXml.CONFIG_XML_FILE, counter, emphasizedLog
+    )
+/*    @Suppress(&quot;UNUSED_VALUE&quot;)
+    counter = ensureConfigFile(
+      applicationHomeDir,
+      AttrSchemaServiceSpringBeanImpl.CLASSPATH_INITIAL_ATTR_SCHEMA_CONFIG_FILE,
+      AttrSchemaServiceSpringBeanImpl.ATTR_SCHEMA_CONFIG_FILE,
+      counter,
+      emphasizedLog
+    )*/
+    emphasizedLog.logEnd()
+    if (!setupData.startServer) {
+      giveUpAndSystemExit(&quot;Initialisation du répertoire personnel de ProjectForge terminée. Le démarrage automatique n'a pas été sélectionné. Veuillez redémarrer le serveur manuellement.&quot;)
+    }
+    PluginAdminService.registerFirstStart()
+    return setupData.applicationHomeDir
+  }
+
+  private fun replace(text: String, property: String, value: Any?): String {
+    return text.replaceFirst(
+      &quot;^#?+$property=.*$&quot;.toRegex(RegexOption.MULTILINE),
+      Matcher.quoteReplacement(&quot;$property=$value&quot;)
+    )
+  }
+
+  private fun ensureConfigFile(
+    baseDir: File, initialClasspathFilename: String, filename: String, counter: Int,
+    emphasizedLog: EmphasizedLogSupport, modifier: StringModifier? = null
+  ): Int {
+    if (File(baseDir, filename).exists())
+      return counter
+    emphasizedLog.log(&quot;  $counter. Création du fichier de configuration : $filename...&quot;)
+    if (!ProjectForgeApp.ensureInitialConfigFile(baseDir, initialClasspathFilename, filename, false, modifier)) {
+      emphasizedLog.logEnd()
+      giveUpAndSystemExit(&quot;Erreur lors de la création du fichier de configuration &#x27;$filename&#x27;.&quot;)
+    }
+// ... (tronqué, total 123 lignes)</pre>
+
+<h2>Historique Git</h2><div class="hist"><pre>868d6abb7 2025 -&gt; 2026
+63081666f En-têtes des fichiers source : 2024 -&gt; 2025.
+b1560ca43 Travail sur la migration en cours...
+b6092df09 Copyright 2023 -&gt; 2024
+ab45d51fa Copyright 2001-2022 -&gt; 2001-2023.</pre></div>
+</body></html>

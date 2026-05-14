@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<title>#863: CalendarStyle.kt — ProjectForge-Dokumentation [DE]</title>
+<style>
+body { font-family: system-ui, sans-serif; max-width: 960px; margin: 2em auto; padding: 0 1em; background: #fafafa; color: #222; line-height: 1.6; }
+h1 { border-bottom: 2px solid #333; padding-bottom: 0.3em; }
+h2 { margin-top: 2.5em; border-bottom: 1px solid #ddd; padding-bottom: 0.2em; color: #333; }
+h3 { margin-top: 2em; color: #444; }
+a { color: #0366d6; }
+.c { border-left: 3px solid #ddd; padding: .5em 1em; margin: 1em 0; background: #fff; }
+.nav { font-size: .9em; color: #888; margin-bottom: 1em; }
+.meta { font-size: .9em; margin: 1em 0; color: #555; }
+code { background: #f0f0f0; padding: 0 .2em; font-size: .93em; }
+pre { background: #f5f5f5; padding: .8em 1em; border: 1px solid #ddd; border-radius: 4px; overflow-x: auto; font-size: .88em; line-height: 1.4; }
+table { border-collapse: collapse; width: 100%; margin: 1em 0; }
+th, td { border: 1px solid #ddd; padding: .5em .8em; text-align: left; font-size: .9em; }
+th { background: #f5f5f5; font-weight: 600; }
+.hist { font-size: .85em; color: #555; }
+</style>
+</head>
+<body>
+
+<p class="nav">
+<a href="https://maureranton.github.io/projectforge/">← Index</a> ·
+<a href="file-index.html">← Dateiindex</a> ·
+<a href="862.html">← Vorherige</a> ·
+<a href="864.html">Nächste →</a>
+</p>
+
+<h1>#863: <code>CalendarStyle.kt</code></h1>
+
+<div class="meta"><code>projectforge-business/src/main/kotlin/org/projectforge/business/calendar/CalendarStyle.kt</code> 
+<strong>Typ:</strong> Kotlin-Klasse (Hilfsprogramm für Styling)<br>
+<strong>Zweck:</strong> Berechnet Hintergrund- und Textfarben für Kalenderereignisse basierend auf einer konfigurierbaren Grundfarbe<br>
+<strong>Quellpfad:</strong> <code>projectforge-business/src/main/kotlin/org/projectforge/business/calendar/CalendarStyle.kt</code>
+ <span style="color:#888">161 Zeilen · 103 Code · 38 Kommentare · 20 leer</span></div>
+
+<div class="c">
+<p>
+<code>CalendarStyle</code> nimmt eine Grund-Hintergrundfarbe (Hex-String) entgegen, berechnet eine passende Textfarbe und leitet eine halbtransparente Hintergrundvariante für die Darstellung von Kalenderereignissen ab. Die Textfarbe wird serverseitig mittels HSB-Farbraum-Manipulation berechnet, um einen ausreichenden Kontrast sicherzustellen. Ergebnisse werden in einem <code>ColorCache</code> (erweitert <code>AbstractCache</code> mit 1-Stunde-Ablauf) zwischengespeichert, um wiederholte Berechnungen derselben Konvertierungen zu vermeiden. Zwei Farbschemata werden unterstützt: der Standardmodus (modern) mit HSB-abgeleiteten Farben und ein <code>CLASSIC</code>-Modus, der das ursprüngliche v6-Verhalten (schwarz auf weiß oder weiß auf dunkel) beibehält.
+</p>
+</div>
+
+<h2>Konstruktor</h2>
+<table>
+<tr><th>Parameter</th><th>Typ</th><th>Standard</th><th>Beschreibung</th></tr>
+<tr>
+  <td><code>baseBackgroundColor</code></td>
+  <td><code>String?</code></td>
+  <td><code>null</code></td>
+  <td>Ein Hex-Farbstring (z. B. <code>"#06790e"</code>). Standardmäßig <code>"#777"</code>, falls null.</td>
+</tr>
+</table>
+
+<h2>Eigenschaften</h2>
+<h3><code>bgColor: String</code></h3>
+<p>Die Grund-Hintergrundfarbe. Wird aus dem Konstruktorparameter initialisiert, mit Rückfall auf <code>"#777"</code> (ein neutrales Grau). Dies wird als kanonischer Hex-Wert gespeichert und sollte nicht direkt für die Darstellung verwendet werden — verwenden Sie stattdessen <code>getBackgroundColor()</code>.</p>
+
+<h2>Öffentliche Methoden</h2>
+
+<h3><code>getTextColor(colorScheme: CalendarEventColorScheme?): String</code></h3>
+<p>Gibt die berechnete Textfarbe für das angegebene Farbschema zurück. Delegiert an <code>colorCache.getTextColor(bgColor, colorScheme)</code>.</p>
+
+<h3><code>getBackgroundColor(calendarEventColorScheme: CalendarEventColorScheme?): String</code></h3>
+<p>Gibt die für das Farbschema angepasste Hintergrundfarbe zurück:</p>
+<ul>
+  <li><strong>CLASSIC-Modus:</strong> Gibt <code>bgColor</code> unverändert zurück (undurchsichtig).</li>
+  <li><strong>Moderner Modus (Standard):</strong> Fügt Alpha-Transparenz hinzu — <code>"3"</code> für kurzes Hex (<code>"#7773"</code> → ~20% Deckkraft) oder <code>"33"</code> für volles Hex (<code>"#77777733"</code> → ~20% Deckkraft). Dies erzeugt durchscheinende Kalenderereignisse, die mit dem Hintergrund verschmelzen.</li>
+</ul>
+
+<h2>Begleitobjekt — Farbberechnungs-Engine</h2>
+
+<h3>Interne Klasse <code>RGB(r: Int, g: Int, b: Int)</code></h3>
+<p>Einfache Datenklasse, die RGB-Kanalwerte (0–255) hält.</p>
+
+<h3>Interne Klasse <code>ColorCache : AbstractCache()</code></h3>
+<p>Cache mit 1-Stunde-TTL, der berechnete Textfarben, gespeichert nach Hex-String, zwischenspeichert und redundante HSB-Konvertierungen vermeidet. Unterhält separate Maps für das Standard- und das klassische Farbschema. Thread-sicher durch <code>synchronized</code>-Blöcke auf der pro-Schema-Map.</p>
+
+<h3>Farbkonvertierungsfunktionen</h3>
+
+<table>
+<tr><th>Funktion</th><th>Signatur</th><th>Zweck</th></tr>
+<tr>
+  <td><code>validateHexCode</code></td>
+  <td><code>(color: String): Boolean</code></td>
+  <td>Validiert, ob ein String einem 3-stelligen (<code>#[a-f0-9]{3}</code>) oder 6-stelligen (<code>#[a-f0-9]{6}</code>) Hex-Farbmuster entspricht.</td>
+</tr>
+<tr>
+  <td><code>hexToRGB</code></td>
+  <td><code>(color: String?): RGB</code></td>
+  <td>Konvertiert einen Hex-String in ein <code>RGB</code>-Objekt. Erweitert Kurzschreibweise (<code>"#abc"</code> → <code>"#aabbcc"</code>). Gibt bei Fehler <code>RGB(0,0,0)</code> zurück.</td>
+</tr>
+<tr>
+  <td><code>hexToColor</code></td>
+  <td><code>(color: String?): Color</code></td>
+  <td>Konvertiert einen Hex-String in ein <code>java.awt.Color</code>. Behandelt Kurzschreibweise-Erweiterung.</td>
+</tr>
+<tr>
+  <td><code>getTextColor</code></td>
+  <td><code>(backgroundColor: String?, colorScheme: CalendarEventColorScheme?): String</code></td>
+  <td>Öffentlicher statischer Einstiegspunkt, der an den Cache delegiert.</td>
+</tr>
+<tr>
+  <td><code>calculateTextColor</code></td>
+  <td><code>(backgroundColor: String?, colorScheme: CalendarEventColorScheme?): String</code></td>
+  <td>Kernalgorithmus. Für CLASSIC: gibt <code>"#fff"</code> zurück, wenn dunkel, sonst <code>"#444"</code>. Für modern: senkt die HSB-Helligkeit um 0,6 (begrenzt auf mindestens 0,3), um eine dunklere Variante der Hintergrundfarbe zu erzeugen.</td>
+</tr>
+<tr>
+  <td><code>brightness(rgb: RGB): Int</code></td>
+  <td>—</td>
+  <td>Gewichtete Helligkeitsformel: <code>(R*299 + G*587 + B*114) / 1000</code> (wahrgenommene Leuchtkraft).</td>
+</tr>
+<tr>
+  <td><code>brightness(color: String?): Int</code></td>
+  <td>—</td>
+  <td>Überladung, die zuerst <code>hexToRGB</code> aufruft und dann die Helligkeit berechnet.</td>
+</tr>
+<tr>
+  <td><code>dark(color: String?): Boolean</code></td>
+  <td>—</td>
+  <td>Gibt <code>true</code> zurück, wenn die Helligkeit unter 180 liegt (d. h. die Farbe ist dunkel).</td>
+</tr>
+</table>
+
+<h3>Details zum Farbalgorithmus</h3>
+<p>Für das moderne Schema wird die Textfarbe wie folgt berechnet:</p>
+<ol>
+  <li>Konvertieren des Hintergrund-Hex in <code>java.awt.Color</code>.</li>
+  <li>Extrahieren der HSB-Werte (Farbton, Sättigung, Helligkeit) mittels <code>Color.RGBtoHSB()</code>.</li>
+  <li>Subtraktion von 0,6 von der Helligkeit, wobei die untere Grenze auf 0,3 begrenzt wird. Dies erzeugt einen merklich dunkleren Farbton des gleichen Farbtons.</li>
+  <li>Rückkonvertierung nach RGB mittels <code>Color.HSBtoRGB()</code> und Formatierung als <code>"#rrggbb"</code>.</li>
+  <li>Auskommentierter Code hatte eine zusätzliche Sättigungsverstärkung für nahezu graue Farben, die deaktiviert wurde.</li>
+</ol>
+<p>Das CLASSIC-Schema ist einfacher: Dunkle Hintergründe erhalten weißen Text (<code>"#fff"</code>), helle Hintergründe erhalten dunkelgrauen Text (<code>"#444"</code>), mit einem Schwellenwert bei Helligkeit 180.</p>
+
+<h2 class="hist">Git-Verlauf</h2>
+<div class="hist">
+<ul>
+<li><strong>868d6abb7</strong> 2025 → 2026</li>
+<li><strong>63081666f</strong> Quelltext-Dateiköpfe: 2024 → 2025</li>
+<li><strong>b6092df09</strong> Copyright 2023 → 2024</li>
+<li><strong>ab45d51fa</strong> Copyright 2001-2022 → 2001-2023</li>
+<li><strong>5a2c98523</strong> Klassisches Farbschema-Option für besseren Kontrast</li>
+<li><strong>6bffc03e8</strong> Transparente Hintergründe, Rahmen-/Textfarbe mit verbessertem Kontrastalgorithmus</li>
+<li><strong>accc8cbe3</strong> Transparente Farben für Ereignisse, Einstellungen vorbereitet</li>
+<li><strong>5f075a1b6</strong> Farben verbessert, Urlaubs-Popover zeigt abgekürzten Kommentar mit Klickunterstützung</li>
+<li><strong>cc9a1b752</strong> Textfarbalgorithmus, Popovers bei Drag/Resize ausblenden, Popover-Verzögerung</li>
+<li><strong>cb613567a</strong> WIP: BigCalendar → FullCalendar</li>
+<li><strong>4def09990</strong> Veraltet: toLowerCase → lowerCase, toUpperCase → uppercase</li>
+<li><strong>5f7ef41b8</strong> Copyright 2021 → 2022</li>
+<li><strong>ceb63e8a1</strong> Copyright 2001-2021</li>
+<li><strong>7c79f1922</strong> Copyright → 2020</li>
+<li><strong>b05d8a8be</strong> WIP: Kalenderstile und Geburtstage</li>
+<li><strong>05244ff19</strong> Kotlin-Dateikopf erstellt/aktualisiert</li>
+<li><strong>46f71e71a</strong> In Geschäftsmodul verschoben</li>
+<li><strong>bd3a3e824</strong> Modulumbenennung: jax-rs → rest</li>
+<li><strong>c16c4c07d</strong> ColorPicker eingeführt</li>
+<li><strong>eb453d8a1</strong> Schwellenwert Schwarz/Weiß gesenkt</li>
+<li><strong>9031ed63f</strong> Farbberechnungen serverseitig (gemeinsam von Ereignissen und Auswahlfeldern genutzt)</li>
+<li><strong>7b2661bfc</strong> Kalender, Kalender, Kalender und Farben</li>
+</ul>
+</div>
+
+<h2>Design-Grundlage</h2>
+<p>
+Die serverseitige Farbberechnung ist eine bewusste architektonische Entscheidung. Durch die Berechnung von Text- und Hintergrundfarben auf dem Server (anstatt im React-Frontend) stehen dieselben Farbwerte sowohl für die FullCalendar-Ereignisdarstellung <em>als auch</em> für Formular-Auswahllisten zur Verfügung, wodurch Inkonsistenzen vermieden werden. Der HSB-basierte Algorithmus erzeugt Farben, die wahrnehmbar mit dem Hintergrund verwandt sind (gleicher Farbton, angepasste Helligkeit), anstatt einfach zu invertieren – dies schafft ein kohärenteres visuelles Design. Der <code>ColorCache</code> vermeidet die wiederholte Berechnung derselben Farbkombinationen (jeder Kalenderstil wird für viele Ereignisse verwendet), und der 1-Stunden-Ablauf über <code>AbstractCache</code> ermöglicht die Weitergabe von Themenänderungen ohne Neustart. Der <code>CLASSIC</code>-Modus wurde nachträglich hinzugefügt (Commit <code>5a2c98523</code>) als Benutzeroption für diejenigen, die den einfacheren kontrastreichen Ansatz aus früheren Versionen bevorzugen.
+</p>
+
+</body>
+</html>

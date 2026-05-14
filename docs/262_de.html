@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>#262: SkillMatrixPrivacyProtectionJob.kt [DE]</title>
+<style>
+body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}
+h1{border-bottom:2px solid #333;padding-bottom:.3em}
+h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}
+h3{margin-top:2em;color:#444}
+a{color:#0366d6}
+.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}
+.nav{font-size:.9em;color:#888;margin-bottom:1em}
+.lang{font-size:.85em;color:#888;float:right}
+.lang a{color:#888;text-decoration:none;padding:0 .3em}
+.lang a.active{color:#0366d6;font-weight:600;text-decoration:underline}
+.meta{font-size:.9em;margin:1em 0;color:#555}
+code{background:#f0f0f0;padding:0 .2em;font-size:.93em}
+pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}
+table{border-collapse:collapse;width:100%;margin:1em 0}
+th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}
+th{background:#f5f5f5;font-weight:600}
+.hist{font-size:.85em;color:#555}
+</style>
+</head>
+<body>
+<div class="lang">
+<a href="262.html">EN</a> · 
+<a href="262_de.html" class="active">DE</a> · 
+<a href="262_ru.html">RU</a> · 
+<a href="262_fr.html">FR</a> · 
+<a href="262_es.html">ES</a>
+</div>
+<div class="nav">
+<a href="https://maureranton.github.io/projectforge/">← Index</a> · 
+<a href="file-index.html">← Dateiindex</a> · 
+<a href="2705.html">← Vorherige</a> · 
+<a href="3187.html">Nächste →</a> · 
+<a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/plugins/org.projectforge.plugins.skillmatrix/src/main/kotlin/org/projectforge/plugins/skillmatrix/SkillMatrixPrivacyProtectionJob.kt" target="_blank" title="Quellcode auf GitHub anzeigen">📄 Quelle</a>
+</div>
+<h1>#262: <code>SkillMatrixPrivacyProtectionJob.kt</code></h1>
+<div class="meta">
+<code>plugins/org.projectforge.plugins.skillmatrix/src/main/kotlin/org/projectforge/plugins/skillmatrix/SkillMatrixPrivacyProtectionJob.kt</code> Typ: Kotlin · Rolle: Plugin-Registrierung · Quelle: plugins/org.projectforge.plugins.skillmatrix/src/main/kotlin/org/projectforge/plugins/skillmatrix/SkillMatrixPrivacyProtectionJob.kt <span style="color:#888">79 Zeilen · 44 Code · 26 Kommentare · 9 leer</span>
+</div>
+<div class="c">Geplanter/System-Job für SkillMatrixPrivacyProtection. Implementiert periodische Wartungs- oder Plausibilitätsprüfungslogik, die vom PF-Job-Scheduler ausgeführt wird.</div>
+<h2>Codestruktur</h2>
+<p>Annotationen: <code>PostConstruct</code>, <code>micromata</code>, <code>Service</code>, <code>author</code>, <code>Autowired</code></p>
+<p>Klassen: <code>SkillMatrixPrivacyProtectionJob</code></p>
+<p>Supertyp(en): <code>IPrivacyProtectionJob</code></p>
+<p>Funktionen (2): <code>postConstruct</code>, <code>execute</code></p>
+<p>Eigenschaften (6): <code>persistenceService</code>, <code>purgeCronPrivacyProtectionJob</code>, <code>userDao</code>, <code>date</code>, <code>lastUpdate</code>, <code>counter</code></p>
+<p>Importe: 9 Pakete</p>
+<p>Paket: <code>org.projectforge.plugins.skillmatrix</code></p>
+<h2>Quellcode (gekürzt)</h2>
+<pre>
+package org.projectforge.plugins.skillmatrix
+
+import jakarta.annotation.PostConstruct
+import mu.KotlinLogging
+import org.projectforge.business.privacyprotection.CronPrivacyProtectionJob
+import org.projectforge.business.privacyprotection.IPrivacyProtectionJob
+import org.projectforge.business.user.UserDao
+import org.projectforge.framework.persistence.jpa.PfPersistenceService
+import org.projectforge.framework.time.PFDateTime
+import org.springframework.beans.factory.annotation.Autowired
+import org.springframework.stereotype.Service
+
+private val log = KotlinLogging.logger {}
+
+/**
+ *
+ * @author Kai Reinhard (k.reinhard@micromata.de)
+ */
+@Service
+class SkillMatrixPrivacyProtectionJob : IPrivacyProtectionJob {
+    @Autowired
+    private lateinit var persistenceService: PfPersistenceService
+
+    @Autowired
+    private lateinit var purgeCronPrivacyProtectionJob: CronPrivacyProtectionJob
+
+    @Autowired
+    private lateinit var userDao: UserDao
+
+    @PostConstruct
+    private fun postConstruct() {
+        purgeCronPrivacyProtectionJob.register(this)
+    }
+
+    override fun execute() {
+        val date = PFDateTime.now().minusMonths(3L)
+        log.info(&quot;Bereinige Skill-Matrix-Einträge von Ausgeschiedenen (gelöschte/deaktivierte Benutzer mit lastUpdate &lt; ${date.isoString}Z)...&quot;)
+
+        userDao.selectAll(checkAccess = false).forEach { user -&gt;
+            if (user.deactivated || user.deleted) {
+                val lastUpdate = user.lastUpdate
+                if (lastUpdate != null &amp;&amp; lastUpdate &lt; date.utilDate) {
+                    val counter = persistenceService.runInTransaction { context -&gt;
+                        context.executeNamedUpdate(
+                            SkillEntryDO.DELETE_ALL_OF_USER, Pair(&quot;userId&quot;, user.id)
+                        )
+                    }
+                    if (counter &gt; 0) {
+                        log.info { &quot;$counter Einträge der Skill-Matrix von Benutzer &#x27;${user.username}&#x27; mit ID ${user.id} gelöscht.&quot; }
+                    }
+                }
+            }
+        }
+        log.info(&quot;Bereinigung der Skill-Matrix-Einträge abgeschlossen.&quot;)
+    }
+}</pre>
+
+<h2>Git-Verlauf</h2>
+<div class="hist">
+<pre>868d6abb7 2025 -> 2026
+63081666f Quellcode-Dateiköpfe: 2024 -> 2025.
+1b50060c3 BaseDao: umbenannt: get -> find, save -> insert, getList -> select, load -> select
+2a8ea2076 Migration in Arbeit... BaseDao umgestaltet (noch nicht abgeschlossen) interne* Methoden umbenannt.
+108ecf629 !!!!! Große Änderung der Transaktionsverwaltung: Verwendet PfPersistenceContext so weit wie möglich wieder (noch nicht abgeschlossen). Tests laufen noch nicht. readOnly-Transaktionen in PfPersistenceService entfernt, Schreiboperationen von PfPersistenceService entfernt.</pre>
+</div>
+</body>
+</html>

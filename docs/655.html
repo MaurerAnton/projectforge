@@ -1,12 +1,73 @@
 <!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>#655</title>
-<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333}a{color:#0366d6}.meta{font-size:.9em;margin:1em 0}.nav{font-size:.9em;color:#888;margin-bottom:1em}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}code{background:#f0f0f0;padding:0 .2em}</style></head>
-<body><div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="654.html">← Prev</a> · <a href="656.html">Next →</a></div>
-<h1>#655: <code>AccessException.java</code></h1>
-<div class="meta"><strong>Lines:</strong> 246 · <strong>Author:</strong> Kai Reinhard · <strong>Type:</strong> Java — extends <code>UserException</code></div>
-<div class="c"><p><strong>I18n-aware access denial exception with full context information.</strong> 246 lines. Extends <code>UserException</code> (which itself extends <code>RuntimeException</code> — unchecked, so callers don't need <code>throws</code> clauses). Extends <code>UserException</code> rather than <code>RuntimeException</code> directly to get i18n message resolution support — the error message shown to users is localized.</p>
-<p><strong>Fields (context for error messages):</strong> <code>user</code> (PFUserDO — who was denied), <code>taskId</code> (Long — WBS task context, if applicable), <code>accessType</code> (READ/WRITE/DEPLOY), <code>operationType</code> (CREATE/READ/UPDATE/DELETE/INSERT), <code>clazz</code> (the entity class for which access was attempted), <code>message</code> (optional custom error message).</p>
-<p><strong>I18n keys:</strong> <code>I18N_KEY_STANDARD = "access.exception.standard"</code> — used when no task context, e.g. "User John was denied WRITE access to Invoice." <code>I18N_KEY_STANDARD_WITH_TASK = "access.exception.standardWithTask"</code> — used when task context exists, e.g. "User John was denied READ access to task 'Web Platform'."</p>
-<p><strong><code>getMessageArgs()</code> — two overloads:</strong> One returns <code>MessageParam[]</code> (ProjectForge's i18n param type), the other returns <code>Object[]</code> (Java's legacy <code>ResourceBundle</code> API). Both resolve the task ID to a displayable name via <code>TaskTree.getInstance().getTaskById(taskId)</code> — converts a numeric ID to a human-readable task title. If the task isn't found, falls back to the raw ID.</p>
-<p><strong>Constructors — 5 overloads:</strong> With various combinations of (user, taskId, accessType, operationType, i18nKey, params). All constructors log the exception at INFO level — <code>log.info("AccessException: " + this)</code>. The <code>toString()</code> method uses <code>ToStringBuilder</code> to produce structured log output: <code>"user=42:jdoe, task=15:Web Platform, accessType=WRITE, operationType=UPDATE, class=RechnungDO, i18nKey=access.exception.standardWithTask"</code>.</p>
-<p><strong>UserException base class:</strong> Provides <code>getI18nKey()</code>, <code>getParams()</code> for i18n message resolution. The framework catches <code>UserException</code> and renders a user-friendly error page with the localized message. <code>AccessException</code> is the most frequently thrown exception in ProjectForge's access control layer — every denied operation creates one.</p></div>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}.hist{font-size:.85em;color:#555}</style></head>
+<body><div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="654.html">← Prev</a> · <a href="656.html">Next →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/java/org/projectforge/framework/access/AccessCheckerImpl.java" target="_blank" title="View source on GitHub">📄 source</a></div>
+<h1>#655: <code>AccessCheckerImpl.java</code></h1>
+<div class="meta"><code>projectforge-business/src/main/java/org/projectforge/framework/access/AccessCheckerImpl.java</code> Access Checker, projectforge-business/src/main/java/org/projectforge/framework/access/AccessCheckerImpl.java <span style="color:#888">853 lines · 502 code · 280 comments · 71 blank</span></div>
+<div class="c">Security access checker implementing fine-grained permission checks for a specific module or operation.</div>
+<h2>Git History</h2><div class="hist"><pre>868d6abb7 2025 -&gt; 2026
+11dbfab8c Userright handling in PFUserDO and UserGroupCache improved (rights of user may not be initialized).
+63081666f Source file headers: 2024-&gt; 2025.
+d67bce18b Migration stuff in progress...
+67805f2fc ThreadLocalUserContext.user -&gt; ThreadLocalUserContext.loggedInUser (renamed for avoiding mis-understandings in code).
+4c04cfd65 MAJOR-CHANGE! Migration of integer id&#x27;s to Long id&#x27;s (including fk&#x27;s etc.)
+c1d14ecdb Migration stuff in progress...
+b6092df09 Copyright 2023 -&gt; 2024
+ab45d51fa Copyright 2001-2022 -&gt; 2001-2023.
+5f9658941 UserRight.isConfigurable/getAvailableValues/matches(UserGroupCache, ...) -&gt; isConfigurable/...(..., Collection&lt;GroupDO&gt;...) UserGroovyRight removed.
+1678d3fe1 UserRight.isAvailable(UserGroupCache, ...) -&gt; isAvailable(..., Collection&lt;GroupDO&gt;...)
+5f7ef41b8 Copyright 2021 -&gt; 2022
+c0f2b9de0 Tenants functionality removed everywhere (untested).
+ceb63e8a1 Source code header: (C) 2001-2021.
+6129b1709 AccessCheckerImpl.areUsersInSameGroup: fixed if no groups are given.
+a278ea05f SourceFileCheckerTest added.
+01bd74a89 AccessChecker.isLoggedInUserMemberOfGroup(boolean, ProjectForgeGroup...)
+7c79f1922 Copyright of source header -&gt; 2020.
+08225154f Bugfix in AccessCheckerImpl.hasRight(final PFUserDO origUser, final IUserRightId rightId, final boolean throwException, UserRightValue... values)
+b66248fae Heavy WIP:JPA
+2609f511f Heavy WIP: session -&gt; em
+73a9755df More code cleanup: - Collapsed catch blocks that did the exact same things - Replaced ArrayList&lt;Class&gt; with ArrayList&lt;&gt; - Replaced StringBuffer with StringBuilder - Removed a few usages of deprecated classes (mainly HSSFColors in Excel) - Replace Collections.sort with List.sort
+97991a2c4 Revert &quot;Simplify boolean return statements (business)&quot;
+40480b54d Simplify boolean return statements (business)
+000ca723d Remove pointless boolean expressions (business)
+0910a4935 Compile errors after merge fixed (tests are all in the green arc).
+b31e4594f Merge branch &#x27;develop-6&#x27; into develop
+1a6c58ed1 AccessCheckerImp.isRestrictedUser(Integer) handles now internal test users correct (id &lt; 0).
+b0e00ebaa AccessCheckerImpl.isRestrictedUser(): NPE fix.
+3db756bca AccessCheckerImpl: Check of restricted user fixed.</pre></div>
+</body></html>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}.hist{font-size:.85em;color:#555}</style></head>
+<body><div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="654.html">← Prev</a> · <a href="656.html">Next →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/java/org/projectforge/framework/access/AccessCheckerImpl.java" target="_blank" title="View source on GitHub">📄 source</a></div>
+<h1>#655: <code>AccessCheckerImpl.java</code></h1>
+<div class="meta">Access Checker, projectforge-business/src/main/java/org/projectforge/framework/access/AccessCheckerImpl.java</div>
+<div class="c">Security access checker implementing fine-grained permission checks for a specific module or operation.</div>
+<h2>Git History</h2><div class="hist"><pre>868d6abb7 2025 -&gt; 2026
+11dbfab8c Userright handling in PFUserDO and UserGroupCache improved (rights of user may not be initialized).
+63081666f Source file headers: 2024-&gt; 2025.
+d67bce18b Migration stuff in progress...
+67805f2fc ThreadLocalUserContext.user -&gt; ThreadLocalUserContext.loggedInUser (renamed for avoiding mis-understandings in code).
+4c04cfd65 MAJOR-CHANGE! Migration of integer id&#x27;s to Long id&#x27;s (including fk&#x27;s etc.)
+c1d14ecdb Migration stuff in progress...
+b6092df09 Copyright 2023 -&gt; 2024
+ab45d51fa Copyright 2001-2022 -&gt; 2001-2023.
+5f9658941 UserRight.isConfigurable/getAvailableValues/matches(UserGroupCache, ...) -&gt; isConfigurable/...(..., Collection&lt;GroupDO&gt;...) UserGroovyRight removed.
+1678d3fe1 UserRight.isAvailable(UserGroupCache, ...) -&gt; isAvailable(..., Collection&lt;GroupDO&gt;...)
+5f7ef41b8 Copyright 2021 -&gt; 2022
+c0f2b9de0 Tenants functionality removed everywhere (untested).
+ceb63e8a1 Source code header: (C) 2001-2021.
+6129b1709 AccessCheckerImpl.areUsersInSameGroup: fixed if no groups are given.
+a278ea05f SourceFileCheckerTest added.
+01bd74a89 AccessChecker.isLoggedInUserMemberOfGroup(boolean, ProjectForgeGroup...)
+7c79f1922 Copyright of source header -&gt; 2020.
+08225154f Bugfix in AccessCheckerImpl.hasRight(final PFUserDO origUser, final IUserRightId rightId, final boolean throwException, UserRightValue... values)
+b66248fae Heavy WIP:JPA
+2609f511f Heavy WIP: session -&gt; em
+73a9755df More code cleanup: - Collapsed catch blocks that did the exact same things - Replaced ArrayList&lt;Class&gt; with ArrayList&lt;&gt; - Replaced StringBuffer with StringBuilder - Removed a few usages of deprecated classes (mainly HSSFColors in Excel) - Replace Collections.sort with List.sort
+97991a2c4 Revert &quot;Simplify boolean return statements (business)&quot;
+40480b54d Simplify boolean return statements (business)
+000ca723d Remove pointless boolean expressions (business)
+0910a4935 Compile errors after merge fixed (tests are all in the green arc).
+b31e4594f Merge branch &#x27;develop-6&#x27; into develop
+1a6c58ed1 AccessCheckerImp.isRestrictedUser(Integer) handles now internal test users correct (id &lt; 0).
+b0e00ebaa AccessCheckerImpl.isRestrictedUser(): NPE fix.
+3db756bca AccessCheckerImpl: Check of restricted user fixed.</pre></div>
 </body></html>

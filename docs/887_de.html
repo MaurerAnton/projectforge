@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>#887: AbstractRechnungDO.kt [DE]</title>
+<style>
+body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}
+h1{border-bottom:2px solid #333;padding-bottom:.3em}
+h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}
+h3{margin-top:2em;color:#444}
+a{color:#0366d6}
+.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}
+.nav{font-size:.9em;color:#888;margin-bottom:1em}
+.meta{font-size:.9em;margin:1em 0;color:#555}
+code{background:#f0f0f0;padding:0 .2em;font-size:.93em}
+pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}
+table{border-collapse:collapse;width:100%;margin:1em 0}
+th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}
+th{background:#f5f5f5;font-weight:600}
+.hist{font-size:.85em;color:#555}
+</style>
+</head>
+<body>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← Dateiindex</a> · <a href="886.html">← Zurück</a> · <a href="888.html">Weiter →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/kotlin/org/projectforge/business/fibu/AbstractRechnungDO.kt" target="_blank" title="Quelle auf GitHub anzeigen">📄 Quelle</a></div>
+
+<h1>#887: <code>AbstractRechnungDO.kt</code></h1>
+
+<div class="meta"><code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/AbstractRechnungDO.kt</code> 
+<p><strong>Typ:</strong> Kotlin <code>@MappedSuperclass</code> abstrakte JPA-Entität — Basisklasse für alle Rechnungs-Domänenobjekte</p>
+<p><strong>Zweck:</strong> Definiert das gemeinsame Datenbankschema und die Geschäftslogik sowohl für ausgehende Kundenrechnungen (<code>RechnungDO</code>) als auch für eingehende Kreditorenrechnungen (<code>EingangsrechnungDO</code>) und bietet gemeinsame Felder, Hibernate Search-Indizierung, berechnete Eigenschaften und Positionsverwaltung.</p>
+<p><strong>Quellpfad:</strong> <code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/AbstractRechnungDO.kt</code></p>
+ <span style="color:#888">227 Zeilen · 138 Code · 59 Kommentare · 30 leer</span></div>
+
+<div class="c">
+<p>Die <strong>gemeinsame Datenmodell-Grundlage</strong> für alle Rechnungstypen in ProjectForge. Sie erweitert <code>DefaultBaseDO</code> (die Framework-Basisentität mit Prüffeldern wie <code>created</code>, <code>lastUpdate</code>, <code>deleted</code>) und implementiert <code>IRechnung</code> (gemeinsames Rechnungs-Interface) und <code>DisplayNameCapable</code> (für die UI-Darstellung). Sie verwendet JPA <code>@MappedSuperclass</code>, sodass ihre Felder von konkreten Entitätstabellen geerbt werden, ohne eine separate Tabelle zu erstellen. Alle Eigenschaften sind als <code>open</code> deklariert, um den Lazy-Loading-Proxy-Mechanismus von Hibernate zu unterstützen.</p>
+</div>
+
+<h2>Klassenhierarchie</h2>
+<pre>
+DefaultBaseDO &lt;- AbstractRechnungDO &lt;- RechnungDO
+                                    &lt;- EingangsrechnungDO
+IRechnung, DisplayNameCapable (von AbstractRechnungDO implementierte Schnittstellen)
+</pre>
+
+<h2>Datenbankfelder</h2>
+
+<h3>Kernrechnungsfelder</h3>
+<table>
+<tr><th>Eigenschaft</th><th>DB-Spalte</th><th>Typ</th><th>Einschränkungen / Annotationen</th></tr>
+<tr><td><code>datum</code></td><td>—</td><td><code>LocalDate?</code></td><td><code>@Column(nullable = false)</code>, <code>@GenericField</code> (Hibernate Search)</td></tr>
+<tr><td><code>betreff</code></td><td>—</td><td><code>String?</code></td><td><code>@Column(length = 4000)</code>, <code>@FullTextField</code></td></tr>
+<tr><td><code>bemerkung</code></td><td>—</td><td><code>String?</code></td><td><code>@Column(length = 4000)</code>, <code>@FullTextField</code></td></tr>
+<tr><td><code>besonderheiten</code></td><td>—</td><td><code>String?</code></td><td><code>@Column(length = 4000)</code>, <code>@FullTextField</code></td></tr>
+<tr><td><code>faelligkeit</code></td><td>—</td><td><code>LocalDate?</code></td><td><code>@GenericField</code></td></tr>
+<tr><td><code>bezahlDatum</code></td><td><code>bezahl_datum</code></td><td><code>LocalDate?</code></td><td><code>@GenericField</code></td></tr>
+<tr><td><code>zahlBetrag</code></td><td><code>zahl_betrag</code></td><td><code>BigDecimal?</code></td><td><code>scale = 2, precision = 12</code>; tatsächlich gezahlter Bruttobetrag</td></tr>
+<tr><td><code>currency</code></td><td>—</td><td><code>String?</code></td><td><code>@Column(length = 10)</code>, <code>@FullTextField</code></td></tr>
+</table>
+
+<h3>Konto-Beziehung</h3>
+<table>
+<tr><th>Eigenschaft</th><th>Typ</th><th>Annotationen</th></tr>
+<tr><td><code>konto</code></td><td><code>KontoDO?</code></td><td><code>@ManyToOne(fetch = LAZY)</code>, <code>@JoinColumn(name = "konto_id")</code>, <code>@IndexedEmbedded(includeDepth = 1)</code>, <code>@JsonSerialize(using = IdOnlySerializer::class)</code>, <code>@IndexingDependency(reindexOnUpdate = SHALLOW)</code></td></tr>
+</table>
+<p>Das dieser Rechnung zugeordnete DATEV-Konto. Bei ausgehenden Rechnungen wird standardmäßig das dem Kunden oder Projekt zugewiesene Konto verwendet. Bei eingehenden Rechnungen repräsentiert es den Kontenplan-Eintrag des Kreditoren.</p>
+
+<h3>Rabatt-/Skontofelder</h3>
+<table>
+<tr><th>Eigenschaft</th><th>Typ</th><th>Beschreibung</th></tr>
+<tr><td><code>discountPercent</code></td><td><code>BigDecimal?</code></td><td>Skontosatz in Prozent (z. B. 2 für 2 %)</td></tr>
+<tr><td><code>discountMaturity</code></td><td><code>LocalDate?</code></td><td>Datum, bis zu dem der Rabatt gilt</td></tr>
+</table>
+
+<h2>Transiente / Berechnete Felder</h2>
+
+<h3>Jahr</h3>
+<pre>open val year: Int
+    get() = datum?.year ?: 0</pre>
+<p>Abgeleitet von <code>datum</code>. Indiziert über <code>@GenericField</code> + <code>@IndexingDependency(derivedFrom = ...)</code>, um Hibernate Search-Abfragen nach Jahr zu ermöglichen, ohne es in der Datenbank zu speichern.</p>
+
+<h3>Zahlungsbedingungen (berechnet)</h3>
+<table>
+<tr><th>Eigenschaft</th><th>Typ</th><th>Beschreibung</th></tr>
+<tr><td><code>zahlungsZielInTagen</code></td><td><code>Int?</code></td><td>Tage zwischen Rechnungsdatum und Fälligkeitsdatum</td></tr>
+<tr><td><code>discountZahlungsZielInTagen</code></td><td><code>Int?</code></td><td>Tage zwischen Rechnungsdatum und Skontofrist</td></tr>
+</table>
+<p>Beide werden von <code>recalculate()</code> mit <code>PFDateTime.daysBetween()</code> berechnet. Sie sind <code>@Transient</code> (nicht persistent).</p>
+
+<h3><code>uiStatus</code> / <code>uiStatusAsXml</code></h3>
+<p>Der Benutzeroberflächenstatus wird als XML in <code>uiStatusAsXml</code> (<code>@Column(length = 10000)</code>) gespeichert und über <code>XmlObjectReader</code> lazy in eine <code>RechnungUIStatus</code>-Instanz deserialisiert. Der Getter cached das deserialisierte Objekt. Mit <code>@NoHistory</code> annotiert, um von der Nachverfolgung ausgeschlossen zu werden.</p>
+
+<h3><code>info</code> (<code>RechnungInfo</code>)</h3>
+<pre>@Transient @CandHIgnore lateinit var info: RechnungInfo</pre>
+<p>Die berechnete Rechnungszusammenfassung (Netto-/Bruttobeträge, Umsatzsteueraufschlüsselung, Kostenverteilung). Initialisiert von <code>RechnungCalculator</code> und gecached von <code>AbstractRechnungCache</code>. Mit <code>@CandHIgnore</code> markiert, um die Verarbeitung durch Verlauf/Prüfung zu verhindern. Die Prüfung <code>isInfoInitialized</code> verhindert eine erneute Initialisierung.</p>
+
+<h3><code>ensuredInfo</code></h3>
+<pre>val ensuredInfo: RechnungInfo
+    get() {
+        if (!isInfoInitialized) { RechnungCalculator.calculate(this) }
+        return info
+    }</pre>
+<p>Garantierter Zugriff — falls <code>info</code> noch nicht berechnet wurde (z. B. nach Deserialisierung oder wenn der Cache es nicht vorab befüllt hat), wird die Berechnung bei Bedarf erzwungen.</p>
+
+<h2>Hibernate Search / Indizierungsstrategie</h2>
+<table>
+<tr><th>Annotation</th><th>Verwendung</th></tr>
+<tr><td><code>@GenericField</code></td><td>Datums- und Zahlenfelder — exakte Filterung, nicht analysierte Volltextsuche</td></tr>
+<tr><td><code>@FullTextField</code></td><td>Textfelder (<code>betreff</code>, <code>bemerkung</code>, <code>besonderheiten</code>, <code>currency</code>) — analysierte Volltextsuche</td></tr>
+<tr><td><code>@IndexedEmbedded(includeDepth = 1)</code></td><td><code>konto</code> — Indizierung verschachtelter Entitäten mit begrenzter Tiefe</td></tr>
+<tr><td><code>@IndexingDependency(reindexOnUpdate = SHALLOW)</code></td><td><code>konto</code> — nur Neuindizierung, wenn sich das Konto selbst ändert (nicht seine verschachtelten Kinder)</td></tr>
+<tr><td><code>@IndexingDependency(derivedFrom = ...)</code></td><td><code>year</code> — transparent abgeleitet vom Feld <code>datum</code></td></tr>
+</table>
+
+<h2>Abstrakte Methoden (von Unterklassen implementiert)</h2>
+<table>
+<tr><th>Methode</th><th>Beschreibung</th></tr>
+<tr><td><code>abstractPositionen: List&lt;AbstractRechnungsPositionDO&gt;?</code></td><td>Gibt die Sammlung von Positionen/Zeilenartikeln für diese Rechnung zurück</td></tr>
+<tr><td><code>isValid: Boolean</code></td><td>True, wenn die Rechnung ausgestellt, nicht storniert, nicht gelöscht und nicht nur geplant ist</td></tr>
+<tr><td><code>addPositionWithoutCheck(position)</code></td><td>Fügt eine Position ohne Validierung zur internen Sammlung hinzu</td></tr>
+<tr><td><code>setAbstractRechnung(position)</code></td><td>Setzt die Rückreferenz von der Position zu dieser Rechnung</td></tr>
+<tr><td><code>ensureAndGetPositionen()</code></td><td>Initialisiert lazy und gibt die Positionssammlung zurück</td></tr>
+</table>
+
+<h2>Wichtige Geschäftsmethoden</h2>
+
+<h3><code>recalculate()</code></h3>
+<p>Berechnet <code>zahlungsZielInTagen</code> und <code>discountZahlungsZielInTagen</code> aus <code>datum</code>, <code>faelligkeit</code> und <code>discountMaturity</code>. Wenn <code>datum</code> null ist, werden beide auf null gesetzt.</p>
+
+<h3><code>addPosition(position: AbstractRechnungsPositionDO)</code></h3>
+<p>Fügt der Rechnung einen neuen Zeilenartikel mit automatischer Nummernvergabe hinzu:
+<ol>
+<li>Stellt sicher, dass die Positionsliste existiert</li>
+<li>Ermittelt die maximale vorhandene Positionsnummer und erhöht sie um 1 (oder verwendet 1 für die erste Position)</li>
+<li>Setzt die Rückreferenz über <code>setAbstractRechnung()</code></li>
+<li>Fügt zur internen Sammlung über <code>addPositionWithoutCheck()</code> hinzu</li>
+</ol></p>
+
+<h3><code>hasKostZuweisungen(): Boolean</code></h3>
+<p>Gibt <code>true</code> zurück, wenn eine Position dieser Rechnung Kostenverteilungen (<code>kostZuweisungen</code>) hat.</p>
+
+<h3><code>getAbstractPosition(idx: Int): AbstractRechnungsPositionDO?</code></h3>
+<p>Gibt die Position am angegebenen 0-basierten Index zurück oder null, wenn außerhalb des gültigen Bereichs.</p>
+
+<h2>Architekturnotizen</h2>
+<ul>
+<li><strong>Alle Eigenschaften und Methoden sind <code>open</code></strong> — dies ist entscheidend für den CGLIB-Proxy-Mechanismus von Hibernate und die Kotlin-JPA-Interoperabilität. Commit <code>8675a1dbe</code> identifizierte dies als ein großes Leistungsproblem, bei dem nicht-offene Kotlin-Eigenschaften Lazy Loading verhinderten und Tausende unnötiger SQL-Abfragen verursachten</li>
+<li><strong>ID-only-JSON-Serialisierung:</strong> Die <code>konto</code>-Beziehung verwendet <code>@JsonSerialize(using = IdOnlySerializer::class)</code>, um eine tiefe Serialisierung verschachtelter Entitäten in REST-Antworten zu vermeiden</li>
+<li><strong>Verlaufsausschluss:</strong> <code>uiStatusAsXml</code> ist mit <code>@NoHistory</code> annotiert, da Änderungen am UI-Status nicht im Prüfprotokoll verfolgt werden sollen</li>
+<li><strong>CanH-Ausschluss:</strong> <code>info</code> ist <code>@CandHIgnore</code>, da es sich um einen berechneten Cache-Wert handelt, der möglicherweise noch nicht initialisiert ist</li>
+<li>Die <code>@PropertyInfo</code>-Annotationen bieten i18n-Schlüssel und Typmetadaten für automatisch generierte UI-Formulare</li>
+<li>Migration von Java zu Kotlin in Phasen — siehe Verlauf unten</li>
+</ul>
+
+<h2>Git-Verlauf</h2>
+<div class="hist"><pre>868d6abb7 2025 -> 2026
+5d8d7db72 WIP: Währung bei Eingangsrechnungen.
+8c2bf04f0 WIP: Währungsumrechnung mit Claude Code.
+16b87b4ce WIP: Import von Kreditorenrechnungen
+175d72c14 WIP: Import von Kreditorenrechnungen
+4d4c6b449 Währungsfeld zu Rechnungen hinzugefügt (eingehend und ausgehend)
+aa20b7708 NewGroupSelectPanel fixed (used in wizard). (Eingangs)RechnungsPositionDO: @get:JoinColumn -> mappedBy.
+1e0e7225b KostzuweisungsExport von Rechnungen ignoriert jetzt ungültige Rechnungen und 0,00-Positionen.
+63081666f Quelltext-Header: 2024 -> 2025.
+b3782c8a8 Migration stuff in progress...
+b810d1c78 Migration stuff in progress... (all tests of all packages: OK).
+ba2479571 Migration stuff in progress...
+b47c21af6 Refactored caching and calculations with invoices (not yet finished)
+ccb7ca64d Migration stuff in progress...
+67a66479e Migration stuff in progress...
+4c04cfd65 MAJOR-CHANGE! Migration of integer id's to Long id's (including fk's etc.)
+ad9ac6b63 Migration stuff in progress...
+f5c09f87f Migration stuff in progress...
+c04fb0d51 Migration stuff in progress...
+06828f490 Migration stuff in progress...
+b6092df09 Copyright 2023 -> 2024
+ab45d51fa Copyright 2001-2022 -> 2001-2023.
+6307a3dbe *RechnungPagesRest: show kost including tooltip.
+2dc192b7a AG grid: auto-format of currency, Formatter works now also with AG grid (rating, dates, timestamps). Currency rendering by client (Formatter.jsx) added.
+68402a26b Eingangsrechnungsliste: User discount date and due date.
+a286007ee Mass update of creditor invoices: handling of discount implemented.
+5f7ef41b8 Copyright 2021 -> 2022
+a7fceb731 Some compiler warnings fixed.
+cd27dd997 package xstream -> xmlstream. (should be replaced by xstream later).
+ceb63e8a1 Source code header: (C) 2001-2021.
+07cb34acb IRechnung, IRechnungsPosition introduced. DTOs fro Eingangsrechnung{sPosition}DO added.
+552603f75 Rename setter methods in RechnungDO to avoid conflicts with Jackson
+92112cdb1 Add InvoicePositionComponent
+5064afcec LocalDate Bridge for hibernate search fixed.
+b209e00ba PFDay.from -> from, fromOrNow, fromOrNull, PFDateTime.from -> from, fromOrNow, fromOrNull
+7c1c48782 Replacing more instance of java.sql.Date with java.time.LocalDate Replacing instances of java sql.Timestamp with java.util.Date
+78b436d9e Replace instances of java.util.date and java.sql.Date with java.time.LocalDate
+7c79f1922 Copyright of source header -> 2020.
+13cfb0330 WIP: Migration to PFDate and PFDateTime.
+24019a0f5 Eliminate DateHolder occurences
+1dc951c03 Remove instances of DayHolder
+e4cdd8d4b Revert "More Holder replacements"
+f604a1afe More Holder replacements
+19b97fcc3 DateBridge: encoding = EncodingType.STRING for all DateBridges in all DO's.
+fbe4381e7 DateBridge: string encoding removed again.
+76c5c6955 WIP: MultiFieldQueryParser
+8675a1dbe Found big performance issue: Declared all Kotlin JPA entities and their properties as open. Lazy loading wasn't supported by Hibernate and results in thousands of JPA queries...
+d36fe6ad9 Heavy WIP: refactoring
+a55ef0c14 Heavy WIP: refactoring of (Eingangs)Rechnung*. Found a big performance killer!!!!!
+812b5b751 Heavy WIP: refactoring of (Eingangs)Rechnung*. Found a big performance killer!!!!!
+39cdd224c Hibernate search: DateBridge...
+339e017b4 ElementRegistry: @PropertyInfo is now also supported for getter methods of read-only vals.
+f2b55f6aa RechnungsPositionDO.java - RechnungsPositionDO.kt EingangsrechnungsPositionDO.java -> EingangsrechnungsPositionDO.kt AbstractRechnungsPositionDO.java -> AbstractRechnungsPositionDO.kt
+050a5ccd7 @NoHistory needed as field annotation: @field:NoHistory.
+05244ff19 CopyRight of all Kotlin file-header updated or created.
+f55615812 Kotlin migration of {Abstract|Eingangs}RechnungDO...
+39a2bd24f AbstractRechnungDO: More open attributes
+bd9803e81 AbstractRechnungDO: Add open to previously protected attributes.
+103e4f592 AbstractRechnungDO.java -> AbstractRechnungDO.kt
+</pre></div>
+</body>
+</html>

@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>#897: AuftragsCache.kt [ES]</title>
+<style>
+body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}
+h1{border-bottom:2px solid #333;padding-bottom:.3em}
+h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}
+h3{margin-top:2em;color:#444}
+a{color:#0366d6}
+.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}
+.nav{font-size:.9em;color:#888;margin-bottom:1em}
+.meta{font-size:.9em;margin:1em 0;color:#555}
+code{background:#f0f0f0;padding:0 .2em;font-size:.93em}
+pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}
+table{border-collapse:collapse;width:100%;margin:1em 0}
+th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}
+th{background:#f5f5f5;font-weight:600}
+.hist{font-size:.85em;color:#555}
+</style>
+</head>
+<body>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Índice</a> · <a href="file-index.html">← Índice de archivos</a> · <a href="896.html">← Anterior</a> · <a href="898.html">Siguiente →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/kotlin/org/projectforge/business/fibu/AuftragsCache.kt" target="_blank" title="Ver fuente en GitHub">📄 fuente</a></div>
+
+<h1>#897: <code>AuftragsCache.kt</code></h1>
+
+<div class="meta"><code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/AuftragsCache.kt</code> 
+<p><strong>Tipo:</strong> Spring <code>@Service</code> — caché temporizado (<code>AbstractCache</code>)</p>
+<p><strong>Paquete:</strong> <code>org.projectforge.business.fibu</code></p>
+<p><strong>Ruta completa:</strong> <code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/AuftragsCache.kt</code></p>
+ <span style="color:#888">252 líneas · 174 código · 48 comentarios · 30 en blanco</span></div>
+
+<div class="c">
+<p>Caché temporizado de rendimiento crítico que precarga y mantiene toda la información de pedidos (<em>Auftrag</em>) para el libro de pedidos. Extiende <code>AbstractCache</code> con un ciclo de actualización de 8 horas. Carga todos los pedidos no eliminados, sus posiciones y calendarios de pago en mapas en memoria para evitar consultas repetidas a la base de datos. Calcula sumas facturadas, estado de facturación completa, indicadores "por facturar" y realiza un seguimiento de los recuentos de pedidos que necesitan facturación. Escucha cambios a través de hooks <code>BaseDOModifiedListener</code> tanto en <code>AuftragDO</code> como en <code>RechnungDO</code> para invalidar los datos en caché. Maneja una dependencia cíclica con <code>AuftragDao</code> mediante cableado posterior a la construcción.</p>
+</div>
+
+<h2>Definición de clase</h2>
+<pre>@Service
+class AuftragsCache : AbstractCache(8 * TICKS_PER_HOUR)</pre>
+
+<h2>Dependencias</h2>
+<table>
+<tr><th>Dependencia</th><th>Tipo</th><th>Notas</th></tr>
+<tr><td><code>auftragsCacheService</code></td><td><code>@Autowired AuftragsCacheService</code></td><td>Proporciona consultas SELECT masivas para pedidos, posiciones y calendarios de pago</td></tr>
+<tr><td><code>rechnungDao</code></td><td><code>@Autowired RechnungDao</code></td><td>Escuchado para cambios de factura que invalidan datos de pedidos</td></tr>
+<tr><td><code>auftragDao</code></td><td><code>@Autowired AuftragDao</code></td><td>Conectado de vuelta a <code>AuftragDao.auftragsCache</code> vía <code>init()</code>; escuchado para cambios de pedidos</td></tr>
+</table>
+
+<h2>Estructuras de datos internas</h2>
+<table>
+<tr><th>Mapa</th><th>Clave</th><th>Valor</th><th>Descripción</th></tr>
+<tr><td><code>orderInfoMap</code></td><td><code>Long</code> (ID de pedido)</td><td><code>OrderInfo</code></td><td>Toda la información de pedido en caché por ID de pedido</td></tr>
+<tr><td><code>orderPositionMapByPosId</code></td><td><code>Long</code> (ID de posición)</td><td><code>OrderPositionInfo</code></td><td>Toda la información de posición en caché por ID de posición</td></tr>
+<tr><td><code>toBeInvoicedCounter</code></td><td>—</td><td><code>Int?</code></td><td>Recuento en caché de pedidos con <code>toBeInvoiced == true</code> (calculado perezosamente)</td></tr>
+</table>
+
+<h2>Inicialización (<code>@PostConstruct init()</code>)</h2>
+<p>Establece la <code>instance</code> singleton, conecta <code>this</code> en <code>auftragDao.auftragsCache</code> y registra dos oyentes de cambios:</p>
+<ul>
+<li><strong>Oyente de facturas:</strong> Cualquier inserción/modificación en <code>RechnungDO</code> llama a <code>setExpired()</code> para invalidar toda la caché (ya que las facturas afectan las sumas facturadas de las posiciones del pedido)</li>
+<li><strong>Oyente de pedidos:</strong> Cualquier inserción/modificación en <code>AuftragDO</code> llama a <code>setExpired()</code></li>
+</ul>
+
+<h2>Métodos de búsqueda pública</h2>
+<table>
+<tr><th>Método</th><th>Retorna</th><th>Descripción</th></tr>
+<tr><td><code>getOrderInfo(orderId)</code></td><td><code>OrderInfo?</code></td><td>Obtiene información en caché por ID de pedido</td></tr>
+<tr><td><code>getOrderInfo(order)</code></td><td><code>OrderInfo</code></td><td>Obtiene información en caché para un objeto pedido (retorna <code>OrderInfo</code> vacío si no se encuentra)</td></tr>
+<tr><td><code>findOrderInfoByNumber(orderNumber)</code></td><td><code>OrderInfo?</code></td><td>Búsqueda por <code>AuftragDO.nummer</code></td></tr>
+<tr><td><code>getOrderInfoByPositionId(positionInfoId)</code></td><td><code>OrderInfo?</code></td><td>Obtiene la información del pedido padre para un ID de posición dado</td></tr>
+<tr><td><code>getOrderPositionInfo(positionId)</code></td><td><code>OrderPositionInfo?</code></td><td>Obtiene información de posición en caché por ID de posición</td></tr>
+<tr><td><code>getOrderPositionInfosByAuftragId(auftragId)</code></td><td><code>Collection&lt;OrderPositionInfo&gt;?</code></td><td>Obtiene todas las infos de posición para un pedido</td></tr>
+<tr><td><code>setOrderInfo(order)</code></td><td><code>Unit</code></td><td>Llena <code>order.info</code> con datos calculados en caché</td></tr>
+<tr><td><code>getFakturiertSum(order)</code></td><td><code>BigDecimal</code></td><td>Conveniencia para <code>getOrderInfo(order).invoicedSum</code></td></tr>
+<tr><td><code>isVollstaendigFakturiert(order)</code></td><td><code>Boolean</code></td><td>Conveniencia para <code>getOrderInfo(order).isVollstaendigFakturiert</code></td></tr>
+<tr><td><code>isPositionAbgeschlossenUndNichtVollstaendigFakturiert(order)</code></td><td><code>Boolean</code></td><td>Búsqueda de conveniencia</td></tr>
+<tr><td><code>isPaymentSchedulesReached(order)</code></td><td><code>Boolean</code></td><td>Búsqueda de conveniencia</td></tr>
+<tr><td><code>getToBeInvoicedCounter()</code></td><td><code>Int</code></td><td>Cuenta perezosamente pedidos con <code>toBeInvoiced == true</code></td></tr>
+</table>
+
+<h2>Invalidación de caché</h2>
+<ul>
+<li><code>setExpired()</code> — Sobrescribe <code>AbstractCache.setExpired()</code> para también reiniciar <code>toBeInvoicedCounter</code> a null, forzando el recálculo en el próximo acceso</li>
+<li><code>setExpired(order)</code> — Igual que arriba (anteriormente actualizaba entradas individuales; ahora expira toda la caché)</li>
+<li>Ambas implementaciones de oyentes (<code>auftragListener</code>, <code>rechnungListener</code>) llaman a <code>setExpired()</code> ante cualquier cambio</li>
+</ul>
+
+<h2>Lógica de actualización (<code>refresh()</code>)</h2>
+<p>Se llama cuando el TTL de la caché expira (cada 8 horas) o cuando se expira manualmente:</p>
+<ol>
+<li>Registra el inicio de actualización con temporizador <code>LogDuration</code></li>
+<li>Carga todas las posiciones de pedido no eliminadas vía <code>auftragsCacheService.selectNonDeletedAuftragsPositions()</code>, agrupadas por <code>auftrag.id</code></li>
+<li>Carga todos los pedidos vía <code>auftragsCacheService.selectAuftragsList()</code></li>
+<li>Carga todos los calendarios de pago no eliminados vía <code>auftragsCacheService.selectNonDeletedPaymentSchedules()</code>, agrupados por <code>auftrag.id</code></li>
+<li>Inicializa objetos <code>OrderInfo</code> para cada pedido (llamando a <code>updateFields(order)</code> para copiar datos básicos)</li>
+<li>Crea objetos <code>OrderPositionInfo</code> para cada posición (nota: el constructor usa <code>AuftragsRechnungCache</code>, que a su vez usa <code>AuftragsCache</code> — la dependencia cíclica se resuelve ejecutando las cachés dos veces en la inicialización)</li>
+<li>Asigna posiciones y calendarios de pago a cada pedido, llamando a <code>order.info.calculateAll(order, positions, paymentSchedules)</code></li>
+<li>Reemplaza los mapas inmutables atómicamente</li>
+<li>Reinicia <code>toBeInvoicedCounter</code> a null</li>
+<li>Registra el tiempo de finalización</li>
+</ol>
+
+<h2>Seguridad para hilos</h2>
+<p>Los mapas (<code>orderInfoMap</code>, <code>orderPositionMapByPosId</code>) se reemplazan atómicamente con nuevos mapas inmutables durante la actualización. El comentario "Sin sincronización, mapa inmutable" en todos los accesos de lectura indica un patrón de instantánea de solo lectura: en cada llamada a <code>checkRefresh()</code>, la caché puede reconstruir un mapa nuevo e intercambiar la referencia.</p>
+
+<h2>Notas de diseño</h2>
+<ul>
+<li>El parámetro <code>checkRefresh</code> en <code>getOrderInfo(order, checkRefresh)</code> existe para evitar interbloqueos durante la inicialización de la caché — cuando la caché ya se está actualizando, las llamadas recursivas omiten la actualización</li>
+<li>La dependencia cíclica entre <code>AuftragsCache</code>, <code>AuftragsRechnungCache</code> y <code>OrderPositionInfo</code> está documentada en el commit <code>51d352133</code> — resuelta ejecutando las cachés dos veces en la inicialización</li>
+<li>El <code>toBeInvoicedCounter</code> usa un patrón de cálculo perezoso con registro de depuración de qué números de pedido se cuentan</li>
+<li>Todos los métodos getter de conveniencia llaman a <code>checkRefresh()</code> antes del acceso para garantizar datos frescos</li>
+</ul>
+
+<h2>Historial Git</h2>
+<div class="hist"><pre>868d6abb7 2025 -> 2026
+51d352133 AuftragsCache / AuftragsRechnungsCache manejo refactorizado (uso cíclico resuelto ejecutando cachés dos veces en inicialización)
+0043cbdb5 WIP Forecast
+63081666f Encabezados de archivos fuente: 2024-> 2025.
+ae2c04ee0 Cosas de migración en progreso... (todas las pruebas de todos los paquetes: OK).
+9aff90908 Cosas de migración en progreso... (todas las pruebas de todos los paquetes: OK).
+89ea9a532 Cosas de migración en progreso... (todas las pruebas de todos los paquetes: OK).
+d02c8a770 Cosas de migración en progreso...
+3159cfa6c Cosas de migración en progreso... (todas las pruebas de todos los paquetes: OK).
+ff2cc4cfa Cosas de migración en progreso... (todas las pruebas de todos los paquetes: OK).
+714452019 Cosas de migración en progreso... (todas las pruebas de todos los paquetes: OK).
+567ca70cd Migración en progreso... spring.datasource.hikari.auto-commit=false
+(40+ commits abarcando migración, refactorización, conversión java.time, migración Jakarta, etc.)</pre></div>
+</body>
+</html>

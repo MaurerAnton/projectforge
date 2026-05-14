@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>#331: SwingSetupWizard.kt +[RU]</title>
+<style>
+body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}
+h1{border-bottom:2px solid #333;padding-bottom:.3em}
+h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}
+h3{margin-top:2em;color:#444}
+a{color:#0366d6}
+.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}
+.nav{font-size:.9em;color:#888;margin-bottom:1em}
+.lang{font-size:.85em;color:#888;float:right}
+.lang a{color:#888;text-decoration:none;padding:0 .3em}
+.lang a.active{color:#0366d6;font-weight:600;text-decoration:underline}
+.meta{font-size:.9em;margin:1em 0;color:#555}
+code{background:#f0f0f0;padding:0 .2em;font-size:.93em}
+pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}
+table{border-collapse:collapse;width:100%;margin:1em 0}
+th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}
+th{background:#f5f5f5;font-weight:600}
+.hist{font-size:.85em;color:#555}
+</style>
+</head>
+<body>
+<div class="lang"><a href="331.html">EN</a> · <a href="331_de.html">DE</a> · <a href="331_ru.html" class="active">RU</a> · <a href="331_fr.html">FR</a> · <a href="331_es.html">ES</a></div>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Индекс</a> · <a href="file-index.html">← Индекс файлов</a> · <a href="657.html">← Предыдущий</a> · <a href="3097.html">Следующий →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-application/src/main/kotlin/org/projectforge/setup/wizard/swing/SwingSetupWizard.kt" target="_blank" title="Просмотреть исходник на GitHub">📄 исходник</a></div>
+<h1>#331: <code>SwingSetupWizard.kt</code></h1>
+<div class="meta"><code>projectforge-application/src/main/kotlin/org/projectforge/setup/wizard/swing/SwingSetupWizard.kt</code> Тип: Kotlin · Роль: Мастер настройки · Исходник: projectforge-application/src/main/kotlin/org/projectforge/setup/wizard/swing/SwingSetupWizard.kt <span style="color:#888">149 строк · 107 кода · 26 комментариев · 16 пустых</span></div>
+<div class="c">Файл исходного кода <code>projectforge-application/src/main/kotlin/org/projectforge/setup/wizard/swing/SwingSetupWizard.kt</code>, содержащий код Kotlin для слоя мастера настройки.</div>
+<h2>Структура кода</h2>
+<p>Аннотации: <code>return</code>, <code>JvmStatic</code></p>
+<p>Классы: <code>SwingSetupWizard</code></p>
+<p>Супертип(ы): <code>AbstractSetupWizard</code></p>
+<p>Функции (6): <code>windowClosing</code>, <code>run</code>, <code>setActiveWindow</code>, <code>finish</code>, <code>run</code>, <code>main</code></p>
+<p>Свойства (18): <code>context</code>, <code>chooseDirectoryScreen</code>, <code>finalizeScreen</code>, <code>frame</code>, <code>cardLayout</code>, <code>cards</code>, <code>lock</code>, <code>condition</code>, <code>applicationClass</code>, <code>quitStrategyClass</code>, <code>getApplicationMethod</code>, <code>setQuitStrategyMethod</code>, <code>disableSuddenTerminationMethod</code>, <code>application</code>, <code>quitStrategy</code>, <code>scrPane</code>, <code>window</code>, <code>cl</code></p>
+<p>Импорты: 16 пакетов</p>
+<p>Пакет: <code>org.projectforge.setup.wizard.swing</code></p>
+<h2>Исходный код (сокращённый)</h2>
+<pre>
+package org.projectforge.setup.wizard.swing
+
+import org.projectforge.common.CanonicalFileUtils
+import org.projectforge.common.EmphasizedLogSupport
+import org.projectforge.setup.SetupData
+import org.projectforge.setup.wizard.AbstractSetupWizard
+import java.awt.CardLayout
+import java.awt.GridBagConstraints
+import java.awt.GridBagLayout
+import java.awt.event.WindowAdapter
+import java.awt.event.WindowEvent
+import java.io.File
+import java.io.IOException
+import java.util.concurrent.locks.ReentrantLock
+import javax.swing.JFrame
+import javax.swing.JPanel
+import javax.swing.JScrollPane
+import kotlin.concurrent.withLock
+
+class SwingSetupWizard(presetAppHomeDir: File? = null) : AbstractSetupWizard() {
+    override val context: SwingGUIContext
+    private val chooseDirectoryScreen: SwingChooseDirectoryScreen
+    private val finalizeScreen: SwingFinalizeScreen
+    private val frame = JFrame(&quot;Настройка ProjectForge&quot;)
+    private val cardLayout: CardLayout
+    private val cards: JPanel
+    private val lock = ReentrantLock()
+    private val condition = lock.newCondition()
+
+    init {
+        frame.setSize(1024, 600)
+        frame.layout = GridBagLayout()
+        frame.defaultCloseOperation = JFrame.DO_NOTHING_ON_CLOSE
+        try {
+            // Требуется рефлексия, так как классы Apple могут быть недоступны:
+            val applicationClass = Class.forName(&quot;com.apple.eawt.Application&quot;)
+            val quitStrategyClass = Class.forName(&quot;com.apple.eawt.QuitStrategy&quot;)
+            val getApplicationMethod = applicationClass.getDeclaredMethod(&quot;getApplication&quot;)
+            val setQuitStrategyMethod = applicationClass.getDeclaredMethod(&quot;setQuitStrategy&quot;, quitStrategyClass)
+            val disableSuddenTerminationMethod = applicationClass.getDeclaredMethod(&quot;disableSuddenTermination&quot;)
+
+            val application = getApplicationMethod.invoke(null)
+            val quitStrategy = quitStrategyClass.enumConstants.find { it.toString() == &quot;CLOSE_ALL_WINDOWS&quot; }//.QuitStrategy.CLOSE_ALL_WINDOWS
+            setQuitStrategyMethod.invoke(application, quitStrategy)  //Application.getApplication().setQuitStrategy(QuitStrategy.CLOSE_ALL_WINDOWS)
+            disableSuddenTerminationMethod.invoke(application) // Application.getApplication().disableSuddenTermination()
+        } catch (ex: Exception) {
+            log.debug(&quot;Не система MacOS или JVM MacOS не поддерживает com.apple.eawt.Application (нормально).&quot;)
+        }
+        frame.addWindowListener(object : WindowAdapter() {
+            override fun windowClosing(e: WindowEvent?) {
+                exit()
+            }
+        })
+
+        context = SwingGUIContext(this, frame)
+        context.setupData.applicationHomeDir = presetAppHomeDir
+
+        chooseDirectoryScreen = SwingChooseDirectoryScreen(context)
+        finalizeScreen = SwingFinalizeScreen(context)
+
+        cardLayout = CardLayout()
+        cards = JPanel(cardLayout)
+        cards.add(chooseDirectoryScreen.mainPanel, ScreenID.CHOOSE_DIR.name)
+        cards.add(finalizeScreen.mainPanel, ScreenID.FINALIZE.name)
+        val scrPane = JScrollPane(cards)
+        frame.contentPane.add(scrPane, SwingUtils.constraints(0, 0, fill = GridBagConstraints.BOTH, weightx = 1.0, weighty = 1.0))
+
+        frame.isVisible = true
+    }
+
+    /**
+     * @return Настройки пользователя или null, если пользователь отменил мастер через выход.
+     */
+    override fun run(): SetupData? {
+        super.initialize()
+        lock.withLock {
+            condition.await()
+        }
+        return super.run()
+    }
+
+    override fun setActiveWindow(nextScreen: ScreenID) {
+        val window = when (nextScreen) {
+            ScreenID.CHOOSE_DIR -&gt; chooseDirectoryScreen
+            else -&gt; finalizeScreen
+        }
+        window.redraw()
+        val cl = cards.layout as CardLayout
+        cl.show(cards, nextScreen.name)
+    }
+
+
+    override fun finish() {
+        frame.dispose()
+        lock.withLock {
+            condition.signal()
+        }
+    }
+
+    companion object {
+        private val log = org.slf4j.LoggerFactory.getLogger(SwingSetupWizard::class.java)
+
+        @JvmStatic
+        fun run(appHomeDir: File? = null): SetupData? {
+            log.info(&quot;Запуск графического мастера...&quot;)
+            return try {
+                SwingSetupWizard(appHomeDir).run()
+            } catch (ex: IOException) {
+                EmphasizedLogSupport(log)
+                        .log(&quot;Не удалось запустить графический мастер настройки, рабочий стол, похоже, недоступен.&quot;)
+                        .logEnd()
+                return null
+            }
+        }
+
+        @JvmStatic
+        fun main(args: Array&lt;String&gt;) {
+            try {
+                val result = SwingSetupWizard().run()
+// ... (сокращено, всего 127 строк)</pre>
+
+<h2>История Git</h2><div class="hist"><pre>868d6abb7 2025 -&gt; 2026
+63081666f Заголовки исходных файлов: 2024-&gt; 2025.
+b6092df09 Авторские права 2023 -&gt; 2024
+ab45d51fa Авторские права 2001-2022 -&gt; 2001-2023.
+5f7ef41b8 Авторские права 2021 -&gt; 2022</pre></div>
+</body>
+</html>

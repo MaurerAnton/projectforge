@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>#2775: PageParameterAwareMountedMapper.java [RU]</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:2em;color:#444}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.lang{font-size:.85em;color:#888;float:right}.lang a{color:#888;text-decoration:none;padding:0 .3em}.lang a.active{color:#0366d6;font-weight:600;text-decoration:underline}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}</style>
+</head>
+<body>
+<div class="lang"><a href="2775.html">EN</a> · <a href="2775_de.html">DE</a> · <a href="2775_ru.html" class="active">RU</a> · <a href="2775_fr.html">FR</a> · <a href="2775_es.html">ES</a></div>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Индекс</a> · <a href="file-index.html">← Индекс файлов</a> · <a href="2774.html">← Пред.</a> · <a href="2776.html">След. →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-wicket/src/main/java/de/micromata/wicket/request/mapper/PageParameterAwareMountedMapper.java" target="_blank" title="Просмотреть исходник на GitHub">📄 исходник</a></div>
+<h1>#2775: <code>PageParameterAwareMountedMapper.java</code></h1>
+<div class="meta"><code>projectforge-wicket/src/main/java/de/micromata/wicket/request/mapper/PageParameterAwareMountedMapper.java</code> Wicket Request Mapper (Маршрутизация URL) · <code>projectforge-wicket/src/main/java/de/micromata/wicket/request/mapper/PageParameterAwareMountedMapper.java</code> <span style="color:#888">126 строк · 47 кода · 71 комментарий · 8 пустых</span></div>
+<div class="c">Критическое исправление маршрутизации URL в Wicket, устраняющее тонкий дефект в поведении стандартного <code>MountedMapper</code>. Когда пользователь вручную редактирует URL Wicket — например, меняет <code>/User/4?15</code> на <code>/User/5?15</code> — стандартный маппер отдаёт приоритет параметру ID страницы в запросе (<code>?15</code>) над параметрами пути (<code>/5</code>), в результате чего пользователь видит кэшированную страницу для пользователя 4 вместо новой страницы для пользователя 5. Этот пользовательский маппер обнаруживает несоответствия между параметрами кэшированной страницы и параметрами текущего запроса и перенаправляет на новый экземпляр страницы с возможностью закладки, когда они различаются, гарантируя, что URL всегда отражает актуальное отображаемое содержимое.</div>
+<h2>Архитектура</h2>
+<h3>Стратегия переопределения</h3>
+<p>Класс расширяет <code>MountedMapper</code> и переопределяет только <code>processHybrid()</code> — метод, который Wicket вызывает, когда у него есть как ID страницы (из кэшированной в сессии страницы), так и параметры пути (из URL). Переопределение:</p>
+<ol>
+<li>Вызывает родительский <code>processHybrid()</code> для получения обработчика по умолчанию</li>
+<li>Перехватывает <code>PageExpiredException</code> — если кэшированная страница устарела, возвращается к <code>processBookmarkable()</code>, который создаёт новую страницу</li>
+<li>Если родительский метод вернул <code>RenderPageRequestHandler</code> с <code>PageProvider</code>, содержащим экземпляр страницы, сравнивает: (a) класс страницы кэшированного экземпляра с запрошенным классом страницы и (b) параметры кэшированной страницы с параметрами текущего запроса</li>
+<li>Если любое из сравнений не удаётся, перенаправляет на <code>processBookmarkable()</code> — новый экземпляр страницы без состояния с правильными параметрами</li>
+</ol>
+<h3>Корневая проблема</h3>
+<p>Стандартный <code>MountedMapper</code> в Wicket реализует «гибридную» стратегию: если в URL присутствует ID страницы (либо как <code>?wicket:pageId=15</code>, либо через сокращение <code>?15</code>), загрузить сериализованную страницу из хранилища страниц; в противном случае создать новый экземпляр с возможностью закладки. Проблема в том, что после того, как сессия получила кэшированную страницу (например, ID страницы 15 для пользователя 4), последующие запросы с другими параметрами пути, но тем же ID страницы будут обслуживать кэшированную страницу — маппер никогда не сравнивает параметры пути с параметрами кэшированной страницы. Манипуляции с URL со стороны пользователя (или история браузера) могут привести к отображению устаревших данных.</p>
+<h3>Использование монтирования</h3>
+<p>Страницы монтируются в <code>WicketApplication.init()</code> с помощью <code>mount(new PageParameterAwareMountedMapper("Home", HomePage.class))</code> вместо <code>mountPage()</code>. Это задокументировано в Javadoc самого класса с примером использования.</p>
+<h2>История Git</h2>
+<div class="hist"><table>
+<tr><th>Коммит</th><th>Что изменилось</th></tr>
+<tr><td><code>868d6abb7</code> – <code>ceb63e8a1</code></td><td>Шесть ежегодных обновлений заголовков авторских прав. Сама логика маппинга оставалась стабильной с момента создания — поведение маршрутизации URL оказалось корректным для всех смонтированных страниц при нескольких обновлениях версий Wicket.</td></tr>
+</table></div>
+</body>
+</html>

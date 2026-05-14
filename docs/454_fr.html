@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>#454 : ExportMSProject.java [FR]</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:2em;color:#444}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.lang{font-size:.85em;color:#888;float:right}.lang a{color:#888;text-decoration:none;padding:0 .3em}.lang a.active{color:#0366d6;font-weight:600;text-decoration:underline}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}</style>
+</head>
+<body>
+<div class="lang"><a href="454.html">EN</a> · <a href="454_de.html">DE</a> · <a href="454_ru.html">RU</a> · <a href="454_fr.html" class="active">FR</a> · <a href="454_es.html">ES</a></div>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← Index des fichiers</a> · <a href="2771.html">← Précédent</a> · <a href="367.html">Suivant →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/java/org/projectforge/business/gantt/ExportMSProject.java" target="_blank" title="Voir la source sur GitHub">📄 source</a></div>
+<h1>#454 : <code>ExportMSProject.java</code></h1>
+<div class="meta"><code>projectforge-business/src/main/java/org/projectforge/business/gantt/ExportMSProject.java</code> Type : Java · Rôle : Diagramme de Gantt · Source : projectforge-business/src/main/java/org/projectforge/business/gantt/ExportMSProject.java <span style="color:#888">231 lignes · 151 code · 60 commentaires · 20 vides</span></div>
+<div class="c">Utilitaire d'export Excel/CSV pour les données MSProject. Configure les en-têtes de colonnes (i18n), les formatteurs de champs (devise, date) et remplit les lignes à partir des collections de données.</div>
+<h2>Structure du code</h2>
+<p>Paquetage : <code>org.projectforge.business.gantt</code></p>
+<p>Classes : <code>ExportMSProject</code></p>
+<p>Méthodes (3) : <code>addTask</code>, <code>setPredecessors</code>, <code>getRelationType</code></p>
+<p>Importations : 15 paquetages</p>
+<h2>Code source (abrégé)</h2>
+<pre>
+package org.projectforge.business.gantt;
+
+import net.sf.mpxj.*;
+import net.sf.mpxj.mpx.MPXWriter;
+import net.sf.mpxj.mspdi.MSPDIWriter;
+import net.sf.mpxj.writer.ProjectWriter;
+import org.projectforge.framework.calendar.Holidays;
+import org.projectforge.framework.time.PFDateTime;
+import org.projectforge.framework.time.PFDayUtils;
+
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.io.Serializable;
+import java.math.BigDecimal;
+import java.util.Date;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
+/**
+ * Utilise l'implémentation de http://mpxj.sourceforge.net/, distribuée sous les termes de la GNU LGPL.
+ *
+ * @author Kai Reinhard (k.reinhard@micromata.de)
+ */
+public class ExportMSProject {
+  private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(ExportMSProject.class);
+
+  public static byte[] exportXml(final GanttChart ganttChart) {
+    return export(new MSPDIWriter(), ganttChart);
+  }
+
+  public static byte[] exportMpx(final GanttChart ganttChart) {
+    return export(new MPXWriter(), ganttChart);
+  }
+
+  private static byte[] export(final ProjectWriter result, final GanttChart ganttChart) {
+    final ProjectFile file = new ProjectFile();
+
+    //
+    // Configure le fichier pour générer automatiquement les identifiants des tâches.
+    //
+    file.setAutoTaskID(true);
+    file.setAutoTaskUniqueID(true);
+
+    //
+    // Configure le fichier pour générer automatiquement les identifiants des ressources.
+    //
+    file.setAutoResourceID(true);
+    file.setAutoResourceUniqueID(true);
+
+    //
+    // Configure le fichier pour générer automatiquement les niveaux hiérarchiques
+    // et les numéros hiérarchiques.
+    //
+    file.setAutoOutlineLevel(true);
+    file.setAutoOutlineNumber(true);
+
+    //
+    // Configure le fichier pour générer automatiquement les étiquettes WBS
+    //
+    file.setAutoWBS(true);
+
+    //
+    // Configure le fichier pour générer automatiquement les identifiants des calendriers
+    // (pas strictement nécessaire ici, mais requis pour générer des fichiers MSPDI)
+    //
+    file.setAutoCalendarUniqueID(true);
+
+    //
+    // Récupère l'en-tête du projet et définit la date de début. Notez que Microsoft
+    // Project semble recaler toutes les dates de tâches par rapport à cette date, donc cette
+    // date doit correspondre à la date de début de la tâche la plus ancienne pour que vous voyiez
+    // les résultats attendus. Si cette valeur n'est pas définie, elle prendra par défaut la
+    // date d'aujourd'hui.
+    //
+    ganttChart.recalculate();
+    final ProjectHeader header = file.getProjectHeader();
+    header.setStartDate(PFDayUtils.convertToUtilDate(ganttChart.getCalculatedStartDate()));
+
+    //
+    // Ajoute un calendrier par défaut appelé "Standard"
+    //
+    final ProjectCalendar calendar = file.addDefaultBaseCalendar();
+    calendar.setWorkingDay(Day.SATURDAY, false);
+    calendar.setWorkingDay(Day.SUNDAY, false);
+    PFDateTime dt = PFDateTime.from(ganttChart.getCalculatedStartDate()); // non null
+    for (int i = 0; i &lt; 3000; i++) { // Protection contre les boucles infinies (paranoïa)
+      dt = dt.plusDays(1);
+      Holidays holidays = Holidays.getInstance();
+      if (!holidays.isWorkingDay(dt.getDateTime()) &amp;&amp; holidays.isHoliday(dt) &amp;&amp; !dt.isWeekend()) {
+        // Ajoute ce jour férié au calendrier :
+        final Date date = dt.getSqlDate();
+        calendar.addCalendarException(date, date);
+        if (log.isDebugEnabled()) {
+          log.debug(&quot;Ajout du jour férié : &quot; + date);
+        }
+      }
+      PFDateTime dtEnd = PFDateTime.from(ganttChart.getCalculatedEndDate()); // non null
+      if (!dt.isBefore(dtEnd)) {
+        break;
+      }
+    }
+
+    final List&lt;GanttTask&gt; children = ganttChart.getRootNode().getChildren();
+    if (children != null) {
+      final Map&lt;Serializable, Task&gt; taskMap = new HashMap&lt;&gt;();
+      for (final GanttTask child : children) {
+        addTask(file, taskMap, null, child);
+      }
+      for (final GanttTask child : children) {
+        setPredecessors(taskMap, child);
+      }
+    }
+
+    //
+    // Écrit le fichier
+    //
+    final ByteArrayOutputStream ba = new ByteArrayOutputStream();
+    try {
+// ... (tronqué, total 209 lignes)</pre>
+
+<h2>Historique Git</h2><div class="hist"><pre>868d6abb7 2025 -> 2026
+63081666f En-têtes des fichiers source : 2024 -> 2025.
+b6092df09 Copyright 2023 -> 2024
+ab45d51fa Copyright 2001-2022 -> 2001-2023.
+5f7ef41b8 Copyright 2021 -> 2022</pre></div>
+</body>
+</html>

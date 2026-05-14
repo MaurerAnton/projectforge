@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>#1879: DatabaseDialect.kt [ES]</title>
+<style>
+body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}
+h1{border-bottom:2px solid #333;padding-bottom:.3em}
+h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}
+h3{margin-top:2em;color:#444}
+a{color:#0366d6}
+.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}
+.nav{font-size:.9em;color:#888;margin-bottom:1em}
+.lang{font-size:.85em;color:#888;float:right}
+.lang a{color:#888;text-decoration:none;padding:0 .3em}
+.lang a.active{color:#0366d6;font-weight:600;text-decoration:underline}
+.meta{font-size:.9em;margin:1em 0;color:#555}
+code{background:#f0f0f0;padding:0 .2em;font-size:.93em}
+pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}
+table{border-collapse:collapse;width:100%;margin:1em 0}
+th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}
+th{background:#f5f5f5;font-weight:600}
+.hist{font-size:.85em;color:#555}
+.warn{background:#fff3cd;border-left:3px solid #ffc107;padding:.5em 1em;margin:1em 0}
+.tip{background:#d4edda;border-left:3px solid #28a745;padding:.5em 1em;margin:1em 0}
+</style>
+</head>
+<body>
+<div class="lang"><a href="1879.html">EN</a> · <a href="1879_de.html">DE</a> · <a href="1879_ru.html">RU</a> · <a href="1879_fr.html">FR</a> · <a href="1879_es.html" class="active">ES</a></div>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Índice</a> · <a href="file-index.html">← Índice de archivos</a> · <a href="1878.html">← Anterior</a> · <a href="1880.html">Siguiente →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-common/src/main/java/org/projectforge/common/DatabaseDialect.kt" target="_blank" title="Ver fuente en GitHub">📄 fuente</a></div>
+<h1>#1879: <code>DatabaseDialect.kt</code></h1>
+<div class="meta"><code>projectforge-common/src/main/java/org/projectforge/common/DatabaseDialect.kt</code> Enum de Kotlin — paquete org.projectforge.common, projectforge-common/src/main/java/org/projectforge/common/DatabaseDialect.kt <span style="color:#888">55 líneas · 24 código · 27 comentarios · 4 en blanco</span></div>
+<div class="c">Enum de Kotlin que define los dialectos de base de datos compatibles para Hibernate ORM y la herramienta de migración Flyway. Asigna los tipos de base de datos a sus nombres de clase de dialecto de Hibernate y nombres de directorio de proveedor de Flyway. Actualmente compatible con PostgreSQL (<code>org.hibernate.dialect.PostgreSQLDialect</code>) y HSQLDB (<code>org.hibernate.dialect.HSQLDialect</code>). Actúa como la única fuente de verdad para la configuración del tipo de base de datos en el arranque de la aplicación, la resolución de scripts de migración de Flyway y la configuración de la fábrica de sesiones de Hibernate.</div>
+<h2>Arquitectura</h2>
+<div class="c">
+<h3>Uso de características de Kotlin</h3>
+<ul>
+<li><strong>Clase enum con propiedad</strong>: Cada constante enum lleva una propiedad <code>asString: String</code> a través del constructor primario</li>
+<li><strong>Objeto complementario</strong>: Proporciona métodos estáticos de fábrica y utilidad accesibles desde Java mediante <code>@JvmStatic</code></li>
+<li><strong>Interoperabilidad con JVM</strong>: La anotación <code>@JvmStatic</code> en <code>fromString()</code> permite llamarlo como <code>DatabaseDialect.fromString(...)</code> desde código Java, en lugar de <code>DatabaseDialect.Companion.fromString(...)</code></li>
+</ul>
+
+<h3>Constantes del Enum</h3>
+<table>
+<tr><th>Constante</th><th>Clase de Dialecto Hibernate</th><th>Proveedor Flyway</th><th>Contexto de Uso</th></tr>
+<tr><td><code>PostgreSQL</code></td><td><code>org.hibernate.dialect.PostgreSQLDialect</code></td><td><code>postgresql</code></td><td>Despliegues en producción — la base de datos recomendada para producción</td></tr>
+<tr><td><code>HSQL</code></td><td><code>org.hibernate.dialect.HSQLDialect</code></td><td><code>hsqldb</code></td><td>Desarrollo/pruebas, configuración embebida — utilizado por el asistente de configuración para instalaciones de un solo usuario/locales</td></tr>
+</table>
+
+<h3>Métodos del Objeto Complementario</h3>
+
+<h4>fromString(asString: String): DatabaseDialect?</h4>
+<p>Busca un dialecto por su nombre de clase de Hibernate. Devuelve null si no se encuentra ninguna coincidencia — los llamadores deben manejar el caso nulo (generalmente predeterminando a HSQL para desarrollo). El método utiliza una cadena simple if-else en lugar de un mapa de búsqueda, apropiado para el pequeño número de dialectos compatibles.</p>
+
+<h4>getFlywayVendorName(databaseProductName: String): String</h4>
+<p>Asigna un nombre de producto del controlador JDBC al nombre del directorio del proveedor de Flyway. Esto es crítico para el descubrimiento de scripts de <strong>migración de base de datos de Flyway</strong>. Flyway organiza los scripts de migración en directorios específicos del proveedor:
+<pre>
+flyway/{module}/migrate/postgresql/V1.1.0__RELEASE-RemoveMGC.sql
+flyway/{module}/migrate/hsqldb/V1.1.0__RELEASE-RemoveMGC.sql
+</pre>
+El método verifica si el nombre del producto contiene "hsql" (sin distinción de mayúsculas/minúsculas) y devuelve <code>"hsqldb"</code> o <code>"postgresql"</code> según corresponda. Esto permite que la misma lógica de migración funcione en todos los tipos de base de datos — las diferencias SQL específicas del proveedor (por ejemplo, sintaxis de tipos de columna, manejo de secuencias) se aíslan en los scripts de migración específicos del proveedor.</p>
+
+<h3>Contexto Histórico: Bases de Datos Comentadas</h3>
+<p>El archivo contiene un comentario que enumera el soporte de base de datos considerado o planificado anteriormente:</p>
+<pre>// Aún no compatible:
+// MYSQL, ORACLE, MS_SQL_SERVER, DB2, INFORMIX, DERBY, UNKOWN;</pre>
+<p>Esto revela la intención de diseño de admitir múltiples bases de datos — un requisito común para el software empresarial. La implementación actual solo admite PostgreSQL (para producción) y HSQLDB (para embebido/desarrollo), con la arquitectura lista para extensión.</p>
+
+<h3>Arquitectura de Base de Datos en ProjectForge</h3>
+<p>El enum <code>DatabaseDialect</code> es parte de una abstracción de base de datos en capas:</p>
+<ol>
+<li><strong>Hibernate ORM</strong>: Mapeo objeto-relacional — la propiedad <code>asString</code> proporciona la clase de dialecto de Hibernate para <code>hibernate.cfg.xml</code> o la configuración automática de Spring Boot</li>
+<li><strong>Flyway</strong>: Gestión de migraciones de base de datos — el método <code>getFlywayVendorName()</code> dirige a los scripts de migración SQL específicos del proveedor</li>
+<li><strong>Asistente de Configuración</strong>: El asistente de configuración de ProjectForge (interfaces gráficas Swing y Lanterna) utiliza este enum para presentar opciones de base de datos a los administradores y configurar conexiones JDBC</li>
+</ol>
+
+<h3>Decisión de Diseño: ¿Por qué Kotlin?</h3>
+<p>Este archivo es uno de los primeros archivos Kotlin en el módulo projectforge-common (junto con otras clases de utilidad). Usar Kotlin para este enum proporciona:
+<ul>
+<li><strong>Definición concisa del enum</strong>: Constructor primario con propiedad, en comparación con los constructores verbosos de enum en Java</li>
+<li><strong>Seguridad nula</strong>: El tipo de retorno <code>DatabaseDialect?</code> de <code>fromString()</code> obliga a los llamadores a manejar el caso nulo</li>
+<li><strong>Interpolación de cadenas</strong>: Manejo de cadenas más limpio en comparación con la concatenación de cadenas de Java</li>
+</ul>
+
+<div class="warn">El método <code>getFlywayVendorName()</code> utiliza una simple coincidencia de subcadena (<code>contains("hsql")</code>) en lugar de una comparación exacta. Esto podría producir falsos positivos si un nombre de producto de base de datos contiene casualmente "hsql" como subcadena. Un enfoque más robusto sería comparar con una lista exacta de nombres de producto conocidos.</div>
+
+<div class="tip">El patrón de ruta de migración de Flyway utiliza directorios separados para <code>init/common</code> (creación de esquema) y <code>migrate/{vendor}</code> (migraciones específicas de versión). Esta separación permite que el esquema base sea independiente de la base de datos, mientras que las migraciones específicas del proveedor manejan diferencias en la sintaxis SQL o características (como PostgreSQL vs HSQLDB para el manejo de secuencias o la migración "RemoveMGC" visible en los directorios flyway del proyecto).</div>
+</div>
+<h2>Historial Git</h2><div class="hist"><pre>868d6abb7 2025 -> 2026
+63081666f Encabezados de archivos fuente: 2024-> 2025.
+b6092df09 Copyright 2023 -> 2024
+ab45d51fa Copyright 2001-2022 -> 2001-2023.
+5f7ef41b8 Copyright 2021 -> 2022
+637063dd7 Nada (encabezado de archivo fuente corregido)
+440d191a2 Página de configuración: activación de plugins estándar. AbstractPlugin: Corrección del nombre del proveedor para flyway.</pre></div>
+</body>
+</html>

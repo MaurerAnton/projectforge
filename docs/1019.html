@@ -1,31 +1,81 @@
-<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>1019</title>
-<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:2em;color:#444}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}</style></head>
-<body><div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="1018.html">← Prev</a> · <a href="1020.html">Next →</a></div>
-<h1>1019: <code>VisitorbookCache.kt</code></h1>
-<div class="meta">Cache Component, projectforge-business/src/main/kotlin/org/projectforge/business/orga/VisitorbookCache.kt</div>
-<div class="c">In-memory cache for visitorbook aggregate data (last visit date, number of visits). Extends <code>AbstractCache</code> for automatic refresh lifecycle. Provides <code>VisitorbookInfo</code> summaries without querying the database per visitorbook display.</div>
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>#1019: SystemSanityCheckJob.kt</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:2em;color:#444}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.lang{font-size:.85em;color:#888;float:right}.lang a{color:#888;text-decoration:none;padding:0 .3em}.lang a.active{color:#0366d6;font-weight:600;text-decoration:underline}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}</style></head>
+<body><div class="lang"><a href="1019.html" class="active">EN</a> · <a href="1019_de.html">DE</a> · <a href="1019_ru.html">RU</a> · <a href="1019_fr.html">FR</a> · <a href="1019_es.html">ES</a></div>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="771.html">← Prev</a> · <a href="1011.html">Next →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/kotlin/org/projectforge/business/jobs/SystemSanityCheckJob.kt" target="_blank" title="View source on GitHub">📄 source</a></div>
+<h1>#1019: <code>SystemSanityCheckJob.kt</code></h1>
+<div class="meta"><code>projectforge-business/src/main/kotlin/org/projectforge/business/jobs/SystemSanityCheckJob.kt</code> Type: Kotlin · Role: Component · Source: projectforge-business/src/main/kotlin/org/projectforge/business/jobs/SystemSanityCheckJob.kt <span style="color:#888">82 lines · 55 code · 23 comments · 4 blank</span></div>
+<div class="c">Scheduled/system job for SystemSanityCheck. Implements periodic maintenance or sanity-check logic executed by the PF job scheduler.</div>
+<h2>Code Structure</h2>
+<p>Classes: <code>SystemSanityCheckJob</code></p>
+<p>Supertype(s): <code>AbstractJob</code></p>
+<p>Functions (2): <code>executeJob</code>, <code>asString</code></p>
+<p>Properties (7): <code>taskDao</code>, <code>tasks</code>, <code>taskMap</code>, <code>rootTask</code>, <code>abandonedTasks</code>, <code>ancestor</code>, <code>rootTaskFound</code></p>
+<p>Imports: 5 packages</p>
+<p>Package: <code>org.projectforge.business.jobs</code></p>
+<h2>Source Code (abridged)</h2>
+<pre>
+package org.projectforge.business.jobs
 
-<h2>Architecture</h2>
-<h3>Refresh Strategy</h3>
-<p>On <code>refresh()</code>, the cache runs in a read-only transaction and:</p>
-<ol>
-<li>Loads all non-deleted visitorbooks into a map (keyed by ID) with empty <code>VisitorbookInfo</code>.</li>
-<li>Loads all non-deleted visitorbook entries, grouped by visitorbook ID.</li>
-<li>For each group, fills the info: <code>lastDateOfVisit</code> (first/latest entry by date desc), <code>latestArrived</code>/<code>latestDeparted</code>, and <code>numberOfVisits</code> (count).</li>
-</ol>
+import org.projectforge.business.task.TaskDO
+import org.projectforge.business.task.TaskDao
+import org.projectforge.business.task.TaskNode
+import org.projectforge.jobs.AbstractJob
+import org.projectforge.jobs.JobExecutionContext
 
-<h3>Selective Invalidation</h3>
-<p><code>setExpired(id)</code> updates a single visitorbook's info without full cache refresh, using the <code>queryVisitEntries</code> named query filtered by visitorbook ID. This is called after any insert/update/delete of a visitorbook entry via <code>VisitorbookService</code>.</p>
+class SystemSanityCheckJob(val taskDao: TaskDao) : AbstractJob(&quot;System integrity check&quot;) {
+    override fun executeJob() {
+        jobExecutionContext.addMessage(&quot;Task integrity (abandoned tasks)&quot;)
+        val tasks: List&lt;TaskDO&gt; = taskDao.selectAll(false)
+        jobExecutionContext.addMessage(&quot;Found ${tasks.size} tasks.&quot;)
+        val taskMap: MutableMap&lt;Long?, TaskDO&gt; = HashMap()
+        for (task in tasks) {
+            taskMap[task.id] = task
+        }
+        var rootTask = false
+        var abandonedTasks = false
+        for (task in tasks) {
+            if (task.parentTask == null) {
+                if (rootTask) {
+                    jobExecutionContext.addError(&quot;Found another root task: ${asString(task)}&quot;)
+                } else {
+                    jobExecutionContext.addMessage(&quot;Found root task: ${asString(task)}&quot;)
+                    rootTask = true
+                }
+            } else {
+                var ancestor = taskMap[task.parentTaskId]
+                var rootTaskFound = false
+                for (i in 0..49) { // Max. depth of 50, otherwise cyclic task!
+                    if (ancestor == null) {
+                        break
+                    }
+                    if (ancestor.parentTaskId == null) {
+                        // Root task found, OK.
+                        rootTaskFound = true
+                        break
+                    }
+                    ancestor = taskMap[ancestor.parentTaskId]
+                }
+                if (!rootTaskFound) {
+                    jobExecutionContext.addError(&quot;Found abandoned task (cyclic tasks without path to root): ${asString(task)}&quot;)
+                    abandonedTasks = true
+                }
+            }
+            taskMap[task.id] = task
+        }
+        if (!abandonedTasks) {
+            jobExecutionContext.addMessage(&quot;Test OK, no abandoned tasks detected.&quot;)
+        } else {
+            jobExecutionContext.addError(&quot;Test FAILED, abandoned tasks detected.&quot;)
+        }
+    }
 
-<h3>Thread Safety</h3>
-<p>Access to <code>visitorbookMap</code> is synchronized. The <code>refresh()</code> method works with a new map and atomically replaces the reference, avoiding stale reads.</p>
+    private fun asString(task: TaskDO): String {
+        return &quot;TaskNode[id=[${task.id}], created=[${task.created}] title=[${task.title}]]&quot;
+    }
+}</pre>
 
-<h2>Git History</h2><div class="hist"><pre>
-868d6abb7 2025 -> 2026
-63081666f Source file headers: 2024-> 2025.
-2c9ea00ac VisitorbookCache fixed.
-ba2479571 Migration stuff in progress...
-b3293f0cc PersistenceService/Context: stats handling improved.
-b5dc26e24 Migration stuff in progress...
-</pre></div>
+<h2>Git History</h2><div class="hist"><pre>868d6abb7 2025 -&gt; 2026
+034eebd5d Html handling and job handling.
+63081666f Source file headers: 2024-&gt; 2025.
+619985f48 Release 8.1 snapshot (#247)</pre></div>
 </body></html>

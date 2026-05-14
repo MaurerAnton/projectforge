@@ -1,9 +1,8 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>#877: Option.kt</title>
+<meta charset="utf-8">
+<title>#877: YearValueBridge.kt — ProjectForge Docs</title>
 <style>
 body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}
 h1{border-bottom:2px solid #333;padding-bottom:.3em}
@@ -19,46 +18,53 @@ table{border-collapse:collapse;width:100%;margin:1em 0}
 th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}
 th{background:#f5f5f5;font-weight:600}
 .hist{font-size:.85em;color:#555}
+.warn{background:#fff3cd;border-left:3px solid #ffc107;padding:.5em 1em;margin:1em 0}
 </style>
 </head>
 <body>
-<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="876.html">← Prev</a> · <a href="878.html">Next →</a></div>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="876.html">← Prev</a> · <a href="878.html">Next →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/kotlin/org/projectforge/business/common/YearValueBridge.kt" target="_blank" title="View source on GitHub">📄 source</a></div>
+<h1>#877: <code>YearValueBridge.kt</code></h1>
+<div class="meta"><code>projectforge-business/src/main/kotlin/org/projectforge/business/common/YearValueBridge.kt</code> <strong>Type:</strong> Hibernate Search ValueBridge · <strong>Purpose:</strong> Date → year integer bridge · <strong>Source:</strong> <code>projectforge-business/src/main/kotlin/org/projectforge/business/common/YearValueBridge.kt</code> <span style="color:#888">34 lines · 9 code · 22 comments · 3 blank</span></div>
+<div class="c">A minimal Hibernate Search <code>ValueBridge&lt;LocalDate, Int&gt;</code> that extracts only the year component from a <code>LocalDate</code> for indexing. Enables year-based search queries (e.g., "2024") against date fields without indexing the full date string.</div>
 
-<h1>#877: <code>Option.kt</code></h1>
+<h2>Bridge Signature</h2>
+<pre>class YearValueBridge : ValueBridge&lt;LocalDate, Int&gt;</pre>
+<ul>
+<li><strong>Input type:</strong> <code>LocalDate</code> (the entity date field, nullable)</li>
+<li><strong>Indexed type:</strong> <code>Int</code> (the year as an integer, nullable)</li>
+<li><strong>Unidirectional:</strong> Only implements <code>toIndexedValue</code> (indexing only, no read-back)</li>
+</ul>
 
-<div class="meta">
-<p><strong>Type:</strong> Kotlin data class — DTO</p>
-<p><strong>Purpose:</strong> Represents a selectable option / list-of-values entry in the D-velop system, used for field dropdowns (e.g., contact type, trading partner type) in the D-velop UI and API.</p>
-<p><strong>Source path:</strong> <code>projectforge-business/src/main/kotlin/org/projectforge/business/dvelop/Option.kt</code></p>
-</div>
+<h2><code>toIndexedValue()</code></h2>
+<pre>override fun toIndexedValue(value: LocalDate?, context: ValueBridgeToIndexedValueContext): Int?</pre>
+<p>Simply returns <code>value?.year</code> — the year as an <code>Int</code>. Returns <code>null</code> if the input date is null.</p>
 
-<div class="c">
-<p>A minimal DTO for D-velop's option/list-of-values model. Each option has an <code>id</code> (the internal key), a <code>value</code> (the display string), and an optional <code>color</code> for UI rendering. Used when ProjectForge needs to map its internal enum values to D-velop's option IDs during synchronization.</p>
-</div>
+<h2>Use Case</h2>
+<p>Applied to entity date fields where filtering or searching by year is the primary use case (e.g., invoice dates, timesheet entries, fiscal year boundaries). By indexing only the year as an integer, Hibernate Search can efficiently handle queries like:</p>
+<ul>
+<li>Exact year match: <code>year = 2024</code></li>
+<li>Year range: <code>year BETWEEN 2020 AND 2024</code></li>
+<li>Year comparison: <code>year >= 2024</code></li>
+</ul>
+<p>This is more efficient than indexing the full ISO date string and parsing it in queries, and avoids the need for database-level date functions in search predicates.</p>
 
-<h2>Properties</h2>
-<table>
-<tr><th>Property</th><th>Type</th><th>Description</th></tr>
-<tr><td><code>id</code></td><td><code>String?</code></td><td>Unique identifier of the option in D-velop (e.g., UUID for a list-of-values entry)</td></tr>
-<tr><td><code>value</code></td><td><code>String?</code></td><td>The human-readable display value</td></tr>
-<tr><td><code>color</code></td><td><code>String?</code></td><td>Optional color associated with the option for UI rendering</td></tr>
-</table>
+<h2>Design Rationale</h2>
+<p>The bridge is intentionally unidirectional (no <code>fromIndexedValue</code> implementation) because the index does not need to reconstruct a full <code>LocalDate</code> from the stored year. Projection queries that need the original date field can read it directly from the entity rather than from the index.</p>
 
-<h2>Architecture Notes</h2>
-<p>All three properties are constructor parameters with default <code>null</code> values, making this compatible with Jackson deserialization from D-velop's JSON API. No business logic — pure data transfer. Likely used in D-velop integration code that needs to resolve option IDs for fields like <code>type</code>, <code>contactType</code>, and <code>active</code> on <code>TradingPartner</code>.</p>
+<p>Using <code>Int</code> as the indexed type (rather than <code>String</code>) allows numeric range queries and comparisons natively in Hibernate Search, which is more performant than string-based range queries.</p>
 
 <h2>Git History</h2>
-<div class="hist"><pre>868d6abb7 2025 -> 2026
+<div class="hist"><pre>
+868d6abb7 2025 -> 2026
 63081666f Source file headers: 2024-> 2025.
+cf00da112 Migration stuff in progress...
+4f5a458c9 Migration stuff in progress...
 b6092df09 Copyright 2023 -> 2024
-be750e77e WIP D.velop
 ab45d51fa Copyright 2001-2022 -> 2001-2023.
-7c0185105 AG grid state (sort order etc.) is preserved if returned from edit page to list page.
-a492027b4 AGGrid: column states (size is now persisted in user's preferences)
-ec7f46aa1 WIP: scripting
 5f7ef41b8 Copyright 2021 -> 2022
-0ab100d21 Configuration refactored (GlobalConfiguration not needed anymore). SEPA export should now erease unprintable chars.
 ceb63e8a1 Source code header: (C) 2001-2021.
+0e850ecb2 Plugins don't need to be spring components, ServiceLoader is used again.
+c526c1bbb I18nEnum, IUserRightId -> Kotlin.
 7c79f1922 Copyright of source header -> 2020.
 dd5ca38ac CopyRight of all java file-header updated or created.
 9ebb88522 Initial commit

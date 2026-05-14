@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>#2766: vite.config.ts [FR]</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:2em;color:#444}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.lang{font-size:.85em;color:#888;float:right}.lang a{color:#888;text-decoration:none;padding:0 .3em}.lang a.active{color:#0366d6;font-weight:600;text-decoration:underline}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}</style>
+</head>
+<body>
+<div class="lang"><a href="2766.html">EN</a> · <a href="2766_de.html">DE</a> · <a href="2766_ru.html">RU</a> · <a href="2766_fr.html" class="active">FR</a> · <a href="2766_es.html">ES</a></div>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← Index des fichiers</a> · <a href="2765.html">← Précédent</a> · <a href="2767.html">Suivant →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-webapp/vite.config.ts" target="_blank" title="Voir la source sur GitHub">📄 source</a></div>
+<h1>#2766 : <code>vite.config.ts</code></h1>
+<div class="meta"><code>projectforge-webapp/vite.config.ts</code> Configuration de build Vite · <code>projectforge-webapp/vite.config.ts</code> <span style="color:#888">62 lignes · 59 lignes de code · 1 commentaire · 2 lignes vides</span></div>
+<div class="c">Le fichier de configuration du système de build Vite qui a remplacé la chaîne d'outils basée sur webpack de Create React App. Ce fichier unique orchestre l'ensemble du pipeline de développement et de build : transformation JSX/TSX via <code>@vitejs/plugin-react</code>, un plugin esbuild personnalisé pour gérer le JSX dans les <code>.js</code> de node_modules tiers (comme <code>react-rrule-generator</code>), compilation SCSS, proxy du serveur de développement vers le backend Java, et configuration du test runner Vitest. Créé lors de la migration majeure qui a éliminé 43 vulnérabilités npm en remplaçant la chaîne de dépendances obsolète <code>react-scripts</code> par la pile d'outils plus légère de Vite.</div>
+<h2>Architecture</h2>
+<h3>Plugin personnalisé : rruleJsxPlugin</h3>
+<p>C'est la partie la plus inhabituelle de la configuration. Certains packages npm (notamment <code>react-rrule-generator</code>) fournissent des fichiers <code>.js</code> contenant de la syntaxe JSX, que Vite ne traite normalement que dans les fichiers <code>.jsx</code>. Le <code>rruleJsxPlugin</code> intercepte les transformations de modules avec <code>enforce: 'pre'</code>, détecte tout fichier <code>.js</code> provenant du package <code>react-rrule-generator</code> (ou tout fichier node_modules contenant des motifs de type JSX via l'expression régulière <code>/&lt;[A-Z]\w*[\s/&gt;]/</code>), et le traite via esbuild avec <code>loader: 'jsx'</code>. Cela évite les erreurs de Vite rencontrant du JSX brut dans des fichiers <code>.js</code>. La sortie cible le format <code>cjs</code> avec la norme <code>esnext</code>.</p>
+<h3>Pipeline de plugins</h3>
+<p><code>rruleJsxPlugin()</code> s'exécute en premier (enforce: pre) pour transformer les fichiers JSX non standard, puis <code>react()</code> (le plugin React officiel de Vite) gère la transformation standard JSX/TSX avec le support Fast Refresh.</p>
+<h3>Configuration SCSS</h3>
+<p>Le paramètre <code>css.preprocessorOptions.scss.loadPaths</code> ajoute <code>./node_modules</code> au chemin d'importation SCSS, permettant des imports de style <code>@import "bootstrap/scss/bootstrap"</code> sans traversée de chemin relatif.</p>
+<h3>Configuration de build</h3>
+<p>La sortie va dans <code>build/</code> (suivant la convention CRA), les sourcemaps sont désactivées, la minification est désactivée (le serveur Wicket gère l'optimisation des assets), et <code>maxParallelFileOps: 1</code> limite les opérations parallèles sur les fichiers — une solution de contournement pour l'épuisement des descripteurs de fichiers sur certains systèmes.</p>
+<h3>Proxy du serveur de développement</h3>
+<p>Deux règles de proxy redirigent les requêtes <code>/rs</code> et <code>/rest</code> vers <code>http://localhost:8080</code> (le backend Spring Boot). C'est l'élément critique qui a permis à <code>baseURL</code> dans <code>rest.js</code> de fonctionner comme une chaîne vide — le proxy Vite gère le routage des préfixes, donc l'application React appelle toujours des URL relatives et le serveur de développement les transmet de manière transparente au point de terminaison backend approprié.</p>
+<h3>Tests : Vitest</h3>
+<p>Remplace Jest (le test runner de CRA). Configuré avec l'environnement <code>jsdom</code> (DOM de type navigateur pour les tests de composants), <code>globals: true</code> (pour que <code>it</code>, <code>expect</code>, <code>describe</code> fonctionnent sans imports), et des motifs de fichiers de test correspondant aux suffixes <code>.test.</code> et <code>.spec.</code> pour toutes les variantes JS/TS.</p>
+<h2>Historique Git</h2>
+<div class="hist"><table>
+<tr><th>Commit</th><th>Ce qui a changé</th></tr>
+<tr><td><code>bf988bc6d</code></td><td>Création du fichier dans le cadre de la migration complète react-scripts→Vite. Introduction de la chaîne d'outils complète : plugins Vite, gestionnaire JSX personnalisé pour rrule, support SCSS, proxy de développement avec routes backend doubles, configuration de build, et configuration du test runner Vitest. Ce fichier unique a remplacé toute la couche de configuration webpack de CRA.</td></tr>
+</table></div>
+</body>
+</html>

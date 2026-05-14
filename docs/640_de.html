@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>#640 [DE]</title>
+<style>
+body {
+    font-family: system-ui, sans-serif;
+    max-width: 960px;
+    margin: 2em auto;
+    padding: 0 1em;
+    background: #fafafa;
+    color: #222;
+    line-height: 1.6
+}
+h1 {
+    border-bottom: 2px solid #333
+}
+a {
+    color: #0366d6
+}
+.meta {
+    font-size: .9em;
+    margin: 1em 0
+}
+.nav {
+    font-size: .9em;
+    color: #888;
+    margin-bottom: 1em
+}
+.c {
+    border-left: 3px solid #ddd;
+    padding: .5em 1em;
+    margin: 1em 0;
+    background: #fff
+}
+code {
+    background: #f0f0f0;
+    padding: 0 .2em
+}
+</style>
+</head>
+<body>
+
+<div class="nav">
+<a href="https://maureranton.github.io/projectforge/">← Index</a> ·
+<a href="file-index.html">← Datei-Index</a> ·
+<a href="639.html">← Vorherige</a> ·
+<a href="641.html">Nächste →</a> ·
+<a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/java/org/projectforge/database/jdbc/JdbcExecutor.java" target="_blank" title="Quellcode auf GitHub ansehen">📄 Quelle</a>
+</div>
+
+<h1>#640: <code>JdbcExecutor.java</code></h1>
+
+<div class="meta">
+<code>projectforge-business/src/main/java/org/projectforge/database/jdbc/JdbcExecutor.java</code>
+<strong>Zeilen:</strong> 95 ·
+<strong>Autor:</strong> Kai Reinhard ·
+<strong>Typ:</strong> Java abstrakte Klasse — Template-Method-Pattern
+<span style="color:#888">95 Zeilen · 61 Code · 26 Kommentare · 8 leer</span>
+</div>
+
+<div class="c">
+<p><strong>Abstrakter JDBC-Operationsausführer unter Verwendung des Template-Method-Patterns.</strong> 95 Zeilen. Dies ist die Grundlage für alle rohen JDBC-Operationen in ProjectForge — <a href="635.html">DatabaseExecutorImpl</a> erstellt anonyme Unterklassen für jeden SQL-Aufruf. Diese Klasse <strong>besitzt den Verbindungslebenszyklus</strong>, während Unterklassen definieren, <strong>was mit dem Statement passiert</strong>.</p>
+
+<p><strong>Template-Methode — <code>execute(String sql, boolean ignoreErrors, Object... args)</code>:</strong></p>
+<ol>
+<li><strong>Verbindungsaufnahme:</strong> <code>dataSource.getConnection()</code> — holt eine rohe JDBC-Verbindung aus dem Pool (oder direkt im Testmodus)</li>
+<li><strong>Statement-Vorbereitung:</strong> <code>con.prepareStatement(sql)</code> — erstellt ein <code>PreparedStatement</code></li>
+<li><strong>Parameterbindung:</strong> iteriert über <code>args[]</code> und ruft <code>stmt.setObject(i+1, args[i])</code> auf — beachten Sie die <code>i+1</code>-Konvertierung: JDBC-Parameter sind 1-basiert (JDBC-Spezifikation), während Java-Arrays 0-basiert sind. Dies ist eine häufige Fehlerquelle, wenn man es vergisst</li>
+<li><strong>Delegation:</strong> ruft <code>execute(stmt)</code> auf — die abstrakte Methode, die von Unterklassen überschrieben wird. Der Rückgabewert ist als <code>Object</code> typisiert, da Unterklassen verschiedene Typen zurückgeben: <code>null</code> für DDL, <code>List&lt;DatabaseResultRow&gt;</code> für Abfragen, <code>Integer</code> für Updates/Zählungen</li>
+<li><strong>Fehlerbehandlung:</strong> Wenn <code>SQLException</code> abgefangen wird und <code>ignoreErrors=true</code> ist, wird der Fehler auf ERROR-Ebene protokolliert und <code>null</code> zurückgegeben. Wenn <code>ignoreErrors=false</code> ist, wird die Exception in <code>RuntimeException</code> verpackt und erneut geworfen — dies ist eine <strong>Entwurfsentscheidung für ungeprüfte Ausnahmen</strong>; Aufrufer benötigen kein <code>try-catch</code> für SQL-Fehler</li>
+</ol>
+
+<p><strong>Ressourcenbereinigung (<code>finally</code>-Block):</strong> Schließt zuerst <code>PreparedStatement</code>, dann <code>Connection</code>. Jedes Schließen erfolgt in einem eigenen <code>try-catch</code> — falls das Schließen des Statements eine Exception wirft, wird die Verbindung dennoch geschlossen. <strong>Kritische Nuance:</strong> Wenn eines der Schließen eine Exception wirft, wird ein <code>static boolean hasErrors</code>-Flag gesetzt. Nach beiden Schließvorgängen wird, falls Fehler aufgetreten sind, eine <code>RuntimeException</code> geworfen. Dadurch wird sichergestellt, dass Ressourcenleck-Fehler nicht stillschweigend geschluckt werden — der Aufrufer erfährt, dass die Ressourcenbereinigung fehlgeschlagen ist.</p>
+
+<p><strong>Abstrakte Methode — <code>execute(PreparedStatement stmt)</code>:</strong> Wird von anonymen Unterklassen in <a href="635.html">DatabaseExecutorImpl</a> für 4 verschiedene Operationen implementiert: DDL-Ausführung (<code>stmt.execute()</code>), Abfrage (<code>stmt.executeQuery()</code> + ResultSet-Mapping), Skalarabfrage (<code>rs.getInt(1)</code>) und Update (<code>stmt.executeUpdate()</code>).</p>
+
+<p><strong>Fehlendes Connection-Pooling:</strong> Der Javadoc warnt: „Verbindungen können verloren gehen“ — diese Klasse holt eine <code>Connection</code> über <code>DataSource.getConnection()</code> und schließt sie im <code>finally</code>-Block. Dies ist <strong>korrekt</strong> für gepoolte DataSources (das Schließen gibt die Verbindung an den Pool zurück), aber die Sorge des Autors galt direkten <code>DriverManager</code>-Verbindungen im Testmodus, bei denen jeder Aufruf eine neue TCP-Verbindung öffnet. In der Produktion mit HikariCP funktioniert das Pooling einwandfrei — die Warnung ist übervorsichtig.</p>
+</div>
+
+</body>
+</html>

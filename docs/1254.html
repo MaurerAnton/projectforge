@@ -1,63 +1,37 @@
-<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>1254</title>
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>#1254: DBResultIterator.kt</title>
 <style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:2em;color:#444}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}</style></head>
-<body><div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="1253.html">← Prev</a> · <a href="1255.html">Next →</a></div>
-<h1>1254: <code>DisplayHistoryEntry.kt</code></h1>
-<div class="meta">DTO / Display Model, projectforge-business/.../persistence/history/DisplayHistoryEntry.kt</div>
-<div class="c">JSON-serializable data transfer object that renders a single history entry for the React frontend. Includes localized timestamps, user attribution, operation type, diff summaries, and child attribute diffs.</div>
+<body><div class="nav"><a href="https://maureranton.github.io/projectforge/">&#8592; Index</a> &#183; <a href="file-index.html">&#8592; File index</a> &#183; <a href="1253.html">&#8592; Prev</a> &#183; <a href="1255.html">Next &#8594;</a></div>
+<h1>#1254: <code>DBResultIterator.kt</code></h1>
+<div class="meta"><code>projectforge-business/src/main/kotlin/org/projectforge/framework/persistence/api/impl/DBResultIterator.kt</code> Result Iteration, projectforge-business/src/main/kotlin/org/projectforge/framework/persistence/api/impl/DBResultIterator.kt <span style="color:#888">102 lines · 58 code · 31 comments · 13 blank</span></div>
+<div class="c">Generic interface and implementations for iterating over database search results. Provides <code>DBCriteriaResultIterator</code> using Hibernate <code>ScrollableResults</code> with entity graph support, and <code>DBEmptyResultIterator</code> for empty query results.</div>
 
-<h2>Architecture &amp; Role</h2>
-<p><code>DisplayHistoryEntry</code> is the public-facing representation of database entity <code>HistoryEntryDO</code>. It is built by <code>HistoryService</code> converters and consumed directly by the React UI (<code>HistoryEntry.jsx</code>). It provides computed fields (<code>operation</code>, <code>diffSummary</code>) alongside raw data.</p>
+<h2>Architecture</h2>
+<h3>Interface</h3>
+<pre>interface DBResultIterator&lt;O : ExtendedBaseDO&lt;Long&gt;&gt; {
+    fun next(): O?
+    fun sort(list: List&lt;O&gt;): List&lt;O&gt;
+}</pre>
 
-<h3>Key Properties</h3>
+<h3>Implementations</h3>
 <table>
-<tr><th>Property</th><th>Type</th><th>Description</th></tr>
-<tr><td><code>id</code></td><td>Long?</td><td>Primary key of the history entry</td></tr>
-<tr><td><code>modifiedAt</code></td><td>Date?</td><td>Timestamp of the modification</td></tr>
-<tr><td><code>timeAgo</code></td><td>String?</td><td>Human-readable, localized "X minutes ago" via <code>TimeAgo</code></td></tr>
-<tr><td><code>modifiedByUserId</code></td><td>Long?</td><td>User database ID</td></tr>
-<tr><td><code>modifiedByUser</code></td><td>String?</td><td>Full name of the modifying user</td></tr>
-<tr><td><code>operationType</code></td><td>EntityOpType?</td><td>Insert / Update / Delete</td></tr>
-<tr><td><code>operation</code></td><td>String (computed)</td><td>Localized operation label via <code>HistoryFormatService.translate()</code></td></tr>
-<tr><td><code>userComment</code></td><td>String?</td><td>Optional admin comment attached to the change</td></tr>
-<tr><td><code>diffSummary</code></td><td>List&lt;DiffCount&gt; (computed)</td><td>Counts of inserted/updated/deleted attributes; falls back to entity-level counts if no attribute diffs</td></tr>
-<tr><td><code>attributes</code></td><td>MutableList&lt;DisplayHistoryEntryAttr&gt;</td><td>Per-property change details</td></tr>
+<tr><th>Class</th><th>Description</th></tr>
+<tr><td><code>DBEmptyResultIterator</code></td><td>Returns null for <code>next()</code>; identity sort. Used for queries with no results.</td></tr>
+<tr><td><code>DBCriteriaResultIterator</code></td><td>Wraps <code>ScrollableResults</code> from <code>jakarta.persistence.Query</code>. Supports entity graph hints (<code>jakarta.persistence.loadgraph</code>) and flushes entity manager every 100 iterations. Catches exceptions in <code>next()</code> with error logging.</td></tr>
 </table>
 
-<h3>Inner Class: DiffCount</h3>
-<p><code>DiffCount(type: EntityOpType, count: Int, operation: String)</code> — describes how many attributes were inserted/updated/deleted for display in the diff summary bar.</p>
+<h3>Constructor Dependencies (DBCriteriaResultIterator)</h3>
+<ul>
+<li><strong>entityManager</strong> — JPA EntityManager for query creation and clearing</li>
+<li><strong>criteria</strong> <code>CriteriaQuery&lt;O&gt;</code> — the JPA Criteria query</li>
+<li><strong>resultPredicates</strong> <code>List&lt;DBPredicate&gt;</code> — post-query in-memory predicates</li>
+<li><strong>queryFilter</strong> <code>QueryFilter</code> — provides entity graph name via <code>entityGraphName</code></li>
+</ul>
 
-<h3>Factory Method</h3>
-<p><code>Companion.create(historyEntry, context)</code> constructs a <code>DisplayHistoryEntry</code> from a raw <code>HistoryEntry</code> plus the load context. It resolves the modifying user via <code>UserGroupCache</code> and computes <code>timeAgo</code>.</p>
-
-<h2>Git History</h2><div class="hist"><pre>868d6abb7 2025 -> 2026
-f02617502 HistoryEntry.jsx: diffSummary, edit user comment only displayed if available.
-aec1e30ab History supports now user comments.
-146694df2 DisplayHistory: minor improvements.
+<h2>Git History</h2><div class="hist"><pre>
+868d6abb7 2025 -> 2026
 63081666f Source file headers: 2024-> 2025.
-bbc198d03 Migration stuff in progress... (all tests of all packages: OK).
-55972f36a Migration stuff in progress...
-f408da8a8 Migration stuff in progress... (all tests of all packages: OK).
-d18c899b5 Refactoring of history entries, FlatDisplayHistoryEntries and DisplayHistoryEntries...
-8bd78b145 Migration stuff in progress... (all tests of all packages: OK).
-b79a1edca Migration stuff in progress... (all tests of all packages: OK).
-b90249e10 Migration stuff in progress... (all tests of all packages: OK).
-cb03dc74f Migration stuff in progress... (all tests of all packages: OK).
-68be78d38 Migration stuff in progress... (all tests of all packages: OK).
-6b908c61b Migration stuff in progress...
-f8e614f12 DisplayHistoryEntry: new concept in progress...
-68688c148 DisplayHistoryEntry: new concept in progress...
-3347f3b41 DisplayHistoryEntry: new concept in progress...
-c3c3ba662 DisplayHistoryEntry: new concept in progress...
-fa973038e HistoryEntry is now longer generic, is now IdObject&lt;Long&gt;.
-4c04cfd65 MAJOR-CHANGE! Migration of integer id's to Long id's.
-c1d14ecdb Migration stuff in progress...
-e33c8b9c2 Migration stuff in progress...
-06828f490 Migration stuff in progress...
-b6092df09 Copyright 2023 -> 2024
-ab45d51fa Copyright 2001-2022 -> 2001-2023.
-f3ed38265 HistoryService (displaying entries) improved.
-c06db1dab Nearly all jars updated (code changes required).
-5f7ef41b8 Copyright 2021 -> 2022
-f32b8b70e DisplayHistoryEntry: warning fixed.
-bbbad97c2 DisplayHistoryEntry -> kotlin.</pre></div>
+313bed1ec Merge remote-tracking branch 'origin/master' into mgc-remove
+9aff90908 Migration stuff in progress... (all tests of all packages: OK).
+b71b5073d Migration stuff in progress... (all tests of all packages: OK).
+</pre></div>
 </body></html>

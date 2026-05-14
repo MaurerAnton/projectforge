@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>#889: AbstractRechnungsStatistik.kt [DE]</title>
+<style>
+body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}
+h1{border-bottom:2px solid #333;padding-bottom:.3em}
+h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}
+h3{margin-top:2em;color:#444}
+a{color:#0366d6}
+.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}
+.nav{font-size:.9em;color:#888;margin-bottom:1em}
+.meta{font-size:.9em;margin:1em 0;color:#555}
+code{background:#f0f0f0;padding:0 .2em;font-size:.93em}
+pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}
+table{border-collapse:collapse;width:100%;margin:1em 0}
+th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}
+th{background:#f5f5f5;font-weight:600}
+.hist{font-size:.85em;color:#555}
+</style>
+</head>
+<body>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← Dateiindex</a> · <a href="888.html">← Vorherige</a> · <a href="890.html">Nächste →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/kotlin/org/projectforge/business/fibu/AbstractRechnungsStatistik.kt" target="_blank" title="Quelle auf GitHub ansehen">📄 Quelle</a></div>
+
+<h1>#889: <code>AbstractRechnungsStatistik.kt</code></h1>
+
+<div class="meta"><code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/AbstractRechnungsStatistik.kt</code> 
+<p><strong>Typ:</strong> Abstrakte generische Klasse (<code>Serializable</code>)</p>
+<p><strong>Paket:</strong> <code>org.projectforge.business.fibu</code></p>
+<p><strong>Vollständiger Pfad:</strong> <code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/AbstractRechnungsStatistik.kt</code></p>
+ <span style="color:#888">223 Zeilen · 148 Code · 53 Kommentare · 22 leer</span></div>
+
+<div class="c">
+<p>Abstrakter Statistikrechner für Rechnungen. Aggregiert finanzielle Kennzahlen über eine Sammlung von Rechnungen (ausgehend oder eingehend): Brutto (<code>brutto</code>), Netto (<code>netto</code>), mit Skonto (<code>bruttoMitSkonto</code>), gezahlt (<code>gezahlt</code>), offen (<code>offen</code>), überfällig (<code>ueberfaellig</code>) und Skontobeträge (<code>skonto</code>). Erfasst auch Durchschnittswerte der Zahlungsziele und bietet eine Markdown-formatierte Ausgabe für die Wicket-Benutzeroberfläche. Unterstützt Multiwährungsumrechnung mit Warnungsverfolgung.</p>
+</div>
+
+<h2>Typparameter</h2>
+<p><code>T : AbstractRechnungDO?</code> — Der konkrete Rechnungstyp (z. B. <code>RechnungDO</code> oder <code>EingangsrechnungDO</code>).</p>
+
+<h2>Aggregierte Eigenschaften</h2>
+<table>
+<tr><th>Eigenschaft</th><th>Typ</th><th>Beschreibung</th></tr>
+<tr><td><code>brutto</code></td><td><code>BigDecimal</code></td><td>Gesamtbruttosumme aller Rechnungen</td></tr>
+<tr><td><code>netto</code></td><td><code>BigDecimal</code></td><td>Gesamtnettosumme</td></tr>
+<tr><td><code>bruttoMitSkonto</code></td><td><code>BigDecimal</code></td><td>Gesamtbrutto mit angewendetem Skonto</td></tr>
+<tr><td><code>gezahlt</code></td><td><code>BigDecimal</code></td><td>Gesamtbezahlter Betrag</td></tr>
+<tr><td><code>offen</code></td><td><code>BigDecimal</code></td><td>Gesamt offener (noch nicht bezahlter) Betrag</td></tr>
+<tr><td><code>ueberfaellig</code></td><td><code>BigDecimal</code></td><td>Gesamt überfälliger Betrag</td></tr>
+<tr><td><code>skonto</code></td><td><code>BigDecimal</code></td><td>Akzeptierte Minderung (vom Kunden gewährte Skonti)</td></tr>
+<tr><td><code>counter</code></td><td><code>Int</code></td><td>Gesamtanzahl der gezählten Rechnungen</td></tr>
+<tr><td><code>counterBezahlt</code></td><td><code>Int</code></td><td>Anzahl der vollständig bezahlten Rechnungen</td></tr>
+</table>
+
+<h2>Kernmethode: <code>add(rechnung: T)</code></h2>
+<p>Der primäre Einstiegspunkt. Für jede hinzugefügte Rechnung:</p>
+<ol>
+<li>Ruft die zwischengespeicherten Rechnungsinformationen über <code>rechnungCache.getRechnungInfo(rechnung)</code> ab</li>
+<li>Konvertiert alle Beträge in die systemkonfigurierte Währung mittels <code>currencyConversionService.convert()</code></li>
+<li>Wenn die Währungsumrechnung für eine Rechnung fehlschlägt, wird eine Warnmeldung in <code>currencyConversionWarnings</code> gesammelt und der ursprüngliche (nicht konvertierte) Betrag als Fallback verwendet</li>
+<li>Akkumuliert Brutto-, Netto-, Brutto-mit-Skonto- sowie bezahlte/offene/überfällige Beträge</li>
+<li>Berechnet den Skonto (<code>skonto</code>), wenn der bezahlte Betrag geringer ist als der Bruttobetrag</li>
+<li>Erfasst Durchschnittswerte der Zahlungsziele: vertraglich (<code>zahlungsZielSum</code>) und tatsächlich (<code>tatsaechlichesZahlungsZiel</code>)</li>
+<li>Erkennt überfällige Rechnungen über <code>rechnungInfo.isUeberfaellig</code></li>
+</ol>
+
+<h2>Währungsumrechnung</h2>
+<p>Die private Methode <code>convertToSystemCurrency()</code> behandelt Multiwährungsszenarien:</p>
+<ul>
+<li>Überspringt die Konvertierung, wenn Quell- und Zielwährung übereinstimmen (Groß-/Kleinschreibung wird ignoriert)</li>
+<li>Verwendet <code>useFallbackToOldestRate = true</code> für historische Rechnungen, für die möglicherweise kein genauer Wechselkurs existiert</li>
+<li>Erstellt Warnmeldungen zur Anzeige im Format: <code>"Rechnungsreferenz (Datum): USD → EUR"</code></li>
+<li>Greift auf den ursprünglichen Betrag zurück, wenn keine Konvertierung verfügbar ist</li>
+</ul>
+
+<h2>Berechnete Eigenschaften</h2>
+<table>
+<tr><th>Eigenschaft</th><th>Typ</th><th>Beschreibung</th></tr>
+<tr><td><code>zahlungszielAverage</code></td><td><code>Int</code></td><td>Durchschnittliches vertragliches Zahlungsziel in Tagen</td></tr>
+<tr><td><code>tatsaechlichesZahlungzielAverage</code></td><td><code>Int</code></td><td>Gewichtete durchschnittliche tatsächliche Zahlungsdauer in Tagen</td></tr>
+<tr><td><code>asMarkdown</code></td><td><code>String</code></td><td>Markdown-Tabelle mit allen Finanzkennzahlen, farblich gekennzeichnet für offene (blau) und überfällige (rot) Beträge</td></tr>
+<tr><td><code>hasCurrencyConversionWarnings</code></td><td><code>Boolean</code></td><td>True, wenn Fehler bei der Währungsumrechnung aufgetreten sind</td></tr>
+<tr><td><code>currencyConversionWarningsList</code></td><td><code>List&lt;String&gt;</code></td><td>Liste der Warnmeldungen für die Wicket-Anzeige</td></tr>
+</ul>
+
+<h2>Abhängigkeiten des Begleitobjekts</h2>
+<p>Das Begleitobjekt enthält <code>lateinit</code>-Service-Referenzen, die vor der Verwendung extern gesetzt werden müssen:</p>
+<ul>
+<li><code>rechnungCache: RechnungCache</code> — stellt <code>RechnungInfo</code> für jede Rechnung bereit</li>
+<li><code>currencyConversionService: CurrencyConversionService</code> — behandelt die Multiwährungsbetragsumrechnung</li>
+<li><code>configurationService: ConfigurationService</code> — stellt die systemstandardmäßige Währung bereit</li>
+</ul>
+
+<h2>Git-Verlauf</h2>
+<div class="hist"><pre>868d6abb7 2025 -> 2026
+472fbc977 WIP: Währungsumrechnung mit Claude Code.
+8c2bf04f0 WIP: Währungsumrechnung mit Claude Code.
+6be9c2b84 WIP: Währungsumrechnung mit Claude Code.
+63081666f Quelltextdatei-Header: 2024 -> 2025.
+b47c21af6 Überarbeitung der Zwischenspeicherung und Berechnungen bei Rechnungen (noch nicht abgeschlossen)
+ccb7ca64d Migration läuft...
+b6092df09 Copyright 2023 -> 2024
+ab45d51fa Copyright 2001-2022 -> 2001-2023.
+09b3f0df7 WIP: Jobmonitor. ListStatisticsSupport -> MarkdownBuilder
+0b835b27e Unterstützung von Statistiken oder anderen Informationen zum Ergebnissatz auf der Listenseite.
+a286007ee Massenaktualisierung von Kreditorenrechnungen: Behandlung von Skonto implementiert.
+832934b14 WIP: Massenaktualisierung</pre></div>
+</body>
+</html>

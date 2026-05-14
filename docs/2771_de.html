@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>#2771: LessWicketApplicationInstantiator.java [DE]</title>
+<style>
+body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}
+h1{border-bottom:2px solid #333;padding-bottom:.3em}
+h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}
+h3{margin-top:2em;color:#444}
+a{color:#0366d6}
+.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}
+.nav{font-size:.9em;color:#888;margin-bottom:1em}
+.lang{font-size:.85em;color:#888;float:right}
+.lang a{color:#888;text-decoration:none;padding:0 .3em}
+.lang a.active{color:#0366d6;font-weight:600;text-decoration:underline}
+.meta{font-size:.9em;margin:1em 0;color:#555}
+code{background:#f0f0f0;padding:0 .2em;font-size:.93em}
+pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}
+table{border-collapse:collapse;width:100%;margin:1em 0}
+th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}
+th{background:#f5f5f5;font-weight:600}
+.hist{font-size:.85em;color:#555}
+</style>
+</head>
+<body>
+<div class="lang"><a href="2771.html">EN</a> · <a href="2771_de.html" class="active">DE</a> · <a href="2771_ru.html">RU</a> · <a href="2771_fr.html">FR</a> · <a href="2771_es.html">ES</a></div>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← Datei-Index</a> · <a href="2770.html">← Vorherige</a> · <a href="2772.html">Nächste →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-wicket/src/main/java/de/micromata/less/LessWicketApplicationInstantiator.java" target="_blank" title="Quellcode auf GitHub ansehen">📄 Quelle</a></div>
+<h1>#2771: <code>LessWicketApplicationInstantiator.java</code></h1>
+<div class="meta"><code>projectforge-wicket/src/main/java/de/micromata/less/LessWicketApplicationInstantiator.java</code> LESS-CSS-Kompilierungs-Engine (Wicket-Integration) · <code>projectforge-wicket/src/main/java/de/micromata/less/LessWicketApplicationInstantiator.java</code> <span style="color:#888">206 Zeilen · 116 Code · 62 Kommentare · 28 leer</span></div>
+<div class="c">Der zentrale LESS-zu-CSS-Kompilierungs-Orchestrator für die Wicket-Webschicht von ProjectForge. Diese Singleton-Klasse integriert den <code>lesscss-java</code>-Compiler in den Wicket-Anwendungslebenszyklus: Sie findet <code>.less</code>-Quelldateien im Klassenpfad, kompiliert sie zu CSS im Dateisystem, mountet das kompilierte CSS als versionierte Wicket-Ressource (mittels <code>LessResourceReference</code>) und registriert im Entwicklungsmodus Dateisystem-Überwacher, die bei Änderungen an <code>.less</code>-Quelldateien automatisch neu kompilieren. Der kompilierte CSS-Dateiname enthält den Server-Startzeitstempel als Cache-Busting-Versionsmarker (<code>projectforge-version-{timestamp}.css</code>).</div>
+<h2>Architektur</h2>
+<h3>Integration in den Anwendungslebenszyklus</h3>
+<p>Die Klasse implementiert <code>Serializable</code> und führt ein statisches <code>instance</code>-Feld. Beim Start der Wicket-Anwendung wird eine Instanz mit dem Quell-<code>.less</code>-Pfad, dem Ziel-<code>.css</code>-Pfad und einem Dateisystem-<code>baseDir</code> erstellt. Die Methode <code>instantiate()</code> wird aufgerufen, welche:</p>
+<ol>
+<li>Die LESS-Quelldatei über Springs <code>ClassPathResource</code> aus dem Klassenpfad auflöst</li>
+>li>Optional das LESS zu CSS kompiliert (gesteuert durch das <code>compileCss</code>-Flag – nützlich für die Produktion, wo CSS vorab kompiliert werden sollte)</li>
+<li>Eine <code>LessResourceReference</code> für die kompilierte Ausgabe erstellt</li>
+<li>Die Ressource mit einem versionierten Pfad im Wicket-Ressourcenregister mountet</li>
+<li>Im Entwicklungsmodus Dateisystem-Änderungsüberwacher für jede importierte LESS-Datei anfügt</li>
+</ol>
+<h3>Überwacher im Entwicklungsmodus</h3>
+<p>Wenn <code>WebConfiguration.isDevelopmentMode()</code> true zurückgibt, nutzt die Klasse Wickets eingebaute <code>IModificationWatcher</code>-Infrastruktur, um die Haupt-LESS-Quelle und alle ihre <code>@import</code>-Abhängigkeiten zu überwachen. Bei Dateiänderungen löst der Überwacher eine Neukompilierung aus – Entwickler sehen CSS-Änderungen sofort, ohne den Server neu starten zu müssen. Der Überwacher deckt den gesamten transitiven Importgraphen über <code>mainLessSource.getImports().values()</code> ab.</p>
+<h3>Cache-Busting-Strategie</h3>
+<p>Die Methode <code>encodePathWithCachingStrategy</code> ersetzt <code>.css</code> durch <code>-version-{startTime}.css</code> im Ressourcenpfad. Der Zeitstempel (<code>WicketApplication.getStartTime()</code>) ändert sich bei jedem Serverneustart und macht so nach Bereitstellungen Browser-Caches ungültig. Das Präfix <code>-version-</code> unterscheidet sich bewusst von Wickets Standard-<code>-ver-</code>, um Kollisionen mit Wickets interner Ressourcenversionierung zu vermeiden.</p>
+<h3>Statische Rendering-Hilfsmethode</h3>
+<p>Die statische Methode <code>renderCompiledCssResource(IHeaderResponse)</code> ist der Einstiegspunkt, der von Seitenvorlagen aufgerufen wird, um das kompilierte CSS in HTML-Header einzubinden. Sie rendert ein <code>CssReferenceHeaderItem</code>, das auf die gemountete Ressource verweist. Wenn der Instantiator noch nicht initialisiert wurde (die statische <code>instance</code> ist null), wird ein Fehler protokolliert – dies ist eine Absicherung für Seiten, die vor Abschluss der LESS-Kompilierung gerendert werden.</p>
+<h2>Git-Verlauf</h2>
+<div class="hist"><table>
+<tr><th>Commit</th><th>Was wurde geändert</th></tr>
+<tr><td><code>868d6abb7</code> bis <code>4a6390e11</code></td><td>Sechs Commits mit Aktualisierungen der Copyright-Jahre (2021→2026) und einem Wicket-8-Migrations-Merge (<code>4548710df</code>). Die Copyright-Aktualisierungen folgen dem jährlichen Header-Durchlauf. Der Wicket-8-Migrations-Commit (<code>4a6390e11</code>) ist ein Merge von <code>feature/wicket8</code> in <code>develop</code> – während das Merge-Diff selbst möglicherweise keine Änderungen in dieser spezifischen Datei zeigt, brachte der Branch bedeutende API-Änderungen im gesamten Wicket-Modul. Die Klassenlogik selbst ist stabil geblieben; alle Verlaufseinträge betreffen Infrastrukturänderungen und keine Funktionsänderungen.</td></tr>
+</table></div>
+</body>
+</html>

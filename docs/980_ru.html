@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>#980 [RU]</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:2em;color:#444}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}</style>
+</head>
+<body>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Индекс</a> · <a href="file-index.html">← Индекс файлов</a> · <a href="979.html">← Назад</a> · <a href="981.html">Вперёд →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/kotlin/org/projectforge/business/fibu/SEPATransferGenerator.kt" target="_blank" title="Просмотреть исходный код на GitHub">📄 исходник</a></div>
+<h1>#980: <code>SEPATransferGenerator.kt</code></h1>
+<div class="meta"><code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/SEPATransferGenerator.kt</code> Генератор SEPA-переводов, projectforge-business/src/main/kotlin/org/projectforge/business/fibu/SEPATransferGenerator.kt <span style="color:#888">229 строк · 153 кода · 40 комментариев · 36 пустых</span></div>
+<div class="c">Оркестрирует генерацию XML для SEPA Credit Transfer (pain.001.001.03) на основе счетов ProjectForge. Координирует полный конвейер: загрузку счетов, проверку IBAN/счета, группировку по дебиторам, построение XML через <code>SEPAXmlBuilder</code> и упаковку результата в <code>SEPATransferResult</code>.</div>
+
+<h2>Архитектура</h2>
+<h3>Основной конвейер</h3>
+<p>Генератор следует многоэтапному конвейеру:</p>
+<ol>
+  <li><strong>Выбор входных данных:</strong> Получает список ID счетов или объектов <code>RechnungDO</code> для обработки.</li>
+  <li><strong>Проверка:</strong> Убеждается, что каждый счёт имеет действительные IBAN/BIC и связанный счёт для банковских реквизитов. Отфильтровывает уже экспортированные счета.</li>
+  <li><strong>Группировка:</strong> Группирует счета по дебитору (Kunde) для пакетных переводов, когда это возможно.</li>
+  <li><strong>Генерация XML:</strong> Делегирует <code>SEPAXmlBuilder</code> построение XML в формате pain.001.</li>
+  <li><strong>Сборка результата:</strong> Упаковывает сгенерированный XML, количество обработанных счетов и возможные ошибки в <code>SEPATransferResult</code>.</li>
+</ol>
+
+<h3>Граф зависимостей</h3>
+<p>Генератор сильно зависит от кэш-слоя fibu (<code>ProjektCache</code>, <code>KundeCache</code>, <code>KontoCache</code>) для разрешения связей счетов без дополнительных запросов к базе данных. Он использует <code>RechnungDao</code> для сохранения счетов и отметки их как экспортированных.</p>
+
+<h3>Проектные решения</h3>
+<ul>
+  <li><strong>Идемпотентность:</strong> Пропускает счета, уже отмеченные датой экспорта SEPA, чтобы предотвратить дублирование переводов.</li>
+  <li><strong>Накопление ошибок:</strong> Собирает все ошибки проверки, а не останавливается на первой, предоставляя полный отчёт об ошибках.</li>
+  <li><strong>Формат XML:</strong> Использует pain.001.001.03 (ISO 20022) как стандарт SEPA Credit Transfer, совместимый с банками ЕС.</li>
+  <li><strong>Точность даты/времени:</strong> Генерирует уникальные ID сообщений для каждого запуска экспорта с использованием временных меток, обеспечивая отслеживаемость.</li>
+</ul>
+
+<h2>Ключевые методы</h2>
+<table>
+<tr><th>Метод</th><th>Описание</th></tr>
+<tr><td><code>generate(invoices, exportDate)</code></td><td>Основная точка входа: проверяет, группирует, строит XML, возвращает <code>SEPATransferResult</code></td></tr>
+<tr><td><code>buildXml(...)</code></td><td>Строит полный XML-документ SEPA pain.001 через <code>SEPAXmlBuilder</code></td></tr>
+<tr><td><code>validateInvoice(invoice)</code></td><td>Проверяет действительность IBAN/BIC/счёта для одного счёта</td></tr>
+</table>
+
+<h2>История Git</h2><div class="hist"><pre>
+868d6abb7 2025 -> 2026
+63081666f Заголовки исходных файлов: 2024 -> 2025.
+53e88fb6e SEPA-Экспорт: paymentType теперь настраивается (ZAH вместо ZIN).
+b6092df09 Авторское право 2023 -> 2024
+ab45d51fa Авторское право 2001-2022 -> 2001-2023.
+f0b91f12a SEPA-Перевод: если счёт был экспортирован ранее, он помечается датой экспорта, а не удаляется.
+5288f771e Генератор SEPA теперь создаёт валидный XML без проблем с пространствами имён и без дублирования определений xmlns.
+3b4908eb7 SEPA Экспорт для счетов: теперь используются данные из RechnungDO в сотрудничестве с SEPATransferGeneratorUtils.
+e4a9008d4 Добавлен SEPA Экспорт для счетов.
+</pre></div>
+</body></html>

@@ -1,0 +1,97 @@
+Here is the complete HTML translated into French, with the language set to `fr`, the French language active in the switcher, and the title updated with `[FR]`.
+
+```html
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>#986: DatevImportService.kt [FR]</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:2em;color:#444}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}</style>
+</head>
+<body>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← Index des fichiers</a> · <a href="985.html">← Précédent</a> · <a href="987.html">Suivant →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/kotlin/org/projectforge/business/fibu/datev/DatevImportService.kt" target="_blank" title="Voir la source sur GitHub">📄 source</a></div>
+
+<h1>#986: <code>DatevImportService.kt</code></h1>
+
+<div class="meta"><code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/datev/DatevImportService.kt</code> 
+  <strong>Type :</strong> Service Spring<br>
+  <strong>Paquetage :</strong> <code>org.projectforge.business.fibu.datev</code><br>
+  <strong>Chemin réel :</strong> <code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/datev/DatevImportService.kt</code><br>
+  <strong>Remarque :</strong> Le fichier <strong>n'existe pas</strong> au chemin demandé (<code>.../excelimport/...</code>). Il se trouve dans le sous-paquetage <code>datev</code>. La documentation ci-dessous reflète la source réelle.
+ <span style="color:#888">273 lignes · 180 lignes de code · 69 commentaires · 24 lignes vides</span></div>
+
+<div class="c">
+  <p>Le <strong>service d'orchestration</strong> pour les imports Excel de type DATEV. Coordonne le pipeline d'import pour le <strong>Kontenplan</strong> (plan comptable) et les <strong>Buchungssätze</strong> (écritures comptables). Gère le cycle de vie de l'import : analyse (import), validation (réconciliation) et persistance (validation). Toutes les opérations nécessitent le droit utilisateur <code>FIBU_DATEV_IMPORT</code>.</p>
+</div>
+
+<h2>Architecture</h2>
+
+<h3>Dépendances</h3>
+<table>
+  <tr><th>Dépendance</th><th>Rôle</th></tr>
+  <tr><td><code>PfPersistenceService</code></td><td>Gestion du contexte de persistance</td></tr>
+  <tr><td><code>AccessChecker</code></td><td>Vérification des droits utilisateur</td></tr>
+  <tr><td><code>KontoDao</code></td><td>Valider les entrées du plan comptable ; résoudre les numéros de compte</td></tr>
+  <tr><td><code>Kost1Dao</code></td><td>Transmis à <code>BuchungssatzExcelImporter</code></td></tr>
+  <tr><td><code>Kost2Dao</code></td><td>Transmis à <code>BuchungssatzExcelImporter</code></td></tr>
+  <tr><td><code>BuchungssatzDao</code></td><td>Valider les entrées d'écritures ; rechercher les enregistrements existants</td></tr>
+</table>
+
+<h2>Cycle de vie de l'import</h2>
+
+<h3>Phase 1 : Import (Analyse Excel)</h3>
+<table>
+  <tr><th>Méthode</th><th>Entrée</th><th>Sortie</th></tr>
+  <tr><td><code>importKontenplan(inputStream, filename)</code></td><td>InputStream Excel</td><td><code>ImportStorage&lt;KontoDO&gt;</code></td></tr>
+  <tr><td><code>importBuchungsdaten(inputStream, filename)</code></td><td>InputStream Excel</td><td><code>ImportStorage&lt;BuchungssatzDO&gt;</code></td></tr>
+</table>
+<p>Les deux méthodes ouvrent un <code>ExcelWorkbook</code> à partir du flux d'entrée, créent un <code>ImportStorage</code> avec la configuration de journalisation, délèguent à la classe d'import respective (<code>KontenplanExcelImporter</code> / <code>BuchungssatzExcelImporter</code>) et retournent le stockage rempli.</p>
+
+<h3>Phase 2 : Réconciliation (Validation & Diff)</h3>
+<table>
+  <tr><th>Méthode</th><th>Description</th></tr>
+  <tr><td><code>reconcile(storage, sheetName)</code></td><td>Distribue vers <code>reconcileKontenplan()</code> ou <code>reconcileBuchungsdaten()</code> selon le type de stockage. Définit <code>numberOfCommittedElements</code> à -1.</td></tr>
+</table>
+<p>La réconciliation fait correspondre les éléments importés avec les entrées existantes de la base de données :</p>
+<ul>
+  <li><strong>Kontenplan :</strong> recherche chaque <code>KontoDO</code> importé par numéro de compte. Les entrées trouvées sont stockées comme <code>oldValue</code> sur l'élément importé et leur horodatage <code>created</code> est copié dans l'import (nécessaire à BaseDao pour déterminer l'insertion ou la mise à jour).</li>
+  <li><strong>Buchungssätze :</strong> recherche par (<code>year</code>, <code>month</code>, <code>satznr</code>) en utilisant <code>buchungssatzDao.getBuchungssatz()</code>.</li>
+</ul>
+
+<h3>Phase 3 : Validation (Persistance)</h3>
+<table>
+  <tr><th>Méthode</th><th>Description</th></tr>
+  <tr><td><code>commit(storage, sheetName)</code></td><td>Nécessite le statut <code>RECONCILED</code>. Distribue vers <code>commitKontenplan()</code> ou <code>commitBuchungsdaten()</code>. Définit le statut à <code>IMPORTED</code>.</td></tr>
+</table>
+<p>La validation collecte les éléments sélectionnés, définit l'identifiant de base de données à partir de <code>oldValue</code> si l'entrée existe déjà, et effectue une insertion en masse via le DAO par blocs de 50.</p>
+
+<h2>Énumération des types d'import</h2>
+<p><code>DatevImportService.Type</code> : <code>KONTENPLAN</code>, <code>BUCHUNGSSAETZE</code>. Utilisé comme discriminateur dans <code>ImportStorage</code>.</p>
+
+<h2>Propriétés de diff</h2>
+<table>
+  <tr><th>Constante</th><th>Propriétés</th></tr>
+  <tr><td><code>KONTO_DIFF_PROPERTIES</code></td><td><code>nummer</code>, <code>bezeichnung</code></td></tr>
+  <tr><td><code>BUCHUNGSSATZ_DIFF_PROPERTIES</code></td><td><code>satznr</code>, <code>betrag</code>, <code>sh</code>, <code>konto</code>, <code>kost2</code>, <code>menge</code>, <code>beleg</code>, <code>datum</code>, <code>gegenKonto</code>, <code>text</code>, <code>kost1</code>, <code>comment</code></td></tr>
+</table>
+
+<h2>Contrôle d'accès</h2>
+<p>Toutes les méthodes publiques appellent <code>checkLoggedinUserRight()</code> qui vérifie <code>UserRightId.FIBU_DATEV_IMPORT</code> avec la valeur <code>TRUE</code>. L'objet compagnon fournit des méthodes statiques d'aide pour une utilisation dans les pages Wicket (découplage pré-service).</p>
+
+<h2>Historique Git</h2>
+<div class="hist"><pre>
+868d6abb7 2025 -> 2026
+312d5e61c Nettoyage
+63081666f En-têtes des fichiers source : 2024 -> 2025.
+1012e347a Migration en cours... (tous les tests de tous les paquetages : OK).
+bbc198d03 Migration en cours... (tous les tests de tous les paquetages : OK).
+4bc37b3a1 Migration en cours...
+d67bce18b Migration en cours...
+1b50060c3 BaseDao : renommé : get -> find, save -> insert, getList -> select, load -> select
+87aaf6a5a Migration en cours... BaseDao refactorisé (pas encore terminé)
+3aeda5ef5 Gros changement : tous les save|update|...InTrans renommés (InTrans supprimé).
+</pre></div>
+
+</body>
+</html>

@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>299: WebXMLInitializer.java [DE]</title>
+<style>
+body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}
+h1{border-bottom:2px solid #333;padding-bottom:.3em}
+h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}
+h3{margin-top:1.5em;color:#444;font-size:1em}
+a{color:#0366d6}
+.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}
+.nav{font-size:.9em;color:#888;margin-bottom:1em}
+.lang{font-size:.85em;color:#888;float:right}
+.lang a{color:#888;text-decoration:none;padding:0 .3em}
+.lang a.active{color:#0366d6;font-weight:600;text-decoration:underline}
+.meta{font-size:.9em;margin:1em 0;color:#555}
+code{background:#f0f0f0;padding:0 .2em;font-size:.93em}
+pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}
+table{border-collapse:collapse;width:100%;margin:1em 0}
+th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}
+th{background:#f5f5f5;font-weight:600}
+.hist{font-size:.85em;color:#555}
+pre.diff{background:#fff;font-size:.82em;max-height:300px;overflow-y:auto}
+</style>
+</head>
+<body>
+<div class="lang"><a href="299.html">EN</a> · <a href="299_de.html" class="active">DE</a> · <a href="299_ru.html">RU</a> · <a href="299_fr.html">FR</a> · <a href="299_es.html">ES</a></div>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← Datei-Index</a> · <a href="217.html">← Vorherige</a> · <a href="558.html">Nächste →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-application/src/main/java/org/projectforge/config/WebXMLInitializer.java" target="_blank" title="Quelltext auf GitHub anzeigen">📄 Quelle</a></div>
+<h1>#299: <code>WebXMLInitializer.java</code></h1>
+<div class="meta"><code>projectforge-application/src/main/java/org/projectforge/config/WebXMLInitializer.java</code> Java-Klasse, <code>projectforge-application/src/main/java/org/projectforge/config/WebXMLInitializer.java</code> <span style="color:#888">115 Zeilen · 70 Code · 30 Kommentare · 15 leer</span></div>
+<div class="c"><strong>Zweck:</strong> Quelldatei: org/projectforge/config/WebXMLInitializer.java. WebXMLInitializer.java ist Teil der Open-Source-Projektmanagement-Anwendung ProjectForge.</div>
+<h2>Quelltext (erste 100 Zeilen)</h2>
+<pre>/////////////////////////////////////////////////////////////////////////////
+//
+// Project ProjectForge Community Edition
+//         www.projectforge.org
+//
+// Copyright (C) 2001-2026 Micromata GmbH, Germany (www.micromata.com)
+//
+// ProjectForge ist dual-lizenziert.
+//
+// Diese Community-Edition ist freie Software; Sie können sie weitergeben und/oder
+// modifizieren unter den Bedingungen der GNU General Public License, wie sie
+// von der Free Software Foundation veröffentlicht wurde; Version 3 der Lizenz.
+//
+// Diese Community-Edition wird in der Hoffnung verteilt, dass sie nützlich sein wird,
+// aber OHNE JEDE GEWÄHR; ohne die stillschweigende Gewährleistung der
+// MARKTGÄNGIGKEIT oder EIGNUNG FÜR EINEN BESTIMMTEN ZWECK. Siehe die GNU General
+// Public License für weitere Details.
+//
+// Sie sollten eine Kopie der GNU General Public License zusammen mit
+// diesem Programm erhalten haben; falls nicht, siehe http://www.gnu.org/licenses/.
+//
+/////////////////////////////////////////////////////////////////////////////
+
+package org.projectforge.config;
+
+import jakarta.servlet.FilterRegistration;
+import jakarta.servlet.ServletContext;
+import jakarta.servlet.ServletException;
+import org.apache.wicket.protocol.http.WicketFilter;
+import org.apache.wicket.spring.SpringWebApplicationFactory;
+import org.projectforge.business.user.filter.WicketUserFilter;
+import org.projectforge.carddav.CardDavInit;
+import org.projectforge.framework.configuration.PFSpringConfiguration;
+import org.projectforge.model.rest.RestPaths;
+import org.projectforge.rest.config.LocaleFilter;
+import org.projectforge.rest.config.Rest;
+import org.projectforge.rest.config.RestUtils;
+import org.projectforge.security.LoggingFilter;
+import org.projectforge.security.SecurityHeaderFilter;
+import org.projectforge.web.OrphanedLinkFilter;
+import org.projectforge.web.filter.ResponseHeaderFilter;
+import org.projectforge.web.filter.SpringThreadLocalFilter;
+import org.projectforge.web.rest.RestCalendarSubscriptionUserFilter;
+import org.projectforge.web.rest.RestUserFilter;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.web.servlet.ServletContextInitializer;
+import org.springframework.context.annotation.Configuration;
+
+/**
+ * Diese Klasse ersetzt die web.xml. Sie registriert den Wicket-Filter im Spring-konfigurierten Stil.
+ *
+ * @author Florian Blumenstein
+ */
+@Configuration
+public class WebXMLInitializer implements ServletContextInitializer {
+    private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(WebXMLInitializer.class);
+
+    @Value("${projectforge.security.csp-header-value:}") // Standardwert ist leerer String
+    private String cspHeaderValue;
+
+    private static final String PARAM_APP_BEAN = "applicationBean";
+
+    @Autowired
+    private CardDavInit cardDavInit;
+
+    @Autowired
+    private PFSpringConfiguration pfSpringConfiguration;
+
+    @Override
+    public void onStartup(ServletContext sc) throws ServletException {
+        final FilterRegistration securityHeaderFilter = sc.addFilter("SecurityHeaderFilter", SecurityHeaderFilter.class);
+        securityHeaderFilter.addMappingForUrlPatterns(null, false, "/*");
+        securityHeaderFilter.setInitParameter(SecurityHeaderFilter.PARAM_CSP_HEADER_VALUE, cspHeaderValue);
+
+        if (pfSpringConfiguration.getCorsFilterEnabled()) {
+            log.warn("************* Aktiviere CorsPreflightFilter für die Entwicklung. *************");
+            FilterRegistration.Dynamic corsPreflightFilter = sc.addFilter("CorsPreflightFilter", CorsPreflightFilter.class);
+            corsPreflightFilter.addMappingForUrlPatterns(null, false, "/*");
+        }
+        /*
+         * Leite verwaiste Links aus früheren Versionen von ProjectForge um (z. B. wenn Links in E-Mails aufgrund von Migrationen oder Refactoring geändert wurden).
+         */
+        sc.addFilter("redirectOrphanedLinks", new OrphanedLinkFilter()).addMappingForUrlPatterns(null, false, "/*");
+
+        cardDavInit.init(sc);
+
+        boolean filterAfterInternal = false;
+        RestUtils.registerFilter(sc, "loggingFilter", LoggingFilter.class, false, "/*");
+        RestUtils.registerFilter(sc, "UserFilter", WicketUserFilter.class, filterAfterInternal, "/wa/*");
+        RestUtils.registerFilter(sc, "springContext", SpringThreadLocalFilter.class, filterAfterInternal, "/wa/*");
+
+        final FilterRegistration wicketApp = RestUtils.registerFilter(sc, "wicket.app", WicketFilter.class, filterAfterInternal, "/wa/*");
+        wicketApp.setInitParameter(WicketFilter.APP_FACT_PARAM, SpringWebApplicationFactory.class.getName());
+        wicketApp.setInitParameter(PARAM_APP_BEAN, "wicketApplication");
+        wicketApp.setInitParameter(WicketFilter.FILTER_MAPPING_PARAM, "/wa/*");
+
+        sc.addFilter("locale", new LocaleFilter()).addMappingForUrlPatterns(null, false,
+                "/" + RestPaths.REST_PUBLIC + "/*"); // Wird für den Login-Dienst benötigt.</pre>
+<h2>Git-Verlauf</h2>
+<div class="hist">
+<pre>868d6abb7 2025 -> 2026
+e1658a6a3 CorsPreflightFilter erneut hinzugefügt (erforderlich).
+19954eeb1 CorsPreflightFilter nicht benötigt, siehe WebXMLInitializer (allowedOrigin kann nicht '*' sein).
+9a0941e90 CorsPreflightFilter für die Entwicklung hinzugefügt.
+63081666f Quelldatei-Header: 2024 -> 2025.</pre>
+<h3>868d6abb7</h3><div class="c"><strong>2025 -> 2026</strong><pre class="diff">868d6abb75cd191a892911ac8e45058932cf9074
+diff --git a/projectforge-application/src/main/java/org/projectforge/config/WebXMLInitializer.java b/projectforge-application/src/main/java/org/projectforge/config/WebXMLInitializer.java
+index 6f6c6e8d3..dd8af1245 100644
+--- a/projectforge-application/src/main/java/org/projectforge/config/WebXMLInitializer.java
++++ b/projectforge-application/src/main/java/org/projectforge/config/WebXMLInitializer.java
+@@ -3,7 +3,7 @@
+ // Project ProjectForge Community Edition
+ //         www.projectforge.org
+ //
+-// Copyright (C) 2001-2025 Micromata GmbH, Germany (www.micromata.com)
++// Copyright (C) 2001-2026 Micromata GmbH, Germany (www.micromata.com)
+ //
+ // ProjectForge ist dual-lizenziert.
+ //</pre></div><h3>e1658a6a3</h3><div class="c"><strong>CorsPreflightFilter erneut hinzugefügt (erforderlich).</strong><pre class="diff">e1658a6a32becabc7921f8c4f70a356bd2df2661
+diff --git a/projectforge-application/src/main/java/org/projectforge/config/WebXMLInitializer.java b/projectforge-application/src/main/java/org/projectforge/config/WebXMLInitializer.java
+index 7313a96b6..6f6c6e8d3 100644
+--- a/projectforge-application/src/main/java/org/projectforge/config/WebXMLInitializer.java
++++ b/projectforge-application/src/main/java/org/projectforge/config/WebXMLInitializer.java
+@@ -73,6 +73,11 @@ public class WebXMLInitializer implements ServletContextInitializer {
+         securityHeaderFilter.addMappingForUrlPatterns(null, false, "/*");
+         securityHeaderFilter.setInitParameter(SecurityHeaderFilter.PARAM_CSP_HEADER_VALUE, cspHeaderValue);
+ 
++        if (pfSpringConfiguration.getCorsFilterEnabled()) {
++            log.warn("************* Aktiviere CorsPreflightFilter für die Entwicklung. *************");
++            FilterRegistration.Dynamic corsPreflightFilter = sc.addFilter("CorsPreflightFilter", CorsPreflightFilter.class);
++            corsPreflightFilter.addMappingForUrlPatterns(null, false, "/*");
++        }
+         /*
+          * Leite verwaiste Links aus früheren Versionen von ProjectForge um (z. B. wenn Links in E-Mails aufgrund von Migrationen oder Refactoring geändert wurden).
+          */</pre></div><h3>19954eeb1</h3><div class="c"><strong>CorsPreflightFilter nicht benötigt, siehe WebXMLInitializer (allowedOrigin kann nicht '*' sein).</strong><pre class="diff">19954eeb1d5dd278e48920e103100b1dd10ce230
+diff --git a/projectforge-application/src/main/java/org/projectforge/config/WebXMLInitializer.java b/projectforge-application/src/main/java/org/projectforge/config/WebXMLInitializer.java
+index e496e607e..7313a96b6 100644
+--- a/projectforge-application/src/main/java/org/projectforge/config/WebXMLInitializer.java
++++ b/projectforge-application/src/main/java/org/projectforge/config/WebXMLInitializer.java
+@@ -73,12 +73,6 @@ public class WebXMLInitializer implements ServletContextInitializer {
+         securityHeaderFilter.addMappingForUrlPatterns(null, false, "/*");
+         securityHeaderFilter.setInitParameter(SecurityHeaderFilter.PARAM_CSP_HEADER_VALUE, cspHeaderValue);
+ 
+-        if (pfSpringConfiguration.getCorsFilterEnabled()) {
+-            log.warn("************* Aktiviere CorsPreflightFilter für die Entwicklung. *************");
+-            FilterRegistration.Dynamic corsPreflightFilter = sc.addFilter("CorsPreflightFilter", CorsPreflightFilter.class);
+-            corsPreflightFilter.addMappingForUrlPatterns(null, false, "/*");
+-        }
+-
+         /*
+          * Leite verwaiste Links aus früheren Versionen von ProjectForge um (z. B. wenn Links in E-Mails aufgrund von Migrationen oder Refactoring geändert wurden).
+          */</pre></div><h3>9a0941e90</h3><div class="c"><strong>CorsPreflightFilter für die Entwicklung hinzugefügt.</strong><pre class="diff">9a0941e90e2295c44a5b1fd6956110ddd530093d
+diff --git a/projectforge-application/src/main/java/org/projectforge/config/WebXMLInitializer.java b/projectforge-application/src/main/java/org/projectforge/config/WebXMLInitializer.java
+index 62d79fd51..e496e607e 100644
+--- a/projectforge-application/src/main/java/org/projectforge/config/WebXMLInitializer.java
++++ b/projectforge-application/src/main/java/org/projectforge/config/WebXMLInitializer.java
+@@ -30,6 +30,7 @@ import org.apache.wicket.protocol.http.WicketFilter;
+ import org.apache.wicket.spring.SpringWebApplicationFactory;
+ import org.projectforge.business.user.filter.WicketUserFilter;
+ import org.projectforge.carddav.CardDavInit;
++import org.projectforge.framework.configuration.PFSpringConfiguration;
+ import org.projectforge.model.rest.RestPaths;
+ import org.projectforge.rest.config.LocaleFilter;
+ import org.projectforge.rest.config.Rest;
+@@ -63,12 +64,21 @@ public class WebXMLInitializer implements ServletContextInitializer {
+     @Autowired
+     private CardDavInit cardDavInit;
+ 
++    @Autowired
++    private PFSpringConfiguration pfSpringConfiguration;
++
+     @Override
+     public void onStartup(ServletContext sc) throws ServletException {
+         final FilterRegistration securityHeaderFilter = sc.addFilter("SecurityHeaderFilter", SecurityHeaderFilter.class);
+         securityHeaderFilter.addMappingForUrlPatterns(null, false, "/*");
+         securityHeaderFilter.setInitParameter(SecurityHeaderFilter.PARAM_CSP_HEADER_VALUE, cspHeaderValue);
+ 
++        if (pfSpringConfiguration.getCorsFilterEnabled()) {
++            log.warn("************* Aktiviere CorsPreflightFilter für die Entwicklung. *************");
++            FilterRegistration.Dynamic corsPreflightFilter = sc.addFilter("CorsPreflightFilter", CorsPreflightFilter.class);
++            corsPreflightFilter.addMappingForUrlPatterns(null, false, "/*");
++        }
++
+         /*
+          * Leite verwaiste Links aus früheren Versionen von ProjectForge um (z. B. wenn Links in E-Mails aufgrund von Migrationen oder Refactoring geändert wurden).
+          */</pre></div><h3>63081666f</h3><div class="c"><strong>Quelldatei-Header: 2024 -> 2025.</strong><pre class="diff">63081666f620fb87315f01b817e560e0b2f6a33a
+diff --git a/projectforge-application/src/main/java/org/projectforge/config/WebXMLInitializer.java b/projectforge-application/src/main/java/org/projectforge/config/WebXMLInitializer.java
+index fec333df2..62d79fd51 100644
+--- a/projectforge-application/src/main/java/org/projectforge/config/WebXMLInitializer.java
++++ b/projectforge-application/src/main/java/org/projectforge/config/WebXMLInitializer.java
+@@ -3,7 +3,7 @@
+ // Project ProjectForge Community Edition
+ //         www.projectforge.org
+ //
+-// Copyright (C) 2001-2024 Micromata GmbH, Germany (www.micromata.com)
++// Copyright (C) 2001-2025 Micromata GmbH, Germany (www.micromata.com)
+ //
+ // ProjectForge ist dual-lizenziert.
+ //</pre></div>
+</div>
+</body></html>

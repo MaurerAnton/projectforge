@@ -1,0 +1,112 @@
+Here is the translated HTML in Russian, with the language set to `ru`, the title updated with `[RU]`, and the language switcher marked as active for Russian.
+
+```html
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>#836: DoubletsResultFilter.kt [RU]</title>
+<style>
+  body { font-family: system-ui, sans-serif; max-width: 960px; margin: 2em auto; padding: 0 1em; background: #fafafa; color: #222; line-height: 1.6; }
+  h1 { border-bottom: 2px solid #333; padding-bottom: 0.3em; }
+  h2 { margin-top: 2.5em; border-bottom: 1px solid #ddd; padding-bottom: 0.2em; color: #333; }
+  h3 { margin-top: 2em; color: #444; }
+  a { color: #0366d6; }
+  .c { border-left: 3px solid #ddd; padding: .5em 1em; margin: 1em 0; background: #fff; }
+  .nav { font-size: .9em; color: #888; margin-bottom: 1em; }
+  .meta { font-size: .9em; margin: 1em 0; color: #555; }
+  code { background: #f0f0f0; padding: 0 .2em; font-size: .93em; }
+  pre { background: #f5f5f5; padding: .8em 1em; border: 1px solid #ddd; border-radius: 4px; overflow-x: auto; font-size: .88em; line-height: 1.4; }
+  table { border-collapse: collapse; width: 100%; margin: 1em 0; }
+  th, td { border: 1px solid #ddd; padding: .5em .8em; text-align: left; font-size: .9em; }
+  th { background: #f5f5f5; font-weight: 600; }
+  .hist { font-size: .85em; color: #555; }
+</style>
+</head>
+<body>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Индекс</a> · <a href="file-index.html">← Индекс файлов</a> · <a href="835.html">← Предыдущий</a> · <a href="837.html">Следующий →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/kotlin/org/projectforge/business/address/DoubletsResultFilter.kt" target="_blank" title="Просмотреть исходник на GitHub">📄 исходник</a></div>
+
+<h1>#836: <code>DoubletsResultFilter.kt</code></h1>
+<div class="meta"><code>projectforge-business/src/main/kotlin/org/projectforge/business/address/DoubletsResultFilter.kt</code> <strong>Фильтр результатов Kotlin</strong> — пост-фильтр для дедупликации адресов. Реализует <code>CustomResultFilter&lt;AddressDO&gt;</code> для обнаружения и извлечения дублирующихся записей адресов (дублетов) на основе сравнения нормализованных полных имен. Расположение: <code>projectforge-business/src/main/kotlin/org/projectforge/business/address/DoubletsResultFilter.kt</code> <span style="color:#888">57 строк · 30 кода · 23 комментария · 4 пустых</span></div>
+
+<div class="c">
+<strong>Назначение:</strong> Когда адресная книга растет органически (импорты, ручной ввод, миграция данных), накапливаются дублирующиеся контакты — часто с незначительными различиями в форматировании, но с идентичными нормализованными именами. Этот фильтр позволяет интерфейсу списка адресов отображать представление «Только дублеты», помогая администраторам находить и объединять дубликаты.
+</div>
+
+<h2>Архитектура</h2>
+
+<div class="c">
+Реализует <strong><code>CustomResultFilter&lt;AddressDO&gt;</code></strong> — интерфейс фреймворка ProjectForge для пост-запросной фильтрации результатов. В отличие от фильтрации на стороне базы данных (условия <code>WHERE</code>), фильтры результатов работают в памяти над набором результатов, возвращенных DAO. Это необходимо для дедупликации, потому что:<br><br>
+• Дубликаты могут находиться в разных строках базы данных с разными ID<br>
+• Логика нормализации (<code>getNormalizedFullname</code>) включает манипуляции со строками, которые сложно выразить в SQL/HQL<br>
+• Фильтру требуется накапливать состояние между несколькими элементами — метод <code>match()</code> вызывается для каждого элемента по порядку, но изменяет внутренние множества
+</div>
+
+<h3>Конечный автомат</h3>
+<div class="c">
+Фильтр работает как <strong>конечный автомат с двумя множествами и двумя проходами</strong>:<br><br>
+<strong>Проход 1 (накопление):</strong> Когда каждый элемент адреса передается в <code>match()</code>:<br>
+• Если нормализованное полное имя уже есть в <code>fullnames</code>, это дублет — добавляется в <code>doubletFullnames</code><br>
+• Если его нет в <code>fullnames</code>, это первое вхождение — добавляется в <code>all</code> и <code>fullnames</code><br><br>
+<strong>Проход 2 (сброс):</strong> Когда обнаружен дублет, все ранее просмотренные адреса, чьи имена совпадают с любым именем дублета, добавляются в результирующий список. Множество <code>addedDoublets</code> предотвращает добавление одного и того же адреса дважды.
+</div>
+
+<h3>Выбор структур данных</h3>
+<table>
+<tr><th>Поле</th><th>Тип</th><th>Назначение</th></tr>
+<tr><td><code>fullnames</code></td><td><code>MutableSet&lt;String&gt;</code> (HashSet)</td><td>Отслеживает все уникальные нормализованные имена, встреченные на данный момент — поиск O(1)</td></tr>
+<tr><td><code>doubletFullnames</code></td><td><code>MutableSet&lt;String&gt;</code> (HashSet)</td><td>Отслеживает имена, подтвержденные как имеющие ≥2 вхождения — используется для ретроактивного сброса</td></tr>
+<tr><td><code>all</code></td><td><code>MutableList&lt;AddressDO&gt;</code> (ArrayList)</td><td>Упорядоченный список всех обработанных адресов — необходим, потому что более ранние записи не были возвращены как совпадения</td></tr>
+<tr><td><code>addedDoublets</code></td><td><code>MutableSet&lt;Long?&gt;</code> (HashSet)</td><td>Защита от дублирования — предотвращает добавление одного и того же ID адреса дважды в результат</td></tr>
+</table>
+
+<h2>Пошаговый алгоритм</h2>
+<pre>
+Для каждого адреса в результате запроса (отсортированного по имени):
+
+1. Пропустить удаленные адреса → вернуть false
+  
+2. Вычислить normalizedFullname = AddressDao.getNormalizedFullname(element)
+   (удалить пробелы, привести к нижнему регистру и т.д.)
+
+3. Проверить fullnames.contains(normalizedFullname):
+   
+   НЕТ (первое вхождение):
+     all.add(element)
+     fullnames.add(normalizedFullname)
+     вернуть false  (не включать в результаты пока)
+   
+   ДА (обнаружен дубликат):
+     doubletFullnames.add(normalizedFullname)
+     
+     // Сброс: добавить все ранее просмотренные адреса с этим именем
+     для (adr in all):
+       если (addedDoublets.contains(adr.id)) продолжить  // пропустить уже добавленные
+       если (doubletFullnames.contains(getNormalizedFullname(adr))):
+         list.add(adr)                                // вставить в результат
+         addedDoublets.add(adr.id)                    // отметить как вставленный
+     
+     // Текущий элемент (дубликат) также возвращается
+     вернуть true
+</pre>
+
+<h2>История Git</h2>
+<div class="hist">
+<pre>868d6abb7 2025 → 2026 (обновление года авторских прав)
+63081666f Заголовки исходных файлов: 2024→2025
+4c04cfd65 MAJOR: Миграция целочисленных id на Long id (каскады FK)
+067a4cbb1 Работа над миграцией в процессе...
+0d183e5df Работа над миграцией в процессе...
+b7b459e73 Работа над миграцией в процессе...
+</pre>
+Файл появился в период миграции <code>int→Long</code>, когда фильтры результатов были перестроены для использования <code>Long</code> ID.
+</div>
+
+<h2>Обоснование дизайна</h2>
+<div class="c">
+<strong>Почему пост-фильтр, а не GROUP BY + HAVING в базе данных?</strong> SQL <code>GROUP BY normalized_name HAVING COUNT(*) > 1</code> потребовал бы, чтобы функция нормализации была выразима в SQL (возможно, но хрупко из-за различий в диалектах SQL) и не предоставил бы точные объекты сущностей, необходимые для диалога слияния в интерфейсе. Подход с пост-фильтром сохраняет логику нормализации в Java/Kotlin, где она типизирована, тестируема и согласована с остальной частью приложения.<br><br>
+<strong>Почему шаблон ретроактивного сброса?</strong> Интерфейс <code>match()</code> возвращает <code>true</code>/<code>false</code> для каждого элемента (включить/исключить из результатов). Элементы, обработанные до обнаружения дублета, уже были исключены (возвращали <code>false</code>). Ретроактивный сброс вставляет эти более ранние экземпляры, напрямую изменяя результирующий список. Это преднамеренный побочный эффект — фильтр имеет доступ на запись к списку и использует его для компенсации потоковой природы API <code>match()</code>.
+</div>
+
+</body>
+</html>

@@ -1,137 +1,25 @@
-<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>#2281</title>
-<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}.hist{font-size:.85em;color:#555}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}</style></head>
-<body><div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="2280.html">← Prev</a> · <a href="2282.html">Next →</a></div>
-<h1>#2281: <code>SystemStatusRest.kt</code></h1>
-<div class="meta">REST Controller, <code>projectforge-rest/src/main/kotlin/org/projectforge/rest/pub/SystemStatusRest.kt</code> (120 lines)</div>
-<div class="c">Source file: SystemStatusRest.kt - rest controller in ProjectForge REST module.</div>
-<h2>Source Code</h2><pre>/////////////////////////////////////////////////////////////////////////////
-//
-// Project ProjectForge Community Edition
-//         www.projectforge.org
-//
-// Copyright (C) 2001-2026 Micromata GmbH, Germany (www.micromata.com)
-//
-// ProjectForge is dual-licensed.
-//
-// This community edition is free software; you can redistribute it and/or
-// modify it under the terms of the GNU General Public License as published
-// by the Free Software Foundation; version 3 of the License.
-//
-// This community edition is distributed in the hope that it will be useful,
-// but WITHOUT ANY WARRANTY; without even the implied warranty of
-// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General
-// Public License for more details.
-//
-// You should have received a copy of the GNU General Public License along
-// with this program; if not, see http://www.gnu.org/licenses/.
-//
-/////////////////////////////////////////////////////////////////////////////
-
-package org.projectforge.rest.pub
-
-import jakarta.servlet.http.HttpServletRequest
-import org.projectforge.SystemStatus
-import org.projectforge.login.LoginService
-import org.projectforge.rest.config.Rest
-import org.springframework.beans.factory.annotation.Autowired
-import org.springframework.web.bind.annotation.GetMapping
-import org.springframework.web.bind.annotation.RequestMapping
-import org.springframework.web.bind.annotation.RestController
-import java.time.Year
-import java.util.*
-
-
-/**
- * This rest service should be available without login (public).
- */
-@RestController
-@RequestMapping(Rest.PUBLIC_URL)
-class SystemStatusRest {
-    data class SystemData(
-        var appname: String,
-        var version: String,
-        var buildTimestamp: String,
-        var buildDate: String,
-        var releaseYear: String,
-        val scmId: String,
-        val scmIdFull: String,
-        var messageOfTheDay: String? = null,
-        var copyRightYears: String,
-        var logoUrl: String? = null,
-        /**
-         * If given, the client should redirect to this url.
-         */
-        var setupRedirectUrl: String? = null,
-        var startTimeUTC: Date? = null
-    )
-
-    val systemData: SystemData by lazy {
-        // Must be initialized on demand, LogServiceRest is not available on @PostConstruct in test cases.
-        SystemData(
-            appname = systemStatus.appname,
-            version = systemStatus.version,
-            buildTimestamp = systemStatus.buildTimestamp,
-            buildDate = systemStatus.buildDate,
-            releaseYear = systemStatus.releaseYear,
-            scmId = systemStatus.scmId,
-            scmIdFull = systemStatus.scmIdFull,
-            messageOfTheDay = systemStatus.messageOfTheDay,
-            copyRightYears = systemStatus.copyRightYears,
-            logoUrl = LogoServiceRest.logoUrl,
-            setupRedirectUrl = if (systemStatus.setupRequiredFirst == true) "/wa/setup" else null,
-            startTimeUTC = Date(systemStatus.startTimeMillis)
-        )
-    }
-
-    /**
-     * Contains only message of the day without detailed information of version, build-date etc. due to security reasons.
-     */
-    val publicSystemData: SystemData by lazy {
-        // Must be initialized on demand, LogServiceRest is not available on @PostConstruct in test cases.
-        SystemData(
-            appname = systemData.appname,
-            version = "&lt;version&gt;",
-            buildTimestamp = "&lt;date&gt;",
-            buildDate = "&lt;date&gt;",
-            releaseYear = "2001",
-            scmId = "&lt;scmId&gt;",
-            scmIdFull = "&lt;scmIdFull&gt;",
-            messageOfTheDay = systemStatus.messageOfTheDay,
-            copyRightYears = "2001-${Year.now()}",
-            logoUrl = LogoServiceRest.logoUrl,
-            setupRedirectUrl = if (systemStatus.setupRequiredFirst == true) "/wa/setup" else null,
-            startTimeUTC = Date(0L)
-        )
-    }
-
-    @Autowired
-    private lateinit var systemStatus: SystemStatus
-
-    @GetMapping("systemStatus")
-    fun getSystemStatus(request: HttpServletRequest): SystemData {
-        if (systemData.setupRedirectUrl != null
-            &amp;&amp; systemStatus.setupRequiredFirst != true
-            &amp;&amp; systemStatus.updateRequiredFirst != true
-        ) {
-            // Setup was already done:
-            systemData.setupRedirectUrl = null
-            publicSystemData.setupRedirectUrl = null
-        }
-        return if (LoginService.getUserContext(request)?.user != null) {
-            systemData
-        } else {
-            publicSystemData
-        }
-    }
-}</pre>
-<h2>Git History</h2><div class="hist"><pre>868d6abb7 2025 -&gt; 2026
-b131193e7 Member variables refactored by using by lazy {}: DataTransferRestUtils, BirthdayCache, PollAssignementFilter, VacationSendMailService, DBQueryBuilderByCriteria, PFDateTime, PFDay, StringComparator, UserPagesTypeFilter, AbstractPagesRest, LogoServicesRest and SystemStatusRest.
-63081666f Source file headers: 2024-&gt; 2025.
-a73905c14 Fix typos in projectforge*/ directories Found via codespell See c3b0602a893
-77bade6df javax.* -&gt; jakarta.*
-b6092df09 Copyright 2023 -&gt; 2024
-ab45d51fa Copyright 2001-2022 -&gt; 2001-2023.
-1b50e124f WIP: Refactoring of login handling...
-5ffff18f8 WIP: Refactoring of login handling...
-5f7ef41b8 Copyright 2021 -&gt; 2022</pre></div>
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="utf-8"><title>#2281: PostausgangPagesRest.kt</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333}a{color:#0366d6}.meta{background:#f0f0f0;border-radius:6px;padding:1em;margin:1em 0;font-size:.9em}.commentary{margin:.8em 0;background:#fff;padding:.5em 1em;border-radius:6px;border-left:4px solid #ddd;line-height:1.7}table{border-collapse:collapse;width:100%;margin:.8em 0;font-size:.9em}th,td{border:1px solid #ddd;padding:.4em .6em}th{background:#f0f0f0}code{background:#e8e8e8;border-radius:3px;padding:.1em .3em;font-size:.9em}.nav{font-size:.9em;color:#888;margin-bottom:1em}.history{background:#fffbe6;border-radius:6px;padding:1em;margin:1em 0;font-size:.9em;border-left:4px solid #ffc107}</style></head>
+<body><div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="2280.html">← Prev</a> · <a href="2282.html">Next →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-rest/src/main/kotlin/org/projectforge/rest/orga/PostausgangPagesRest.kt" target="_blank" title="View source on GitHub">📄 source</a></div>
+<h1>#2281: <code>PostausgangPagesRest.kt</code></h1>
+<div class="meta"><code>projectforge-rest/src/main/kotlin/org/projectforge/rest/orga/PostausgangPagesRest.kt</code> <p><strong>Path:</strong> <code>projectforge-rest/src/main/kotlin/org/projectforge/rest/orga/PostausgangPagesRest.kt</code> · <strong>Type:</strong> Kotlin class</p><p><strong>Purpose:</strong> Part of the ProjectForge orga module.</p><p><strong>Source:</strong> <a href="https://github.com/micromata/projectforge/blob/develop/projectforge-rest/src/main/kotlin/org/projectforge/rest/orga/PostausgangPagesRest.kt">GitHub</a></p> <span style="color:#888">95 lines total</span></div>
+<div class="history"><table><tr><th>Commit</th><th>Date</th><th>Message</th></tr><tr><td><code>868d6abb</code></td><td></td><td>2025 -&amp;gt; 2026</td></tr>
+<tr><td><code>63081666</code></td><td></td><td>Source file headers: 2024-&amp;gt; 2025.</td></tr>
+<tr><td><code>77bade6d</code></td><td></td><td>javax.* -&amp;gt; jakarta.*</td></tr>
+<tr><td><code>b6092df0</code></td><td></td><td>Copyright 2023 -&amp;gt; 2024</td></tr>
+<tr><td><code>ab45d51f</code></td><td></td><td>Copyright 2001-2022 -&amp;gt; 2001-2023.</td></tr>
+<tr><td><code>44dcb895</code></td><td></td><td>AbstractPagesRest.createListLayout(...) refactored.</td></tr>
+<tr><td><code>db8a6537</code></td><td></td><td>Removed Wicket pages.</td></tr>
+<tr><td><code>807304d5</code></td><td></td><td>PostEingangs- und PostAusgangsbuch als AG grid.</td></tr>
+<tr><td><code>46898f84</code></td><td></td><td>Formatter -&amp;gt; UITableColumn.Formatter</td></tr>
+<tr><td><code>4a8ee9d9</code></td><td></td><td>WIP: AG-Grid, multi-selection</td></tr>
+</table></div>
+<h2>What it does</h2>
+<div class="commentary"><p>REST controller. Package: <code>org.projectforge.rest.orga</code>. Patterns: REST controller, request mapping.</p></div>
+<h2>Key takeaways</h2>
+<div class="commentary"><ul><li><strong>10 commits</strong> (sample): <code>868d6abb</code>: 2025 -&amp;gt; 2026; <code>63081666</code>: Source file headers: 2024-&amp;gt; 2025.; <code>77bade6d</code>: javax.* -&amp;gt; jakarta.*.</li>
+<li><strong>REST endpoint:</strong> Returns SDUI <code>UILayout</code> responses consumed by the React frontend via the dynamic page framework.</li></ul></div>
+<div class="nav" style="margin-top:2em"><a href="2280.html">← Prev</a> · <a href="2282.html">Next →</a></div>
 </body></html>

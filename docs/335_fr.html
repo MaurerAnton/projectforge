@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="fr"><head><meta charset="utf-8"><title>#335: ProjectForgeHomeFinder.kt [FR]</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:2em;color:#444}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.lang{font-size:.85em;color:#888;float:right}.lang a{color:#888;text-decoration:none;padding:0 .3em}.lang a.active{color:#0366d6;font-weight:600;text-decoration:underline}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}</style></head>
+<body><div class="lang"><a href="335.html">EN</a> · <a href="335_de.html">DE</a> · <a href="335_ru.html">RU</a> · <a href="335_fr.html" class="active">FR</a> · <a href="335_es.html">ES</a></div>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← Index des fichiers</a> · <a href="2658.html">← Précédent</a> · <a href="2827.html">Suivant →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-application/src/main/kotlin/org/projectforge/start/ProjectForgeHomeFinder.kt" target="_blank" title="Voir la source sur GitHub">📄 source</a></div>
+<h1>#335: <code>ProjectForgeHomeFinder.kt</code></h1>
+<div class="meta"><code>projectforge-application/src/main/kotlin/org/projectforge/start/ProjectForgeHomeFinder.kt</code> Type : Kotlin · Rôle : Composant · Source : projectforge-application/src/main/kotlin/org/projectforge/start/ProjectForgeHomeFinder.kt <span style="color:#888">403 lignes · 285 code · 88 commentaires · 30 vides</span></div>
+<div class="c">Fichier de code source dans <code>projectforge-application/src/main/kotlin/org/projectforge/start/ProjectForgeHomeFinder.kt</code> contenant du code Kotlin pour la couche Composant.</div>
+<h2>Structure du code</h2>
+<p>Annotations : <code>param</code>, <code>return</code>, <code>JvmStatic</code></p>
+<p>Classes : <code>ProjectForgeHomeFinder</code>, <code>WizardMode</code></p>
+<p>Objets : <code>and</code></p>
+<p>Classes d'énumération : <code>WizardMode</code></p>
+<p>Fonctions (16) : <code>findAndEnsureAppHomeDir</code>, <code>proceedForced</code>, <code>searchAndProceed</code>, <code>proceed</code>, <code>answerValid</code>, <code>saveUserPrefHomeDir</code>, <code>checkAndAdd</code>, <code>checkAndAdd</code>, <code>getExecutableDir</code>, <code>findBaseDirAndAncestors</code>, <code>findBaseDirOnly</code>, <code>checkDirectory</code>, <code>isStandardProjectForgeUserDir</code>, <code>isProjectForgeSourceCodeRepository</code>, <code>isProjectForgeConfigured</code>, <code>isProjectForgeConfigured</code></p>
+<p>Propriétés (28) : <code>userAcceptsGraphicalTerminal</code>, <code>appHomeDir</code>, <code>prefHomeDir</code>, <code>appHomeDir</code>, <code>appHomeDir</code>, <code>setupContext</code>, <code>answer</code>, <code>setupData</code>, <code>userPrefHomeDir</code>, <code>preferences</code>, <code>preferences</code>, <code>savedHomeDir</code>, <code>absolutePath</code>, <code>ENV_PROJECTFORGE_HOME</code>, <code>COMMAND_LINE_VAR_HOME_DIR</code>, <code>DIR_NAMES</code>, <code>homeEnvironmentVariableDefinition</code>, <code>suggestedDirectories</code>, <code>files</code>, <code>canonicalDir</code>, <code>locationUrl</code>, <code>location</code>, <code>file</code>, <code>currentDir</code>, <code>recursiveCounter</code>...</p>
+<p>Importations : 17 paquets</p>
+<p>Paquet : <code>org.projectforge.start</code></p>
+<h2>Code source (abrégé)</h2>
+<pre>
+package org.projectforge.start
+
+import mu.KotlinLogging
+import org.apache.commons.lang3.StringUtils
+import org.apache.commons.lang3.SystemUtils
+import org.projectforge.ProjectForgeApp
+import org.projectforge.common.CanonicalFileUtils
+import org.projectforge.common.EmphasizedLogSupport
+import org.projectforge.setup.ProjectForgeInitializer.initialize
+import org.projectforge.setup.SetupContext
+import org.projectforge.setup.SetupData
+import org.projectforge.setup.wizard.lanterna.LantSetupWizard.Companion.run
+import org.projectforge.setup.wizard.swing.SwingSetupWizard.Companion.run
+import java.awt.GraphicsEnvironment
+import java.io.File
+import java.io.IOException
+import java.net.URI
+import java.net.URISyntaxException
+import java.util.prefs.Preferences
+
+private val log = KotlinLogging.logger {}
+
+/**
+ * Helper pour trouver le répertoire personnel de ProjectForge :&lt;br&gt;&lt;/br&gt;
+ *
+ *  1. Créez ProjectForge en tant que répertoire de premier niveau de votre répertoire personnel : &#x27;$HOME/ProjectForge&#x27;, ou
+ *  1. créez un répertoire et placez le fichier jar quelque part à l&#x27;intérieur de ce répertoire. ProjectForge détecte le dossier relatif au jar exécuté, ou
+ *  1. créez un répertoire et définissez-le comme paramètre de ligne de commande : java -Dhome.dir=votrerépertoire -jar ..., ou
+ *  1. créez un répertoire et définissez-le comme variable d&#x27;environnement système $PROJECTFORGE_HOME.
+ *
+ */
+class ProjectForgeHomeFinder {
+  private var userAcceptsGraphicalTerminal: WizardMode? = null
+
+  private enum class WizardMode { DESKTOP, CONSOLE, NONE }
+
+  /**
+   * Essaie de trouver le répertoire personnel de ProjectForge. S&#x27;il n&#x27;est pas trouvé ou n&#x27;est pas initialisé, un assistant d&#x27;installation est démarré.
+   *
+   * @return Le répertoire personnel. S&#x27;il n&#x27;est pas trouvé, un System.exit() est effectué et des informations utilisateur sont affichées sur la marche à suivre.
+   */
+  fun findAndEnsureAppHomeDir(): File? {
+    // Essayer le répertoire défini via la ligne de commande : -Dhome.dir :
+    var appHomeDir = proceedForced(
+      System.getProperty(COMMAND_LINE_VAR_HOME_DIR),
+      &quot;Le répertoire personnel de ProjectForge est défini comme paramètre de ligne de commande, mais n&#x27;est pas encore initialisé : -D&quot;
+          + COMMAND_LINE_VAR_HOME_DIR + &quot;=\$APP_HOME_DIR&quot;
+    )
+    if (appHomeDir != null) return appHomeDir
+
+    // Essayer le répertoire défini via la ligne de commande : -Dprojectforge.base.dir :
+    appHomeDir = proceedForced(
+      System.getProperty(ProjectForgeApp.CONFIG_PARAM_BASE_DIR),
+      &quot;Le répertoire personnel de ProjectForge est défini comme paramètre de ligne de commande, mais n&#x27;est pas encore initialisé : -D&quot;
+          + ProjectForgeApp.CONFIG_PARAM_BASE_DIR + &quot;=\$APP_HOME_DIR&quot;
+    )
+    if (appHomeDir != null) return appHomeDir
+
+    // Essayer le répertoire défini via la variable d&#x27;environnement :
+    appHomeDir = proceedForced(
+      System.getenv(ENV_PROJECTFORGE_HOME),
+      &quot;Le répertoire personnel de ProjectForge est défini comme variable d&#x27;environnement système $&quot; + ENV_PROJECTFORGE_HOME + &quot; : \$APP_HOME_DIR&quot;
+    )
+    if (appHomeDir != null) return appHomeDir
+
+    // Essayer le répertoire défini via la variable de préférences utilisateur :
+    val prefHomeDir = userPrefHomeDir
+    if (prefHomeDir != null) {
+      appHomeDir = proceed(
+        File(prefHomeDir),
+        &quot;Le répertoire personnel de ProjectForge est défini comme préférence utilisateur java &quot; + ENV_PROJECTFORGE_HOME + &quot; : \$APP_HOME_DIR&quot;,
+        false
+      )
+      if (appHomeDir != null) return appHomeDir
+    }
+
+    // Essayer le répertoire où se trouve le jar exécutable :
+    appHomeDir = searchAndProceed(
+      File(System.getProperty(&quot;user.home&quot;)),
+      &quot;Le répertoire personnel de ProjectForge trouvé dans le répertoire personnel de l&#x27;utilisateur : \$APP_HOME_DIR&quot;,
+      false
+    )
+    if (appHomeDir != null) return appHomeDir
+
+    // Essayer le répertoire où se trouve le jar exécutable :
+    appHomeDir = searchAndProceed(
+      getExecutableDir(true),
+      &quot;Le répertoire personnel de ProjectForge trouvé relativement au jar exécutable : \$APP_HOME_DIR&quot;,
+      false
+    )
+    if (appHomeDir != null) return appHomeDir
+
+    // Essayer le répertoire courant (lancer l&#x27;assistant, car c&#x27;est la dernière chance de le faire) :
+    appHomeDir = searchAndProceed(
+      File(&quot;.&quot;),
+      &quot;&quot;&quot;Répertoire personnel de ProjectForge non trouvé, recherché dans :
+  ${StringUtils.join(suggestedDirectories, &quot;\n  &quot;)}&quot;&quot;&quot;,
+      true
+    )
+    if (appHomeDir != null) return appHomeDir
+    ProjectForgeApplication.giveUpAndSystemExit(&quot;Aucun répertoire personnel de ProjectForge trouvé ou configuré, abandon :-(&quot;)
+    return null // inaccessible, car SystemExit() a été appelé avant.
+  }
+
+  /**
+   *
+   *  1.
+   * Si le appHomeDir donné est nul ou vide, null est retourné.
+   *
+   *  1.
+   * Vérifie si le appHomeDir donné existe déjà. Si c&#x27;est le cas, le appHomeDir est retourné comme objet File et ProjectForge
+   * doit continuer la phase de démarrage avec ce répertoire.
+   *
+   *  1.
+   * Si le appHomeDir donné n&#x27;existe pas ou n&#x27;est pas déjà initialisé, l&#x27;assistant d&#x27;installation et l&#x27;installation sont démarrés.
+   * Si l&#x27;utilisateur abandonne ou si une erreur survient, System.exit(1) est appelé, sinon le fichier avec le nouveau répertoire
+   * personnel installé est retourné.
+   *
+   *
+// ... (tronqué, total 381 lignes)</pre>
+
+<h2>Historique Git</h2><div class="hist"><pre>868d6abb7 2025 -> 2026
+63081666f En-têtes des fichiers source : 2024 -> 2025.
+b6092df09 Copyright 2023 -> 2024
+ab45d51fa Copyright 2001-2022 -> 2001-2023.
+7fe9b2c1d Nouvelle bibliothèque jdbc postgresql : 42.3.4 -> 42.5.0</pre></div>
+</body></html>

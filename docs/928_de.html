@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>#928: EmployeeScriptingService.kt [DE]</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:2em;color:#444}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}</style>
+</head>
+<body>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← Dateiindex</a> · <a href="927.html">← Vorherige</a> · <a href="929.html">Nächste →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/kotlin/org/projectforge/business/fibu/EmployeeScriptingService.kt" target="_blank" title="Quellcode auf GitHub anzeigen">📄 Quelle</a></div>
+<h1>#928: <code>EmployeeScriptingService.kt</code></h1>
+<div class="meta"><code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/EmployeeScriptingService.kt</code> Typ: Scripting-Proxy-Dienst · Zweck: Schreibgeschützter Wrapper um EmployeeService für Groovy/Kotlin-Script-Zugriff · Pfad: <code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/EmployeeScriptingService.kt</code> <span style="color:#888">198 Zeilen · 66 Code · 117 Kommentare · 15 leer</span></div>
+<div class="c">Scripting-Proxy, der <code>EmployeeService</code> kapselt und <strong>schreibgeschützten</strong> Zugriff auf die Mitarbeiter-Geschäftslogik für Groovy/Kotlin-Scripts bereitstellt. Verfügbar in Scripts als: <code>employeeService</code>. Stellt zeitabhängige Attributabfragen, Aktivitätsstatusprüfungen, Mitarbeitersuche und monatliche Berichtserstellung bereit. Dies ist das neuere, bevorzugte Scripting-Interface im Vergleich zu <code>EmployeeScriptingDao</code>.</div>
+
+<h2>Architektur &amp; Design</h2>
+
+<h3>Delegationsmuster</h3>
+<p>Jede Methode delegiert direkt an die zugrunde liegende <code>EmployeeService</code>-Instanz (konstruktorinjiziert als <code>__employeeService</code>). Der Proxy folgt dem gleichen Muster wie <code>ScriptingDao</code>, kapselt jedoch einen Dienst anstelle eines DAO – er bietet Geschäftslogik und nicht nur Entitätszugriff.</p>
+
+<h3>Bereitgestellte Methoden</h3>
+<table>
+<tr><th>Methode</th><th>Zugrunde liegender Dienstaufruf</th><th>Zweck</th></tr>
+<tr><td><code>getWeeklyWorkingHours(employee)</code></td><td><code>EmployeeService.getWeeklyWorkingHours(employee)</code></td><td>Wochenstunden, gültig heute</td></tr>
+<tr><td><code>getWeeklyWorkingHours(employee, validAtDate, checkAccess)</code></td><td><code>EmployeeService.getWeeklyWorkingHours(employee, validAtDate, checkAccess)</code></td><td>Wochenstunden zu einem historischen Datum – KRITISCH für Scripts, die historische Daten benötigen</td></tr>
+<tr><td><code>getAnnualLeaveDays(employee)</code></td><td><code>EmployeeService.getAnnualLeaveDays(employee)</code></td><td>Jahresurlaub, gültig heute</td></tr>
+<tr><td><code>getAnnualLeaveDays(employee, validAtDate, checkAccess)</code></td><td><code>EmployeeService.getAnnualLeaveDays(employee, validAtDate, checkAccess)</code></td><td>Jahresurlaub zu einem historischen Datum</td></tr>
+<tr><td><code>isEmployeeActive(employee, showRecentlyLeavers)</code></td><td><code>EmployeeService.isEmployeeActive()</code></td><td>Prüfung des Aktivitätsstatus</td></tr>
+<tr><td><code>getEmployeeStatus(employee, checkAccess)</code></td><td><code>EmployeeService.getEmployeeStatus()</code></td><td>Aktueller <code>EmployeeStatus</code>-Enum</td></tr>
+<tr><td><code>selectAllActive(checkAccess, showRecentLeft)</code></td><td><code>EmployeeService.selectAllActive()</code></td><td>Alle aktiven Mitarbeiter</td></tr>
+<tr><td><code>findByUserId(userId)</code></td><td><code>EmployeeService.findByUserId()</code></td><td>Suche nach Benutzer-ID</td></tr>
+<tr><td><code>findByStaffnumber(staffnumber)</code></td><td><code>EmployeeService.findByStaffnumber()</code></td><td>Suche nach Personalnummer (Int- und String-Überladungen)</td></tr>
+<tr><td><code>selectAllValidSinceAttrs(employee, type, deleted, checkAccess)</code></td><td><code>EmployeeService.selectAllValidSinceAttrs()</code></td><td>Alle zeitabhängigen Attribute mit optionaler Filterung</td></tr>
+<tr><td><code>getReportOfMonth(year, month, user)</code></td><td><code>EmployeeService.getReportOfMonth()</code></td><td>Monatlicher Mitarbeiterbericht mit aggregierten Zeiterfassungsdaten</td></tr>
+</table>
+
+<h3>Design-Entscheidungen</h3>
+<p>Scripts benötigen Zugriff auf Geschäftslogik wie „Wochenstunden für Mitarbeiter zum Datum X abrufen“ oder „Ist dieser Mitarbeiter aktiv?“ – nicht nur CRUD. Dieser Proxy stellt nur schreibgeschützte Methoden bereit. Scripts sollten über dieses Interface niemals Daten verändern; Mutationen erfolgen über dedizierte Scripting-DAOs.</p>
+
+<h2>Git-Verlauf</h2>
+<div class="hist"><pre>8d821622d EmployeeScriptingService.getReportOfMonth
+b589ea0c1 EmployeeScriptingService.kt: selectAllValidSinceAttrs hinzugefügt.
+10d4e0aad EmployeeScriptingService für Script-Zugriff auf Mitarbeiterdaten hinzugefügt</pre></div>
+</body>
+</html>

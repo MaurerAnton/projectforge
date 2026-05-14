@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="de"><head><meta charset="utf-8"><title>#1419 [DE]</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:2em;color:#444}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}</style></head>
+<body><div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← Dateiindex</a> · <a href="1418.html">← Zurück</a> · <a href="1420.html">Weiter →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/kotlin/org/projectforge/security/My2FAService.kt" target="_blank" title="Quellcode auf GitHub ansehen">📄 Quelle</a></div>
+<h1>#1419: <code>My2FAService.kt</code></h1>
+<div class="meta"><code>projectforge-business/src/main/kotlin/org/projectforge/security/My2FAService.kt</code> Service, projectforge-business/src/main/kotlin/org/projectforge/security/My2FAService.kt <span style="color:#888">253 Zeilen · 177 Code · 53 Kommentare · 23 leer</span></div>
+<div class="c">Zentraler Zwei-Faktor-Authentifizierungsdienst: Validiert OTP-Codes über Authenticator-App (TOTP), SMS oder E-Mail mit Brute-Force-Schutz.</div>
+
+<h2>Architektur</h2>
+<p><code>My2FAService</code> ist ein <code>@Service</code>, der die mehrkanalige 2FA-Verifizierung orchestriert. Er verbindet <code>UserAuthenticationsService</code> (Token-Speicher), <code>SmsSenderConfig</code> (SMS-Verfügbarkeitsprüfung), <code>My2FABruteForceProtection</code> (Ratenbegrenzung), <code>My2FARequestConfiguration</code> (gruppenbasierte Deaktivierung) und <code>WebAuthnSupport</code> (WebAuthn-Verfügbarkeit).</p>
+
+<h3>OTP-Validierungspipeline</h3>
+<ol>
+<li><code>validateOTP(code, *expectedToken)</code> — Primärer Einstiegspunkt. Akzeptiert einen 6-stelligen Code und ein oder mehrere erwartete Token (von SMS oder E-Mail).</li>
+<li><code>preCheck(code)</code> — Gibt BLOCKED zurück, wenn der Brute-Force-Schutz aktiv ist, FAILED, wenn der Code zu kurz ist (&lt;4 Zeichen).</li>
+<li>Vergleicht den Code mit jedem <code>expectedToken</code> (SMS-/E-Mail-Token). Bei Übereinstimmung: ruft <code>bruteForceProtection.registerOTPSuccess()</code> auf und aktualisiert den Zeitstempel <code>lastSuccessful2FA</code>.</li>
+<li>Wenn kein SMS-/E-Mail-Token übereinstimmt, fällt es auf <code>_validateAuthenticatorOTP(code)</code> zurück, das gegen das gespeicherte TOTP-Token über <code>TimeBased2FA.standard.validate()</code> validiert.</li>
+<li>Bei Fehlschlag: <code>bruteForceProtection.registerOTPFailure()</code> erhöht den Fehlerzähler.</li>
+</ol>
+
+<h3>Brute-Force-Schutz</h3>
+<p>Erfolgreiche Registrierungen setzen den Zähler zurück. Fehlschläge erhöhen ihn. <code>getBlockedResult()</code> gibt null oder ein BLOCKED-OTPCheckResult mit einer lokalisierten Nachricht zurück. Die Vorprüfung begrenzt die minimale Codelänge (4), um unnötiges Brute-Force-Zählen bei offensichtlich ungültigen Eingaben zu vermeiden.</p>
+
+<h3>2FA-Statusprüfungen</h3>
+<ul>
+<li><code>userConfigured2FA</code> — Wahr, wenn der Benutzer mindestens eine 2FA-Methode konfiguriert hat (Authenticator-App-Token, Mobiltelefon für SMS oder WebAuthn-Anmeldedaten).</li>
+<li><code>smsConfigured</code> — Wahr, wenn der SMS-Sender konfiguriert ist oder sich das System im Entwicklungsmodus befindet.</li>
+<li><code>checklastSuccessful2FA(timePeriod, unit, user)</code> — Prüft, ob die letzte erfolgreiche 2FA innerhalb eines bestimmten Zeitraums lag (unterstützt MINUTEN, STUNDEN, TAGE).</li>
+<li><code>isMail2FADisabledForUser(userContext)</code> — Prüft, ob der Benutzer zu einer Gruppe gehört, die in <code>My2FARequestConfiguration.disableEmail2FAForGroups</code> aufgeführt ist.</li>
+</ul>
+
+<h3>Gruppenbasierte 2FA-Deaktivierung</h3>
+<p><code>setDisabled(groupNames)</code> parst eine durch Semikolon/Komma/Doppelpunkt getrennte Zeichenfolge von Gruppennamen aus der Konfiguration, löst sie gegen <code>GroupService.allGroups</code> auf und befüllt <code>mail2FADisabledGroupIds</code>. Benutzer in diesen Gruppen überspringen die E-Mail-basierte 2FA. Dies wird bei <code>@PostConstruct</code> aus <code>my2FARequestConfiguration.disableEmail2FAForGroups</code> konfiguriert.</p>
+
+<h2>Designbegründung</h2>
+<p>Die mehrkanalige OTP-Validierung (SMS, E-Mail, Authenticator-App) ist als Fallback-Kette implementiert: Externe Token werden zuerst geprüft, dann TOTP. Dies ermöglicht, dass ein einzelner <code>validateOTP</code>-Aufruf unabhängig von der Zustellungsmethode funktioniert. Der Brute-Force-Schutz wird auf OTP-Ebene (nicht auf Login-Ebene) angewendet, sodass jeder 2FA-Versuch unabhängig ratenbegrenzt wird. Die gruppenbasierte Deaktivierungsfunktion unterstützt organisatorische Richtlinien, bei denen bestimmte Benutzer (z. B. Administratoren mit Hardware-Token) keine E-Mail-2FA benötigen. Der Zeitstempel <code>lastSuccessful2FA</code> ermöglicht das Zwischenspeichern von 2FA auf Sitzungsebene (keine erneute Aufforderung, wenn kürzlich verifiziert).</p>
+
+<h2>Git-Verlauf</h2><div class="hist"><pre>868d6abb7 2025 -> 2026
+600951ee0 2025 -> 2026
+63081666f Quellcode-Dateiköpfe: 2024 -> 2025.
+199c26801 Quellcode-Dateiköpfe: 2024 -> 2025.
+67805f2fc ThreadLocalUserContext.user -> loggedInUser
+58ffda82b ThreadLocalUserContext.user -> loggedInUser
+4c04cfd65 MAJOR-CHANGE! Migration von Integer-IDs zu Long-IDs.
+fd13c259a MAJOR-CHANGE! Migration von Integer-IDs zu Long-IDs.
+4f5a458c9 Migration läuft...
+635197c0b Migration läuft...
+77bade6df javax.* -> jakarta.*
+3afa03fb1 javax.* -> jakarta.*
+b6092df09 Copyright 2023 -> 2024
+9a0609dd1 Copyright 2023 -> 2024
+ab45d51fa Copyright 2001-2022 -> 2001-2023.
+29815da21 Copyright 2001-2022 -> 2001-2023.
+38bec971a ThreadLocal -> Kotlin
+19bb46d57 ThreadLocal -> Kotlin
+cb605ebde 2FA: WebAuthn nicht experimentell; mindestens eine 2FA erforderlich.
+f988a9b1b 2FA: WebAuthn nicht experimentell; mindestens eine 2FA erforderlich.
+</pre></div>
+</body></html>

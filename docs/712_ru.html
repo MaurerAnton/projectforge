@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>#712 [RU]</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:2em;color:#444}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}.warn{background:#fff3cd;border-left:3px solid #ffc107;padding:.5em 1em;margin:1em 0}.tip{background:#d4edda;border-left:3px solid #28a745;padding:.5em 1em;margin:1em 0}</style>
+</head>
+<body>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Индекс</a> · <a href="file-index.html">← Индекс файлов</a> · <a href="711.html">← Назад</a> · <a href="713.html">Вперёд →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/java/org/projectforge/framework/persistence/xstream/XStreamMarshallingStrategy.java" target="_blank" title="Просмотреть исходник на GitHub">📄 исходник</a></div>
+<h1>#712: <code>XStreamMarshallingStrategy.java</code></h1>
+<div class="meta"><code>projectforge-business/src/main/java/org/projectforge/framework/persistence/xstream/XStreamMarshallingStrategy.java</code> Стратегия маршалинга XStream — фабрика, которая подключает Hibernate-прокси-совместимый XPath-маршалинг в конвейер древовидной сериализации XStream, <code>projectforge-business/src/main/java/org/projectforge/framework/persistence/xstream/XStreamMarshallingStrategy.java</code> <span style="color:#888">49 строк · 18 кода · 25 комментариев · 6 пустых</span></div>
+<div class="c">Расширяет <code>ReferenceByXPathMarshallingStrategy</code> от XStream, чтобы служить верхнеуровневым связующим звеном, которое соединяет Hibernate-прокси-совместимый маршаллер с движком сериализации XStream. Это класс стратегии, который XStream настроен использовать — он переопределяет фабричный метод <code>createMarshallingContext()</code>, чтобы заменить стандартный XPath-маршаллер на <a href="707.html">HibernateProxyXPathMarshaller</a>, внедряя осведомлённость о Hibernate-прокси в каждую операцию сериализации XStream. Это единственная точка конфигурации, которая делает весь связующий слой XStream+Hibernate работоспособным. Без этой стратегии ни один из классов конвертера, маппера или маршаллера в этом пакете не был бы активирован во время сериализации XStream.</div>
+
+<h2>Архитектура</h2>
+
+<h3>Иерархия классов</h3>
+<pre>MarshallingStrategy (интерфейс)
+  └── AbstractTreeMarshallingStrategy
+       ├── ReferenceByXPathMarshallingStrategy  (XPath-обработка циклических ссылок)
+       │    └── XStreamMarshallingStrategy       (этот класс — подставляет HibernateProxyXPathMarshaller)
+       └── ReferenceByIdMarshallingStrategy      (ID/IDREF-обработка циклических ссылок)
+            └── ProxyIdRefMarshallingStrategy     (<a href="709.html">#709</a> — подставляет ProxyIdRefMarshaller)</pre>
+
+<h3>Конструктор</h3>
+<pre>public XStreamMarshallingStrategy(int mode) {
+    super(mode);
+}</pre>
+<p>Принимает константу режима XPath-ссылок (<code>RELATIVE</code>, <code>ABSOLUTE</code>, <code>SINGLE_NODE</code> и т.д.) и передаёт её в суперкласс. Режим управляет тем, как генерируются XPath-выражения для обратных ссылок в циклических графах сущностей.</p>
+
+<h3>createMarshallingContext() — Фабричный метод</h3>
+<pre>@Override
+protected TreeMarshaller createMarshallingContext(
+    HierarchicalStreamWriter writer,
+    ConverterLookup converterLookup,
+    Mapper mapper)
+{
+    return new HibernateProxyXPathMarshaller(writer, converterLookup, mapper, RELATIVE);
+}</pre>
+
+<p>Это единственный переопределённый метод — классический шаблон «Template Method». Суперкласс <code>ReferenceByXPathMarshallingStrategy</code> вызывает <code>createMarshallingContext()</code> всякий раз, когда ему требуется <code>TreeMarshaller</code> для сериализации графа объектов. Вместо возврата стандартного <code>ReferenceByXPathMarshaller</code> эта переопределённая версия возвращает экземпляр <a href="707.html">HibernateProxyXPathMarshaller</a>.</p>
+
+<div class="warn"><strong>Жёстко заданный режим RELATIVE:</strong> Несмотря на то, что конструктор принимает параметр <code>mode</code>, переопределённый <code>createMarshallingContext()</code> жёстко задаёт <code>RELATIVE</code> вместо использования режима экземпляра. Это означает, что параметр конструктора фактически игнорируется при создании маршаллера. Если бы потребовался другой режим XPath, этот класс нужно было бы модифицировать или создать подкласс с другим переопределением.</div>
+
+<h2>Точки интеграции</h2>
+<ul>
+  <li><strong>Конфигурация XStream:</strong> Устанавливается на экземпляр XStream через <code>xstream.setMarshallingStrategy(new XStreamMarshallingStrategy(ReferenceByXPathMarshallingStrategy.RELATIVE))</code>. Обычно это делается один раз во время запуска приложения при настройке экземпляра XStream для экспорта XML.</li>
+  <li><strong>Создаёт:</strong> <a href="707.html">HibernateProxyXPathMarshaller</a> в качестве маршаллера для всех операций сериализации.</li>
+  <li><strong>Родственная стратегия:</strong> <a href="709.html">ProxyIdRefMarshallingStrategy</a> — обеспечивает тот же прокси-совместимый маршалинг, но с использованием атрибутов ID/IDREF вместо XPath-ссылок. Обе стратегии служат одной цели, но используют разные механизмы XML-ссылок. Приложение может выбирать между ними в зависимости от предпочтений формата XML.</li>
+  <li><strong>Ссылка на JIRA XSTR-226:</strong> Комментарий в исходнике ссылается на issue Codehaus JIRA, в котором документирована исходная несовместимость XStream/Hibernate прокси.</li>
+</ul>
+
+<h2>Сравнение стратегий: XPath против ID/IDREF</h2>
+<table>
+<tr><th></th><th><code>XStreamMarshallingStrategy</code> (этот класс)</th><th><a href="709.html">ProxyIdRefMarshallingStrategy</a></th></tr>
+<tr><td>Механизм ссылок</td><td>XPath-выражения (например, <code>reference="../../task"</code>)</td><td>Атрибуты ID/IDREF (например, <code>id="1"</code>, <code>reference="1"</code>)</td></tr>
+<tr><td>Зависит от структуры документа</td><td>Да — XPath-пути ломаются при изменении структуры XML</td><td>Нет — ID не зависят от структуры документа</td></tr>
+<tr><td>Человекочитаемость</td><td>Ниже — XPath-пути структурны, а не семантичны</td><td>Выше — последовательные числовые ID легко отслеживать</td></tr>
+<tr><td>Распаковка прокси</td><td>Только в маршаллере (<a href="707.html">HibernateProxyXPathMarshaller</a>)</td><td>В маршаллере (<a href="708.html">ProxyIdRefMarshaller</a>) + удаление CGLIB</td></tr>
+<tr><td>Поддержка Spring CGLIB</td><td>Нет</td><td>Да (удаляет прокси <code>Enhancer</code>)</td></tr>
+</table>
+
+<h2>Как работает весь связующий слой</h2>
+<p>Когда XStream сериализует граф JPA-сущностей в ProjectForge, выполняется следующий конвейер:</p>
+<ol>
+  <li><strong><code>XStreamMarshallingStrategy</code></strong> (этот класс) вызывается для создания контекста маршалинга.</li>
+  <li>Он создаёт экземпляр <strong><a href="707.html">HibernateProxyXPathMarshaller</a></strong> в качестве древовидного маршаллера.</li>
+  <li>По мере того как маршаллер обходит граф объектов, он вызывает <code>convertAnother()</code>, который распаковывает экземпляры <strong>HibernateProxy</strong> перед делегированием отслеживанию ссылок XStream.</li>
+  <li>Когда XStream требуется преобразовать конкретный класс, <strong><a href="704.html">HibernateMapper</a></strong> разрешает имя класса (заменяя имена прокси на реальные имена сущностей, а имена Hibernate-коллекций — на имена JDK-коллекций).</li>
+  <li>Когда XStream встречает <code>PersistentCollection</code>, <strong><a href="702.html">HibernateCollectionConverter</a></strong> принудительно инициализирует её и делегирует соответствующему конвертеру JDK-коллекций.</li>
+  <li>Когда XStream встречает <code>HibernateProxy</code>, <strong><a href="705.html">HibernateProxyConverter</a></strong> распаковывает его до реальной сущности перед сериализацией.</li>
+</ol>
+
+<h3>Проектные решения и «подводные камни»</h3>
+<ul>
+  <li><strong>Шаблон «Template Method»:</strong> Стратегия использует шаблон «Template Method» — суперкласс определяет алгоритм (как маршалировать граф объектов), а этот подкласс предоставляет конкретную реализацию <code>TreeMarshaller</code>. Это каноническая точка расширения XStream для настройки поведения маршалинга.</li>
+  <li><strong>Жёстко заданный режим RELATIVE:</strong> Жёстко заданный <code>RELATIVE</code> в <code>createMarshallingContext()</code> означает, что параметр <code>mode</code> конструктора является рудиментарным. Вероятно, это оплошность или осознанное решение, гарантирующее, что прокси-совместимый маршалинг всегда использует относительные XPath, независимо от того, что передают вызывающие стороны. На практике <code>RELATIVE</code> является наиболее надёжным режимом для графов сущностей, поскольку иерархии сущностей могут меняться при рефакторинге.</li>
+  <li><strong>Минимальная реализация:</strong> Этот класс состоит всего из ~20 строк — реальная работа делегируется <a href="707.html">HibernateProxyXPathMarshaller</a>. Это хороший пример принципа единственной ответственности: задача стратегии — связывать компоненты вместе, а не реализовывать логику маршалинга.</li>
+  <li><strong>Конвертеры и мапперы здесь не регистрируются:</strong> Эта стратегия работает только с маршаллером. Конвертеры (<a href="702.html">HibernateCollectionConverter</a>, <a href="705.html">HibernateProxyConverter</a>) и мапперы (<a href="703.html">HibernateCollectionsMapper</a>, <a href="704.html">HibernateMapper</a>) регистрируются отдельно на экземпляре XStream. Стратегия ничего о них не знает — они работают независимо на своих уровнях.</li>
+</ul>
+
+<h2>История Git</h2><div class="hist"><pre>868d6abb7 2025 -> 2026
+63081666f Заголовки исходных файлов: 2024-> 2025.
+b6092df09 Copyright 2023 -> 2024
+ab45d51fa Copyright 2001-2022 -> 2001-2023.
+5f7ef41b8 Copyright 2021 -> 2022
+ceb63e8a1 Заголовок исходного кода: (C) 2001-2021.
+7c79f1922 Copyright заголовка исходника -> 2020.
+dd5ca38ac Copyright всех заголовков java-файлов обновлён или создан.
+9ebb88522 Первоначальный коммит</pre></div>
+</body>
+</html>

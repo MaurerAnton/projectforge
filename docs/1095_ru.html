@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>1095: ICalGenerator.kt [RU]</title>
+<style>
+body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}
+h1{border-bottom:2px solid #333;padding-bottom:.3em}
+h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}
+h3{margin-top:1.5em;color:#444;font-size:1em}
+a{color:#0366d6}
+.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}
+.nav{font-size:.9em;color:#888;margin-bottom:1em}
+.lang{font-size:.85em;color:#888;float:right}
+.lang a{color:#888;text-decoration:none;padding:0 .3em}
+.lang a.active{color:#0366d6;font-weight:600;text-decoration:underline}
+.meta{font-size:.9em;margin:1em 0;color:#555}
+code{background:#f0f0f0;padding:0 .2em;font-size:.93em}
+pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}
+table{border-collapse:collapse;width:100%;margin:1em 0}
+th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}
+th{background:#f5f5f5;font-weight:600}
+.hist{font-size:.85em;color:#555}
+pre.diff{background:#fff;font-size:.82em;max-height:300px;overflow-y:auto}
+</style>
+</head>
+<body>
+<div class="lang"><a href="1095.html">EN</a> · <a href="1095_de.html">DE</a> · <a href="1095_ru.html" class="active">RU</a> · <a href="1095_fr.html">FR</a> · <a href="1095_es.html">ES</a></div>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Индекс</a> · <a href="file-index.html">← Индекс файлов</a> · <a href="3043.html">← Предыдущий</a> · <a href="1799.html">Следующий →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/kotlin/org/projectforge/business/teamcal/ical/ICalGenerator.kt" target="_blank" title="Просмотреть исходный код на GitHub">📄 исходник</a></div>
+<h1>#1095: <code>ICalGenerator.kt</code></h1>
+<div class="meta"><code>projectforge-business/src/main/kotlin/org/projectforge/business/teamcal/ical/ICalGenerator.kt</code> Класс Kotlin, <code>projectforge-business/src/main/kotlin/org/projectforge/business/teamcal/ical/ICalGenerator.kt</code> <span style="color:#888">118 строк · 71 код · 33 комментария · 14 пустых</span></div>
+<div class="c"><strong>Назначение:</strong> Исходный файл: business/teamcal/ical/ICalGenerator.kt. ICalGenerator.kt является частью приложения управления проектами с открытым исходным кодом ProjectForge.</div>
+<h2>Исходный код (первые 100 строк)</h2>
+<pre>/////////////////////////////////////////////////////////////////////////////
+//
+// Project ProjectForge Community Edition
+//         www.projectforge.org
+//
+// Copyright (C) 2001-2026 Micromata GmbH, Germany (www.micromata.com)
+//
+// ProjectForge распространяется по двойной лицензии.
+//
+// Эта версия для сообщества является бесплатным программным обеспечением; вы можете распространять и/или
+// изменять её в соответствии с условиями Стандартной общественной лицензии GNU (GNU General Public License) в том виде,
+// в каком она опубликована Фондом свободного программного обеспечения; версия 3 Лицензии.
+//
+// Эта версия для сообщества распространяется в надежде, что она будет полезной,
+// но БЕЗ КАКИХ-ЛИБО ГАРАНТИЙ; даже без подразумеваемой гарантии
+// КОММЕРЧЕСКОЙ ЦЕННОСТИ или ПРИГОДНОСТИ ДЛЯ ОПРЕДЕЛЁННОЙ ЦЕЛИ. См. Стандартную общественную лицензию GNU
+// для получения более подробной информации.
+//
+// Вы должны были получить копию Стандартной общественной лицензии GNU вместе
+// с этой программой; если нет, см. http://www.gnu.org/licenses/.
+//
+/////////////////////////////////////////////////////////////////////////////
+
+package org.projectforge.business.teamcal.ical
+
+import mu.KotlinLogging
+import net.fortuna.ical4j.data.CalendarOutputter
+import net.fortuna.ical4j.model.Calendar
+import net.fortuna.ical4j.model.component.VEvent
+import org.projectforge.ProjectForgeVersion
+import org.projectforge.business.calendar.event.model.ICalendarEvent
+import org.projectforge.business.teamcal.event.model.TeamEventDO
+import java.io.ByteArrayOutputStream
+import java.io.IOException
+import java.io.OutputStream
+import java.time.LocalDate
+import java.util.*
+
+private val log = KotlinLogging.logger {}
+
+/**
+ * Записывает события в формате ics.
+ */
+class ICalGenerator @JvmOverloads constructor(val exportVAlarms: Boolean = true, val editable: Boolean = false) {
+    var empty: Boolean = true
+        private set
+
+    // Создание объекта календаря
+    private val calendar = Calendar()
+        .withProdId("-//${ProjectForgeVersion.APP_ID} ${ProjectForgeVersion.VERSION_NUMBER}//iCal Generator//EN")
+        .withDefaults() // add(GREGORIAN).add(VERSION_2_0)
+
+    /**
+     * Гарантирует наличие хотя бы одного события настройки.
+     */
+    fun ensureNotEmpty() {
+        if (empty) {
+            calendar.withComponent(VEventUtils.createSetupEvent())
+        }
+    }
+
+    fun add(events: List&lt;TeamEventDO&gt;) {
+        // Преобразование TeamEventDO в VEvent и добавление в календарь
+        events.forEach { event -&gt;
+            add(event)
+        }
+    }
+
+    fun add(event: ICalendarEvent) {
+        val vEvent = VEventUtils.convertToVEvent(event)
+        // Добавление события в календарь
+        calendar.withComponent(vEvent)
+        empty = false
+    }
+
+    fun addAllDayEvent(startDay: LocalDate, endDay: LocalDate?, title: String, uid: String): VEvent {
+        val vEvent = VEventUtils.createAllDayEvent(startDay, endDay ?: startDay, title, uid)
+        // Добавление события в календарь
+        calendar.withComponent(vEvent)
+        empty = false
+        return vEvent
+    }
+
+    fun addEvent(startDate: Date, endDate: Date, title: String, uid: String): VEvent {
+        val vEvent = VEventUtils.createEvent(startDate, endDate, title, uid)
+        // Добавление события в календарь
+        calendar.withComponent(vEvent)
+        empty = false
+        return vEvent
+    }
+
+    val asByteArray: ByteArray?
+        get() {
+            try {
+                ByteArrayOutputStream().use { stream -&gt;
+                    val outputter = CalendarOutputter()
+                    outputter.output(this.calendar.fluentTarget, stream)
+                    return stream.toByteArray()
+                }
+            } catch (ex: IOException) {</pre>
+<h2>История Git</h2>
+<div class="hist">
+<pre>868d6abb7 2025 -> 2026
+63081666f Заголовки исходных файлов: 2024-> 2025.
+c193e8288 Ical4j: миграционные материалы... (все тесты пройдены)</pre>
+<h3>868d6abb7</h3><div class="c"><strong>2025 -> 2026</strong><pre class="diff">868d6abb75cd191a892911ac8e45058932cf9074
+diff --git a/projectforge-business/src/main/kotlin/org/projectforge/business/teamcal/ical/ICalGenerator.kt b/projectforge-business/src/main/kotlin/org/projectforge/business/teamcal/ical/ICalGenerator.kt
+index 7692ab96d..88113b38c 100644
+--- a/projectforge-business/src/main/kotlin/org/projectforge/business/teamcal/ical/ICalGenerator.kt
++++ b/projectforge-business/src/main/kotlin/org/projectforge/business/teamcal/ical/ICalGenerator.kt
+@@ -3,7 +3,7 @@
+ // Project ProjectForge Community Edition
+ //         www.projectforge.org
+ //
+-// Copyright (C) 2001-2025 Micromata GmbH, Germany (www.micromata.com)
++// Copyright (C) 2001-2026 Micromata GmbH, Germany (www.micromata.com)
+ //
+ // ProjectForge is dual-licensed.
+ //</pre></div><h3>63081666f</h3><div class="c"><strong>Заголовки исходных файлов: 2024-> 2025.</strong><pre class="diff">63081666f620fb87315f01b817e560e0b2f6a33a
+diff --git a/projectforge-business/src/main/kotlin/org/projectforge/business/teamcal/ical/ICalGenerator.kt b/projectforge-business/src/main/kotlin/org/projectforge/business/teamcal/ical/ICalGenerator.kt
+index e7df854e5..7692ab96d 100644
+--- a/projectforge-business/src/main/kotlin/org/projectforge/business/teamcal/ical/ICalGenerator.kt
++++ b/projectforge-business/src/main/kotlin/org/projectforge/business/teamcal/ical/ICalGenerator.kt
+@@ -3,7 +3,7 @@
+ // Project ProjectForge Community Edition
+ //         www.projectforge.org
+ //
+-// Copyright (C) 2001-2024 Micromata GmbH, Germany (www.micromata.com)
++// Copyright (C) 2001-2025 Micromata GmbH, Germany (www.micromata.com)
+ //
+ // ProjectForge is dual-licensed.
+ //</pre></div><h3>c193e8288</h3><div class="c"><strong>Ical4j: миграционные материалы... (все тесты пройдены)</strong><pre class="diff">c193e8288c03be35a08171e2319957a6080381b9
+diff --git a/projectforge-business/src/main/kotlin/org/projectforge/business/teamcal/ical/ICalGenerator.kt b/projectforge-business/src/main/kotlin/org/projectforge/business/teamcal/ical/ICalGenerator.kt
+new file mode 100644
+index 000000000..e7df854e5
+--- /dev/null
++++ b/projectforge-business/src/main/kotlin/org/projectforge/business/teamcal/ical/ICalGenerator.kt
+@@ -0,0 +1,118 @@
++/////////////////////////////////////////////////////////////////////////////
++//
++// Project ProjectForge Community Edition
++//         www.projectforge.org
++//
++// Copyright (C) 2001-2024 Micromata GmbH, Germany (www.micromata.com)
++//
++// ProjectForge распространяется по двойной лицензии.
++//
++// Эта версия для сообщества является бесплатным программным обеспечением; вы можете распространять и/или
++// изменять её в соответствии с условиями Стандартной общественной лицензии GNU (GNU General Public License) в том виде,
++// в каком она опубликована Фондом свободного программного обеспечения; версия 3 Лицензии.
++//
++// Эта версия для сообщества распространяется в надежде, что она будет полезной,
++// но БЕЗ КАКИХ-ЛИБО ГАРАНТИЙ; даже без подразумеваемой гарантии
++// КОММЕРЧЕСКОЙ ЦЕННОСТИ или ПРИГОДНОСТИ ДЛЯ ОПРЕДЕЛЁННОЙ ЦЕЛИ. См. Стандартную общественную лицензию GNU
++// для получения более подробной информации.
++//
++// Вы должны были получить копию Стандартной общественной лицензии GNU вместе
++// с этой программой; если нет, см. http://www.gnu.org/licenses/.
++//
++/////////////////////////////////////////////////////////////////////////////
++
++package org.projectforge.business.teamcal.ical
++
++import mu.KotlinLogging
++import net.fortuna.ical4j.data.CalendarOutputter
++import net.fortuna.ical4j.model.Calendar
++import net.fortuna.ical4j.model.component.VEvent
++import org.projectforge.ProjectForgeVersion
++import org.projectforge.business.calendar.event.model.ICalendarEvent
++import org.projectforge.business.teamcal.event.model.TeamEventDO
++import java.io.ByteArrayOutputStream
++import java.io.IOException
++import java.io.OutputStream
++import java.time.LocalDate
++import java.util.*
++
++private val log = KotlinLogging.logger {}
++
++/**
++ * Записывает события в формате ics.
++ */
++class ICalGenerator @JvmOverloads constructor(val exportVAlarms: Boolean = true, val editable: Boolean = false) {
++    var empty: Boolean = true
++        private set
++
++    // Создание объекта календаря
++    private val calendar = Calendar()
++        .withProdId("-//${ProjectForgeVersion.APP_ID} ${ProjectForgeVersion.VERSION_NUMBER}//iCal Generator//EN")
++        .withDefaults() // add(GREGORIAN).add(VERSION_2_0)
++
++    /**</pre></div>
+</div>
+</body></html>

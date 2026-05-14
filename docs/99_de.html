@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="de"><head><meta charset="utf-8"><title>99: DataTransferPublicAttachmentPageRest.kt [DE]</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:1.5em;color:#444;font-size:1em}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.lang{font-size:.85em;color:#888;float:right}.lang a{color:#888;text-decoration:none;padding:0 .3em}.lang a.active{color:#0366d6;font-weight:600;text-decoration:underline}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}pre.diff{background:#fff;font-size:.82em;max-height:300px;overflow-y:auto}</style></head>
+<body><div class="lang"><a href="99.html">EN</a> · <a href="99_de.html" class="active">DE</a> · <a href="99_ru.html">RU</a> · <a href="99_fr.html">FR</a> · <a href="99_es.html">ES</a></div>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← Dateiindex</a> · <a href="2747.html">← Vorherige</a> · <a href="1808.html">Nächste →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/plugins/org.projectforge.plugins.datatransfer/src/main/kotlin/org/projectforge/plugins/datatransfer/restPublic/DataTransferPublicAttachmentPageRest.kt" target="_blank" title="Quelltext auf GitHub ansehen">📄 Quelle</a></div>
+<h1>#99: <code>DataTransferPublicAttachmentPageRest.kt</code></h1>
+<div class="meta"><code>plugins/org.projectforge.plugins.datatransfer/src/main/kotlin/org/projectforge/plugins/datatransfer/restPublic/DataTransferPublicAttachmentPageRest.kt</code> Kotlin-Klasse, <code>plugins/org.projectforge.plugins.datatransfer/src/main/kotlin/org/projectforge/plugins/datatransfer/restPublic/DataTransferPublicAttachmentPageRest.kt</code> <span style="color:#888">108 Zeilen · 69 Code · 28 Kommentare · 11 leer</span></div>
+<div class="c"><strong>Zweck:</strong> Quelldatei: plugins/datatransfer/restPublic/DataTransferPublicAttachmentPageRest.kt. DataTransferPublicAttachmentPageRest.kt ist Teil der Open-Source-Projektmanagement-Anwendung ProjectForge.</div>
+<h2>Quelltext (erste 100 Zeilen)</h2>
+<pre>/////////////////////////////////////////////////////////////////////////////
+//
+// Project ProjectForge Community Edition
+//         www.projectforge.org
+//
+// Copyright (C) 2001-2026 Micromata GmbH, Deutschland (www.micromata.com)
+//
+// ProjectForge ist dual-lizenziert.
+//
+// Diese Community-Edition ist freie Software; Sie können es weiterverteilen und/oder
+// modifizieren unter den Bedingungen der GNU General Public License, wie veröffentlicht
+// von der Free Software Foundation; Version 3 der Lizenz.
+//
+// Diese Community-Edition wird in der Hoffnung verteilt, dass sie nützlich sein wird,
+// aber OHNE JEDE GEWÄHRLEISTUNG; ohne sogar die stillschweigende Garantie der
+// MARKTGÄNGIGKEIT oder EIGNUNG FÜR EINEN BESTIMMTEN ZWECK. Siehe die GNU General
+// Public License für weitere Details.
+//
+// Sie sollten eine Kopie der GNU General Public License zusammen mit
+// diesem Programm erhalten haben; falls nicht, siehe http://www.gnu.org/licenses/.
+//
+/////////////////////////////////////////////////////////////////////////////
+
+package org.projectforge.plugins.datatransfer.restPublic
+
+import jakarta.annotation.PostConstruct
+import jakarta.servlet.http.HttpServletRequest
+import mu.KotlinLogging
+import org.projectforge.framework.jcr.AttachmentsService
+import org.projectforge.plugins.datatransfer.DataTransferAreaDao
+import org.projectforge.plugins.datatransfer.DataTransferPlugin
+import org.projectforge.plugins.datatransfer.rest.DataTransferAreaPagesRest
+import org.projectforge.rest.AttachmentPageRest
+import org.projectforge.rest.AttachmentsServicesRest
+import org.projectforge.rest.config.Rest
+import org.projectforge.rest.core.AbstractDynamicPageRest
+import org.projectforge.rest.dto.FormLayoutData
+import org.springframework.beans.factory.annotation.Autowired
+import org.springframework.web.bind.annotation.GetMapping
+import org.springframework.web.bind.annotation.RequestMapping
+import org.springframework.web.bind.annotation.RequestParam
+import org.springframework.web.bind.annotation.RestController
+
+private val log = KotlinLogging.logger {}
+
+/**
+ * Für externe anonyme Nutzung über Token/Passwort.
+ */
+@RestController
+@RequestMapping("${Rest.PUBLIC_URL}/attachment")
+class DataTransferPublicAttachmentPageRest : AbstractDynamicPageRest() {
+    @Autowired
+    private lateinit var services: AttachmentsServicesRest
+
+    @Autowired
+    private lateinit var dataTransferAreaPagesRest: DataTransferAreaPagesRest
+
+    @Autowired
+    private lateinit var dataTransferPublicServicesRest: DataTransferPublicServicesRest
+
+    @Autowired
+    private lateinit var dataTransferPublicSession: DataTransferPublicSession
+
+    private lateinit var dataTransferPublicAccessChecker: DataTransferPublicAccessChecker
+
+    @PostConstruct
+    private fun postConstruct() {
+        dataTransferPublicAccessChecker = DataTransferPublicAccessChecker(dataTransferPublicSession)
+    }
+
+    /**
+     * Schlägt fehl, wenn der Benutzer keine Sitzung hat.
+     */
+    @GetMapping("dynamic")
+    fun getForm(
+        @RequestParam("id", required = true) id: Long,
+        @RequestParam("category", required = true) category: String,
+        @RequestParam("fileId", required = true) fileId: String,
+        @RequestParam("listId") listId: String?,
+        request: HttpServletRequest
+    ): FormLayoutData {
+        check(category == DataTransferPlugin.ID)
+        check(listId == AttachmentsService.DEFAULT_NODE)
+        val data =
+            dataTransferPublicSession.checkLogin(request, id) ?: throw IllegalArgumentException("Keine gültige Anmeldung.")
+        val area = data.first
+        val sessionData = data.second
+
+        log.info {
+            "Benutzer versucht, Details des Anhangs zu bearbeiten/anzuzeigen: category=$category, id=$id, fileId=$fileId, listId=$listId)}, user='${
+                DataTransferAreaDao.getExternalUserString(request, sessionData.userInfo)
+            }'."
+        }
+        val attachmentData =
+            AttachmentsServicesRest.AttachmentData(category = category, id = id, fileId = fileId, listId = listId)
+        attachmentData.attachment =
+            services.getAttachment(dataTransferAreaPagesRest.jcrPath!!, dataTransferPublicAccessChecker, attachmentData)
+        val layout = AttachmentPageRest.createAttachmentLayout(
+            id = id,
+            category = category,</pre>
+<h2>Git-Verlauf</h2>
+<div class="hist">
+<pre>868d6abb7 2025 -> 2026
+63081666f Quelltext-Dateiköpfe: 2024 -> 2025.
+d67bce18b Migrationsarbeiten in Bearbeitung...
+4c04cfd65 GROSSE ÄNDERUNG! Migration von Integer-IDs zu Long-IDs (inkl. Fremdschlüssel usw.)
+77bade6df javax.* -> jakarta.*</pre>
+<h3>868d6abb7</h3><div class="c"><strong>2025 -> 2026</strong><pre class="diff">868d6abb75cd191a892911ac8e45058932cf9074
+diff --git a/plugins/org.projectforge.plugins.datatransfer/src/main/kotlin/org/projectforge/plugins/datatransfer/restPublic/DataTransferPublicAttachmentPageRest.kt b/plugins/org.projectforge.plugins.datatransfer/src/main/kotlin/org/projectforge/plugins/datatransfer/restPublic/DataTransferPublicAttachmentPageRest.kt
+index 107f1e29f..7e77dc16f 100644
+--- a/plugins/org.projectforge.plugins.datatransfer/src/main/kotlin/org/projectforge/plugins/datatransfer/restPublic/DataTransferPublicAttachmentPageRest.kt
++++ b/plugins/org.projectforge.plugins.datatransfer/src/main/kotlin/org/projectforge/plugins/datatransfer/restPublic/DataTransferPublicAttachmentPageRest.kt
+@@ -3,7 +3,7 @@
+ // Project ProjectForge Community Edition
+ //         www.projectforge.org
+ //
+-// Copyright (C) 2001-2025 Micromata GmbH, Deutschland (www.micromata.com)
++// Copyright (C) 2001-2026 Micromata GmbH, Deutschland (www.micromata.com)
+ //
+ // ProjectForge ist dual-lizenziert.
+ //</pre></div><h3>63081666f</h3><div class="c"><strong>Quelltext-Dateiköpfe: 2024 -> 2025.</strong><pre class="diff">63081666f620fb87315f01b817e560e0b2f6a33a
+diff --git a/plugins/org.projectforge.plugins.datatransfer/src/main/kotlin/org/projectforge/plugins/datatransfer/restPublic/DataTransferPublicAttachmentPageRest.kt b/plugins/org.projectforge.plugins.datatransfer/src/main/kotlin/org/projectforge/plugins/datatransfer/restPublic/DataTransferPublicAttachmentPageRest.kt
+index 89d9339bc..107f1e29f 100644
+--- a/plugins/org.projectforge.plugins.datatransfer/src/main/kotlin/org/projectforge/plugins/datatransfer/restPublic/DataTransferPublicAttachmentPageRest.kt
++++ b/plugins/org.projectforge.plugins.datatransfer/src/main/kotlin/org/projectforge/plugins/datatransfer/restPublic/DataTransferPublicAttachmentPageRest.kt
+@@ -3,7 +3,7 @@
+ // Project ProjectForge Community Edition
+ //         www.projectforge.org
+ //
+-// Copyright (C) 2001-2024 Micromata GmbH, Deutschland (www.micromata.com)
++// Copyright (C) 2001-2025 Micromata GmbH, Deutschland (www.micromata.com)
+ //
+ // ProjectForge ist dual-lizenziert.
+ //</pre></div><h3>d67bce18b</h3><div class="c"><strong>Migrationsarbeiten in Bearbeitung...</strong><pre class="diff">d67bce18b948b5dce6a302daf4cfbfe89f4b9d99
+diff --git a/plugins/org.projectforge.plugins.datatransfer/src/main/kotlin/org/projectforge/plugins/datatransfer/restPublic/DataTransferPublicAttachmentPageRest.kt b/plugins/org.projectforge.plugins.datatransfer/src/main/kotlin/org/projectforge/plugins/datatransfer/restPublic/DataTransferPublicAttachmentPageRest.kt
+index ea09aa7ce..89d9339bc 100644
+--- a/plugins/org.projectforge.plugins.datatransfer/src/main/kotlin/org/projectforge/plugins/datatransfer/restPublic/DataTransferPublicAttachmentPageRest.kt
++++ b/plugins/org.projectforge.plugins.datatransfer/src/main/kotlin/org/projectforge/plugins/datatransfer/restPublic/DataTransferPublicAttachmentPageRest.kt
+@@ -23,6 +23,8 @@
+ 
+ package org.projectforge.plugins.datatransfer.restPublic
+ 
++import jakarta.annotation.PostConstruct
++import jakarta.servlet.http.HttpServletRequest
+ import mu.KotlinLogging
+ import org.projectforge.framework.jcr.AttachmentsService
+ import org.projectforge.plugins.datatransfer.DataTransferAreaDao
+@@ -38,8 +40,6 @@ import org.springframework.web.bind.annotation.GetMapping
+ import org.springframework.web.bind.annotation.RequestMapping
+ import org.springframework.web.bind.annotation.RequestParam
+ import org.springframework.web.bind.annotation.RestController
+-import jakarta.annotation.PostConstruct
+-import jakarta.servlet.http.HttpServletRequest
+ 
+ private val log = KotlinLogging.logger {}
+ 
+@@ -49,60 +49,60 @@ private val log = KotlinLogging.logger {}
+ @RestController
+ @RequestMapping("${Rest.PUBLIC_URL}/attachment")
+ class DataTransferPublicAttachmentPageRest : AbstractDynamicPageRest() {
+-  @Autowired
+-  private lateinit var services: AttachmentsServicesRest
++    @Autowired
++    private lateinit var services: AttachmentsServicesRest
+ 
+-  @Autowired
+-  private lateinit var dataTransferAreaPagesRest: DataTransferAreaPagesRest
++    @Autowired
++    private lateinit var dataTransferAreaPagesRest: DataTransferAreaPagesRest
+ 
+-  @Autowired
+-  private lateinit var dataTransferPublicServicesRest: DataTransferPublicServicesRest
++    @Autowired
++    private lateinit var dataTransferPublicServicesRest: DataTransferPublicServicesRest
+ 
+-  @Autowired
+-  private lateinit var dataTransferPublicSession: DataTransferPublicSession
++    @Autowired
++    private lateinit var dataTransferPublicSession: DataTransferPublicSession
+ 
+-  private lateinit var dataTransferPublicAccessChecker: DataTransferPublicAccessChecker
++    private lateinit var dataTransferPublicAccessChecker: DataTransferPublicAccessChecker
+ 
+-  @PostConstruct
+-  private fun postConstruct() {
+-    dataTransferPublicAccessChecker = DataTransferPublicAccessChecker(dataTransferPublicSession)
+-  }
++    @PostConstruct
++    private fun postConstruct() {
++        dataTransferPublicAccessChecker = DataTransferPublicAccessChecker(dataTransferPublicSession)
++    }
+ 
+-  /**</pre></div><h3>4c04cfd65</h3><div class="c"><strong>GROSSE ÄNDERUNG! Migration von Integer-IDs zu Long-IDs (inkl. Fremdschlüssel usw.)</strong><pre class="diff">4c04cfd652210afe373d55f53a5300c85997b109
+diff --git a/plugins/org.projectforge.plugins.datatransfer/src/main/kotlin/org/projectforge/plugins/datatransfer/restPublic/DataTransferPublicAttachmentPageRest.kt b/plugins/org.projectforge.plugins.datatransfer/src/main/kotlin/org/projectforge/plugins/datatransfer/restPublic/DataTransferPublicAttachmentPageRest.kt
+index 06ce822f2..ea09aa7ce 100644
+--- a/plugins/org.projectforge.plugins.datatransfer/src/main/kotlin/org/projectforge/plugins/datatransfer/restPublic/DataTransferPublicAttachmentPageRest.kt
++++ b/plugins/org.projectforge.plugins.datatransfer/src/main/kotlin/org/projectforge/plugins/datatransfer/restPublic/DataTransferPublicAttachmentPageRest.kt
+@@ -73,7 +73,7 @@ class DataTransferPublicAttachmentPageRest : AbstractDynamicPageRest() {
+    */
+   @GetMapping("dynamic")
+   fun getForm(
+-    @RequestParam("id", required = true) id: Int,
++    @RequestParam("id", required = true) id: Long,
+     @RequestParam("category", required = true) category: String,
+     @RequestParam("fileId", required = true) fileId: String,
+     @RequestParam("listId") listId: String?,</pre></div><h3>77bade6df</h3><div class="c"><strong>javax.* -> jakarta.*</strong><pre class="diff">77bade6dfb148c87638c71951accb03942157fcf
+diff --git a/plugins/org.projectforge.plugins.datatransfer/src/main/kotlin/org/projectforge/plugins/datatransfer/restPublic/DataTransferPublicAttachmentPageRest.kt b/plugins/org.projectforge.plugins.datatransfer/src/main/kotlin/org/projectforge/plugins/datatransfer/restPublic/DataTransferPublicAttachmentPageRest.kt
+index 2219a4403..06ce822f2 100644
+--- a/plugins/org.projectforge.plugins.datatransfer/src/main/kotlin/org/projectforge/plugins/datatransfer/restPublic/DataTransferPublicAttachmentPageRest.kt
++++ b/plugins/org.projectforge.plugins.datatransfer/src/main/kotlin/org/projectforge/plugins/datatransfer/restPublic/DataTransferPublicAttachmentPageRest.kt
+@@ -38,8 +38,8 @@ import org.springframework.web.bind.annotation.GetMapping
+ import org.springframework.web.bind.annotation.RequestMapping
+ import org.springframework.web.bind.annotation.RequestParam
+ import org.springframework.web.bind.annotation.RestController
+-import javax.annotation.PostConstruct
+-import javax.servlet.http.HttpServletRequest
++import jakarta.annotation.PostConstruct
++import jakarta.servlet.http.HttpServletRequest
+ 
+ private val log = KotlinLogging.logger {}
+ </pre></div>
+</div>
+</body></html>

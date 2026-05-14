@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>#1154 [RU]</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:2em;color:#444}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}</style>
+</head>
+<body>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Индекс</a> · <a href="file-index.html">← Индекс файлов</a> · <a href="1153.html">← Предыдущий</a> · <a href="1155.html">Следующий →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/kotlin/org/projectforge/business/vacation/service/VacationSendMailService.kt" target="_blank" title="Просмотреть исходный код на GitHub">📄 исходный код</a></div>
+<h1>#1154: <code>VacationSendMailService.kt</code></h1>
+<div class="meta"><code>projectforge-business/src/main/kotlin/org/projectforge/business/vacation/service/VacationSendMailService.kt</code> Сервис, projectforge-business/src/main/kotlin/org/projectforge/business/vacation/service/VacationSendMailService.kt <span style="color:#888">310 строк · 234 кода · 50 комментариев · 26 пустых</span></div>
+<div class="c">Отправляет уведомления по электронной почте отпускникам, руководителям, заместителям и сотрудникам отдела кадров при создании, изменении или удалении записей об отпусках.</div>
+
+<h2>Архитектура</h2>
+<p><code>VacationSendMailService</code> — это <code>@Service</code>, который связывает вместе <code>ConfigurationService</code> (конфигурация почтового сервера, адрес электронной почты HR), <code>EmployeeDao</code> (поиск сотрудников/пользователей) и <code>SendMail</code> (почтовая инфраструктура). Он вызывается исключительно из хуков жизненного цикла <code>after*</code> в <code>VacationDao</code>.</p>
+
+<h3>Поток уведомлений</h3>
+<ol>
+<li><code>checkAndSendMail(obj, operationType, dbObj)</code> — Точка входа. Проверяет, настроен ли почтовый сервер, создаёт держатель <code>VacationInfo</code>.</li>
+<li>Для специальных записей об отпусках со статусом IN_PROGRESS или APPROVED отправляет на адрес электронной почты HR (настраивается в администрировании).</li>
+<li>Отправляет отпускнику (если он не сам внёс изменения — проверяется через <code>ThreadLocalUserContext.loggedInUserId</code>).</li>
+<li>Отправляет руководителю (если он не является инициатором).</li>
+<li>Отправляет основному заместителю и всем остальным заместителям (дедупликация через множество).</li>
+</ol>
+
+<h3>Составление письма</h3>
+<p>Метод <code>prepareMail()</code> создаёт объект <code>Mail</code> с HTML-содержимым, отображаемым из шаблона Groovy <code>mail/vacationMail.html</code>. Шаблон получает карту, содержащую:</p>
+<ul>
+<li><code>vacationInfo</code> — внутренний класс <code>VacationInfo</code> со всеми разрешёнными именами пользователей, адресами электронной почты, отформатированными датами и рабочими днями</li>
+<li><code>vacation</code> — сырой объект <code>VacationDO</code></li>
+<li><code>mailInfo</code> — тема, тип операции (вставка/обновление/удаление/восстановление) и режим (свой/руководитель/заместитель/HR)</li>
+</ul>
+
+<h3>Внутренний класс VacationInfo</h3>
+<p>Этот держатель данных разрешает все ссылки на сотрудников (отпускник, руководитель, заместитель, другие заместители) в объекты <code>PFUserDO</code> и форматирует даты, рабочие дни, флаги половинного дня и специальный статус. Метод <code>updateI18n(recipient)</code> повторно разрешает видимые пользователем строки для локали получателя, обеспечивая локализованную доставку электронной почты получателям с разными языковыми настройками.</p>
+
+<h3>Генерация URL</h3>
+<p>Объект-компаньон лениво строит ссылку на страницу редактирования отпуска через <code>SendMail.buildUrl()</code> в сочетании с <code>MenuItemDefId.VACATION.url</code>, создавая глубокие ссылки вида <code>/vacation/edit/123?returnToCaller=account</code>.</p>
+
+<h2>Обоснование дизайна</h2>
+<p>Отправка почты отделена от DAO, чтобы изолировать проблемы сохранения. Сервис использует <code>VacationInfo</code> как промежуточный класс данных, а не передаёт сущность напрямую в шаблоны — это гарантирует, что шаблоны никогда не обращаются к лениво загружаемым прокси JPA (которые не работают вне транзакции). Метод <code>updateI18n</code> поддерживает требование мультилокализации немецкой компании с международными сотрудниками. Путь уведомления HR для специальных отпусков обеспечивает мониторинг соответствия, даже когда сотрудник и руководитель — одно и то же лицо.</p>
+
+<h2>История Git</h2>
+<div class="hist"><pre>868d6abb7 2025 -> 2026
+600951ee0 2025 -> 2026
+b131193e7 Переменные-члены рефакторизованы с использованием by lazy {}...
+d5cc73eb6 Переменные-члены рефакторизованы с использованием by lazy {}...
+63081666f Заголовки исходных файлов: 2024-> 2025.
+199c26801 Заголовки исходных файлов: 2024-> 2025.
+e1db80611 Исправление: добавлен com.sun.mail.
+0a78bc22c Исправление: добавлен com.sun.mail.
+1b50060c3 BaseDao: переименованы get->find, save->insert, getList->select, load->select
+514533e99 BaseDao: переименованы get->find, save->insert, getList->select, load->select
+87aaf6a5a Миграционные дела: BaseDao рефакторизован...
+41217b065 Миграционные дела: BaseDao рефакторизован...
+67805f2fc ThreadLocalUserContext.user -> loggedInUser
+58ffda82b ThreadLocalUserContext.user -> loggedInUser
+4c04cfd65 КРУПНОЕ ИЗМЕНЕНИЕ! Миграция целочисленных id на Long id.
+fd13c259a КРУПНОЕ ИЗМЕНЕНИЕ! Миграция целочисленных id на Long id.
+06828f490 Миграционные дела в процессе...
+4b3872a1b Миграционные дела в процессе...
+b6092df09 Авторское право 2023 -> 2024
+9a0609dd1 Авторское право 2023 -> 2024
+</pre></div>
+</body>
+</html>

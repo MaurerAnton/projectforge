@@ -1,10 +1,53 @@
-<!DOCTYPE html>
-<html lang="en"><head><meta charset="utf-8"><title>File #1309: JcrDao.kt</title>
-<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333}a{color:#0366d6}.meta{background:#f0f0f0;border-radius:6px;padding:1em;margin:1em 0;font-size:.9em}.commentary{margin:.8em 0;background:#fff;padding:.5em 1em;border-radius:6px;border-left:4px solid #ddd;line-height:1.7}table{border-collapse:collapse;width:100%;margin:.8em 0;font-size:.9em}th,td{border:1px solid #ddd;padding:.4em .6em}th{background:#f0f0f0}code{background:#e8e8e8;border-radius:3px;padding:.1em .3em;font-size:.9em}.nav{font-size:.9em;color:#888;margin-bottom:1em}.history{background:#fffbe6;border-radius:6px;padding:1em;margin:1em 0;font-size:.9em;border-left:4px solid #ffc107}</style></head>
-<body><div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="1308.html">← Prev</a> · <a href="1310.html">Next →</a></div>
-<h1>File #1309: <code>JcrDao.kt</code></h1>
-<div class="meta"><p><strong>Path:</strong> <code>Not found on branch fix/vite-eslint-upgrade</code> · <strong>Type:</strong> Other file</p><p><strong>Source:</strong> <a href="https://github.com/micromata/projectforge/blob/develop/Not found on branch fix/vite-eslint-upgrade">GitHub</a></p></div>
-<div class="history"><table><tr><th>Commit</th><th>Message</th></tr><tr><td><code>9ebb88522</code></td><td>2016-07-18 Initial commit</td></tr></table></div>
-<div class="commentary"><p>Part of the ProjectForge Wicket web application. Located at <code>Not found on branch fix/vite-eslint-upgrade</code>. Project resource file.</p></div>
-<div class="nav" style="margin-top:2em"><a href="1308.html">← #1308</a> · <a href="1310.html">#1310 →</a></div>
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>#1309</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:2em;color:#444}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}</style></head>
+<body><div class="nav"><a href="https://maureranton.github.io/projectforge/">&#8592; Index</a> &#183; <a href="file-index.html">&#8592; File index</a> &#183; <a href="1249.html">&#8592; Prev</a> &#183; <a href="1251.html">Next &#8594;</a></div>
+<h1>#1309: <code>HistoryFormatUtils.kt</code></h1>
+<div class="meta"><code>projectforge-business/src/main/kotlin/org/projectforge/framework/persistence/history/HistoryFormatUtils.kt</code> Spring Service / Utility, projectforge-business/src/main/kotlin/org/projectforge/framework/persistence/history/HistoryFormatUtils.kt <span style="color:#888">198 lines · 118 code · 64 comments · 16 blank</span></div>
+<div class="c">Spring <code>@Service</code> providing formatting utilities for history display. Translates group/user ID lists into human-readable names, handles property name translation via i18n, formats embedded collection entries with positional prefixes (e.g., <code>pos#1:propertyName</code>), and processes <code>DisplayHistoryEntry</code> objects for frontend rendering.</div>
+
+<h2>Architecture</h2>
+<h3>ID-to-Name Resolution</h3>
+<p>Injects <code>GroupService</code> and <code>UserService</code> to resolve ID lists into sorted, comma-separated names:</p>
+<ul>
+  <li>Properties ending with <code>"GroupIds"</code>: resolves to group names via <code>groupService.getGroupNames(value)</code></li>
+  <li>Properties ending with <code>"UserIds"</code>: resolves to user names via <code>userService.getUserNames(value)</code></li>
+  <li>Handles blank/null/<code>"null"</code> values gracefully</li>
+</ul>
+
+<h3>Property Name Handling</h3>
+<table>
+  <tr><th>Method</th><th>Description</th></tr>
+  <tr><td><code>getPlainPropertyName(attr)</code></td><td>Strips internal format; delegates to <code>HistoryOldFormatConverter</code> if outdated</td></tr>
+  <tr><td><code>translatePropertyName(clazz, propertyName)</code></td><td>Looks up <code>@PropertyInfo</code> annotation for i18n key, translates it, or returns raw name</td></tr>
+</table>
+
+<h3>Embedded Collection Formatting</h3>
+<p>Used for list-type properties (e.g., <code>AuftragDO.positionen</code>) to show positional context in history:</p>
+<pre>getPropertyNameForEmbedded(propertyName, "pos", 1) → "pos#1" or "pos#1:propertyName"
+getPropertyNameForEmbedded(propertyName, Pair("pos", 1), Pair("kost1", 3)) → "pos#1.kost1#3:propertyName"</pre>
+
+<h3>Batch Operations</h3>
+<ul>
+  <li><code>setNumberAsPropertyNameForListEntries(historyEntries, prefix, number)</code> — applies display names to all entries/attrs in a collection</li>
+  <li>Variadic <code>vararg prefixes: Pair&lt;String, Number?&gt;</code> overload for multi-level nesting</li>
+</ul>
+
+<h3>Formatting Pipeline</h3>
+<ol>
+  <li><code>HistoryOldFormatConverter.getPlainPropertyName()</code> — normalizes legacy format</li>
+  <li><code>translatePropertyName()</code> — i18n translation via <code>@PropertyInfo</code> annotation</li>
+  <li><code>replaceGroupAndUserIdsValues()</code> — resolves ID lists to names</li>
+  <li><code>setNumberAsPropertyNameForListEntries()</code> — prefixes position numbers</li>
+</ol>
+
+<h2>Git History</h2><div class="hist"><pre>
+868d6abb7 2025 -> 2026
+63081666f Source file headers: 2024-> 2025.
+18bf92219 WIP: History entries handling. VisitorBookDao.
+9e3c523c7 Migration stuff in progress... (all tests OK).
+c97135a57 Migration stuff in progress...
+f408da8a8 Migration stuff in progress... (all tests OK).
+d18c899b5 Refactoring of history entries, FlatDisplayHistoryEntries and DisplayHistoryEntries...
+b79a1edca Migration stuff in progress... (all tests OK).
+</pre></div>
 </body></html>

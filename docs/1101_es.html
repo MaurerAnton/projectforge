@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>#1101 [ES]</title>
+<style>
+body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}
+h1{border-bottom:2px solid #333;padding-bottom:.3em}
+h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}
+h3{margin-top:2em;color:#444}
+a{color:#0366d6}
+.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}
+.nav{font-size:.9em;color:#888;margin-bottom:1em}
+.meta{font-size:.9em;margin:1em 0;color:#555}
+code{background:#f0f0f0;padding:0 .2em;font-size:.93em}
+pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}
+table{border-collapse:collapse;width:100%;margin:1em 0}
+th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}
+th{background:#f5f5f5;font-weight:600}
+.hist{font-size:.85em;color:#555}
+</style>
+</head>
+<body>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Índice</a> · <a href="file-index.html">← Índice de archivos</a> · <a href="1100.html">← Anterior</a> · <a href="1102.html">Siguiente →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/kotlin/org/projectforge/business/timesheet/TimesheetDao.kt" target="_blank" title="Ver fuente en GitHub">📄 fuente</a></div>
+<h1>#1101: <code>TimesheetDao.kt</code></h1>
+<div class="meta"><code>projectforge-business/src/main/kotlin/org/projectforge/business/timesheet/TimesheetDao.kt</code> DAO / Gestión de partes de horas, projectforge-business/src/main/kotlin/org/projectforge/business/timesheet/TimesheetDao.kt <span style="color:#888">784 líneas · 596 código · 143 comentarios · 45 en blanco</span></div>
+<div class="c">DAO principal para la gestión de partes de horas que extiende BaseDao. Implementa control de acceso integral: partes de horas propios vs. partes de horas ajenos (el grupo de finanzas tiene acceso completo), los jefes de proyecto/RRHH/controlling pueden ver pero con descripción/ubicación oculta (<code>HIDDEN_FIELD_MARKER</code>). <code>checkTimesheetProtection()</code> valida la restricción protectTimesheetsUntil en tareas ancestro (evita registrar antes de la fecha de congelación). <code>checkTaskBookable()</code> aplica 4 reglas: tarea/ancestros no cerrados/eliminados, sin estado TREE_CLOSED, sin ONLY_LEAFS en tareas padre con hijos, sin posiciones de pedido en tareas descendientes. <code>onInsertOrModify()</code> valida: milisegundos/segundos deben ser 0, minutos múltiplo de 5, duración mínima 60s, máxima 14h, detección de solapamiento de tiempo (mediante <code>hasTimeOverlap()</code> en transacción), validación de kost2 (debe estar en la lista kost2 de la tarea). <code>validateTimeSavingsByAI()</code> asegura que la unidad esté establecida cuando se especifica ahorro, porcentaje limitado al 99%. <code>prepareHibernateSearch()</code> reinicializa referencias perezosas de usuario/tarea para indexación. Soporta etiquetas configurables, autocompletado de ubicación, autocompletado de referencia y consultas por rango de años.</div>
+<h2>Historial Git</h2>
+<div class="hist"><pre>868d6abb7 2025 -> 2026
+bb1e156b1 Claude Code: DynamicButton está deshabilitado mientras isFetching, TimesheetDao evita colisiones de partes de horas en múltiples eventos de botón.
+3c439391c Timesheet: entradas recientes (visualización de kost2, proyecto y cliente) corregido. Timesheet: unidad de IA se preestablece según entrada reciente. Timesheet-Excel-Export: ahorros de IA añadidos.
+6a32032d6 Hibernate.isInitialized(obj) -> HibernateUtils.isFullyInitialized(obj). Algunos objetos perezosos de columnas ManyToOne no están completamente cargados pero Hibernate.isInitialized() devuelve true.
+9fc09ddd4 Bugfix: el autocompletado para ubicaciones en partes de horas funciona nuevamente.
+1449f4859 WIP: ahorros de tiempo por IA en partes de horas, parámetro de configuración para nota añadido.
+cbffabd60 WIP: ahorros de tiempo por IA
+63081666f Encabezados de archivos fuente: 2024 -> 2025.
+53b501ab6 Scripts de ejemplo corregidos. TimesheetDO.getDuration() -> TimesheetDO.duration.
+5989b32fd BaseDao: mecanismo de onChangeListener refactorizado.
+1b50060c3 BaseDao: renombrado: get -> find, save -> insert, getList -> select, load -> select
+87aaf6a5a Migración en progreso... BaseDao refactorizado (aún no terminado) métodos internal* renombrados.
+3aeda5ef5 Gran cambio: todos los save|update|...InTrans renombrados (InTrans eliminado). PfPesistenceContext como parámetro ya no es necesario (se usa ThreadLocal en su lugar). (todas las pruebas de todos los paquetes: OK).
+e66d5f5f7 Migración en progreso... TaskTree -> Kotlin y ahora se ejecuta en un gestor de entidades aislado
+67805f2fc ThreadLocalUserContext.user -> ThreadLocalUserContext.loggedInUser (renombrado para evitar malentendidos en el código).
+85b4e1175 PfPersistenceService y PfPersistenceContext: query renombrado a executeQuery.
+b095e6f7d ¡¡¡¡¡ Gran cambio en el manejo de transacciones: Reutiliza PfPersistenceContext tanto como sea posible (aún no terminado). Las pruebas aún no se ejecutan.
+4c04cfd65 ¡CAMBIO MAYOR! Migración de ids enteros a ids Long (incluyendo claves foráneas, etc.)
+09effe8bb BaseDao.hasUpdateAccess y hasDeleteAccess ahora aceptan dbObj nulos.
+2863b30b9 Migración en progreso...
+5bafe7941 @Repository -> @Service. @Transactional-Annotations eliminadas.
+ee7b7fe15 Migración en progreso...
+0d183e5df Migración en progreso...
+9d8b94352 Migración en progreso...
+c25b14e78 Migración en progreso...
+67ce75fe9 Migración en progreso...
+e33c8b9c2 Migración en progreso...
+06828f490 Migración en progreso...
+b6092df09 Copyright 2023 -> 2024
+ab45d51fa Copyright 2001-2022 -> 2001-2023.
+73b0be50b org.apache.commons.collections -> org.apache.commons.collections4
+38bec971a ThreadLocal -> Kotlin
+267283973 PROJECTFORGE-3730: Mostrar mensaje de validación para páginas de lista si el resultado fue truncado debido al máximo de filas en QueryFilter.
+765e7f1af TimesheetDao.massUpdate eliminado (ya no es necesario).
+512ffa420 Parámetro de configuración: timesheetTag implementado.
+fcc633dff La actualización masiva de partes de horas ahora soporta actualización del campo de referencia.
+5f7ef41b8 Copyright 2021 -> 2022
+0ab100d21 Configuración refactorizada (GlobalConfiguration ya no es necesario). La exportación SEPA ahora debería eliminar caracteres no imprimibles.
+c0f2b9de0 Funcionalidad de Tenants eliminada en todas partes (no probada).
+db3b02da7 UserException movido del paquete business al common (AccesssException afectado). UserException ahora se devolverá como Toast para clientes Rest por defecto. FileSizeChecker WIP.
+8c53b07de Nada real.
+d875be4d4 TimesheetDao: Java - Kotlin (¡¡¡¡ Pueden ocurrir efectos secundarios en todo el proyecto!!!!)</pre></div>
+</body>
+</html>

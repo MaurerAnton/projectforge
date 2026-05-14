@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head><meta charset="utf-8"><title>#82: DataTransferService.kt +[RU]</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333}h2{margin-top:2em;border-bottom:1px solid #ddd}h3{margin-top:1.5em;color:#333}a{color:#0366d6}.meta{background:#f0f0f0;border-radius:6px;padding:1em;margin:1em 0;font-size:.9em}.code-block{background:#1e1e1e;color:#d4d4d4;border-radius:4px;padding:.8em 1em;margin:.5em 0;overflow-x:auto;font-family:Consolas,monospace;font-size:.82em;line-height:1.5;white-space:pre-wrap}.commentary{margin:.8em 0;background:#fff;padding:.5em 1em;border-radius:6px;border-left:4px solid #ddd;line-height:1.7}table{border-collapse:collapse;width:100%;margin:.8em 0;font-size:.9em}th,td{border:1px solid #ddd;padding:.4em .6em}th{background:#f0f0f0}code{background:#e8e8e8;border-radius:3px;padding:.1em .3em;font-size:.9em}.nav{font-size:.9em;color:#888;margin-bottom:1em}.history{background:#fffbe6;border-radius:6px;padding:1em;margin:1em 0;font-size:.9em;border-left:4px solid #ffc107}.arch{background:#e8f4fd;border-radius:6px;padding:1em;margin:1em 0;font-size:.9em;border-left:4px solid #2196f3}</style></head>
+<body><div class="nav"><a href="https://maureranton.github.io/projectforge/">← Индекс</a> · <a href="file-index.html">← Индекс файлов</a> · <a href="81.html">← Пред.</a> · <a href="83.html">След. →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/plugins/org.projectforge.plugins.datatransfer/src/main/kotlin/org/projectforge/plugins/datatransfer/DataTransferService.kt" target="_blank" title="Просмотреть исходник на GitHub">📄 исходник</a></div>
+<h1>#82: <code>DataTransferService.kt</code></h1>
+<div class="meta"><code>plugins/org.projectforge.plugins.datatransfer/src/main/kotlin/org/projectforge/plugins/datatransfer/DataTransferService.kt</code> <p><strong>Путь:</strong> <code>plugins/org.projectforge.plugins.datatransfer/src/main/kotlin/org/projectforge/plugins/datatransfer/DataTransferService.kt</code> · <strong>Строк:</strong> 115 · <strong>Язык:</strong> Kotlin</p><p><strong>Назначение:</strong> Основной сервис плагина DataTransfer — система обмена файлами, встроенная в ProjectForge. Создаёт личные файловые ящики для каждого пользователя, помещает в них файлы через JCR (репозиторий контента Jackrabbit) и генерирует ссылки для общего доступа. Реализует <code>DataTransferInterface</code> — контракт, который другие компоненты ProjectForge используют для программного размещения файлов в ящиках пользователей (например, генераторы отчётов, экспортёры счетов).</p><p><strong>Источник:</strong> <a href="https://github.com/micromata/projectforge/blob/develop/plugins/org.projectforge.plugins.datatransfer/src/main/kotlin/org/projectforge/plugins/datatransfer/DataTransferService.kt">GitHub</a></p> <span style="color:#888">115 строк · 80 кода · 22 комментария · 13 пустых</span></div>
+<div class="history"><table><tr><th>Коммит</th><th>Сообщение</th></tr><tr><td><code>9ebb88522</code></td><td>2016-07-18 Первоначальный коммит</td></tr></table></div>
+
+<h2>Мост плагина — саморегистрация при запуске</h2>
+<div class="code-block"><pre>@Service
+class DataTransferService : DataTransferInterface {
+    @PostConstruct
+    private fun postConstruct() {
+        dataTransferBridge.register(this)   // "Я — провайдер DataTransfer!"
+    }
+}</pre></div>
+<div class="commentary"><p>Это <strong>паттерн саморегистрации плагина</strong>. Когда Spring создаёт этот бин, срабатывает <code>@PostConstruct</code>, и сервис регистрируется в <code>DataTransferBridge</code>. Мост хранит коллекцию всех реализаций <code>DataTransferInterface</code>. Другие части ProjectForge (генераторы отчётов, исполнители скриптов, экспортёры счетов) запрашивают мост для поиска доступных провайдеров передачи данных — им не нужно знать об этом конкретном плагине. Это паттерн Наблюдатель, применённый к обнаружению плагинов: плагины регистрируются сами; потребители находят их через мост.</p><p><strong>Почему не просто @Autowired?</strong> Потому что может быть НЕСКОЛЬКО провайдеров передачи данных (разные плагины). Паттерн "Мост" позволяет потребителям перебирать всех провайдеров или выбирать по критериям, тогда как <code>@Autowired</code> со списком привязал бы потребителя к механизму внедрения Spring.</p></div>
+
+<h2>Личный ящик — у каждого пользователя своё приватное хранилище файлов</h2>
+<div class="code-block"><pre>override fun getPersonalBoxOfUserLink(userId: Long): String {
+    val personalBox = dataTransferAreaDao.ensurePersonalBox(userId)
+        ?: throw IllegalStateException("Личный ящик не найден для пользователя с ID $userId.")
+    return getDataTransferAreaLink(personalBox.id)
+}</pre></div>
+<div class="commentary"><p><strong><code>ensurePersonalBox()</code></strong> — префикс "ensure" является соглашением ProjectForge: создать, если отсутствует, вернуть существующий, если найден. Это идемпотентно — повторный вызов для того же пользователя возвращает тот же ящик. DAO, вероятно, проверяет базу данных на наличие существующего личного ящика и создаёт новый, если его нет.</p><p><strong>Оператор Элвиса <code>?:</code>:</strong> оператор нулевой безопасности Kotlin. Если <code>ensurePersonalBox</code> возвращает null (неожиданно — он всегда должен успешно выполняться), срабатывает <code>IllegalStateException</code>. Сообщение исключения включает ID пользователя для отладки — инструменты поиска по логам смогут определить, какой пользователь вызвал сбой.</p><p><strong>Возвращаемая ссылка</strong> указывает на <code>DataTransferPageRest</code> — REST-эндпоинт. Ссылка используется в уведомлениях по электронной почте: "Ваш счёт сгенерирован. Скачайте его здесь: https://projectforge.acme.com/rs/datatransfer/..."</p></div>
+
+<h2>Основная операция — помещение файла в ящик пользователя (строки 82-114)</h2>
+<div class="code-block"><pre>override fun putFileInUsersInBox(
+    receiver: PFUserDO,           // Кто получает файл
+    filename: String,             // Отображаемое имя
+    content: ByteArray,           // Сырые байты файла
+    description: String?          // Необязательное описание
+): Boolean {                       // Возвращает true при успехе, false при неудаче (без исключений!)
+    
+    val personalBox = dataTransferAreaDao.ensurePersonalBox(receiver.id)
+    
+    attachmentsService.addAttachment(
+        dataTransferAreaPagesRest.jcrPath!!,  // Путь к узлу JCR для хранения
+        fileInfo = FileInfo(filename, content.size.toLong(), description),
+        content = content,
+        baseDao = dataTransferAreaDao,        // DAO для контроля доступа
+        obj = personalBox,                    // Сущность, к которой прикрепляется файл
+        accessChecker = dataTransferAreaPagesRest.attachmentsAccessChecker
+    )
+    return true
+  } catch (ex: Exception) {
+    log.error("Не удалось поместить документ '${filename}' размером ...", ex)
+    return false                              // Корректный сбой — вызывающий код обрабатывает это
+  }
+}</pre></div>
+<div class="commentary"><p><strong>attachmentsService.addAttachment()</strong> — мост к <strong>JCR (Java Content Repository)</strong>. Файлы не хранятся как BLOB-объекты базы данных. Они попадают в Apache Jackrabbit — иерархический репозиторий контента, который обрабатывает версионирование, контроль доступа и двоичное хранение. Путь JCR берётся из <code>dataTransferAreaPagesRest.jcrPath</code> — каждая область передачи данных имеет свой узел в дереве JCR.</p><p><strong>6 параметров</strong> <code>addAttachment()</code> раскрывают контракт системы вложений:</p><table><tr><th>Параметр</th><th>Назначение</th></tr><tr><td><code>jcrPath</code></td><td>Путь к узлу JCR — где в дереве контента хранить</td></tr><tr><td><code>fileInfo</code></td><td>Метаданные: имя файла, размер, описание. Обёрнуты в класс данных <code>FileInfo</code>.</td></tr><tr><td><code>content</code></td><td>Сырые байты — сам файл. <code>ByteArray</code> означает, что весь файл находится в памяти. Большие файлы (>100 МБ) могут вызвать OOM.</td></tr><tr><td><code>baseDao</code></td><td>DAO, отвечающий за сущность — используется для отслеживания истории и контроля доступа</td></tr><tr><td><code>obj</code></td><td>Владеющая сущность — личный ящик, который "владеет" этим файлом</td></tr><tr><td><code>accessChecker</code></td><td>Определяет, кто может читать/записывать/удалять это вложение</td></tr></table></div>
+
+<h2>Обработка ошибок — возврат false, без исключений</h2>
+<div class="commentary"><p><strong>Тип возврата <code>Boolean</code> вместо <code>Unit</code>:</strong> Это осознанный выбор дизайна. Метод возвращает <code>true</code> при успехе, <code>false</code> при неудаче. Он НИКОГДА не выбрасывает исключения (блок catch перехватывает <code>Exception</code> — максимально широкий). Вызывающий код может сам решить, как обрабатывать сбой: показать сообщение об ошибке, повторить попытку или молча продолжить.</p><p><strong>Логирование с <code>formatBytes()</code>:</strong> <code>content.size.formatBytes()</code> — это функция-расширение Kotlin (импортирована из <code>org.projectforge.common.extensions</code>). Она преобразует сырые количества байтов в человекочитаемый формат ("1.5 МБ", "340 КБ"). Используется в сообщении лога: <em>"Не удалось поместить документ 'invoice.pdf' размером 1.5 МБ в личный ящик пользователя 'Kai Reinhard'"</em> — это полезно для отладки поддержки.</p><p><strong>Огромный <code>!!</code> в строке 94:</strong> <code>dataTransferAreaPagesRest.jcrPath!!</code> — это вызовет <code>NullPointerException</code>, если <code>jcrPath</code> равен null. Оператор <code>!!</code> означает "Я уверен, что это никогда не null." Если это всё же null, NPE перехватывается блоком <code>catch (Exception)</code> и логируется. Но в идеале здесь должна быть надлежащая проверка на null с описательным сообщением об ошибке.</p></div>
+
+<h2>Используемые возможности Kotlin</h2>
+<div class="commentary"><table><tr><th>Возможность</th><th>Строка</th><th>Что делает</th></tr><tr><td><code>lateinit var</code></td><td>46-58</td><td>Внедряемые Spring зависимости объявлены как <code>lateinit</code> — инициализируются после создания конструктором Spring, гарантированно не-null после <code>@PostConstruct</code></td></tr><tr><td><code>by lazy</code></td><td>60</td><td><code>val jcrPath</code> вычисляется при первом доступе, затем кэшируется. Делегирует <code>dataTransferAreaPagesRest.jcrPath</code>. <code>!!</code> в делегате означает, что само ленивое значение может выбросить NPE.</td></tr><tr><td><code>private val log</code></td><td>41</td><td><code>KotlinLogging.logger {}</code> из библиотеки <code>mu</code> — создаёт логгер с автоматическим именем класса. Не нужно передавать <code>DataTransferService::class.java</code>.</td></tr><tr><td>Элвис <code>?:</code></td><td>69,91</td><td>Объединение по null — если левая часть null, выбрасывает исключение справа</td></tr><tr><td>Строковые шаблоны</td><td>69,91,105,109</td><td><code>"пользователь с ID $userId"</code> — интерполяция строк Kotlin. Переменные и выражения внутри <code>${}</code> вычисляются встроенно.</td></tr></table></div>
+
+<h2>Как это связано с остальной системой</h2>
+<div class="commentary"><p>Этот сервис является мостом между тремя подсистемами:</p><ol><li><strong>Потребители плагина</strong> — исполнители скриптов, генераторы отчётов, экспортёры счетов. Они вызывают <code>dataTransferBridge.getProviders()</code> → находят <code>DataTransferInterface</code> → вызывают <code>putFileInUsersInBox()</code>. Они не знают о JCR, личных ящиках или контроле доступа.</li><li><strong>Хранилище JCR</strong> — <code>attachmentsService.addAttachment()</code> сохраняет файлы в Apache Jackrabbit. JCR обрабатывает версионирование, контроль доступа и двоичное хранение. Файлы не находятся в базе данных.</li><li><strong>REST API</strong> — <code>DataTransferPageRest</code> и <code>DataTransferAreaPagesRest</code> предоставляют эндпоинты для загрузки/скачивания. Метод <code>getDataTransferAreaLink()</code> генерирует URL для этих эндпоинтов.</li></ol><p>Шаблон проектирования — <strong>фасад</strong>: сложные операции JCR скрыты за простым интерфейсом <code>putFileInUsersInBox()</code>.</p></div>
+<div class="nav" style="margin-top:2em"><a href="83.html">← #83</a> · <a href="85.html">#85 →</a></div>
+</body></html>

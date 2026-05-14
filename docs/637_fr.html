@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>#637 [FR]</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333}a{color:#0366d6}.meta{font-size:.9em;margin:1em 0}.nav{font-size:.9em;color:#888;margin-bottom:1em}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}code{background:#f0f0f0;padding:0 .2em}</style>
+</head>
+<body>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← Index des fichiers</a> · <a href="636.html">← Précédent</a> · <a href="638.html">Suivant →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/java/org/projectforge/database/jdbc/DatabaseExecutorImpl.java" target="_blank" title="Voir la source sur GitHub">📄 source</a></div>
+
+<h1>#637: <code>DatabaseExecutorImpl.java</code></h1>
+<div class="meta"><code>projectforge-business/src/main/java/org/projectforge/database/jdbc/DatabaseExecutorImpl.java</code> <strong>Lignes :</strong> 161 · <strong>Auteur :</strong> Kai Reinhard · <strong>Type :</strong> Java — implémente <a href="631.html">DatabaseExecutor</a> · <strong>Paquetage :</strong> <code>org.projectforge.database.jdbc</code> <span style="color:#888">161 lignes · 120 code · 29 commentaires · 12 vides</span></div>
+
+<div class="c"><p><strong>Implémentation JDBC simple de l'interface DatabaseExecutor.</strong> 161 lignes. <strong>Avertissement Javadoc important :</strong> <em>"N'UTILISEZ PAS CETTE CLASSE EN PRODUCTION ! Ceci est uniquement à des fins de démonstration, car il n'y a pas de pooling de connexions et les connexions peuvent être perdues !!!!!"</em> — cette classe est destinée aux <strong>migrations Flyway</strong> (qui s'exécutent avant l'initialisation d'Hibernate), aux scripts de correction de données et au développement/test. Le code de production utilise une implémentation basée sur <code>JdbcTemplate</code> avec le pooling de connexions HikariCP.</p>
+
+<p><strong>Architecture :</strong> Chaque méthode crée une sous-classe anonyme de <code>JdbcExecutor</code> (<a href="638.html">#638</a>) qui redéfinit la méthode modèle <code>execute(PreparedStatement)</code>. Il s'agit du <strong>patron Template Method</strong> — <code>JdbcExecutor</code> gère le cycle de vie de la connexion (ouverture, définition des paramètres, fermeture), tandis que chaque sous-classe anonyme fournit l'opération JDBC spécifique.</p>
+
+<p><strong>Détails des méthodes :</strong></p>
+<ul>
+<li><code>execute(sql, ignoreErrors)</code> — exécute du DDL/DML via <code>stmt.execute()</code>. Ne retourne rien. Quand <code>ignoreErrors=true</code>, <code>JdbcExecutor</code> attrape <code>SQLException</code> et la journalise au niveau WARN sans la relancer. Utilisé pour les opérations idempotentes comme <code>DROP TABLE IF EXISTS</code>.</li>
+<li><code>query(sql, args...)</code> — la méthode de requête principale. Crée un <code>JdbcExecutor</code> dont la redéfinition de <code>execute()</code> :
+  <ol><li>Appelle <code>stmt.executeQuery()</code> pour obtenir un <code>ResultSet</code></li>
+  <li>Itère <code>while(rs.next())</code>, créant un <code>DatabaseResultRowImpl</code> par ligne</li>
+  <li>Pour chaque ligne, itère sur les colonnes de <code>ResultSetMetaData</code> (conversion d'index base 1 → base 0)</li>
+  <li>Crée <code>DatabaseResultRowEntryImpl(type, name, value)</code> pour chaque colonne</li>
+  <li>Retourne <code>List&lt;DatabaseResultRow&gt;</code> — correctement remplie avec les métadonnées des colonnes</li></ol>
+  <strong>Sécurité des ressources :</strong> <code>ResultSet</code> est fermé dans un bloc <code>finally</code> — critique car cela contourne la gestion des ressources d'Hibernate.</li>
+<li><code>queryForInt(sql, args...)</code> — retourne un entier unique. Lève une <code>RuntimeException</code> si le jeu de résultats est vide (pas de <code>rs.next()</code>). Utilisé pour <code>SELECT COUNT(*)</code> et les requêtes agrégées similaires. Ferme <code>ResultSet</code> dans finally.</li>
+<li><code>update(sql, args...)</code> — exécute <code>stmt.executeUpdate()</code>, retourne le nombre de lignes affectées sous forme d'<code>Integer</code>. Conversion depuis <code>Object</code> — le modèle générique <code>JdbcExecutor</code> retourne <code>Object</code> pour s'adapter à différents types de retour.</li></ul>
+
+<p><strong>Deux constructeurs :</strong> <code>DatabaseExecutorImpl()</code> (sans argument — la DataSource doit être définie ultérieurement via <code>setDataSource()</code>) et <code>DatabaseExecutorImpl(DataSource)</code> (prêt à l'emploi). Le constructeur sans argument existe pour les scénarios de configuration Spring XML où la DataSource est injectée via un setter de propriété.</p>
+
+<p><strong>Flux DataSource :</strong> La DataSource provient du <code>@Bean DataSource</code> de Spring (configuré dans les propriétés de l'application : <code>spring.datasource.url</code>, <code>spring.datasource.username</code>, <code>spring.datasource.password</code>). En production, il s'agit d'une DataSource poolée HikariCP — mais cette classe n'utilise pas les fonctionnalités de pooling. Son avertissement concernant "l'absence de pooling de connexions" fait référence à sa propre gestion des connexions : chaque appel à <code>JdbcExecutor</code> ouvre une nouvelle connexion JDBC brute via <code>DataSource.getConnection()</code> plutôt que d'emprunter au pool, ce qui <em>devrait</em> fonctionner avec HikariCP mais n'est pas l'utilisation prévue.</p>
+
+<p><strong>Dépendances :</strong> <code>JdbcExecutor</code> (<a href="638.html">#638</a>), <code>DatabaseResultRowImpl</code> (<a href="637.html">#637</a>), <code>DatabaseResultRowEntryImpl</code> (<a href="636.html">#636</a>). Tous dans le même sous-paquetage <code>jdbc</code>.</p></div>
+
+</body></html>

@@ -1,95 +1,13 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>#976: EmployeePagesRest</title>
-<style>
-body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:2em;color:#444}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}
-</style>
-</head>
-<body>
-<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="975.html">← Prev</a> · <a href="977.html">Next →</a></div>
-<h1>#976: <code>EmployeePagesRest</code></h1>
-<div class="meta">
-<strong>Type:</strong> REST Controller (Spring) &nbsp;|&nbsp; <strong>Purpose:</strong> Employee master data with time-dependent attributes (status, hours, leave)<br>
-<strong>Source:</strong> <code>projectforge-rest/src/main/kotlin/org/projectforge/rest/fibu/EmployeePagesRest.kt</code><br>
-<strong>Extends:</strong> <code>AbstractDTOPagesRest&lt;EmployeeDO, Employee, EmployeeDao&gt;</code><br>
-<strong>Endpoint:</strong> <code>/rs/employee</code>
-</div>
-<div class="c">
-<p>REST controller for <strong>employee master data</strong>. The most feature-rich controller in the fibu REST package, supporting employee creation with auto-redirect to edit, time-dependent attribute management (status history, weekly working hours, annual leave), modal sub-pages for attribute editing, active-employee filtering, and caches integration for Kost1 and user data.</p>
-</div>
-
-<h2>Architecture &amp; Design</h2>
-
-<h3>Dependencies</h3>
-<table>
-<tr><th>Dependency</th><th>Purpose</th></tr>
-<tr><td><code>PfCaches</code></td><td>Initializes lazy-loaded associations on DO before DTO conversion</td></tr>
-<tr><td><code>EmployeeCache</code></td><td>Sets time-dependent attributes on the DO</td></tr>
-<tr><td><code>EmployeeService</code></td><td>Selects status entries, weekly hours entries, annual leave entries</td></tr>
-<tr><td><code>KostCache</code></td><td>Resolves Kost1 for DTO display</td></tr>
-<tr><td><code>UserGroupCache</code></td><td>Resolves user details (firstname, lastname) for DTO</td></tr>
-</table>
-
-<h3>DTO Transformation</h3>
-<p><code>transformFromDB()</code> is comprehensive: initializes caches, copies from DO, resolves user details (firstname/lastname) via <code>UserGroupCache</code>, resolves Kost1 via <code>KostCache</code>, sets time-dependent attrs, and populates status/weeklyHours/annualLeave.</p>
-
-<h3>Time-Dependent Attributes</h3>
-<p><code>onBeforeGetItemAndLayout()</code> loads three collections of <code>EmployeeValidSinceAttr</code> entries from <code>EmployeeService</code>:</p>
-<ul>
-<li><code>statusEntries</code> — Employment status changes over time</li>
-<li><code>weeklyWorkingHoursEntries</code> — Changes in weekly working hours</li>
-<li><code>annualLeaveEntries</code> — Changes in annual leave entitlement</li>
-</ul>
-
-<h3>List Layout (AG-Grid)</h3>
-<table>
-<tr><th>Column</th><th>Field</th></tr>
-<tr><td>First name</td><td><code>user.firstname</code></td></tr>
-<tr><td>Last name</td><td><code>user.lastname</code></td></tr>
-<tr><td>Status</td><td><code>status</code></td></tr>
-<tr><td>Staff number</td><td><code>staffNumber</code></td></tr>
-<tr><td>Cost center 1</td><td><code>kost1</code></td></tr>
-<tr><td>Position</td><td><code>position</code></td></tr>
-<tr><td>Department</td><td><code>abteilung</code></td></tr>
-<tr><td>Entry date</td><td><code>eintrittsDatum</code></td></tr>
-<tr><td>Exit date</td><td><code>austrittsDatum</code></td></tr>
-<tr><td>Comment</td><td><code>comment</code></td></tr>
-</table>
-
-<h3>Magic Filter</h3>
-<p>Adds an <strong>"only active entries"</strong> boolean filter (default: true). The <code>preProcessMagicFilter()</code> marks it as synthetic and adds an <code>EmployeeActiveFilter</code> custom result filter. The commented-out status list filter suggests planned future enhancement.</p>
-
-<h3>Edit Layout</h3>
-<p>Two sections:</p>
-<ol>
-<li><strong>Top:</strong> User, Kost1, Department, Position, Staff number, Entry/exit dates, Comment</li>
-<li><strong>Below actions (new employees only):</strong> Info alert about subsequent attribute setup</li>
-<li><strong>Below actions (existing employees only):</strong> Three AG-Grid tables for annual leave entries, weekly hours entries, and status entries — each with row-click modal navigation via <code>EmployeeValidSinceAttrPageRest</code> and an "Add" button opening the same page in create mode.</li>
-</ol>
-
-<h3>Post-Save Redirect</h3>
-<p><code>onAfterSave()</code> redirects to the edit page after insert, enabling the user to add status, vacation, and weekly hours entries.</p>
-
-<h3>Auto-Completion</h3>
-<p>Search fields: <code>user.username</code>, <code>user.firstname</code>, <code>user.lastname</code>, <code>user.email</code>. Overrides <code>queryAutocompleteObjects()</code> to use <code>selectWithActiveStatus()</code> showing only active and recently departed employees.</p>
-
-<h2>Git History</h2>
-<div class="hist"><pre>
-868d6abb7 2025 -> 2026
-76f216b0f AbstractPagesRest: param request added to open functions, WIP. address vcf upload
-454fa3a50 EmployeePagesRest, VisitorPagesRest: dataType fixed.
-e28cc8007 EmployeePagesRest: creation of new employees is now much user-friendly.
-28efde264 Employee: weeklyWorkingHours now as time-dependent attr.
-63081666f Source file headers: 2024-> 2025.
-... extensive migration history (all tests OK entries), jakarta migration
-b6092df09 Copyright 2023 -> 2024
-ab45d51fa Copyright 2001-2022 -> 2001-2023.
-44dcb895b AbstractPagesRest.createListLayout(...) refactored.
-... 2020-2022: React migration, user separation, EmployeeDO Kotlin conversion, Kost1 support
-7c79f1922 Copyright of source header -> 2020.
-</pre></div>
-</body>
-</html>
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>#976</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}.hist{font-size:.85em;color:#555}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}</style></head>
+<body><div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="975.html">← Prev</a> · <a href="977.html">Next →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/kotlin/org/projectforge/business/fibu/RechnungPosInfo.kt" target="_blank" title="View source on GitHub">📄 source</a></div>
+<h1>#976: <code>RechnungPosInfo.kt</code></h1>
+<div class="meta"><code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/RechnungPosInfo.kt</code> Invoice Position Info Model (DTO), projectforge-business/src/main/kotlin/org/projectforge/business/fibu/RechnungPosInfo.kt <span style="color:#888">75 lines · 45 code · 22 comments · 8 blank</span></div>
+<div class="c">Serializable DTO holding calculated information about a single invoice position (<code>AbstractRechnungsPositionDO</code>). Computed by <code>RechnungCalculator</code>. Copies raw data (<code>number</code>, <code>text</code>, <code>menge</code>, <code>einzelNetto</code>, <code>vat</code>) and holds computed fields: <code>netSum</code>, <code>grossSum</code>, <code>vatAmount</code>, <code>kostZuweisungNetSum</code>, <code>kostZuweisungGrossSum</code>, <code>kostZuweisungNetFehlbetrag</code>. Links back to order position via <code>auftragsPositionId</code>, <code>auftragsId</code>, <code>auftragsPositionNummer</code>. Implements <code>Comparable</code> for sorting by invoice number then position number. Note: imports <code>org.jetbrains.kotlin.ir.types.IdSignatureValues.result</code> (likely a typo/bug at line 28).</div>
+<h2>Git History</h2><div class="hist"><pre>868d6abb7 2026-01-01 Kai Reinhard: 2025 -> 2026
+63081666f 2025-01-01 Kai Reinhard: Source file headers: 2024-> 2025.
+2e9839891 2024-11-03 Kai Reinhard: Migration stuff in progress...
+973fbf518 2024-10-30 Kai Reinhard: Migration stuff in progress...
+ba2479571 2024-10-30 Kai Reinhard: Migration stuff in progress...
+b47c21af6 2024-10-30 Kai Reinhard: Refactored caching and calculations with invoices (not yet finished)</pre></div>
+</body></html>

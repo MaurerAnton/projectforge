@@ -1,9 +1,8 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>#871: ConfigurationService.kt</title>
+<meta charset="utf-8">
+<title>#871: BaseUserGroupRight.kt — ProjectForge Docs</title>
 <style>
 body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}
 h1{border-bottom:2px solid #333;padding-bottom:.3em}
@@ -19,161 +18,86 @@ table{border-collapse:collapse;width:100%;margin:1em 0}
 th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}
 th{background:#f5f5f5;font-weight:600}
 .hist{font-size:.85em;color:#555}
+.warn{background:#fff3cd;border-left:3px solid #ffc107;padding:.5em 1em;margin:1em 0}
 </style>
 </head>
 <body>
-<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="870.html">← Prev</a> · <a href="872.html">Next →</a></div>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="870.html">← Prev</a> · <a href="872.html">Next →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/kotlin/org/projectforge/business/common/BaseUserGroupRight.kt" target="_blank" title="View source on GitHub">📄 source</a></div>
+<h1>#871: <code>BaseUserGroupRight.kt</code></h1>
+<div class="meta"><code>projectforge-business/src/main/kotlin/org/projectforge/business/common/BaseUserGroupRight.kt</code> <strong>Type:</strong> Abstract class · <strong>Purpose:</strong> User/group rights access check · <strong>Source:</strong> <code>projectforge-business/src/main/kotlin/org/projectforge/business/common/BaseUserGroupRight.kt</code> <span style="color:#888">147 lines · 64 code · 66 comments · 17 blank</span></div>
+<div class="c">Abstract base class for domain objects supporting user- and group-specific access rights. Extends <code>UserRightAccessCheck</code> and provides concrete implementations of CRUD access checks (select, insert, update, delete, history) by delegating to <code>BaseUserGroupRightUtils</code>. Supports owner, full, readonly, and minimal access levels.</div>
 
-<h1>#871: <code>ConfigurationService.kt</code></h1>
+<h2>Class Hierarchy</h2>
+<pre>UserRightAccessCheck&lt;T&gt;
+  └── BaseUserGroupRight&lt;T : BaseUserGroupRightsDO?&gt;</pre>
+<p>The generic parameter <code>T</code> is constrained to nullable <code>BaseUserGroupRightsDO</code> subtypes (<a href="865.html">#865</a>).</p>
 
-<div class="meta">
-<p><strong>Type:</strong> Spring <code>@Service</code> — Application-wide configuration facade</p>
-<p><strong>Purpose:</strong> Central configuration service that reads and manages all ProjectForge runtime settings from XML config files, database-stored configuration entries, and Spring property values.</p>
-<p><strong>Source path:</strong> <code>projectforge-business/src/main/kotlin/org/projectforge/business/configuration/ConfigurationService.kt</code></p>
-</div>
-
-<div class="c">
-<p>The <strong>single most important service</strong> in the ProjectForge business layer. It serves as the unified entry point for all configuration concerns — file system paths, security settings, email, locale, currency, SSL keystores, Datev limits, and dozens of database-backed parameters. It is initialized via <code>@PostConstruct</code> and registers itself globally via <code>ConfigurationServiceAccessor</code>, making it available even during early Spring startup (e.g., for Flyway migrations).</p>
-</div>
-
-<h2>Architecture &amp; Responsibilities</h2>
-
-<h3>1. Spring Property Injection (<code>@Value</code> fields)</h3>
-<p>The service declares ~25 <code>@Value</code>-annotated fields sourced from <code>application.properties</code> or equivalent configuration files:</p>
+<h2>Constructor Parameters</h2>
 <table>
-<tr><th>Property</th><th>Type</th><th>Default / Description</th></tr>
-<tr><td><code>projectforge.base.dir</code></td><td><code>String</code></td><td>Application home directory (required)</td></tr>
-<tr><td><code>projectforge.support.mail</code></td><td><code>String?</code></td><td>Support email address</td></tr>
-<tr><td><code>projectforge.resourcesDirectory</code></td><td><code>String</code></td><td>Default: <code>resources</code></td></tr>
-<tr><td><code>projectforge.logSessionIds</code></td><td><code>Boolean?</code></td><td>Log HTTP/SSL session IDs (truncated)</td></tr>
-<tr><td><code>projectforge.keystoreFile</code></td><td><code>String?</code></td><td>Path to jssecacerts file</td></tr>
-<tr><td><code>projectforge.keystorePassphrase</code></td><td><code>String?</code></td><td>Passphrase for keystore</td></tr>
-<tr><td><code>projectforge.fontsDirectory</code></td><td><code>String?</code></td><td>Default: <code>resources/fonts</code></td></tr>
-<tr><td><code>projectforge.telephoneSystemNumber</code></td><td><code>String?</code></td><td>Base number for internal calls</td></tr>
-<tr><td><code>projectforge.phoneLookupKey</code></td><td><code>String?</code></td><td>Reverse phone lookup auth key</td></tr>
-<tr><td><code>projectforge.accessLogConfig</code></td><td><code>String?</code></td><td>"ALL", "NONE", or default (suspicious only)</td></tr>
-<tr><td><code>projectforge.logoFile</code></td><td><code>String?</code></td><td>Relative path to logo in images dir</td></tr>
-<tr><td><code>projectforge.currencySymbol</code></td><td><code>String?</code></td><td>Default: €</td></tr>
-<tr><td><code>projectforge.currency</code></td><td><code>String?</code></td><td>Default: EUR (used by React client)</td></tr>
-<tr><td><code>projectforge.defaultLocale</code></td><td><code>Locale?</code></td><td>Default locale</td></tr>
-<tr><td><code>projectforge.defaultTimeNotation</code></td><td><code>TimeNotation?</code></td><td>12h or 24h notation</td></tr>
-<tr><td><code>projectforge.defaultFirstDayOfWeek</code></td><td><code>DayOfWeek?</code></td><td>First day of week</td></tr>
-<tr><td><code>projectforge.minimalDaysInFirstWeek</code></td><td><code>Int?</code></td><td>Min days for week-of-year calculation</td></tr>
-<tr><td><code>projectforge.excelPaperSize</code></td><td><code>String?</code></td><td>Excel paper size (e.g., "A4")</td></tr>
-<tr><td><code>projectforge.wicket.developmentMode</code></td><td><code>Boolean</code></td><td>Wicket dev mode flag</td></tr>
-<tr><td><code>pf.config.security.teamCalCryptPassword</code></td><td><code>String?</code></td><td>Team calendar crypt password</td></tr>
-<tr><td><code>pf.config.compileCss</code></td><td><code>Boolean</code></td><td>Default: <code>true</code></td></tr>
-<tr><td><code>projectforge.login.handlerClass</code></td><td><code>String?</code></td><td>Custom login handler FQCN</td></tr>
-<tr><td><code>projectforge.max-file-size.datev</code></td><td><code>String?</code></td><td>Max upload size for Datev files</td></tr>
-<tr><td><code>projectforge.max-file-size.xml-dump-import</code></td><td><code>String?</code></td><td>Max upload size for XML dump imports</td></tr>
+<tr><th>Parameter</th><th>Type</th><th>Description</th></tr>
+<tr><td><code>id</code></td><td><code>IUserRightId?</code></td><td>Right identifier passed to superclass</td></tr>
+<tr><td><code>category</code></td><td><code>UserRightCategory?</code></td><td>Category of this right</td></tr>
+<tr><td><code>rightValues</code></td><td><code>vararg UserRightValue?</code></td><td>Access right value flags</td></tr>
 </table>
 
-<h3>2. Initialization (<code>@PostConstruct init()</code>)</h3>
-<ul>
-<li>Registers <code>this</code> in <code>ConfigurationServiceAccessor</code> (static accessor pattern)</li>
-<li>Sets <code>staticApplicationHomeDir</code> for early Flyway access</li>
-<li>Loads <code>ConfigXml</code> from the application home directory</li>
-<li>Creates the <code>resources</code>, <code>fonts</code>, and <code>plugins</code> directories if missing</li>
-<li>In Docker mode, creates an <code>environment.sh</code> file with initial content for Java options</li>
-<li>Sets up SSL keystores via <code>setupKeyStores()</code></li>
-<li>Creates the framework-level <code>Configuration</code> object</li>
-</ul>
+<h2>Access Check Methods</h2>
 
-<h3>3. Resource Resolution</h3>
-<p>Two methods handle file resolution with a fallback strategy:</p>
-<ul>
-<li><code>getResourceAsInputStream(filename)</code> — Tries filesystem path under <code>resources</code> dir first, then falls back to classpath resource loading</li>
-<li><code>getResourceContentAsString(filename)</code> — Same resolution but returns the content as a UTF-8 string</li>
-</ul>
-<p>Both return <code>Array&lt;Any?&gt;</code> of size 2: <code>[InputStream?, URI?]</code>. Logging helpers track which resources exist on disk vs. classpath to avoid spamming logs with repeated "file not found" messages.</p>
-
-<h3>4. Database-Backed Configuration</h3>
-<p>Numerous properties are read from the <code>ConfigurationDao</code> (persisted <code>ConfigurationDO</code> entities):</p>
-<ul>
-<li><code>timezone</code> — Default timezone from DB (falls back to system default)</li>
-<li><code>getEndOfCarryVacationOfPreviousYear(year)</code> — Parses day/month string (defaults to 31.03.)</li>
-<li><code>hREmailadress</code> — HR contact email</li>
-<li><code>minPasswordLength</code> — Enforced minimum; falls back to <code>ConfigurationParam.MIN_PASSWORD_LENGTH</code> default</li>
-<li><code>flagCheckPasswordChange</code> — Whether password change is required</li>
-<li><code>timesheetNoteSavingsByAI</code> — AI-generated timesheet note savings flag</li>
-</ul>
-<p>All DB-backed getters defensively catch <code>RuntimeException</code> for the case where the database hasn't been initialized yet (initial setup phase).</p>
-
-<h3>5. SSL / Keystore Management</h3>
-<p>The private <code>setupKeyStores()</code> method loads a custom jssecacerts file (if configured) and creates an <code>SSLSocketFactory</code> via <code>createSSLSocketFactory()</code>. This factory is exposed as <code>usersSSLSocketFactory</code> for custom certificate validation (e.g., for CardDAV/CalDAV connections).</p>
-
-<h3>6. Template Resolution</h3>
-<p><code>getTemplateFile(dir, filename, resourceFilename)</code> and <code>getOfficeTemplateFile()</code> resolve Office template files from the filesystem first (<code>resources/officeTemplates/</code>), then from the classpath (<code>classpath:officeTemplates/</code>), returning Spring <code>Resource</code> objects.</p>
-
-<h3>7. Logo Management</h3>
-<p>Properties <code>logoFileName</code>, <code>logoFileObject</code>, <code>isLogoFileValid</code>, and <code>syntheticLogoName</code> manage the application logo. The logo file is resolved relative to <code>resources/images/</code> and the synthetic name returns <code>logo.png</code>, <code>logo.jpg</code>, or <code>logo.gif</code> based on the extension.</p>
-
-<h3>8. Delegated Access</h3>
+<h3>Select Access</h3>
 <table>
-<tr><th>Property / Method</th><th>Delegates to</th></tr>
-<tr><td><code>isSendMailConfigured</code></td><td><code>SendMail.isConfigured</code></td></tr>
-<tr><td><code>contractTypes</code></td><td><code>ConfigXml.contractTypes</code></td></tr>
-<tr><td><code>isSecurityConfigured</code></td><td>Checks <code>SecurityConfig.passwordPepper</code></td></tr>
-<tr><td><code>getDaoValue()</code></td><td><code>ConfigurationDao.getValue()</code></td></tr>
-<tr><td><code>daoInternalLoadAll()</code></td><td><code>ConfigurationDao.selectAll()</code></td></tr>
+<tr><th>Method</th><th>Behavior</th></tr>
+<tr><td><code>hasSelectAccess(user: PFUserDO?)</code></td><td>Always returns <code>true</code> (general select allowed)</td></tr>
+<tr><td><code>hasSelectAccess(user, obj)</code></td><td>Returns <code>true</code> if user is owner, admin, or has full/readonly/minimal access via group/user rights</td></tr>
 </table>
 
-<h3>9. Companion Object</h3>
-<p>Contains constants and static utilities:</p>
-<ul>
-<li><code>staticApplicationHomeDir</code> — Available before Spring context is fully loaded (used by Flyway)</li>
-<li><code>nonExistingResources</code> / <code>existingResources</code> — Sets to avoid repeated log messages about resource availability</li>
-<li><code>showNonExistingMessage()</code> / <code>showExistingMessage()</code> — Logging helpers that suppress duplicates</li>
-<li><code>ENVIRONMENT_FILE</code> / <code>ENVIRONMENT_FILE_INITIAL_CONTENT</code> — Shell script template for Docker setups</li>
-</ul>
-
-<h2>Dependencies</h2>
+<h3>Insert Access</h3>
 <table>
-<tr><th>Dependency</th><th>Role</th></tr>
-<tr><td><code>ConfigurationDao</code></td><td>Database-backed configuration CRUD</td></tr>
-<tr><td><code>PfPersistenceService</code></td><td>Persistence context for framework-level <code>Configuration</code></td></tr>
-<tr><td><code>SendMail</code></td><td>Email configuration checks</td></tr>
-<tr><td><code>SecurityConfig</code></td><td>Security-related settings (password pepper)</td></tr>
-<tr><td><code>ApplicationContext</code></td><td>Spring resource resolution</td></tr>
-<tr><td><code>ConfigXml</code></td><td>XML-based config file parsing</td></tr>
-<tr><td><code>FileUtils</code></td><td>Path resolution utilities</td></tr>
+<tr><th>Method</th><th>Behavior</th></tr>
+<tr><td><code>hasInsertAccess(user: PFUserDO)</code></td><td>Always returns <code>true</code> (general insert allowed)</td></tr>
+<tr><td><code>hasInsertAccess(user, obj)</code></td><td>Returns <code>true</code> if user is owner or admin</td></tr>
 </table>
+
+<h3>Update &amp; Delete Access</h3>
+<p>Both <code>hasUpdateAccess(user, obj, oldObj)</code> and <code>hasDeleteAccess(user, obj, oldObj)</code> delegate to <code>hasInsertAccess(user, oldObj)</code>—i.e., the user must be owner or admin of the <em>old</em> object.</p>
+
+<h3>History Access</h3>
+<p><code>hasHistoryAccess(user, obj)</code> returns <code>true</code> if the user has insert access on the object, or if the object is null (default <code>true</code>).</p>
+
+<h2>Delegated Utility Methods</h2>
+<p>All these methods delegate to <code>BaseUserGroupRightUtils</code> (<a href="867.html">#867</a>):</p>
+<table>
+<tr><th>Method</th><th>Description</th></tr>
+<tr><td><code>isOwner(user, obj)</code></td><td>Checks if user is the owner of the object</td></tr>
+<tr><td><code>isOwner(userId, obj)</code></td><td>Checks by user ID</td></tr>
+<tr><td><code>hasReadAccess(obj, userId, throwException)</code></td><td>Read access check with optional exception</td></tr>
+<tr><td><code>hasWriteAccess(obj, userId, throwException)</code></td><td>Write access check with optional exception</td></tr>
+<tr><td><code>getAccessType(obj, userId)</code></td><td>Returns one of <code>NONE</code>, <code>MINIMAL</code>, <code>READONLY</code>, or <code>FULL</code></td></tr>
+<tr><td><code>hasFullAccess(obj, userId)</code></td><td>True if access type has full access</td></tr>
+<tr><td><code>hasReadonlyAccess(obj, userId)</code></td><td>True if access type is <code>READONLY</code></td></tr>
+<tr><td><code>hasMinimalAccess(obj, userId)</code></td><td>True if access type is <code>MINIMAL</code></td></tr>
+</table>
+
+<h2>Design Rationale</h2>
+<p>This class bridges the framework-level <code>UserRightAccessCheck</code> abstraction with the domain-level user/group rights stored in <code>BaseUserGroupRightsDO</code>. By keeping the actual logic in the standalone object <code>BaseUserGroupRightUtils</code>, the rights calculation is accessible without constructing a full <code>BaseUserGroupRight</code> instance (e.g., from the <code>TeamCalCache</code>).</p>
+
+<p>General select and insert always return <code>true</code> because object-level filtering is applied downstream by the concrete DAO/service layer—this class only gates object-specific access.</p>
 
 <h2>Git History</h2>
-<div class="hist"><pre>868d6abb7 2025 -> 2026
-2b601ac08 Deprecated code fixed.
-1449f4859 WIP: timesavings by AI in timesheets, config param for note added.
+<div class="hist"><pre>
+868d6abb7 2025 -> 2026
 63081666f Source file headers: 2024-> 2025.
-0e449b8f1 Fix leftover typos Found via codespell
-5f9bbfbd3 Fix typos in projectforge-business directory
-27dd47d30 ConfigurationService: sqlConsole isn't available anymore.
-98b618a26 WIP: Setup of ProjectForge...
-7f2c255ae WIP: CardDav
-66ec668f6 Migration stuff in progress...
-1b50060c3 BaseDao: renamed: get -> find, save -> insert, getList -> select, load -> select
-87aaf6a5a Migration stuff in progress... BaseDao refactored (not yet finished) internal* methods renamed.
-4c04cfd65 MAJOR-CHANGE! Migration of integer id's to Long id's (including fk's etc.)
-e7128d28c Migration stuff in progress...
-77bade6df javax.* -> jakarta.*
+4c04cfd65 MAJOR-CHANGE! Migration of integer id's to Long id's
+4efcbd0fb Migration stuff in progress...
 b6092df09 Copyright 2023 -> 2024
-a25c868cb SendMail refactored (Genome part removed).
-522866720 BirthdayTemplate/InvoiceTemplate use new Configuration.getOfficeTemplateFile function.
-9cee83a03 WIP: phone calls for Sipgate
-df7482f20 WIP: phone calls for Sipgate
-be898d835 projectforge.logSessionIds= as config param added for logging http and ssl session ids.
 ab45d51fa Copyright 2001-2022 -> 2001-2023.
-72a042463 WIP: Banking plugin (and new import module).
-d38c01233 WIP: Banking plugin (and new import module).
-2dc192b7a AG grid: auto-format of currency, Formatter works now also with AG grid (rating, dates, timestamps). Currency rendering by client (Formatter.jsx) added.
-50c3d4b46 MEB functinoality and SmsReceiverServlet removed.
-f1a12e2e5 MEB functinoality and SmsReceiverServlet removed.
+232a91c5a BaseUserGroupRightUtils implemented. WIP BankingPlugin and jobs-handling.
 5f7ef41b8 Copyright 2021 -> 2022
-77d22d685 Security: LoggingFilter logs now suspicious urls at default in logs/access.log (using Rolling file appender).
-da00c084e ConfigurationServce.kt fixed: open declarations for Java usage (proxied Spring bean).
-28f8db075 WIP entrypoint.sh for docker-compose
-1ea2e5714 ConfigurationService: open fun required by SendMailTest for mocking.
-86f2d5f99 ConfigurationService.kt seems to work now and creates now environment.sh file for docker installations.
-867476f85 ConfigurationService -> Kotlin (not yet tested).
+c0f2b9de0 Tenants functionality removed everywhere (untested).
+ceb63e8a1 Source code header: (C) 2001-2021.
+7140fba5d BaseUserGroupRight.hasSelect(PFUserDO?): NPE fix
+7b1fd2d51 NPE fix in BaseUserGroupRight.kt.
+becbdcaf9 SEPATransferGenerator moved.
+e2a787c6e Fix after migration to Kotlin in BaseUserGroupRight.
+e26bafa83 BaseUserGroupRight, UserGroupCach, userContext -> Kotlin.
 </pre></div>
 </body>
 </html>

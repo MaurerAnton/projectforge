@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>#4321: XStreamTest.java [ES]</title>
+<style>
+  body { font-family: system-ui, sans-serif; max-width: 960px; margin: 2em auto; padding: 0 1em; background: #fafafa; color: #222; line-height: 1.6; }
+  h1 { border-bottom: 2px solid #333; padding-bottom: 0.3em; }
+  h2 { margin-top: 2em; border-bottom: 1px solid #ddd; padding-bottom: 0.2em; }
+  h3 { margin-top: 1.5em; color: #333; }
+  a { color: #0366d6; text-decoration: none; } a:hover { text-decoration: underline; }
+  .meta { background: #f0f0f0; border-radius: 6px; padding: 1em; margin: 1em 0; font-size: 0.9em; }
+  .code-block { background: #1e1e1e; color: #d4d4d4; border-radius: 4px; padding: 0.8em 1em; margin: 0.5em 0; overflow-x: auto; font-family: 'Consolas', monospace; font-size: 0.82em; line-height: 1.5; }
+  .commentary { margin: 0.8em 0; line-height: 1.7; background: #fff; padding: 0.5em 1em; border-radius: 6px; border-left: 4px solid #ddd; }
+  table { border-collapse: collapse; width: 100%; margin: 0.8em 0; font-size: 0.9em; } th, td { border: 1px solid #ddd; padding: 0.4em 0.6em; text-align: left; } th { background: #f0f0f0; }
+  code { background: #e8e8e8; border-radius: 3px; padding: 0.1em 0.3em; font-size: 0.9em; }
+  .nav { font-size: 0.9em; color: #888; margin-bottom: 1em; }
+  .history { background: #fffbe6; border-radius: 6px; padding: 1em; margin: 1em 0; font-size: 0.9em; border-left: 4px solid #ffc107; }
+  .arch { background: #e8f4fd; border-radius: 6px; padding: 1em; margin: 1em 0; font-size: 0.9em; border-left: 4px solid #2196f3; }
+</style>
+</head>
+<body>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Índice</a> · <a href="file-index.html">← Índice de archivos</a> · <a href="4320.html">← Anterior</a> · Siguiente → · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/tools/org.projectforge.tools.schemaexp/src/test/java/org/projectforge/tools/schemaexp/XStreamTest.java" target="_blank" title="Ver fuente en GitHub">📄 fuente</a></div>
+
+<h1>#4321: <code>XStreamTest.java</code></h1>
+
+<div class="meta"><code>tools/org.projectforge.tools.schemaexp/src/test/java/org/projectforge/tools/schemaexp/XStreamTest.java</code> 
+  <p><strong>Ruta:</strong> <code>tools/org.projectforge.tools.schemaexp/src/test/java/org/projectforge/tools/schemaexp/XStreamTest.java</code></p>
+  <p><strong>Tipo:</strong> Clase de prueba JUnit 5 · <strong>Líneas:</strong> 40 · <strong>Paquete:</strong> <code>org.projectforge.tools.schemaexp</code></p>
+  <p><strong>Propósito:</strong> Valida que XStream con <code>ReferenceByIdMarshallingStrategy</code> maneje correctamente grafos de objetos cíclicos durante la serialización XML — un requisito previo para la herramienta de exportación/importación de base de datos SchemaExp.</p>
+  <p><strong>Fuente:</strong> <a href="https://github.com/micromata/projectforge/blob/develop/tools/org.projectforge.tools.schemaexp/src/test/java/org/projectforge/tools/schemaexp/XStreamTest.java">GitHub</a></p>
+ <span style="color:#888">40 líneas · 34 código · 0 comentarios · 6 en blanco</span></div>
+
+<div class="history">
+<table><tr><th>Commit</th><th>Fecha</th><th>Mensaje</th></tr>
+<tr><td><code>f46333761</code></td><td>2019-04-12</td><td>TestNG y JUnit4 reemplazados por JUnit5. Algunas pruebas (con powermock) siguen siendo JUnit4. Ya no existen pruebas TestNG.</td></tr>
+<tr><td><code>9ebb88522</code></td><td>2016-07-18</td><td>Commit inicial</td></tr></table>
+<p>Creado originalmente en 2016 como parte de la herramienta SchemaExp. Migrado de JUnit4 a JUnit5 en abril de 2019. La lógica central de la prueba no ha cambiado durante 10 años.</p>
+</div>
+
+<h2>Qué hace</h2>
+<div class="commentary">
+<p>Esta prueba valida un <strong>aspecto crítico de serialización</strong> para la herramienta SchemaExp: ¿puede XStream serializar y deserializar correctamente objetos Java que contienen <strong>referencias circulares</strong>? El modelo de dominio de ProjectForge está lleno de relaciones bidireccionales: <code>UserDO ↔ GroupDO</code>, <code>TaskDO ↔ TaskDO</code> (padre/hijo), <code>RechnungDO ↔ RechnungsPositionDO</code> (factura ↔ líneas de detalle). Sin un manejo adecuado de ciclos, la estrategia predeterminada <code>TreeMarshallingStrategy</code> de XStream entraría en recursión infinita en estos objetos y lanzaría un <code>StackOverflowError</code>.</p>
+<p>La prueba construye un ciclo mínimo padre-hijo (Parent tiene Map&lt;String, Child&gt;, cada Child tiene una referencia inversa a Parent), configura XStream con <code>ReferenceByIdMarshallingStrategy</code>, y verifica que el marshalling → unmarshalling se complete sin errores. La estrategia reemplaza las referencias repetidas a objetos con IDs internos en la salida XML y reconstruye el grafo de objetos completo durante la deserialización.</p>
+</div>
+
+<h2>Línea por línea</h2>
+
+<h3>Líneas 1–13: Paquete, importaciones, declaración de clase</h3>
+<div class="code-block"><pre>package org.projectforge.tools.schemaexp;
+
+import java.io.Serializable;
+import java.util.HashMap;
+import java.util.Map;
+import org.junit.jupiter.api.Test;
+import com.thoughtworks.xstream.XStream;
+import com.thoughtworks.xstream.core.ReferenceByIdMarshallingStrategy;
+
+public class XStreamTest {</pre></div>
+<div class="commentary">
+<p><strong>Líneas 1–5:</strong> Importaciones estándar. <code>Serializable</code> es necesario porque algunos modos de serialización de XStream lo exigen. <code>HashMap</code> almacena el mapeo padre→hijo.</p>
+<p><strong>Línea 7:</strong> <code>org.junit.jupiter.api.Test</code> — confirma que esto es JUnit 5 (Jupiter), no JUnit 4. El commit de migración (<code>f46333761</code>) menciona explícitamente este cambio.</p>
+<p><strong>Líneas 9–10:</strong> Las dos importaciones de XStream:
+<ul><li><code>XStream</code> — la biblioteca de serialización XML de ThoughtWorks, utilizada por ProjectForge para volcados XML de base de datos</li>
+<li><code>ReferenceByIdMarshallingStrategy</code> — la estrategia que permite el manejo de referencias cíclicas asignando IDs internos a los objetos y referenciándolos en lugar de anidarlos en línea. Esta es la línea más importante de toda la prueba.</li></ul></p>
+</div>
+
+<h3>Líneas 14–22: Clases internas — el modelo de grafo cíclico</h3>
+<div class="code-block"><pre>  public static class Parent implements Serializable {
+    Map&lt;String, Child&gt; childres = new HashMap&lt;&gt;();
+  }
+
+  public static class Child implements Serializable {
+    Parent parentRef;
+  }</pre></div>
+<div class="commentary">
+<p><strong><code>Parent</code></strong> (línea 14): Contiene un <code>Map&lt;String, Child&gt;</code> — un padre puede referenciar múltiples hijos. El nombre del campo <code>childres</code> tiene un error tipográfico (falta la 'n' de "children") — un problema menor conocido de código que no afecta la funcionalidad.</p>
+<p><strong><code>Child</code></strong> (línea 19): Contiene un único <code>Parent parentRef</code> — la referencia inversa que crea el ciclo. Sin este campo, no habría ciclo que probar.</p>
+<p><strong>Modificador <code>static</code>:</strong> Ambas clases son clases internas <code>static</code> — no capturan una referencia a la instancia externa de <code>XStreamTest</code>. Esto evita que la propia clase de prueba sea serializada.</p>
+</div>
+
+<h3>Líneas 24–39: El método de prueba — ida y vuelta marshal → unmarshal</h3>
+<div class="code-block"><pre>  @Test
+  public void testXStream() {
+    Parent parent = new Parent();
+    Child child = new Child();
+    child.parentRef = parent;              // hijo → padre (referencia inversa)
+    parent.childres.put("asdf", child);    // padre → hijo (referencia directa)
+    // Ahora ambas direcciones existen — un ciclo verdadero
+    
+    XStream xstream = new XStream();
+    xstream.setMarshallingStrategy(new ReferenceByIdMarshallingStrategy());
+    String res = xstream.toXML(parent);    // Marshal a XML
+    System.out.println("marshal realizado: " + res);
+    
+    xstream = new XStream();               // Instancia nueva (sin estado obsoleto)
+    xstream.setMarshallingStrategy(new ReferenceByIdMarshallingStrategy());
+    Object object = xstream.fromXML(res);  // Unmarshal desde XML
+    Parent rparent = (Parent) object;      // Cast exitoso = prueba pasa
+  }
+}</pre></div>
+<div class="commentary">
+<p><strong>Líneas 27–30: Construcción del ciclo.</strong> Se crean un <code>Parent</code> y un <code>Child</code>. La línea 29 establece <code>child.parentRef = parent</code> (hijo → padre). La línea 30 coloca al hijo en el mapa del padre con la clave <code>"asdf"</code> (padre → hijo). Ahora existen ambas direcciones.</p>
+<p><strong>Líneas 32–34: Marshalling.</strong> Se configura una instancia nueva de XStream con <code>ReferenceByIdMarshallingStrategy</code>. Sin la línea 32, XStream usaría <code>TreeMarshallingStrategy</code> que serializa recursivamente todo el grafo — encontrando el ciclo y lanzando <code>StackOverflowError</code>. La salida XML contendrá <code>&lt;parentRef reference="1"/&gt;</code> en lugar de anidar en línea el objeto Parent nuevamente.</p>
+<p><strong>Líneas 36–38: Unmarshalling.</strong> Se crea una <strong>instancia nueva de XStream</strong> (línea 36) para asegurar que no haya fuga de estado del paso de marshalling. Se aplica la misma estrategia, luego se deserializa la cadena XML. El cast <code>(Parent) object</code> de la línea 38 es la aserción implícita — si la deserialización falla o los tipos no coinciden, se lanza una <code>ClassCastException</code> y la prueba falla.</p>
+<p><strong>Sin aserciones explícitas:</strong> La prueba no tiene llamadas <code>assert*</code>. Se basa en fallos basados en excepciones: cualquier <code>StackOverflowError</code>, <code>ClassCastException</code> o error de análisis de XStream hará que la prueba falle. Este es un patrón de "prueba de humo" — verificar que la operación no se bloquee.</p>
+</div>
+
+<h2>Cómo se conecta este archivo con el proyecto</h2>
+<div class="commentary">
+<p>Esta prueba es la <strong>validación fundamental</strong> para toda la cadena de herramientas SchemaExp. Demuestra que XStream puede manejar de forma segura el grafo de entidades de ProjectForge antes de tocar cualquier dato de producción. El flujo del conjunto de pruebas:</p>
+<table><tr><th>Archivo</th><th>Rol</th></tr>
+<tr><td><strong>#4108 XStreamTest</strong></td><td>Valida el manejo de ciclos a nivel de biblioteca de serialización</td></tr>
+<tr><td>#4107 ToXmlTest</td><td>Exportación de extremo a extremo de base de datos real a XML</td></tr>
+<tr><td>#4106 FromXmlTest</td><td>Importación de extremo a extremo de XML a base de datos limpia</td></tr>
+<tr><td>#4105 ClearDbTest</td><td>Valida la limpieza de base de datos de forma aislada</td></tr>
+<tr><td>#4104 SchemaExpService</td><td>Servicio de producción que utiliza la configuración validada de XStream</td></tr></table>
+<p><strong>En producción:</strong> La función "Copia de seguridad/Restauración XML" de la interfaz de administración y la inicialización del "Sistema de prueba" del asistente de configuración dependen de que esta serialización funcione correctamente. Un fallo aquí significa: sin copias de seguridad XML, sin importación de datos de prueba y sin migración de base de datos entre proveedores (HSQLDB → PostgreSQL).</p>
+</div>
+
+<h2>Conclusiones clave</h2>
+<div class="commentary">
+<ul>
+<li><strong>ReferenceById es obligatorio:</strong> Nunca uses XStream sin esta estrategia cuando trabajes con entidades de ProjectForge. El modelo de dominio es inherentemente cíclico.</li>
+<li><strong>Migración a JUnit 5:</strong> El <code>@Test</code> de <code>org.junit.jupiter.api</code> confirma JUnit 5. Todas las pruebas nuevas deben seguir este patrón.</li>
+<li><strong>Sin aserciones = elección de diseño:</strong> Las pruebas basadas en excepciones son válidas para pruebas de humo, pero frágiles para regresión. Una mejora futura añadiría aserciones explícitas (por ejemplo, verificar <code>rparent.childres.get("asdf").parentRef == rparent</code>).</li>
+<li><strong>Patrón de instancia nueva:</strong> La línea 36 crea un nuevo XStream para unmarshalling — evita la fuga de estado entre operaciones de marshal y unmarshal. Buena práctica para pruebas de serialización.</li>
+<li><strong>Error tipográfico en nombre de campo:</strong> <code>childres</code> en la línea 16 debería ser <code>children</code>. Inofensivo pero vale la pena corregirlo para mejorar la legibilidad.</li>
+</ul>
+</div>
+
+<div class="nav" style="margin-top:2em; padding-top:1em; border-top:1px solid #ddd">
+  <a href="4107.html">← #4107: ToXmlTest.java</a> ·
+  <a href="file-index.html">Índice de archivos</a>
+</div>
+</body>
+</html>

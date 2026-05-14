@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>#707 [FR]</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:2em;color:#444}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}.warn{background:#fff3cd;border-left:3px solid #ffc107;padding:.5em 1em;margin:1em 0}.tip{background:#d4edda;border-left:3px solid #28a745;padding:.5em 1em;margin:1em 0}</style>
+</head>
+<body>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← Index des fichiers</a> · <a href="706.html">← Précédent</a> · <a href="708.html">Suivant →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/java/org/projectforge/framework/persistence/xstream/HibernateProxyConverter.java" target="_blank" title="Voir la source sur GitHub">📄 source</a></div>
+<h1>#707 : <code>HibernateProxyConverter.java</code></h1>
+<div class="meta"><code>projectforge-business/src/main/java/org/projectforge/framework/persistence/xstream/HibernateProxyConverter.java</code> Convertisseur XStream — dépaquette les proxies de chargement différé Hibernate vers leurs instances d'entité réelles lors du marshalling, <code>projectforge-business/src/main/java/org/projectforge/framework/persistence/xstream/HibernateProxyConverter.java</code> <span style="color:#888">63 lignes · 31 code · 25 commentaires · 7 vides</span></div>
+<div class="c">Étend le <code>ReflectionConverter</code> de XStream pour intercepter tout objet qui implémente <code>org.hibernate.proxy.HibernateProxy</code> avant que la sérialisation par réflexion de XStream ne s'enclenche. Lorsqu'un proxy Hibernate est rencontré, il appelle <code>getHibernateLazyInitializer().getImplementation()</code> pour extraire l'instance d'entité sous-jacente, puis délègue le marshalling au convertisseur approprié pour la classe <em>réelle</em>. Sans ce convertisseur, XStream sérialiserait l'objet proxy généré par Javassist/CGLIB (une coquille vide contenant uniquement un initialiseur différé), ce qui produirait une sortie XML vide ou cassée pour toute association d'entité chargée paresseusement.</div>
+
+<h2>Architecture</h2>
+
+<h3>Hiérarchie des classes</h3>
+<p><code>HibernateProxyConverter</code> étend <code>com.thoughtworks.xstream.converters.reflection.ReflectionConverter</code>, qui est le convertisseur par défaut de XStream pour les objets n'ayant pas de convertisseur plus spécifique. Il utilise la réflexion pour parcourir les champs et les sérialiser. En étendant cette classe de base, le convertisseur hérite automatiquement de tout le comportement standard de sérialisation par réflexion — il ne surcharge que les points d'interception liés aux proxies.</p>
+
+<h3>Champs</h3>
+<table>
+<tr><th>Champ</th><th>Type</th><th>Objectif</th></tr>
+<tr><td><code>converterLookup</code></td><td><code>ConverterLookup</code></td><td>Référence au registre des convertisseurs de XStream. Utilisé au moment du marshalling pour déléguer au convertisseur correct pour la classe réelle de l'entité dépaquetée. Défini via l'injection dans le constructeur.</td></tr>
+</table>
+
+<h3>canConvert(Class clazz)</h3>
+<p>Retourne <code>true</code> pour toute classe pour laquelle <code>HibernateProxy.class.isAssignableFrom(clazz)</code>. Cela correspond à toutes les classes proxy Hibernate générées par Javassist/CGLIB (qui implémentent l'interface <code>HibernateProxy</code>). Lorsque cela retourne <code>true</code>, XStream achemine le marshalling via ce convertisseur au lieu du <code>ReflectionConverter</code> par défaut.</p>
+
+<div class="warn">Important : Ce convertisseur doit être enregistré <em>avant</em> le <code>ReflectionConverter</code> par défaut dans la chaîne de convertisseurs de XStream, sinon le convertisseur par défaut s'emparerait du proxy en premier (car les proxies sont des classes normales) et sérialiserait les internes du proxy au lieu de l'entité réelle.</div>
+
+<h3>marshal(Object, HierarchicalStreamWriter, MarshallingContext)</h3>
+<p>La logique centrale de dépaquetage :</p>
+<ol>
+  <li><strong>Vérification de type :</strong> Teste <code>item instanceof HibernateProxy</code>.</li>
+  <li><strong>Dépaquetage :</strong> Appelle <code>((HibernateProxy) arg0).getHibernateLazyInitializer().getImplementation()</code> pour obtenir l'entité réelle. L'appel à <code>LazyInitializer.getImplementation()</code> force l'initialisation du proxy — cela déclenche une requête en base de données si l'entité n'a pas encore été chargée.</li>
+  <li><strong>Délégation :</strong> Utilise <code>converterLookup.lookupConverterForType(item.getClass())</code> pour trouver le convertisseur approprié pour la classe d'entité réelle, puis appelle <code>converter.marshal(item, writer, context)</code>. Cela garantit que l'entité réelle est sérialisée en utilisant le convertisseur correct (potentiellement ce même <code>HibernateProxyConverter</code> si l'entité réelle est aussi un proxy, ou le convertisseur par réflexion standard sinon).</li>
+</ol>
+
+<h3>Pas de surcharge de unmarshal()</h3>
+<p>Ce convertisseur ne surcharge pas <code>unmarshal()</code>. Pendant la désérialisation, XStream crée des objets Java standards — il n'est pas nécessaire de créer des proxies Hibernate à partir du XML. Les champs désérialisés sont définis sur l'entité via la réflexion, et Hibernate les encapsule lorsque l'entité est ensuite persistée ou fusionnée.</p>
+
+<h2>Points d'intégration</h2>
+<ul>
+  <li>Enregistré avec les instances XStream aux côtés de <a href="704.html">HibernateMapper</a> et <a href="702.html">HibernateCollectionConverter</a>.</li>
+  <li>Utilisé par le sous-système d'export XML (<a href="710.html">XStreamMarshallingStrategy</a>) chaque fois que des graphes d'entités sont sérialisés.</li>
+  <li>Dépend de l'interface <code>LazyInitializer</code> de Hibernate — si une future version de Hibernate modifie la façon dont les proxies exposent leur entité sous-jacente, ce convertisseur devrait être mis à jour.</li>
+</ul>
+
+<h2>Décisions de conception & pièges</h2>
+<ul>
+  <li><strong>Initialisation forcée :</strong> L'appel à <code>getImplementation()</code> force le chargement du proxy différé. Cela signifie que l'export XML d'un graphe d'entités peut déclencher des requêtes en cascade pour chaque association chargée paresseusement. L'appelant doit s'assurer que la session Hibernate reste ouverte et devrait envisager d'utiliser des motifs <code>JOIN FETCH</code> ou <code>OpenSessionInView</code> pour précharger les associations avant la sérialisation.</li>
+  <li><strong>Sécurité de double-dépaquetage :</strong> Si l'entité dépaquetée est elle-même un proxy Hibernate (par exemple, un proxy en encapsule un autre), la recherche du convertisseur délégué peut retrouver ce même <code>HibernateProxyConverter</code>, et le dépaquetage se répète. Cela se termine finalement car la chaîne aboutit à la classe d'entité réelle.</li>
+  <li><strong>converterLookup.lookupConverterForType(item.getClass()) :</strong> Après le dépaquetage, la recherche utilise <code>item.getClass()</code> (la classe de l'entité réelle) plutôt que la classe du proxy. Cela signifie que tous les convertisseurs personnalisés enregistrés pour des types d'entités spécifiques seront correctement sélectionnés, sans être contournés par l'encapsulation du proxy.</li>
+  <li><strong>Visibilité package-privé :</strong> La classe a une visibilité au niveau du package (<code>class HibernateProxyConverter</code> sans <code>public</code>), ce qui indique qu'il s'agit d'un détail d'implémentation interne du package <code>persistence.xstream</code>, non destiné à une utilisation directe en dehors du framework.</li>
+  <li><strong>Nommage des arguments du constructeur :</strong> Utilise les noms de paramètres <code>arg0</code>, <code>arg1</code> — un style Java hérité suggérant que ce code provient d'une version plus ancienne de la base de code.</li>
+</ul>
+
+<h2>Historique Git</h2><div class="hist"><pre>868d6abb7 2025 -> 2026
+63081666f En-têtes des fichiers source : 2024 -> 2025.
+b6092df09 Droits d'auteur 2023 -> 2024
+ab45d51fa Droits d'auteur 2001-2022 -> 2001-2023.
+5f7ef41b8 Droits d'auteur 2021 -> 2022
+ceb63e8a1 En-tête du code source : (C) 2001-2021.
+7c79f1922 Droits d'auteur de l'en-tête source -> 2020.
+32f634b88 Optimiser les imports
+dd5ca38ac Droits d'auteur de tous les en-têtes de fichiers Java mis à jour ou créés.
+9ebb88522 Commit initial</pre></div>
+</body>
+</html>

@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<title>#906 : AuftragsRechnungCache.kt [FR]</title>
+<style>
+body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}
+h1{border-bottom:2px solid #333;padding-bottom:.3em}
+h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}
+h3{margin-top:2em;color:#444}
+a{color:#0366d6}
+.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}
+.nav{font-size:.9em;color:#888;margin-bottom:1em}
+.meta{font-size:.9em;margin:1em 0;color:#555}
+code{background:#f0f0f0;padding:0 .2em;font-size:.93em}
+pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}
+table{border-collapse:collapse;width:100%;margin:1em 0}
+th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}
+th{background:#f5f5f5;font-weight:600}
+.hist{font-size:.85em;color:#555}
+</style>
+</head>
+<body>
+
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← Index des fichiers</a> · <a href="905.html">← Précédent</a> · <a href="907.html">Suivant →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/kotlin/org/projectforge/business/fibu/AuftragsRechnungCache.kt" target="_blank" title="Voir la source sur GitHub">📄 source</a></div>
+
+<h1>#906 : <code>AuftragsRechnungCache.kt</code></h1>
+
+<div class="meta"><code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/AuftragsRechnungCache.kt</code> 
+  <strong>Type :</strong> Composant Spring (AbstractCache) &middot;
+  <strong>Objectif :</strong> Met en cache l'affectation des positions de facture aux positions de commande &middot;
+  <strong>Paquetage :</strong> <code>org.projectforge.business.fibu</code><br>
+  <strong>Chemin source :</strong> <code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/AuftragsRechnungCache.kt</code>
+ <span style="color:#888">171 lignes · 102 code · 52 commentaires · 17 vides</span></div>
+
+<div class="c">
+  Un cache en mémoire qui fait correspondre les positions de facture (<code>RechnungPosInfo</code>) à leurs positions de commande et commandes associées. Cela permet des recherches rapides pour le carnet de commandes afin d'afficher quelles factures sont liées à chaque commande, et pour la vue facture d'afficher quelles commandes sont couvertes. Gère une dépendance cyclique avec <code>AuftragsCache</code> en exécutant les deux caches deux fois lors de l'initialisation (mécanisme de drapeau « ready »).
+</div>
+
+<h2>Architecture &amp; Conception</h2>
+
+<h3>Hiérarchie des classes</h3>
+<p>Étend <code>AbstractCache</code>, qui fournit le cycle de vie <code>refresh()</code>/<code>setExpired()</code>/<code>forceReload()</code>. Enregistré comme <code>@Component</code> Spring.</p>
+
+<h3>Dépendances</h3>
+<table>
+  <tr><th>Dépendance</th><th>Type</th><th>Rôle</th></tr>
+  <tr><td><code>AuftragsCache</code></td><td>Composant</td><td>Fournit la correspondance commande-position ; rafraîchissement mutuel lors de l'initialisation</td></tr>
+  <tr><td><code>RechnungCache</code></td><td>Composant</td><td>Fournit les objets <code>RechnungInfo</code> et <code>RechnungPosInfo</code></td></tr>
+  <tr><td><code>RechnungDao</code></td><td>DAO</td><td>Enregistré pour <code>BaseDOModifiedListener</code> afin d'invalider le cache lors des modifications de facture</td></tr>
+  <tr><td><code>RechnungJdbcService</code></td><td>Service</td><td>Requête JDBC rapide pour les affectations position-facture vers position-commande</td></tr>
+</table>
+
+<h3>Structures de données internes</h3>
+<table>
+  <tr><th>Map</th><th>Clé</th><th>Valeur</th><th>Objectif</th></tr>
+  <tr><td><code>invoicePositionMapByAuftragId</code></td><td><code>Long</code> (ID commande)</td><td><code>MutableSet&lt;Long&gt;</code> (IDs positions facture)</td><td>Recherche des IDs de positions de facture par commande</td></tr>
+  <tr><td><code>invoicePositionMapByAuftragsPositionId</code></td><td><code>Long</code> (ID position commande)</td><td><code>MutableSet&lt;RechnungPosInfo&gt;</code></td><td>Recherche des positions de facture par position de commande</td></tr>
+  <tr><td><code>invoicePositionMapByRechnungId</code></td><td><code>Long</code> (ID facture)</td><td><code>MutableSet&lt;RechnungPosInfo&gt;</code></td><td>Recherche des positions de facture liées à la commande par facture</td></tr>
+</table>
+
+<h3>Cycle de vie &amp; Initialisation</h3>
+<p><code>@PostConstruct init()</code> enregistre deux écouteurs :</p>
+<ul>
+  <li><strong><code>rechnungListener</code></strong> — un <code>BaseDOModifiedListener&lt;RechnungDO&gt;</code> qui appelle <code>setExpired()</code> chaque fois qu'une facture est insérée ou modifiée. Cela garantit que le cache reste à jour lorsque des factures sont créées, éditées ou supprimées.</li>
+  <li><strong><code>auftragsCacheListener</code></strong> — un <code>CacheListener</code> enregistré sur <code>AuftragsCache</code>. Implémente le modèle de rafraîchissement mutuel : lorsque <code>AuftragsCache</code> termine son rafraîchissement, cet écouteur le détecte et déclenche un second cycle de rafraîchissement pour les deux caches afin de résoudre les références croisées.</li>
+</ul>
+
+<h3>Modèle de rafraîchissement mutuel (résolution de dépendance cyclique)</h3>
+<p><code>AuftragsCache</code> et <code>AuftragsRechnungCache</code> dépendent des données l'un de l'autre. La solution utilise un drapeau <code>ready</code> :</p>
+<ol>
+  <li>Premier <code>AuftragsCache.refresh()</code> s'exécute — les données de ce cache sont encore vides</li>
+  <li><code>onAfterCacheRefresh</code> se déclenche, définit <code>ready = true</code>, désenregistre l'écouteur</li>
+  <li><code>AuftragsRechnungCache.forceReload()</code> s'exécute — dispose maintenant des données de <code>AuftragsCache</code></li>
+  <li><code>AuftragsCache.forceReload()</code> s'exécute à nouveau — dispose maintenant des données de ce cache</li>
+  <li>Les deux caches sont entièrement peuplés</li>
+</ol>
+
+<h3>Méthodes publiques</h3>
+
+<h4><code>getRechnungsPosInfoByAuftragId(auftragId: Long?): List&lt;RechnungPosInfo&gt;?</code></h4>
+<p>Retourne les positions de facture affectées à une commande donnée. Les résultats sont triés par numéro de facture, puis par numéro de position. Retourne <code>null</code> si <code>auftragId</code> est nul. Appelle <code>checkRefresh()</code> pour déclencher le peuplement paresseux du cache si nécessaire.</p>
+
+<h4><code>getRechnungsPosInfosByAuftragsPositionId(auftragsPositionId: Long?): Set&lt;RechnungPosInfo&gt;?</code></h4>
+<p>Retourne les positions de facture affectées à une position de commande spécifique. Retourne <code>null</code> pour une entrée nulle.</p>
+
+<h3>Logique de rafraîchissement</h3>
+<p><code>refresh()</code> interroge <code>rechnungJdbcService.selectRechnungsPositionenWithAuftragPosition()</code> pour obtenir le jeu de résultats JDBC brut (plus rapide que JPA pour cette opération en masse), puis :</p>
+<ul>
+  <li>Parcourt tous les liens position-facture vers position-commande</li>
+  <li>Ignore les enregistrements supprimés et les références nulles, en journalisant les erreurs pour les positions de commande manquantes</li>
+  <li>Peuple trois maps basées sur <code>TreeSet</code> (tri automatique) pour chaque dimension</li>
+  <li>Assigne les nouvelles maps de manière atomique aux champs de l'instance</li>
+  <li>Journalise la durée d'initialisation en secondes</li>
+</ul>
+
+<h3>Invalidation</h3>
+<p>Lorsqu'un <code>RechnungDO</code> est inséré ou modifié, <code>rechnungListener</code> appelle <code>setExpired()</code>. Le prochain appel à une méthode getter publique déclenchera <code>checkRefresh()</code> → <code>refresh()</code>, reconstruisant paresseusement la correspondance du cache.</p>
+
+<h2>Classes associées</h2>
+<ul>
+  <li><strong>Pair :</strong> <code>AuftragsCache</code> — partenaire de rafraîchissement mutuel ; fournit <code>getOrderInfoByPositionId()</code></li>
+  <li><strong>Pair :</strong> <code>RechnungCache</code> — fournit <code>getRechnungInfo()</code> et <code>ensureRechnungPosInfo()</code></li>
+  <li><strong>Service :</strong> <code>RechnungJdbcService</code> — requête JDBC brute pour la performance</li>
+  <li><strong>Données :</strong> <code>RechnungPosInfo</code> — objet valeur représentant une position de facture dans le cache</li>
+  <li><strong>Framework :</strong> <code>AbstractCache</code> — classe de base fournissant <code>checkRefresh()</code>/<code>setExpired()</code>/<code>forceReload()</code></li>
+</ul>
+
+<h2>Historique Git</h2>
+<div class="hist"><pre>
+868d6abb7 2025 -> 2026
+51d352133 Refonte de la gestion d'AuftragsCache / AuftragsRechnungsCache (utilisation cyclique résolue en exécutant les caches deux fois lors de l'initialisation)
+63081666f En-têtes des fichiers source : 2024 -> 2025.
+22ccc4877 WIP : Scripting
+884ff2c70 Message de débogage ajouté (factures débiteurs manquantes dans les commandes en production uniquement).
+c9508769a Clone des factures.
+d02c8a770 Travaux de migration en cours...
+ff2cc4cfa Travaux de migration en cours... (tous les tests de tous les paquetages : OK).
+f31e8064e Travaux de migration en cours...
+2e9839891 Travaux de migration en cours...
+973fbf518 Travaux de migration en cours...
+ba2479571 Travaux de migration en cours...
+b3293f0cc PersistenceService/Context : gestion des statistiques améliorée.
+b47c21af6 Refonte de la mise en cache et des calculs avec les factures (pas encore terminé)
+</pre></div>
+
+</body>
+</html>

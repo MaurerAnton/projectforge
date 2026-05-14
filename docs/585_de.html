@@ -1,0 +1,246 @@
+<!DOCTYPE html><html lang="de"><head><meta charset="utf-8"><title>585: TeamEventExternalSubscriptionCache.java [DE]</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:1.5em;color:#444;font-size:1em}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.lang{font-size:.85em;color:#888;float:right}.lang a{color:#888;text-decoration:none;padding:0 .3em}.lang a.active{color:#0366d6;font-weight:600;text-decoration:underline}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}pre.diff{background:#fff;font-size:.82em;max-height:300px;overflow-y:auto}</style></head>
+<body><div class="lang"><a href="585.html">EN</a> · <a href="585_de.html" class="active">DE</a> · <a href="585_ru.html">RU</a> · <a href="585_fr.html">FR</a> · <a href="585_es.html">ES</a></div>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← Dateiindex</a> · <a href="551.html">← Vorherige</a> · <a href="369.html">Nächste →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/java/org/projectforge/business/teamcal/externalsubscription/TeamEventExternalSubscriptionCache.java" target="_blank" title="Quellcode auf GitHub anzeigen">📄 Quelle</a></div>
+<h1>#585: <code>TeamEventExternalSubscriptionCache.java</code></h1>
+<div class="meta"><code>projectforge-business/src/main/java/org/projectforge/business/teamcal/externalsubscription/TeamEventExternalSubscriptionCache.java</code> Java-Klasse, <code>projectforge-business/src/main/java/org/projectforge/business/teamcal/externalsubscription/TeamEventExternalSubscriptionCache.java</code> <span style="color:#888">307 Zeilen · 232 Code · 46 Kommentare · 29 leer</span></div>
+<div class="c"><strong>Zweck:</strong> Quelldatei: business/teamcal/externalsubscription/TeamEventExternalSubscriptionCache.java. TeamEventExternalSubscriptionCache.java ist Teil der Open-Source-Projektmanagement-Anwendung ProjectForge.</div>
+<h2>Quelle (erste 100 Zeilen)</h2>
+<pre>/////////////////////////////////////////////////////////////////////////////
+//
+// Project ProjectForge Community Edition
+//         www.projectforge.org
+//
+// Copyright (C) 2001-2026 Micromata GmbH, Germany (www.micromata.com)
+//
+// ProjectForge ist dual-lizenziert.
+//
+// Diese Community-Edition ist freie Software; Sie können es weiterverteilen und/oder
+// modifizieren unter den Bedingungen der GNU General Public License, wie veröffentlicht
+// von der Free Software Foundation; Version 3 der Lizenz.
+//
+// Diese Community-Edition wird in der Hoffnung verteilt, dass sie nützlich sein wird,
+// aber OHNE JEGLICHE GEWÄHRLEISTUNG; ohne die stillschweigende Garantie der
+// MARKTGÄNGIGKEIT oder EIGNUNG FÜR EINEN BESTIMMTEN ZWECK. Siehe die GNU General
+// Public License für weitere Details.
+//
+// Sie sollten eine Kopie der GNU General Public License zusammen mit
+// diesem Programm erhalten haben; falls nicht, siehe http://www.gnu.org/licenses/.
+//
+/////////////////////////////////////////////////////////////////////////////
+
+package org.projectforge.business.teamcal.externalsubscription;
+
+import org.apache.commons.collections4.CollectionUtils;
+import org.projectforge.business.common.DataobjectAccessType;
+import org.projectforge.business.teamcal.admin.TeamCalCache;
+import org.projectforge.business.teamcal.admin.TeamCalDao;
+import org.projectforge.business.teamcal.admin.model.TeamCalDO;
+import org.projectforge.business.teamcal.admin.right.TeamCalRight;
+import org.projectforge.business.teamcal.event.TeamEventFilter;
+import org.projectforge.business.teamcal.event.model.TeamEventDO;
+import org.projectforge.business.user.UserGroupCache;
+import org.projectforge.business.user.UserRightId;
+import org.projectforge.framework.persistence.api.QueryFilter;
+import org.projectforge.framework.persistence.api.UserRightService;
+import org.projectforge.framework.persistence.jpa.PfPersistenceService;
+import org.projectforge.framework.persistence.user.api.ThreadLocalUserContext;
+import org.projectforge.framework.persistence.user.entities.PFUserDO;
+import org.projectforge.framework.time.DateHelper;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Component;
+
+import java.util.*;
+
+/**
+ * @author Johannes Unterstein (j.unterstein@micromata.de)
+ */
+@Component
+public class TeamEventExternalSubscriptionCache {
+    private static final org.slf4j.Logger log = org.slf4j.LoggerFactory
+            .getLogger(TeamEventExternalSubscriptionCache.class);
+
+    private static final long MAX_WAIT_MS_AFTER_FAILED_UPDATE = 1000 * 60 * 60 * 24; // 24 h
+
+    private final Map&lt;Long, TeamEventSubscription&gt; subscriptions = new HashMap&lt;&gt;();
+
+    private static final Long SUBSCRIPTION_UPDATE_TIME = 5L * 60 * 1000; // 5 min
+
+    private transient TeamCalRight teamCalRight;
+
+    private boolean initialized;
+
+    @Autowired
+    private TeamCalDao teamCalDao;
+
+    @Autowired
+    private PfPersistenceService persistenceService;
+
+    @Autowired
+    private TeamCalCache teamCalCache;
+
+    @Autowired
+    private UserRightService userRights;
+
+    @Autowired
+    private UserGroupCache userGroupCache;
+
+    // @PostConstruct funktioniert nicht (wird zu früh aufgerufen, bevor TenantRegistryMap bereit ist).
+    private synchronized void init() {
+        if (!initialized) {
+            persistenceService.runIsolatedReadOnly(context -&gt; {
+                final QueryFilter filter = new QueryFilter();
+                filter.add(QueryFilter.eq("externalSubscription", true));
+                final List&lt;TeamCalDO&gt; subscribedCalendars = teamCalDao.select(filter, false);
+                for (final TeamCalDO calendar : subscribedCalendars) {
+                    TeamEventSubscription teamEventSubscription = new TeamEventSubscription();
+                    subscriptions.put(calendar.getId(), teamEventSubscription);
+                }
+                initialized = true;
+                return null;
+            });
+            // Starte updateCache als möglicherweise langlaufenden Thread. Vermeidet Blockieren des Aufrufers (CalendarPage).
+            new Thread(() -&gt; {
+                updateCache();
+            }).start();
+        }
+    }</pre>
+<h2>Git-Verlauf</h2>
+<div class="hist">
+<pre>868d6abb7 2025 -> 2026
+63081666f Quelldatei-Header: 2024 -> 2025.
+0ceceb28f Alle Cache-Aktualisierungen laufen jetzt in isolierten Transaktionen oder Kontexten.
+1b50060c3 BaseDao: umbenannt: get -> find, save -> insert, getList -> select, load -> select
+87aaf6a5a Migrationsarbeit in Arbeit... BaseDao umgestaltet (noch nicht abgeschlossen) interne* Methoden umbenannt.</pre>
+<h3>868d6abb7</h3><div class="c"><strong>2025 -> 2026</strong><pre class="diff">868d6abb75cd191a892911ac8e45058932cf9074
+diff --git a/projectforge-business/src/main/java/org/projectforge/business/teamcal/externalsubscription/TeamEventExternalSubscriptionCache.java b/projectforge-business/src/main/java/org/projectforge/business/teamcal/externalsubscription/TeamEventExternalSubscriptionCache.java
+index 548b1f2eb..3a8137c9e 100644
+--- a/projectforge-business/src/main/java/org/projectforge/business/teamcal/externalsubscription/TeamEventExternalSubscriptionCache.java
++++ b/projectforge-business/src/main/java/org/projectforge/business/teamcal/externalsubscription/TeamEventExternalSubscriptionCache.java
+@@ -3,7 +3,7 @@
+ // Project ProjectForge Community Edition
+ //         www.projectforge.org
+ //
+-// Copyright (C) 2001-2025 Micromata GmbH, Germany (www.micromata.com)
++// Copyright (C) 2001-2026 Micromata GmbH, Germany (www.micromata.com)
+ //
+ // ProjectForge ist dual-lizenziert.
+ //</pre></div><h3>63081666f</h3><div class="c"><strong>Quelldatei-Header: 2024 -> 2025.</strong><pre class="diff">63081666f620fb87315f01b817e560e0b2f6a33a
+diff --git a/projectforge-business/src/main/java/org/projectforge/business/teamcal/externalsubscription/TeamEventExternalSubscriptionCache.java b/projectforge-business/src/main/java/org/projectforge/business/teamcal/externalsubscription/TeamEventExternalSubscriptionCache.java
+index d8775d0b2..548b1f2eb 100644
+--- a/projectforge-business/src/main/java/org/projectforge/business/teamcal/externalsubscription/TeamEventExternalSubscriptionCache.java
++++ b/projectforge-business/src/main/java/org/projectforge/business/teamcal/externalsubscription/TeamEventExternalSubscriptionCache.java
+@@ -3,7 +3,7 @@
+ // Project ProjectForge Community Edition
+ //         www.projectforge.org
+ //
+-// Copyright (C) 2001-2024 Micromata GmbH, Germany (www.micromata.com)
++// Copyright (C) 2001-2025 Micromata GmbH, Germany (www.micromata.com)
+ //
+ // ProjectForge ist dual-lizenziert.
+ //</pre></div><h3>0ceceb28f</h3><div class="c"><strong>Alle Cache-Aktualisierungen laufen jetzt in isolierten Transaktionen oder Kontexten.</strong><pre class="diff">0ceceb28f1640e1cbd41bad967d82663ed8bbcb1
+diff --git a/projectforge-business/src/main/java/org/projectforge/business/teamcal/externalsubscription/TeamEventExternalSubscriptionCache.java b/projectforge-business/src/main/java/org/projectforge/business/teamcal/externalsubscription/TeamEventExternalSubscriptionCache.java
+index 6217a58cc..d8775d0b2 100644
+--- a/projectforge-business/src/main/java/org/projectforge/business/teamcal/externalsubscription/TeamEventExternalSubscriptionCache.java
++++ b/projectforge-business/src/main/java/org/projectforge/business/teamcal/externalsubscription/TeamEventExternalSubscriptionCache.java
+@@ -35,6 +35,7 @@ import org.projectforge.business.user.UserGroupCache;
+ import org.projectforge.business.user.UserRightId;
+ import org.projectforge.framework.persistence.api.QueryFilter;
+ import org.projectforge.framework.persistence.api.UserRightService;
++import org.projectforge.framework.persistence.jpa.PfPersistenceService;
+ import org.projectforge.framework.persistence.user.api.ThreadLocalUserContext;
+ import org.projectforge.framework.persistence.user.entities.PFUserDO;
+ import org.projectforge.framework.time.DateHelper;
+@@ -48,250 +49,259 @@ import java.util.*;
+  */
+ @Component
+ public class TeamEventExternalSubscriptionCache {
+-  private static final org.slf4j.Logger log = org.slf4j.LoggerFactory
+-          .getLogger(TeamEventExternalSubscriptionCache.class);
++    private static final org.slf4j.Logger log = org.slf4j.LoggerFactory
++            .getLogger(TeamEventExternalSubscriptionCache.class);
+ 
+-  private static final long MAX_WAIT_MS_AFTER_FAILED_UPDATE = 1000 * 60 * 60 * 24; // 24 h
++    private static final long MAX_WAIT_MS_AFTER_FAILED_UPDATE = 1000 * 60 * 60 * 24; // 24 h
+ 
+-  private final Map&lt;Long, TeamEventSubscription&gt; subscriptions = new HashMap&lt;&gt;();
++    private final Map&lt;Long, TeamEventSubscription&gt; subscriptions = new HashMap&lt;&gt;();
+ 
+-  private static final Long SUBSCRIPTION_UPDATE_TIME = 5L * 60 * 1000; // 5 min
++    private static final Long SUBSCRIPTION_UPDATE_TIME = 5L * 60 * 1000; // 5 min
+ 
+-  private transient TeamCalRight teamCalRight;
++    private transient TeamCalRight teamCalRight;
+ 
+-  private boolean initialized;
++    private boolean initialized;
+ 
+-  @Autowired
+-  private TeamCalDao teamCalDao;
++    @Autowired
++    private TeamCalDao teamCalDao;
+ 
+-  @Autowired
+-  private TeamCalCache teamCalCache;
++    @Autowired
++    private PfPersistenceService persistenceService;
+ 
+-  @Autowired
+-  private UserRightService userRights;
++    @Autowired
++    private TeamCalCache teamCalCache;
+ 
+-  @Autowired
+-  private UserGroupCache userGroupCache;
++    @Autowired
++    private UserRightService userRights;
+ 
+-  // @PostConstruct funktioniert nicht (wird zu früh aufgerufen, bevor TenantRegistryMap bereit ist).
+-  private synchronized void init() {
+-    if (!initialized) {</pre></div><h3>1b50060c3</h3><div class="c"><strong>BaseDao: umbenannt: get -> find, save -> insert, getList -> select, load -> select</strong><pre class="diff">1b50060c3a4b099ec07fd85d28f514b101da4d29
+diff --git a/projectforge-business/src/main/java/org/projectforge/business/teamcal/externalsubscription/TeamEventExternalSubscriptionCache.java b/projectforge-business/src/main/java/org/projectforge/business/teamcal/externalsubscription/TeamEventExternalSubscriptionCache.java
+index 6f81f31c9..6217a58cc 100644
+--- a/projectforge-business/src/main/java/org/projectforge/business/teamcal/externalsubscription/TeamEventExternalSubscriptionCache.java
++++ b/projectforge-business/src/main/java/org/projectforge/business/teamcal/externalsubscription/TeamEventExternalSubscriptionCache.java
+@@ -78,7 +78,7 @@ public class TeamEventExternalSubscriptionCache {
+     if (!initialized) {
+       final QueryFilter filter = new QueryFilter();
+       filter.add(QueryFilter.eq("externalSubscription", true));
+-      final List&lt;TeamCalDO&gt; subscribedCalendars = teamCalDao.getList(filter, false);
++      final List&lt;TeamCalDO&gt; subscribedCalendars = teamCalDao.select(filter, false);
+       for (final TeamCalDO calendar : subscribedCalendars) {
+         TeamEventSubscription teamEventSubscription = new TeamEventSubscription();
+         subscriptions.put(calendar.getId(), teamEventSubscription);
+@@ -96,7 +96,7 @@ public class TeamEventExternalSubscriptionCache {
+     final QueryFilter filter = new QueryFilter();
+     filter.add(QueryFilter.eq("externalSubscription", true));
+     // internalGetList ist an dieser Stelle gültig, da wir diese Methode in einem asynchronen Thread aufrufen
+-    final List&lt;TeamCalDO&gt; subscribedCalendars = teamCalDao.getList(filter, false);
++    final List&lt;TeamCalDO&gt; subscribedCalendars = teamCalDao.select(filter, false);
+ 
+     for (final TeamCalDO calendar : subscribedCalendars) {
+       updateCache(calendar);</pre></div><h3>87aaf6a5a</h3><div class="c"><strong>Migrationsarbeit in Arbeit... BaseDao umgestaltet (noch nicht abgeschlossen) interne* Methoden umbenannt.</strong><pre class="diff">87aaf6a5a5d70743be2526b286b2f735e0631193
+diff --git a/projectforge-business/src/main/java/org/projectforge/business/teamcal/externalsubscription/TeamEventExternalSubscriptionCache.java b/projectforge-business/src/main/java/org/projectforge/business/teamcal/externalsubscription/TeamEventExternalSubscriptionCache.java
+index fbeef97b5..6f81f31c9 100644
+--- a/projectforge-business/src/main/java/org/projectforge/business/teamcal/externalsubscription/TeamEventExternalSubscriptionCache.java
++++ b/projectforge-business/src/main/java/org/projectforge/business/teamcal/externalsubscription/TeamEventExternalSubscriptionCache.java
+@@ -78,7 +78,7 @@ public class TeamEventExternalSubscriptionCache {
+     if (!initialized) {
+       final QueryFilter filter = new QueryFilter();
+       filter.add(QueryFilter.eq("externalSubscription", true));
+-      final List&lt;TeamCalDO&gt; subscribedCalendars = teamCalDao.internalGetList(filter);
++      final List&lt;TeamCalDO&gt; subscribedCalendars = teamCalDao.getList(filter, false);
+       for (final TeamCalDO calendar : subscribedCalendars) {
+         TeamEventSubscription teamEventSubscription = new TeamEventSubscription();
+         subscriptions.put(calendar.getId(), teamEventSubscription);
+@@ -96,7 +96,7 @@ public class TeamEventExternalSubscriptionCache {
+     final QueryFilter filter = new QueryFilter();
+     filter.add(QueryFilter.eq("externalSubscription", true));
+     // internalGetList ist an dieser Stelle gültig, da wir diese Methode in einem asynchronen Thread aufrufen
+-    final List&lt;TeamCalDO&gt; subscribedCalendars = teamCalDao.internalGetList(filter);
++    final List&lt;TeamCalDO&gt; subscribedCalendars = teamCalDao.getList(filter, false);
+ 
+     for (final TeamCalDO calendar : subscribedCalendars) {
+       updateCache(calendar);</pre></div>
+</div>
+</body></html>

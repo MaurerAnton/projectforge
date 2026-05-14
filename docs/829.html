@@ -1,109 +1,29 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<title>#829: DoubletsResultFilter.kt</title>
-<style>
-  body { font-family: system-ui, sans-serif; max-width: 960px; margin: 2em auto; padding: 0 1em; background: #fafafa; color: #222; line-height: 1.6; }
-  h1 { border-bottom: 2px solid #333; padding-bottom: 0.3em; }
-  h2 { margin-top: 2.5em; border-bottom: 1px solid #ddd; padding-bottom: 0.2em; color: #333; }
-  h3 { margin-top: 2em; color: #444; }
-  a { color: #0366d6; }
-  .c { border-left: 3px solid #ddd; padding: .5em 1em; margin: 1em 0; background: #fff; }
-  .nav { font-size: .9em; color: #888; margin-bottom: 1em; }
-  .meta { font-size: .9em; margin: 1em 0; color: #555; }
-  code { background: #f0f0f0; padding: 0 .2em; font-size: .93em; }
-  pre { background: #f5f5f5; padding: .8em 1em; border: 1px solid #ddd; border-radius: 4px; overflow-x: auto; font-size: .88em; line-height: 1.4; }
-  table { border-collapse: collapse; width: 100%; margin: 1em 0; }
-  th, td { border: 1px solid #ddd; padding: .5em .8em; text-align: left; font-size: .9em; }
-  th { background: #f5f5f5; font-weight: 600; }
-  .hist { font-size: .85em; color: #555; }
-</style>
-</head>
-<body>
-<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="828.html">← Prev</a> · <a href="830.html">Next →</a></div>
-
-<h1>#829: <code>DoubletsResultFilter.kt</code></h1>
-<div class="meta"><strong>Kotlin result filter</strong> — address deduplication post-filter. Implements <code>CustomResultFilter&lt;AddressDO&gt;</code> to detect and extract duplicate address entries (doublets) based on normalized fullname comparison. Location: <code>projectforge-business/src/main/kotlin/org/projectforge/business/address/DoubletsResultFilter.kt</code></div>
-
-<div class="c">
-<strong>Purpose:</strong> When an address book grows organically (imports, manual entries, data migration), duplicate contacts accumulate — often with minor variations in formatting but identical normalized names. This filter enables the address list UI to show a "Show doublets only" view, helping administrators find and merge duplicates.
-</div>
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>#829: CardDavUtilsTest.kt</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.lang{font-size:.85em;color:#888;float:right}.lang a{color:#888;text-decoration:none;padding:0 .3em}.lang a.active{color:#0366d6;font-weight:600;text-decoration:underline}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}.missing{background:#fff3cd;border:1px solid #ffc107;padding:.5em 1em;margin:1em 0;border-radius:4px}</style></head>
+<body><div class="lang"><a href="829.html" class="active">EN</a> · <a href="829_de.html">DE</a> · <a href="829_ru.html">RU</a> · <a href="829_fr.html">FR</a> · <a href="829_es.html">ES</a></div>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="828.html">← Prev</a> · <a href="834.html">Next →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/kotlin/org/projectforge/business/address/AddressTextImportService.kt" target="_blank" title="View source on GitHub">📄 source</a></div>
+<h1>#829: <code>CardDavUtilsTest.kt</code></h1>
+<div class="meta"><code>projectforge-business/src/main/kotlin/org/projectforge/business/address/AddressTextImportService.kt</code> Test - CardDAV, <code>projectforge-carddav/src/test/kotlin/org/projectforge/carddav/CardDavUtilsTest.kt</code> <span style="color:#888">186 lines · 97 code · 63 comments · 26 blank</span></div>
+<div class="c">Unit tests for `CardDavUtils`: `getPrincipalsUsersUrl()` (URL construction), `normalizedUri()` (path normalization), and `extractContactId()` (ID parsing from VCF/image URLs).</div>
 
 <h2>Architecture</h2>
-
-<div class="c">
-Implements <strong><code>CustomResultFilter&lt;AddressDO&gt;</code></strong> — a ProjectForge framework interface for post-query result filtering. Unlike database-side filtering (<code>WHERE</code> clauses), result filters run in-memory on the result set returned by the DAO. This is necessary for deduplication because:<br><br>
-• Duplicates may span different database rows with different IDs<br>
-• Normalization logic (<code>getNormalizedFullname</code>) involves string manipulation that can't be expressed in SQL/HQL easily<br>
-• The filter needs to accumulate state across multiple elements — the <code>match()</code> method is called for each element in order but mutates internal sets
-</div>
-
-<h3>State Machine</h3>
-<div class="c">
-The filter operates as a <strong>two-set, two-pass</strong> state machine:<br><br>
-<strong>Pass 1 (accumulation):</strong> As each address element is fed to <code>match()</code>:<br>
-• If the normalized fullname is already in <code>fullnames</code>, it's a doublet — added to <code>doubletFullnames</code><br>
-• If not in <code>fullnames</code>, it's a first occurrence — added to <code>all</code> and <code>fullnames</code><br><br>
-<strong>Pass 2 (flush):</strong> When a doublet is detected, all previously-seen addresses whose names match any doublet name are added to the result list. The <code>addedDoublets</code> set prevents adding the same address twice.
-</div>
-
-<h3>Data Structure Choices</h3>
-<table>
-<tr><th>Field</th><th>Type</th><th>Purpose</th></tr>
-<tr><td><code>fullnames</code></td><td><code>MutableSet&lt;String&gt;</code> (HashSet)</td><td>Tracks all unique normalized names seen so far — O(1) lookup</td></tr>
-<tr><td><code>doubletFullnames</code></td><td><code>MutableSet&lt;String&gt;</code> (HashSet)</td><td>Tracks names confirmed to have ≥2 occurrences — used for retroactive flushing</td></tr>
-<tr><td><code>all</code></td><td><code>MutableList&lt;AddressDO&gt;</code> (ArrayList)</td><td>Ordered list of all processed addresses — needed because earlier entries weren't returned as matches</td></tr>
-<tr><td><code>addedDoublets</code></td><td><code>MutableSet&lt;Long?&gt;</code> (HashSet)</td><td>Deduplication guard — prevents adding the same address ID twice to the result</td></tr>
-</table>
-
-<h2>Algorithm Walkthrough</h2>
-<pre>
-For each address in the query result (sorted by name):
-
-1. Skip deleted addresses → return false
-  
-2. Compute normalizedFullname = AddressDao.getNormalizedFullname(element)
-   (strip whitespace, lowercase, etc.)
-
-3. Check fullnames.contains(normalizedFullname):
-   
-   NO (first occurrence):
-     all.add(element)
-     fullnames.add(normalizedFullname)
-     return false  (don't include in results yet)
-   
-   YES (duplicate detected):
-     doubletFullnames.add(normalizedFullname)
-     
-     // Flush: add all previously-seen addresses sharing this name
-     for (adr in all):
-       if (addedDoublets.contains(adr.id)) continue  // skip already-added
-       if (doubletFullnames.contains(getNormalizedFullname(adr))):
-         list.add(adr)                                // inject into result
-         addedDoublets.add(adr.id)                    // mark as injected
-     
-     // The current element (the duplicate) is also returned
-     return true
-</pre>
-
-<h2>Git History</h2>
-<div class="hist">
-<pre>868d6abb7 2025 → 2026 (copyright year update)
-63081666f Source file headers: 2024→2025
-4c04cfd65 MAJOR: Migration of integer id's to Long id's (FK cascades)
-067a4cbb1 Migration stuff in progress...
-0d183e5df Migration stuff in progress...
-b7b459e73 Migration stuff in progress...
-</pre>
-The file emerged during the <code>int→Long</code> migration period, when result filters were restructured to use <code>Long</code> IDs.
-</div>
-
-<h2>Design Rationale</h2>
-<div class="c">
-<strong>Why a post-filter rather than a database GROUP BY + HAVING?</strong> A SQL <code>GROUP BY normalized_name HAVING COUNT(*) > 1</code> would require the normalization function to be expressible in SQL (possible but fragile with SQL dialect differences) and wouldn't provide the exact entity objects needed for the UI's merge dialog. The post-filter approach keeps normalization logic in Java/Kotlin where it's typed, testable, and consistent with the rest of the application.<br><br>
-<strong>Why the retroactive flush pattern?</strong> The <code>match()</code> interface returns <code>true</code>/<code>false</code> per element (include/exclude from results). Elements processed before a doublet is detected were already excluded (returned <code>false</code>). The retroactive flush injects those earlier instances by mutating the result list directly. This is an intentional side-effect — the filter has write access to the list and uses it to compensate for the streaming nature of the <code>match()</code> API.
-</div>
-
-</body>
-</html>
+<h3>Tested Class</h3>
+<p><code>CardDavUtils</code> — utility class for CardDAV URL manipulation and contact ID extraction.</p>
+<h3>Test Methods</h3>
+<ul>
+<li><code>'test getPrincipalsUsersUrl'</code> — Validates principal URL construction from user paths</li>
+<li><code>'test normalizedUri'</code> — Validates URI path normalization (stripping <code>/carddav</code> prefix and slashes)</li>
+<li><code>'test extraction of contact id'</code> — Validates extraction of numeric contact IDs from VCF and image URLs</li>
+</ul>
+<h3>Dependencies</h3>
+<table><tr><th>Import</th><th>Purpose</th></tr>
+<tr><td>org.junit.jupiter.api.Assertions</td><td>Test assertions</td></tr>
+<tr><td>org.junit.jupiter.api.Test</td><td>JUnit 5 test annotation</td></tr>
+<tr><td>org.projectforge.framework.persistence.user.entities.PFUserDO</td><td>User entity for URL construction</td></tr>
+<tr><td>org.projectforge.carddav.CardDavUtils</td><td>Class under test</td></tr></table>
+<h2>Git History</h2><div class="hist"><pre>868d6abb7 2025 -&gt; 2026
+63081666f Source file headers: 2024-&gt; 2025.
+cc9abacea CardDav-Server: WIP: image handling.
+c4062ed97 WIP: Carddav
+40e554cbe WIP: Carddav</pre></div>
+</body></html>

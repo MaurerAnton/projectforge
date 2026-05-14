@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>#636 [RU]</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333}a{color:#0366d6}.meta{font-size:.9em;margin:1em 0}.nav{font-size:.9em;color:#888;margin-bottom:1em}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}code{background:#f0f0f0;padding:0 .2em}</style>
+</head>
+<body>
+
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Индекс</a> · <a href="file-index.html">← Индекс файлов</a> · <a href="635.html">← Назад</a> · <a href="637.html">Вперёд →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/java/org/projectforge/database/DatabaseSupport.java" target="_blank" title="Просмотреть исходный код на GitHub">📄 исходник</a></div>
+
+<h1>#636: <code>DatabaseSupport.java</code></h1>
+<div class="meta"><code>projectforge-business/src/main/java/org/projectforge/database/DatabaseSupport.java</code> <strong>Строк:</strong> 101 · <strong>Автор:</strong> Kai Reinhard · <strong>Тип:</strong> Java-синглтон — пакет <code>org.projectforge.database</code> <span style="color:#888">101 строка · 47 кода · 42 комментария · 12 пустых</span></div>
+
+<div class="c"><p><strong>Уровень абстракции диалекта базы данных.</strong> Синглтон (статический <code>getInstance()</code> + <code>setInstance()</code> — устанавливается во время запуска приложения). Содержит обнаруженный <code>DatabaseDialect</code> (PostgreSQL или HSQL) и предоставляет оптимизации, специфичные для диалекта. 101 строка.</p>
+
+<p><strong>Конструктор:</strong> <code>DatabaseSupport(DatabaseDialect dialect)</code> — логирует обнаруженный диалект на уровне INFO: <em>"Установлен диалект базы данных: PostgreSQL"</em>. Диалект определяется <code>ConfigurationService</code> из JDBC URL при запуске.</p>
+
+<p><strong>Ключевой метод — <code>getIntervalInSeconds(fromProperty, toProperty)</code>:</strong> Это критический по производительности метод. Для вычисления длительности (например, <code>stopTime - startTime</code> в табеле учёта времени), вместо загрузки всех строк в Java и вычисления разницы в памяти (<code>O(n)</code> память + процессор), он генерирует <strong>вычисление SUM на стороне базы данных в SQL</strong>:</p>
+<pre>PostgreSQL: "SUM(EXTRACT(EPOCH FROM toProperty) - EXTRACT(EPOCH FROM fromProperty))"</pre>
+<p>Это возвращает общее количество секунд как единый агрегат базы данных — размер результата <code>O(1)</code> независимо от количества строк. Критически важно для установок с большим количеством записей в табеле. Альтернативный вариант <code>EXTRACT(EPOCH FROM SUM(to - from))</code> был закомментирован, но для точности был выбран расчёт по каждой строке.</p>
+<p><strong>Запасной вариант:</strong> Если база данных не PostgreSQL (т.е. HSQL для тестирования), возвращает <code>null</code>. Вызывающий код должен тогда загрузить все строки и вычислить сумму в Java. <strong>Одноразовое предупреждение</strong> логируется (защищено <code>static boolean errorMessageShown</code>) с просьбой связаться с разработчиком, если в установке более 10 000 записей табеля — агрегация на стороне Java становится медленной при больших объёмах.</p>
+
+<p><strong><code>getShutdownDatabaseStatement()</code>:</strong> Вызывается <code>WicketApplication</code> при завершении работы. Для HSQL (встроенная тестовая база данных) возвращает <code>"SHUTDOWN COMPACT"</code> — безопасно закрывает встроенную базу данных и уплотняет файл данных. Для PostgreSQL возвращает <code>null</code> — пул соединений обрабатывает завершение работы.</p>
+
+<p><strong>Примечание по дизайну:</strong> Это <strong>единственное</strong> место в кодовой базе, где генерируется SQL, специфичный для базы данных. Весь остальной SQL генерируется Hibernate/HQL, который не зависит от базы данных. Этот класс существует специально для оптимизации интервалов, которую HQL не может выразить переносимым способом.</p></div>
+
+</body>
+</html>

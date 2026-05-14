@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>#835: BirthdayCache.kt [FR]</title>
+<style>
+  body { font-family: system-ui, sans-serif; max-width: 960px; margin: 2em auto; padding: 0 1em; background: #fafafa; color: #222; line-height: 1.6; }
+  h1 { border-bottom: 2px solid #333; padding-bottom: 0.3em; }
+  h2 { margin-top: 2.5em; border-bottom: 1px solid #ddd; padding-bottom: 0.2em; color: #333; }
+  h3 { margin-top: 2em; color: #444; }
+  a { color: #0366d6; }
+  .c { border-left: 3px solid #ddd; padding: .5em 1em; margin: 1em 0; background: #fff; }
+  .nav { font-size: .9em; color: #888; margin-bottom: 1em; }
+  .meta { font-size: .9em; margin: 1em 0; color: #555; }
+  code { background: #f0f0f0; padding: 0 .2em; font-size: .93em; }
+  pre { background: #f5f5f5; padding: .8em 1em; border: 1px solid #ddd; border-radius: 4px; overflow-x: auto; font-size: .88em; line-height: 1.4; }
+  table { border-collapse: collapse; width: 100%; margin: 1em 0; }
+  th, td { border: 1px solid #ddd; padding: .5em .8em; text-align: left; font-size: .9em; }
+  th { background: #f5f5f5; font-weight: 600; }
+  .hist { font-size: .85em; color: #555; }
+  .warn { background: #fff3cd; border-left: 3px solid #ffc107; padding: .5em 1em; margin: 1em 0; }
+</style>
+</head>
+<body>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← Index des fichiers</a> · <a href="834.html">← Précédent</a> · <a href="836.html">Suivant →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/kotlin/org/projectforge/business/address/BirthdayCache.kt" target="_blank" title="Voir la source sur GitHub">📄 source</a></div>
+
+<h1>#835: <code>BirthdayCache.kt</code></h1>
+<div class="meta"><code>projectforge-business/src/main/kotlin/org/projectforge/business/address/BirthdayCache.kt</code> <strong>Classe de cache Kotlin</strong> — index mis en cache de tous les anniversaires du carnet d'adresses pour des requêtes rapides par plage de dates. Étend <code>AbstractCache</code> pour un rafraîchissement automatique basé sur TTL. Emplacement : <code>projectforge-business/src/main/kotlin/org/projectforge/business/address/BirthdayCache.kt</code> <span style="color:#888">124 lignes · 81 code · 33 commentaires · 10 vides</span></div>
+
+<div class="c">
+<strong>Objectif :</strong> Le tableau de bord du calendrier et le système de notification d'anniversaire doivent répondre efficacement à la question « dont l'anniversaire est-ce cette semaine/ce mois ? ». Sans cache, chaque requête scannerait l'intégralité de la table des adresses. BirthdayCache charge en mémoire toutes les adresses non supprimées avec une date d'anniversaire une fois, et effectue un filtrage en mémoire par plage de dates, atteignant un coût de requête O(1) après le chargement initial.
+</div>
+
+<h2>Architecture</h2>
+
+<h3>Chaîne d'héritage</h3>
+<div class="c">
+<code>BirthdayCache</code> étend <strong><code>AbstractCache</code></strong> (de <code>org.projectforge.framework.cache</code>), la classe de base de ProjectForge pour les caches basés sur TTL. Cela lui donne :<br>
+• <code>checkRefresh()</code> — appelle automatiquement <code>refresh()</code> si le TTL a expiré<br>
+• <code>setExpireInMinutes()</code> — TTL configurable<br>
+• Enregistrement thread-safe dans <code>PfCaches</code> (<a href="820.html">#820</a>)<br>
+• Participation au rafraîchissement groupé <code>SystemService.refreshCaches()</code>
+</div>
+
+<h3>Protection singleton</h3>
+<div class="c">
+Le cache utilise un <strong>objet compagnon</strong> avec une <code>lateinit var instance</code> et un garde <code>instanceCounter</code>. Si Spring (ou le code de test) crée une seconde instance, un avertissement est journalisé. Cela empêche la classe de base <code>AbstractCache</code> de double-enregistrer le cache dans <code>PfCaches</code>, ce qui provoquerait des appels de rafraîchissement en double.
+</div>
+
+<h3>Modèle de données</h3>
+<div class="c">
+Le cache stocke une <code>MutableList&lt;BirthdayAddress&gt;</code> où chaque <code>BirthdayAddress</code> encapsule un <code>AddressDO</code> et implémente <code>Comparable</code>. La comparaison trie d'abord par mois/jour d'anniversaire, puis par nom — permettant au <code>TreeSet</code> utilisé dans <code>getBirthdays()</code> de produire une sortie naturellement triée sans appels de tri explicites.
+</div>
+
+<h2>Algorithme de requête</h2>
+<div class="c">
+<code>getBirthdays(fromDate, toDate, all, favorites)</code> filtre la liste mise en cache avec quatre conditions de garde appliquées dans cet ordre de priorité pour l'efficacité :<br><br>
+<strong>1. Contrôle d'accès</strong> (<code>addressDao.hasLoggedInUserSelectAccess</code>) : Ignore les adresses que l'utilisateur actuel ne peut pas voir. Ceci est essentiel car le cache charge TOUTES les adresses (en utilisant <code>checkAccess = false</code> dans la requête DAO).<br>
+<strong>2. Filtre des favoris</strong> (<code>!all && !favorites.contains(address.id)</code>) : Si pas en mode « tout », seules les adresses dans la liste des favoris de l'utilisateur sont incluses.<br>
+<strong>3. Disponibilité de l'anniversaire</strong> : Ignore les adresses où <code>PFDateTime.fromOrNull(address.birthday)</code> retourne null.<br>
+<strong>4. Vérification de la plage de dates</strong> (<code>DateHelper.dateOfYearBetween</code>) : Compare le mois/jour (en ignorant l'année) avec la plage. Cela gère les plages chevauchant les années (ex. 15 déc. — 15 janv.).<br><br>
+Les résultats sont collectés dans un <code>TreeSet&lt;BirthdayAddress&gt;</code> pour un tri automatique.
+</div>
+
+<h2>Logique de rafraîchissement</h2>
+<div class="c">
+<code>refresh()</code> s'exécute dans <strong><code>persistenceService.runIsolatedReadOnly { }</code></strong> — un contexte de transaction dédié, séparé de toute transaction de requête HTTP active. Cet isolement empêche :<br>
+• La contention avec les sessions Hibernate liées à la requête<br>
+• Les problèmes de chargement paresseux (toutes les données sont chargées de manière eager)<br>
+• Les phénomènes de lecture provenant d'écritures non validées dans la transaction de la requête<br><br>
+La requête utilise <code>QueryFilter.isNotNull("birthday")</code> pour exclure les adresses sans date d'anniversaire (qui sont la majorité). Le filtre <code>deleted = false</code> garantit que les adresses supprimées logiquement sont exclues.<br><br>
+Une vérification défensive supplémentaire (<code>if (it.deleted != true)</code>) protège contre les entités où le filtre JPA pourrait ne pas avoir été appliqué (par exemple, lors d'une migration ou si la configuration du filtre change).
+</div>
+
+<h2>Historique Git</h2>
+<div class="hist">
+<pre>868d6abb7 2025 → 2026 (mise à jour de l'année de copyright)
+b131193e7 Variables membres refactorisées en utilisant by lazy {} (BirthdayCache entre autres)
+63081666f En-têtes des fichiers source : 2024→2025
+0ceceb28f Tous les rafraîchissements de cache s'exécutent désormais dans des transactions ou contextes isolés
+1b50060c3 BaseDao renommé : get→find, save→insert, getList→select, load→select
+87aaf6a5a BaseDao refactorisé (méthodes internal* renommées)
+4c04cfd65 MAJEUR : Migration des identifiants Integer vers Long (y compris les cascades FK)
+b6092df09 Copyright 2023 → 2024
+ab45d51fa Copyright 2001-2022 → 2001-2023
+cf80afb28 Fonctionnalité de location supprimée (testée système)
+c0f2b9de0 Fonctionnalité de location supprimée partout
+b209e00ba PFDay/PFDateTime.from → from, fromOrNow, fromOrNull
+24019a0f5 Élimination des occurrences de DateHolder
+bfa336a64 BirthdayCache maintenant rafraîchi par SystemService.refreshCaches(), ignore les utilisateurs supprimés
+76a8fb69d Hibernate.Restrictions → PF.QueryFilter
+140cb4c40 WIP : Cache des anniversaires (implémentation initiale)
+615c248f4 Correction de performance : PersonalAddressDao.getList causait des ralentissements ; introduction de BirthdayCache et PersonalAddressDao.getIdList
+</pre>
+</div>
+
+<h2>Principaux commits expliqués</h2>
+<div class="c">
+<strong><code>615c248f4</code> (le plus ancien) — Correction de performance :</strong> Le cache a été créé pour résoudre un problème de performance critique. <code>PersonalAddressDao.getList</code> prenait des secondes à s'exécuter, et l'affichage des anniversaires dans la vue calendrier provoquait une latence notable. Le cache a éliminé le scan de la table des adresses à chaque requête.<br><br>
+<strong><code>0ceceb28f</code> — Transactions isolées :</strong> Les opérations de rafraîchissement ont été déplacées de la transaction de requête vers <code>runIsolatedReadOnly</code>. Cela a corrigé une classe de bugs où un rafraîchissement de longue durée dans une transaction de requête pouvait provoquer des timeouts de session Hibernate ou des problèmes de visibilité de données obsolètes.<br><br>
+<strong><code>4c04cfd65</code> — Migration int→Long :</strong> Tous les types d'ID sont passés de <code>Integer</code> à <code>Long</code>, affectant le paramètre <code>favorites: List&lt;Long&gt;</code> et les comparaisons <code>address.id</code> dans toute la logique de filtrage.<br><br>
+<strong><code>cf80afb28</code> — Suppression de la location :</strong> La fonctionnalité multi-locataire a été supprimée, simplifiant le cache (plus d'isolation par locataire nécessaire).<br><br>
+<strong><code>bfa336a64</code> — Correction utilisateur supprimé :</strong> Ajout de la vérification explicite pour l'anniversaire des utilisateurs supprimés, garantissant qu'ils n'apparaissent pas dans les widgets du tableau de bord.
+</div>
+
+<h2>Caractéristiques de performance</h2>
+<table>
+<tr><th>Opération</th><th>Complexité temporelle</th><th>Notes</th></tr>
+<tr><td>Rafraîchissement (chargement du cache)</td><td>O(n) où n = adresses avec anniversaire</td><td>Requête SQL unique, s'exécute dans une transaction isolée</td></tr>
+<tr><td>getBirthdays() (plage de dates)</td><td>O(n) scan de la liste mise en cache</td><td>En mémoire ; typiquement n &lt; 500 pour une PME</td></tr>
+<tr><td>getBirthdays() (favoris uniquement)</td><td>O(n) scan avec <code>favorites.contains()</code> = O(1) par élément</td><td>Liste des favoris passée en paramètre (déjà chargée)</td></tr>
+<tr><td>Vérification d'accès par entrée</td><td>O(1) par entrée (appartenances aux groupes mises en cache)</td><td><code>AddressDao.hasLoggedInUserSelectAccess</code></td></tr>
+</table>
+<div class="c">
+Le scan linéaire est acceptable car le cache ne contient que les adresses avec anniversaire (pas le carnet d'adresses complet), et le filtrage par accès/favoris évite les recherches coûteuses en base de données par entrée en travaillant entièrement en mémoire avec des données de sécurité préchargées.
+</div>
+
+<div class="warn"><strong>Piège — Contournement du contrôle d'accès lors du rafraîchissement :</strong> La requête de rafraîchissement utilise <code>checkAccess = false</code> pour charger TOUTES les adresses. Le contrôle d'accès est appliqué plus tard dans <code>getBirthdays()</code> par requête. Cela signifie que le cache lui-même contient des données que l'utilisateur actuel pourrait ne pas être autorisé à voir. Chaque appel à <code>getBirthdays()</code> réévalue l'accès en fonction de l'utilisateur <em>actuellement</em> connecté, rendant le cache agnostique de l'utilisateur au moment du stockage, mais conscient de l'utilisateur au moment de la requête. Si l'accès d'un utilisateur est révoqué, la prochaine requête d'anniversaire (pas le prochain rafraîchissement du cache) exclura ses entrées.</div>
+
+</body>
+</html>

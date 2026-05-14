@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>610: UserRight.java [ES]</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:1.5em;color:#444;font-size:1em}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.lang{font-size:.85em;color:#888;float:right}.lang a{color:#888;text-decoration:none;padding:0 .3em}.lang a.active{color:#0366d6;font-weight:600;text-decoration:underline}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}pre.diff{background:#fff;font-size:.82em;max-height:300px;overflow-y:auto}</style>
+</head>
+<body>
+<div class="lang"><a href="610.html">EN</a> · <a href="610_de.html">DE</a> · <a href="610_ru.html">RU</a> · <a href="610_fr.html">FR</a> · <a href="610_es.html" class="active">ES</a></div>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Índice</a> · <a href="file-index.html">← Índice de archivos</a> · <a href="371.html">← Anterior</a> · <a href="470.html">Siguiente →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/java/org/projectforge/business/user/UserRight.java" target="_blank" title="Ver fuente en GitHub">📄 fuente</a></div>
+<h1>#610: <code>UserRight.java</code></h1>
+<div class="meta"><code>projectforge-business/src/main/java/org/projectforge/business/user/UserRight.java</code> Clase Java, <code>projectforge-business/src/main/java/org/projectforge/business/user/UserRight.java</code> <span style="color:#888">219 líneas · 122 código · 71 comentarios · 26 en blanco</span></div>
+<div class="c"><strong>Propósito:</strong> Archivo fuente: projectforge/business/user/UserRight.java. UserRight.java es parte de la aplicación de gestión de proyectos de código abierto ProjectForge.</div>
+<h2>Fuente (primeras 100 líneas)</h2>
+<pre>/////////////////////////////////////////////////////////////////////////////
+//
+// Project ProjectForge Community Edition
+//         www.projectforge.org
+//
+// Copyright (C) 2001-2026 Micromata GmbH, Germany (www.micromata.com)
+//
+// ProjectForge tiene doble licencia.
+//
+// Esta edición comunitaria es software libre; puedes redistribuirla y/o
+// modificarla bajo los términos de la Licencia Pública General GNU publicada
+// por la Free Software Foundation; versión 3 de la Licencia.
+//
+// Esta edición comunitaria se distribuye con la esperanza de que sea útil,
+// pero SIN NINGUNA GARANTÍA; sin siquiera la garantía implícita de
+// COMERCIABILIDAD o IDONEIDAD PARA UN PROPÓSITO PARTICULAR. Consulte la Licencia
+// Pública General GNU para más detalles.
+//
+// Deberías haber recibido una copia de la Licencia Pública General GNU junto
+// con este programa; si no, visita http://www.gnu.org/licenses/.
+//
+/////////////////////////////////////////////////////////////////////////////
+
+package org.projectforge.business.user;
+
+import org.projectforge.framework.DisplayNameCapable;
+import org.projectforge.framework.persistence.api.IUserRightId;
+import org.projectforge.framework.persistence.user.entities.GroupDO;
+import org.projectforge.framework.persistence.user.entities.PFUserDO;
+
+import java.io.Serializable;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.List;
+
+public abstract class UserRight implements Serializable, DisplayNameCapable {
+  private static final long serialVersionUID = -4356329396089081134L;
+
+  private final IUserRightId id;
+
+  protected UserRightValue[] values;
+
+  protected UserRightCategory category = UserRightCategory.MISC;
+
+  protected UserRight dependsOn;
+
+  public UserRight(final IUserRightId id, final UserRightCategory category) {
+    this.id = id;
+    this.category = category;
+  }
+
+  public UserRight(final IUserRightId id, final UserRightCategory category, final UserRightValue... values) {
+    this(id, category);
+    this.values = values;
+  }
+
+  public UserRight(final IUserRightId id, final UserRightCategory category, final UserRight dependsOn) {
+    this(id, category, dependsOn, new UserRightValue[]{UserRightValue.FALSE, UserRightValue.TRUE});
+  }
+
+  /**
+   * @param id
+   * @param dependsOn
+   * @param values    FALSE, TRUE por defecto.
+   */
+  public UserRight(final IUserRightId id, final UserRightCategory category, final UserRight dependsOn,
+                   final UserRightValue... values) {
+    this(id, category);
+    this.dependsOn = dependsOn;
+    this.values = values;
+  }
+
+  public IUserRightId getId() {
+    return id;
+  }
+
+  /**
+   * Valores disponibles {TRUE, FALSE} por defecto.
+   *
+   * @return
+   */
+  public UserRightValue[] getValues() {
+    return values;
+  }
+
+  /**
+   * Para algunos usuarios y combinaciones de permisos es posible que el usuario tenga un valor de acceso por defecto
+   * porque es miembro de un grupo con un permiso único. &lt;br/&gt;
+   *
+   * @param user
+   * @return true si todos los valores disponibles para el usuario coinciden automáticamente, de lo contrario false
+   * (este permiso parece configurable para el usuario dado en el UserEditForm).
+   */
+  public boolean isConfigurable(final PFUserDO user, final Collection&lt;GroupDO&gt; userGroups) {
+    if (values == null) {
+      return false;
+    }
+    final UserRightValue[] availableValues = getAvailableValues(user, userGroups);
+    if (availableValues == null || availableValues.length &lt;= 1) {
+      return false;</pre>
+<h2>Historial Git</h2>
+<div class="hist">
+<pre>868d6abb7 2025 -> 2026
+63081666f Encabezados de archivos fuente: 2024 -> 2025.
+b6092df09 Copyright 2023 -> 2024
+ab45d51fa Copyright 2001-2022 -> 2001-2023.
+5f9658941 UserRight.isConfigurable/getAvailableValues/matches(UserGroupCache, ...) -> isConfigurable/...(..., Collection<GroupDO>...) UserGroovyRight eliminado.</pre>
+<h3>868d6abb7</h3><div class="c"><strong>2025 -> 2026</strong><pre class="diff">868d6abb75cd191a892911ac8e45058932cf9074
+diff --git a/projectforge-business/src/main/java/org/projectforge/business/user/UserRight.java b/projectforge-business/src/main/java/org/projectforge/business/user/UserRight.java
+index 8f44a66bc..c2192b929 100644
+--- a/projectforge-business/src/main/java/org/projectforge/business/user/UserRight.java
++++ b/projectforge-business/src/main/java/org/projectforge/business/user/UserRight.java
+@@ -3,7 +3,7 @@
+ // Project ProjectForge Community Edition
+ //         www.projectforge.org
+ //
+-// Copyright (C) 2001-2025 Micromata GmbH, Germany (www.micromata.com)
++// Copyright (C) 2001-2026 Micromata GmbH, Germany (www.micromata.com)
+ //
+ // ProjectForge tiene doble licencia.
+ //</pre></div><h3>63081666f</h3><div class="c"><strong>Encabezados de archivos fuente: 2024 -> 2025.</strong><pre class="diff">63081666f620fb87315f01b817e560e0b2f6a33a
+diff --git a/projectforge-business/src/main/java/org/projectforge/business/user/UserRight.java b/projectforge-business/src/main/java/org/projectforge/business/user/UserRight.java
+index 4ca0656f0..8f44a66bc 100644
+--- a/projectforge-business/src/main/java/org/projectforge/business/user/UserRight.java
++++ b/projectforge-business/src/main/java/org/projectforge/business/user/UserRight.java
+@@ -3,7 +3,7 @@
+ // Project ProjectForge Community Edition
+ //         www.projectforge.org
+ //
+-// Copyright (C) 2001-2024 Micromata GmbH, Germany (www.micromata.com)
++// Copyright (C) 2001-2025 Micromata GmbH, Germany (www.micromata.com)
+ //
+ // ProjectForge tiene doble licencia.
+ //</pre></div><h3>b6092df09</h3><div class="c"><strong>Copyright 2023 -> 2024</strong><pre class="diff">b6092df0927c4a3b161e888445f31dcab57493f2
+diff --git a/projectforge-business/src/main/java/org/projectforge/business/user/UserRight.java b/projectforge-business/src/main/java/org/projectforge/business/user/UserRight.java
+index c48cd83ef..4ca0656f0 100644
+--- a/projectforge-business/src/main/java/org/projectforge/business/user/UserRight.java
++++ b/projectforge-business/src/main/java/org/projectforge/business/user/UserRight.java
+@@ -3,7 +3,7 @@
+ // Project ProjectForge Community Edition
+ //         www.projectforge.org
+ //
+-// Copyright (C) 2001-2023 Micromata GmbH, Germany (www.micromata.com)
++// Copyright (C) 2001-2024 Micromata GmbH, Germany (www.micromata.com)
+ //
+ // ProjectForge tiene doble licencia.
+ //</pre></div><h3>ab45d51fa</h3><div class="c"><strong>Copyright 2001-2022 -> 2001-2023.</strong><pre class="diff">ab45d51fa419ede6174b31d69987f96d4b841ff9
+diff --git a/projectforge-business/src/main/java/org/projectforge/business/user/UserRight.java b/projectforge-business/src/main/java/org/projectforge/business/user/UserRight.java
+index dd2b57847..c48cd83ef 100644
+--- a/projectforge-business/src/main/java/org/projectforge/business/user/UserRight.java
++++ b/projectforge-business/src/main/java/org/projectforge/business/user/UserRight.java
+@@ -3,7 +3,7 @@
+ // Project ProjectForge Community Edition
+ //         www.projectforge.org
+ //
+-// Copyright (C) 2001-2022 Micromata GmbH, Germany (www.micromata.com)
++// Copyright (C) 2001-2023 Micromata GmbH, Germany (www.micromata.com)
+ //
+ // ProjectForge tiene doble licencia.
+ //</pre></div><h3>5f9658941</h3><div class="c"><strong>UserRight.isConfigurable/getAvailableValues/matches(UserGroupCache, ...) -> isConfigurable/...(..., Collection<GroupDO>...) UserGroovyRight eliminado.</strong><pre class="diff">5f96589418cc9445e8a09ed5abd80ab9b184748e
+diff --git a/projectforge-business/src/main/java/org/projectforge/business/user/UserRight.java b/projectforge-business/src/main/java/org/projectforge/business/user/UserRight.java
+index 6c5644eb4..dd2b57847 100644
+--- a/projectforge-business/src/main/java/org/projectforge/business/user/UserRight.java
++++ b/projectforge-business/src/main/java/org/projectforge/business/user/UserRight.java
+@@ -87,16 +87,15 @@ public abstract class UserRight implements Serializable, DisplayNameCapable {
+    * Para algunos usuarios y combinaciones de permisos es posible que el usuario tenga un valor de acceso por defecto
+    * porque es miembro de un grupo con un permiso único. &lt;br/&gt;
+    *
+-   * @param userGroupCache
+    * @param user
+    * @return true si todos los valores disponibles para el usuario coinciden automáticamente, de lo contrario false
+    * (este permiso parece configurable para el usuario dado en el UserEditForm).
+    */
+-  public boolean isConfigurable(final UserGroupCache userGroupCache, final PFUserDO user) {
++  public boolean isConfigurable(final PFUserDO user, final Collection&lt;GroupDO&gt; userGroups) {
+     if (values == null) {
+       return false;
+     }
+-    final UserRightValue[] availableValues = getAvailableValues(userGroupCache, user);
++    final UserRightValue[] availableValues = getAvailableValues(user, userGroups);
+     if (availableValues == null || availableValues.length &lt;= 1) {
+       return false;
+     }
+@@ -104,11 +103,11 @@ public abstract class UserRight implements Serializable, DisplayNameCapable {
+       if (value == UserRightValue.FALSE) {
+         continue; // No debería ser configurable.
+       }
+-      if (!matches(userGroupCache, user, value)) {
++      if (!matches(user, userGroups, value)) {
+         final UserRightValue[] includedByValues = value.includedBy();
+         if (includedByValues != null) {
+           for (final UserRightValue includedByValue : includedByValues) {
+-            if (matches(userGroupCache, user, includedByValue)) {
++            if (matches(user, userGroups, includedByValue)) {
+               // Este valor disponible se establece automáticamente para el usuario, por lo que el permiso parece no configurable:
+               break;
+             }
+@@ -126,16 +125,14 @@ public abstract class UserRight implements Serializable, DisplayNameCapable {
+    * Obtiene todos los valores de permiso que están potencialmente disponibles para el usuario. Si el valor de usuario
+    * almacenado en los datos del usuario no es parte de los valores disponibles, entonces AccessChecker devuelve que el
+    * usuario no tiene permiso.
+    *
+-   * @param userGroupCache
+    * @param user
+    * @return
+    */
+-  public UserRightValue[] getAvailableValues(final UserGroupCache userGroupCache, final PFUserDO user) {
++  public UserRightValue[] getAvailableValues(final PFUserDO user, final Collection&lt;GroupDO&gt; userGroups) {
+     if (values == null) {
+       return null;
+     }
+     final List&lt;UserRightValue&gt; list = new ArrayList&lt;&gt;();
+-    final Collection&lt;GroupDO&gt; userGroups = userGroupCache.getUserGroupDOs(user);
+     for (final UserRightValue value : values) {
+       if (isAvailable(user, userGroups, value)) {
+         list.add(value);
+@@ -162,7 +159,7 @@ public abstract class UserRight implements Serializable, DisplayNameCapable {
+ 
+   /**
+    * @param assignedGroups</pre></div>
+</div>
+</body></html>

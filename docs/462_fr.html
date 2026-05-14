@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>#462: GanttChartXLabelBarRenderer.java [FR]</title>
+<style>
+body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}
+h1{border-bottom:2px solid #333;padding-bottom:.3em}
+h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}
+h3{margin-top:2em;color:#444}
+a{color:#0366d6}
+.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}
+.nav{font-size:.9em;color:#888;margin-bottom:1em}
+.lang{font-size:.85em;color:#888;float:right}
+.lang a{color:#888;text-decoration:none;padding:0 .3em}
+.lang a.active{color:#0366d6;font-weight:600;text-decoration:underline}
+.meta{font-size:.9em;margin:1em 0;color:#555}
+code{background:#f0f0f0;padding:0 .2em;font-size:.93em}
+pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}
+table{border-collapse:collapse;width:100%;margin:1em 0}
+th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}
+th{background:#f5f5f5;font-weight:600}
+.hist{font-size:.85em;color:#555}
+</style>
+</head>
+<body>
+<div class="lang"><a href="462.html">EN</a> · <a href="462_de.html">DE</a> · <a href="462_ru.html">RU</a> · <a href="462_fr.html" class="active">FR</a> · <a href="462_es.html">ES</a></div>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← Index des fichiers</a> · <a href="93.html">← Précédent</a> · <a href="652.html">Suivant →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/java/org/projectforge/business/gantt/GanttChartXLabelBarRenderer.java" target="_blank" title="Voir la source sur GitHub">📄 source</a></div>
+<h1>#462: <code>GanttChartXLabelBarRenderer.java</code></h1>
+<div class="meta"><code>projectforge-business/src/main/java/org/projectforge/business/gantt/GanttChartXLabelBarRenderer.java</code> Type : Java · Rôle : Diagramme de Gantt · Source : projectforge-business/src/main/java/org/projectforge/business/gantt/GanttChartXLabelBarRenderer.java <span style="color:#888">380 lignes · 304 code · 44 commentaires · 32 vides</span></div>
+<div class="c">Fichier source à <code>projectforge-business/src/main/java/org/projectforge/business/gantt/GanttChartXLabelBarRenderer.java</code> contenant le code Java pour la couche du diagramme de Gantt.</div>
+<h2>Structure du code</h2>
+<p>Paquetage : <code>org.projectforge.business.gantt</code></p>
+<p>Classes : <code>GanttChartXLabelBarRenderer</code></p>
+<p>Méthodes (7) : <code>init</code>, <code>getScale</code>, <code>draw</code>, <code>showNonWorkingDays</code>, <code>match</code>, <code>getXValue</code>, <code>getFromToDays</code></p>
+<p>Champs (6) : <code>MIN_PIXEL_PER_UNIT</code>, <code>showNonWorkingDays</code>, <code>fromDate</code>, <code>toDate</code>, <code>diagramWidth</code>, <code>style</code></p>
+<p>Importations : 11 paquetages</p>
+<h2>Code source (abrégé)</h2>
+<pre>
+package org.projectforge.business.gantt;
+
+import org.projectforge.export.SVGColor;
+import org.projectforge.export.SVGHelper;
+import org.projectforge.framework.calendar.Holidays;
+import org.projectforge.framework.persistence.user.api.ThreadLocalUserContext;
+import org.projectforge.framework.time.DateTimeFormatter;
+import org.projectforge.framework.time.PFDateTime;
+import org.w3c.dom.Document;
+import org.w3c.dom.Element;
+
+import java.time.LocalDate;
+import java.time.Month;
+import java.util.Date;
+
+public class GanttChartXLabelBarRenderer
+{
+  private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(GanttChartXLabelBarRenderer.class);
+
+  private static final double MIN_PIXEL_PER_UNIT = 10.0;
+
+  private static final int[] QUARTER_SCALES = { 1, 2, 4, 8, 12};
+
+  private static final int[] MONTH_SCALES = { 1, 2, 3, 6, 12, 24, 36, 48, 60};
+
+  private static final int[] SCALES = { 1, 2, 5, 10, 20, 50, 100, 200, 500, 1000};
+
+  GanttXUnit labelUnit;
+
+  int labelScale;
+
+  // Graduations avec étiquettes
+  GanttXUnit ticksUnit;
+
+  int ticksScale;
+
+  // Petites graduations
+  GanttXUnit ticksUnit2;
+
+  int ticksScale2;
+
+  GanttXUnit gridUnit;
+
+  int gridScale;
+
+  String label;
+
+  private boolean showNonWorkingDays;
+
+  private LocalDate fromDate;
+
+  private LocalDate toDate;
+
+  int fromToDays = -1;
+
+  private double diagramWidth;
+
+  private GanttChartStyle style;
+
+  public GanttChartXLabelBarRenderer(final LocalDate fromDate, final LocalDate toDate, final double diagramWidth, final GanttChartStyle style)
+  {
+    this.fromDate = fromDate;
+    this.toDate = toDate;
+    this.diagramWidth = diagramWidth;
+    this.style = style;
+    this.gridScale = style.getXGridScale();
+    init();
+  }
+
+  private void init()
+  {
+
+    final int numberOfDays = getFromToDays(); // Initialise fromToDays.
+    final double numberOfWeeks = 0.25 * numberOfDays;
+    final double numberOfMonths = 0.033 * numberOfDays;
+    final double numberOfQuarters = numberOfMonths / 3;
+    if (this.style.getXUnit() == GanttXUnit.AUTO) {
+      if (diagramWidth / numberOfDays &gt; MIN_PIXEL_PER_UNIT) {
+        labelUnit = GanttXUnit.DAY;
+        ticksUnit = GanttXUnit.DAY;
+        ticksUnit2 = GanttXUnit.DAY;
+      } else if (diagramWidth / numberOfWeeks &gt; MIN_PIXEL_PER_UNIT) {
+        labelUnit = GanttXUnit.WEEK;
+        ticksUnit = GanttXUnit.WEEK;
+        ticksUnit2 = GanttXUnit.DAY;
+      } else if (diagramWidth / numberOfMonths &gt; MIN_PIXEL_PER_UNIT) {
+        labelUnit = GanttXUnit.MONTH;
+        ticksUnit = GanttXUnit.MONTH;
+        ticksUnit2 = GanttXUnit.WEEK;
+      } else {
+        labelUnit = GanttXUnit.QUARTER;
+        ticksUnit = GanttXUnit.MONTH;
+        ticksUnit2 = GanttXUnit.WEEK;
+      }
+    }
+    this.gridUnit = ticksUnit;
+    double numberOfUnits;
+    if (labelUnit == GanttXUnit.DAY) {
+      numberOfUnits = (double) numberOfDays;
+    } else if (labelUnit == GanttXUnit.WEEK) {
+      numberOfUnits = numberOfWeeks;
+    } else if (labelUnit == GanttXUnit.MONTH) {
+      numberOfUnits = numberOfMonths;
+    } else {
+      numberOfUnits = numberOfQuarters;
+    }
+    labelScale = style.getXLabelsScale();
+    ticksScale = style.getXTicksScale();
+    ticksScale2 = style.getXTicksScale2();
+    if (labelUnit == GanttXUnit.QUARTER) {
+      if (labelScale &lt; 0) {
+        if (style.isRelativeTimeValues()) {
+          // Les nombres nécessitent moins d'espace que les étiquettes de trimestre (03/2010)
+          labelScale = getScale(numberOfQuarters, 50, labelUnit);
+        } else {
+          labelScale = getScale(numberOfQuarters, 100, labelUnit);
+        }
+      }
+      if (ticksScale &lt; 0) {
+// ... (tronqué, 358 lignes au total)</pre>
+
+<h2>Historique Git</h2>
+<div class="hist"><pre>868d6abb7 2025 -> 2026
+63081666f En-têtes des fichiers sources : 2024 -> 2025.
+b6092df09 Copyright 2023 -> 2024
+ab45d51fa Copyright 2001-2022 -> 2001-2023.
+5f7ef41b8 Copyright 2021 -> 2022</pre></div>
+</body>
+</html>

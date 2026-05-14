@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>#1877 : CSVWriter.java [FR]</title>
+<style>
+body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}
+h1{border-bottom:2px solid #333;padding-bottom:.3em}
+h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}
+h3{margin-top:2em;color:#444}
+a{color:#0366d6}
+.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}
+.nav{font-size:.9em;color:#888;margin-bottom:1em}
+.lang{font-size:.85em;color:#888;float:right}
+.lang a{color:#888;text-decoration:none;padding:0 .3em}
+.lang a.active{color:#0366d6;font-weight:600;text-decoration:underline}
+.meta{font-size:.9em;margin:1em 0;color:#555}
+code{background:#f0f0f0;padding:0 .2em;font-size:.93em}
+pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}
+table{border-collapse:collapse;width:100%;margin:1em 0}
+th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}
+th{background:#f5f5f5;font-weight:600}
+.hist{font-size:.85em;color:#555}
+.warn{background:#fff3cd;border-left:3px solid #ffc107;padding:.5em 1em;margin:1em 0}
+.tip{background:#d4edda;border-left:3px solid #28a745;padding:.5em 1em;margin:1em 0}
+</style>
+</head>
+<body>
+<div class="lang"><a href="1877.html">EN</a> · <a href="1877_de.html">DE</a> · <a href="1877_ru.html">RU</a> · <a href="1877_fr.html" class="active">FR</a> · <a href="1877_es.html">ES</a></div>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← Index des fichiers</a> · <a href="1876.html">← Précédent</a> · <a href="1878.html">Suivant →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-common/src/main/java/org/projectforge/common/CSVWriter.java" target="_blank" title="Voir la source sur GitHub">📄 source</a></div>
+<h1>#1877 : <code>CSVWriter.java</code></h1>
+<div class="meta"><code>projectforge-common/src/main/java/org/projectforge/common/CSVWriter.java</code> Classe utilitaire — package org.projectforge.common, projectforge-common/src/main/java/org/projectforge/common/CSVWriter.java <span style="color:#888">176 lignes · 100 code · 54 commentaires · 22 vides</span></div>
+<div class="c">Générateur de sortie CSV qui formate les données en fichiers texte délimités par des points-virgules. Compagnon de CSVParser — fournit une API de construction fluide pour écrire des lignes CSV avec un guillemetage correct. Prend en charge des surcharges typées <code>write()</code> pour les chaînes (avec échappement des guillemets doubles), les entiers longs, les dates (format ISO 8601) et les objets génériques. Séparateur, fin de ligne et format de date configurables. Utilisé pour les exportations de données ProjectForge (listes d'adresses, exportations de feuilles de temps, rapports financiers).</div>
+<h2>Architecture</h2>
+<div class="c">
+<h3>Importations</h3>
+<ul>
+<li><code>java.io.PrintWriter</code> / <code>java.io.Writer</code> — Sortie texte</li>
+<li><code>java.text.DateFormat</code> / <code>SimpleDateFormat</code> — Formatage des dates pour les colonnes de date CSV</li>
+<li><code>java.util.Date</code> — Type de valeur Date</li>
+<li><code>java.util.TimeZone</code> — Fuseau horaire UTC pour le formatage des dates</li>
+</ul>
+
+<h3>Configuration</h3>
+<table>
+<tr><th>Paramètre</th><th>Valeur par défaut</th><th>Méthode de définition</th></tr>
+<tr><td>Séparateur CSV</td><td><code>';'</code> (point-virgule — convention européenne)</td><td><code>setCsvSeparator(char)</code></td></tr>
+<tr><td>Fin de ligne</td><td><code>"\n"</code> (saut de ligne Unix)</td><td><code>setCr(String)</code></td></tr>
+<tr><td>Format de date</td><td><code>"yyyy-MM-dd HH:mm:ss.SSS"</code></td><td><code>setDateFormat(DateFormat)</code></td></tr>
+<tr><td>Fuseau horaire des dates</td><td>UTC</td><td>Codé en dur dans le constructeur</td></tr>
+</table>
+
+<h3>API de construction fluide</h3>
+<p>Toutes les méthodes <code>write()</code> retournent <code>this</code> (l'instance de CSVWriter), permettant le chaînage de méthodes :</p>
+<pre>csvWriter.write("Nom").write("Âge").write(42L).writeEndOfLine();</pre>
+
+<h3>Surcharges d'écriture spécifiques aux types</h3>
+
+<table>
+<tr><th>Méthode</th><th>Formatage</th><th>Guillemetage</th></tr>
+<tr><td><code>write(String s)</code></td><td>Chaîne brute avec <code>"</code> échappé en <code>""</code> (doublement)</td><td>Toujours encadré par <code>"..."</code> — suit les règles de guillemetage RFC 4180</td></tr>
+<tr><td><code>write(long valeur)</code></td><td>Sortie numérique directe via <code>PrintWriter.print()</code></td><td>Aucun — les nombres ne sont pas entre guillemets</td></tr>
+<tr><td><code>write(Date valeur)</code></td><td>Formaté via <code>dateFormat.format()</code> en UTC</td><td>Entre guillemets — les dates peuvent contenir des espaces ou des caractères spéciaux</td></tr>
+<tr><td><code>write(Object valeur)</code></td><td>Solution de repli : <code>String.valueOf(valeur)</code></td><td>Aucun — les objets génériques ne sont pas entre guillemets (risqué pour les objets contenant des virgules/guillemets)</td></tr>
+</table>
+
+<h3>Algorithme de guillemetage (écriture de chaînes)</h3>
+<p>La méthode <code>write(String)</code> implémente l'échappement CSV correct selon la RFC 4180 :</p>
+<ol>
+<li>Produit le séparateur si ce n'est pas la première entrée de la ligne (géré par <code>writeSeparator()</code> avec le drapeau <code>firstEntry</code>)</li>
+<li>Produit un guillemet double ouvrant (<code>"</code>)</li>
+<li>Parcourt chaque caractère de la chaîne</li>
+<li>Si le caractère est un guillemet double (<code>"</code>), le produit deux fois (<code>""</code>) — la séquence d'échappement CSV standard</li>
+<li>Produit tous les autres caractères tels quels</li>
+<li>Produit un guillemet double fermant (<code>"</code>)</li>
+</ol>
+
+<h3>Écriture de lignes</h3>
+<ul>
+<li><code>writeLine(Object[] valeurs)</code> — Écrit toutes les valeurs du tableau, puis appelle <code>writeEndOfLine()</code></li>
+<li><code>writeEndOfLine()</code> — Produit la fin de ligne configurée (<code>\n</code> par défaut) et réinitialise <code>firstEntry = true</code></li>
+</ul>
+
+<h3>Logique du séparateur (writeSeparator)</h3>
+<p>Le drapeau booléen <code>firstEntry</code> suit si nous sommes au début d'une ligne :
+<ul>
+<li>Si <code>firstEntry == true</code> : passe à false (première cellule — aucun séparateur nécessaire)</li>
+<li>Si <code>firstEntry == false</code> : produit le caractère séparateur avant la valeur de la cellule</li>
+</ul>
+Il s'agit d'un modèle classique de suivi d'état pour la sortie délimitée.</p>
+
+<h3>Intégration avec CSVParser</h3>
+<p>CSVWriter définit <code>DEFAULT_CSV_SEPARATOR_CHAR = ';'</code> comme constante publique, que CSVParser référence pour garantir un séparateur par défaut cohérent entre le lecteur et l'écrivain.</p>
+
+<h3>Comparaison avec les bibliothèques CSV modernes</h3>
+<p>Cette implémentation est intentionnellement minimale par rapport à Apache Commons CSV ou OpenCSV :
+<ul>
+<li>Pas de mappage d'en-tête (c'est géré par <code>CSVParser.parseHeadCols()</code>)</li>
+<li>Pas de conversion de type automatique (les appelants formatent les valeurs avant l'écriture)</li>
+<li>Pas d'optimisations pour le streaming/les gros fichiers (écrit directement dans un Writer)</li>
+<li>Pas de support pour différentes stratégies de guillemetage (toutes les chaînes sont entre guillemets ; les nombres jamais)</li>
+</ul>
+La simplicité reflète son origine en tant qu'outil spécialisé pour l'exportation de données ProjectForge, et non une bibliothèque CSV à usage général.</p>
+
+<div class="warn">La méthode <code>write(Object)</code> NE met PAS la sortie entre guillemets — elle appelle <code>String.valueOf(valeur)</code> et écrit directement. Si le <code>toString()</code> de l'objet retourne une chaîne contenant des virgules, des points-virgules ou des sauts de ligne, le CSV résultant sera mal formé. Cela est acceptable car les appelants sont censés utiliser les surcharges spécifiques aux types.</div>
+
+<div class="tip">La sortie des dates utilise le <strong>fuseau horaire UTC</strong> — les dates sont normalisées en UTC avant le formatage. C'est un choix délibéré pour l'échange de données : cela évite l'ambiguïté du fuseau horaire dans les exportations. Le format <code>"yyyy-MM-dd HH:mm:ss.SSS"</code> est de type ISO 8601 mais utilise un espace comme séparateur au lieu de 'T'.</div>
+</div>
+<h2>Historique Git</h2><div class="hist"><pre>868d6abb7 2025 -> 2026
+63081666f En-têtes des fichiers source : 2024 -> 2025.
+a73905c14 Correction de fautes de frappe dans les répertoires projectforge*/ Trouvé via codespell
+b6092df09 Copyright 2023 -> 2024
+ab45d51fa Copyright 2001-2022 -> 2001-2023.
+5f7ef41b8 Copyright 2021 -> 2022
+ceb63e8a1 En-tête du code source : (C) 2001-2021.
+7c79f1922 Copyright de l'en-tête source -> 2020.</pre></div>
+</body>
+</html>

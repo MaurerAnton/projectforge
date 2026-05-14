@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>#1237 [FR]</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:2em;color:#444}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}</style>
+</head>
+<body>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← Index des fichiers</a> · <a href="1236.html">← Précédent</a> · <a href="1238.html">Suivant →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/kotlin/org/projectforge/framework/persistence/api/MagicFilterProcessor.kt" target="_blank" title="Voir la source sur GitHub">📄 source</a></div>
+<h1>#1237 : <code>MagicFilterProcessor.kt</code></h1>
+<div class="meta"><code>projectforge-business/src/main/kotlin/org/projectforge/framework/persistence/api/MagicFilterProcessor.kt</code> Objet / Processeur de filtres — Moteur de recherche de persistance, <code>projectforge-business/src/main/kotlin/org/projectforge/framework/persistence/api/MagicFilterProcessor.kt</code> <span style="color:#888">222 lignes · 179 code · 33 commentaires · 10 vides</span></div>
+<div class="c">Objet singleton Kotlin qui transforme les objets <code>MagicFilter</code> orientés utilisateur en <code>QueryFilter</code> prêt pour la base de données. Interprète chaque <code>MagicFilterEntry</code> à l'aide de la réflexion du métamodèle JPA (<code>PropUtils</code>) et des métadonnées Hibernate Search (<code>HibernateSearchMeta</code>) pour construire des prédicats typés : recherches LIKE sur les chaînes, plages de dates/numériques, égalité booléenne, recherches dans l'arborescence des tâches, filtres de valeurs I18nEnum et requêtes d'historique Hibernate Envers.</div>
+
+<h2>Architecture</h2>
+
+<h3>Pipeline de traitement</h3>
+<pre>MagicFilter  ──►  MagicFilterProcessor.doIt()  ──►  QueryFilter  ──►  DBFilter  ──►  JPA/Hibernate</pre>
+<p>Le processeur fait le pont entre le <code>MagicFilter</code> orienté interface utilisateur (qui peut représenter des filtres provenant de frontends React/AG-Grid) et le <code>QueryFilter</code> orienté base de données (qui construit des requêtes JPA Criteria API et des requêtes plein texte Hibernate Search).</p>
+
+<h3>Point d'entrée principal</h3>
+<pre>fun doIt(entityClass: Class&lt;*&gt;, magicFilter: MagicFilter, queryFilter: QueryFilter = QueryFilter()): QueryFilter</pre>
+<p>Prend une classe d'entité pour la réflexion, un MagicFilter de l'utilisateur, et optionnellement un QueryFilter existant à remplir. Retourne le QueryFilter entièrement rempli.</p>
+
+<h3>Étapes de traitement</h3>
+<ol>
+<li><strong>Extraction des champs spéciaux</strong> : <code>deleted</code>, <code>searchHistory</code>, <code>MODIFIED_HISTORY_VALUE</code> sont extraits des entrées et traités directement</li>
+<li><strong>Transfert du filtre principal</strong> : <code>deleted</code>, <code>maxRows</code>, <code>searchHistory</code>, <code>sortProperties</code>, <code>extended</code> sont copiés dans QueryFilter</li>
+<li><strong>Recherche plein texte</strong> : Si <code>searchString</code> n'est pas vide, un <code>DBPredicate.FullSearch</code> est ajouté avec prise en charge des caractères génériques</li>
+<li><strong>Itération de recherche par champ</strong> : Chaque <code>MagicFilterEntry</code> est classifié et transformé dans <code>createFieldSearchEntry()</code></li>
+</ol>
+
+<h3>Génération de prédicats basée sur le type (createFieldSearchEntry)</h3>
+<table>
+<tr><th>Type de champ</th><th>Prédicat généré</th><th>Notes</th></tr>
+<tr><td>Entrée d'historique</td><td>Définit <code>modifiedFrom</code>, <code>modifiedTo</code>, <code>modifiedByUserId</code> sur QueryFilter</td><td>Utilise Hibernate Envers</td></tr>
+<tr><td><code>String</code></td><td><code>DBPredicate.Like(champ, valeur, autoWildcardSearch)</code></td><td>LIKE insensible à la casse</td></tr>
+<tr><td><code>Date</code></td><td><code>QueryFilter.interval()</code> / <code>eq()</code> / <code>isNull()</code></td><td>Analysé via PFDateTimeUtils</td></tr>
+<tr><td><code>LocalDate</code></td><td><code>QueryFilter.interval()</code> / <code>eq()</code> / <code>isNull()</code></td><td>Analysé via PFDayUtils</td></tr>
+<tr><td><code>Integer</code></td><td><code>QueryFilter.interval()</code> / <code>eq()</code> / <code>isNull()</code></td><td>Analysé via NumberHelper</td></tr>
+<tr><td><code>Boolean</code></td><td><code>QueryFilter.eq(champ, valeur == "true")</code></td><td>Conversion chaîne en booléen</td></tr>
+<tr><td>Sous-classe de <code>TaskDO</code></td><td><code>QueryFilter.taskSearch()</code></td><td>Recherche récursive dans l'arborescence des tâches avec IDs descendants</td></tr>
+<tr><td>Sous-classe de <code>BaseDO</code></td><td><code>QueryFilter.eq()</code> / <code>isNull()</code></td><td>Analysé comme ID entier</td></tr>
+<tr><td>Sous-classe de <code>I18nEnum</code></td><td><code>DBPredicate.IsIn(champ, enumConstants)</code></td><td>Filtre d'énumération multi-valeurs via clause IN</td></tr>
+<tr><td>Non trouvé (métamodèle JPA)</td><td>Repli sur <code>DBPredicate.FullSearch()</code> avec tableau de champs</td><td>Utilise les métadonnées d'index Hibernate Search pour les champs non persistants</td></tr>
+<tr><td>Non trouvé (ni l'un ni l'autre)</td><td>Avertissement journalisé, entrée ignorée</td><td>Dégradation gracieuse</td></tr>
+</table>
+
+<h3>Méthodes auxiliaires</h3>
+<table>
+<tr><th>Méthode</th><th>Objectif</th></tr>
+<tr><td><code>isHistoryEntry(champ)</code></td><td>Vérifie si le champ correspond à une valeur de l'énumération <code>MagicFilterEntry.HistorySearch</code></td></tr>
+<tr><td><code>isModifiedInterval(champ)</code></td><td>Vérification spécifique pour le champ d'historique <code>MODIFIED_INTERVAL</code></td></tr>
+<tr><td><code>isModifiedByUserId(champ)</code></td><td>Vérification spécifique pour le champ d'historique <code>MODIFIED_BY_USER</code></td></tr>
+</table>
+
+<h3>Points d'intégration clés</h3>
+<ul>
+<li><strong>PropUtils.getField()</strong> : Découverte du type de champ par réflexion pour les classes d'entité</li>
+<li><strong>HibernateSearchMeta.getClassInfo()</strong> : Métadonnées d'index Hibernate Search pour les champs non persistants</li>
+<li><strong>PFDateTimeUtils / PFDayUtils</strong> : Analyse des chaînes de date pour les types date/heure du framework</li>
+<li><strong>TaskTree</strong> : Hiérarchie des tâches pour la résolution récursive des filtres de tâches</li>
+<li><strong>UserGroupCache</strong> : Informations utilisateur pour les filtres d'historique MODIFIED_BY_USER (appelé lors de <code>MagicFilter.init()</code>)</li>
+</ul>
+
+<h2>Historique Git</h2><div class="hist"><pre>868d6abb7 2025 -> 2026
+63081666f En-têtes des fichiers source : 2024 -> 2025.
+04c38072b AddressDao : select optimisé, WIP : pagination.
+7957637da Travaux de migration en cours... (tous les tests de tous les packages : OK).
+3264694a8 Travaux de migration en cours... (tous les tests de tous les packages : OK).
+4c04cfd65 CHANGEMENT-MAJEUR ! Migration des IDs entiers vers des IDs Long (y compris les clés étrangères, etc.)
+b6092df09 Copyright 2023 -> 2024
+ab45d51fa Copyright 2001-2022 -> 2001-2023.
+9c4cc0ae3 WIP : Utilisation d'AGGrid dans les pages de liste.
+5f7ef41b8 Copyright 2021 -> 2022
+d5dda1711 Correction de bug dans la recherche de liste : la recherche par mots-clés et par utilisateur modifié est désormais prise en charge dans la recherche d'historique.
+09bec8f9d UITable et MagicFilterProcessor : prise en charge du type Boolean.
+ceb63e8a1 En-tête du code source : (C) 2001-2021.
+8a2e1215a Prise en charge de pageSize ajoutée à MagicFilterProcessor.
+658d96c77 WIP 93 : implémentation des choix déroulants dans les entrées de filtre magique.
+b2657ec3a Liste des congés, MagicFilterProcessort prend désormais en charge les valeurs I18nEnum.
+0a321235d MagicFilterEntry.synthetic implémenté (mes favoris et les doublons du filtre d'adresse sont désormais pris en charge comme paramètres de filtre).
+9709a04cf Adresse : recherche de doublons et favoris implémentée.
+ae7140482 React : MagicCheckboxInput implémenté, les entrées supprimées dans la liste sont désormais décorées avec un barré.
+2ecda305b PFUTCDateTime introduit, l'analyse des dates sera désormais gérée par PFDayUtils et PFDateTimeUtils.
+611b20d4e WIP : java.sql.Date -> LocalDate.
+1f0ceacca MagicFilter : modification automatique de searchString en str*
+243613fe9 MagicFilter.searchString ré-ajouté, traduction ajoutée.
+7c79f1922 Copyright de l'en-tête source -> 2020.
+13cfb0330 WIP : Migration vers PFDate et PFDateTime.
+1165d1557 WIP Adresses et CustomResultFilter introduits.
+3096abc37 MagicFilter.autoWildcardSearch
+dc60c1487 MagicFilter.autoWildcardSearch
+031b5b380 MagicFilter.autostartWithSearch
+bf3d20864 DB.SortProperty corrigé.
+a9f7fb127 WiP : DBQuery* et QueryFilter...
+d32649da3 WIP : DBQuery*, QueryFilter et Predicates refactorisés....
+d651c2d98 MagicFilterEntry.value.str -> value.value. user/ac -> user/aco
+619521cf5 MagicFilter : Test : Entry.value -> Entry.value.stringValue.
+41bb8904e MagicFilter : Test : Entry.value -> Entry.value.stringValue.
+db997435f WIP : MagicFilter...
+c0c5e427c WIP : MagicFilter...
+aba5af116 BaseDao.contains et BaseDao.getHistoryEntries sont désormais publics. WIP : MagicFilter...
+5e3bbdfc5 WIP : MagicFilter...
+7cefcd6f3 WIP : MagicFilter...
+507854213 WIP : MagicFilter...</pre></div>
+</body>
+</html>

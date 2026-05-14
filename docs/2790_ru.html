@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="ru"><head><meta charset="utf-8"><title>#2790: AbstractAjaxCallbackWithClientsideRevert.java [RU]</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:2em;color:#444}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.lang{font-size:.85em;color:#888;float:right}.lang a{color:#888;text-decoration:none;padding:0 .3em}.lang a.active{color:#0366d6;font-weight:600;text-decoration:underline}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}</style></head>
+<body><div class="lang"><a href="2790.html">EN</a> · <a href="2790_de.html">DE</a> · <a href="2790_ru.html" class="active">RU</a> · <a href="2790_fr.html">FR</a> · <a href="2790_es.html">ES</a></div>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Индекс</a> · <a href="file-index.html">← Индекс файлов</a> · <a href="2789.html">← Пред.</a> · <a href="2791.html">След. →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-wicket/src/main/java/net/ftlines/wicket/fullcalendar/callback/AbstractAjaxCallbackWithClientsideRevert.java" target="_blank" title="Просмотреть исходник на GitHub">📄 исходник</a></div>
+<h1>#2790: <code>AbstractAjaxCallbackWithClientsideRevert.java</code></h1>
+<div class="meta"><code>projectforge-wicket/src/main/java/net/ftlines/wicket/fullcalendar/callback/AbstractAjaxCallbackWithClientsideRevert.java</code> Абстрактное поведение Wicket (FullCalendar Ajax с откатом) · <code>projectforge-wicket/src/main/java/net/ftlines/wicket/fullcalendar/callback/AbstractAjaxCallbackWithClientsideRevert.java</code> <span style="color:#888">82 строки · 35 кода · 33 комментария · 14 пустых</span></div>
+<div class="c">Абстрактное поведение Ajax-обратного вызова для взаимодействий с FullCalendar, требующих отката на стороне клиента при сбое — в частности, операций перетаскивания и изменения размера. Когда пользователь перетаскивает или изменяет размер события календаря, FullCalendar немедленно перемещает/изменяет размер события в интерфейсе и отправляет Ajax-обратный вызов на сервер. Если сервер отклоняет изменение (например, из-за конфликта расписания или нарушения бизнес-правил), это поведение отправляет обратно на клиент скрипт отката, который возвращает событие в исходное положение. Механизм использует комбинацию слушателей Ajax-вызовов Wicket (onSuccess/onFailure) и атрибута данных jQuery для передачи решения сервера (принять/отклонить) логике отката на стороне клиента.</div>
+<h2>Архитектура</h2>
+<h3>Протокол двухфазной фиксации</h3>
+<p>FullCalendar реализует оптимистичные обновления интерфейса: событие перемещается сразу при перетаскивании, а сервер может принять (ничего не меняется) или отклонить (событие возвращается в исходное положение) изменение. Этот класс реализует серверную часть этого протокола:</p>
+<ol>
+<li>При Ajax-запросе вызывается <code>onEvent(AjaxRequestTarget)</code> — подкласс реализует бизнес-логику и возвращает <code>true</code> (принять) или <code>false</code> (отклонить)</li>
+<li>Результат сохраняется в атрибуте данных jQuery на документе: <code>$.data(document, '{uuid}', {boolean})</code></li>
+<li>При успешном Ajax-запросе скрипт успеха читает атрибут данных — если false, он выполняет скрипт отката (предоставляемый абстрактным методом <code>getRevertScript()</code>)</li>
+<li>При сбое Ajax (сетевая ошибка, исключение сервера) скрипт отката выполняется всегда</li>
+<li>Атрибут данных очищается после оценки</li>
+</ol>
+<h3>Канал состояния на основе UUID</h3>
+<p>Случайный UUID (с префиксом <code>"u"</code>) идентифицирует экземпляр обратного вызова. Этот UUID используется как ключ данных jQuery для хранения логического результата. Это предотвращает коллизии глобального состояния, когда на одной странице находятся несколько экземпляров календаря или несколько типов обратных вызовов. UUID генерируется один раз в инициализаторе поля и сохраняется на время жизни поведения.</p>
+<h3>Интеграция слушателя Ajax-вызовов</h3>
+<p><code>updateAjaxAttributes()</code> переопределяется для добавления двух слушателей:
+<ul>
+<li><code>onSuccess</code> — выполняет скрипт успеха, который условно запускает откат</li>
+<li><code>onFailure</code> — безусловно выполняет скрипт отката (сетевые/серверные ошибки всегда вызывают откат)</li>
+</ul>
+</p>
+<h3>Контракт подкласса</h3>
+<p>Конкретные подклассы должны реализовать:
+<ul>
+<li><code>getRevertScript()</code> — возвращает JavaScript-выражение FullCalendar, которое возвращает событие в исходное состояние (например, <code>$('#calendar').fullCalendarExt('revertEvent', eventId)</code>)</li>
+<li><code>onEvent(AjaxRequestTarget)</code> — бизнес-логика для принятия/отклонения изменения</li>
+</ul>
+</p>
+<h2>История Git</h2>
+<div class="hist"><table>
+<tr><th>Коммит</th><th>Что изменилось</th></tr>
+<tr><td><code>868d6abb7</code> по <code>ceb63e8a1</code></td><td>Шесть ежегодных обновлений заголовков авторских прав. Протокол двухфазной фиксации и канал состояния на основе UUID остаются стабильными — механизм корректно обрабатывает оптимистичный паттерн обновления FullCalendar и различает отклонения по бизнес-правилам (сервер возвращает false) и инфраструктурные сбои (ошибка Ajax запускает безусловный откат).</td></tr>
+</table></div>
+</body></html>

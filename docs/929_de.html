@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>#929: EmployeeService.kt [DE]</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:2em;color:#444}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}</style>
+</head>
+<body>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← Dateiindex</a> · <a href="928.html">← Zurück</a> · <a href="930.html">Weiter →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/kotlin/org/projectforge/business/fibu/EmployeeService.kt" target="_blank" title="Quelltext auf GitHub anzeigen">📄 Quelle</a></div>
+<h1>#929: <code>EmployeeService.kt</code></h1>
+<div class="meta"><code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/EmployeeService.kt</code> Typ: Spring Service / Geschäftslogik · Zweck: Öffentliche Mitarbeiter-Geschäftslogik — Aktivitätsstatusprüfungen, zeitabhängige Attribute, monatliche Berichte · Pfad: <code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/EmployeeService.kt</code> <span style="color:#888">445 Zeilen · 308 Code · 96 Kommentare · 41 leer</span></div>
+<div class="c">Die primäre öffentliche API für die Mitarbeiter-Geschäftslogik. Dient als Fassade über <code>EmployeeServiceSupport</code> (interne Implementierung), <code>EmployeeDao</code>, <code>EmployeeCache</code> und <code>TimesheetDao</code>. Wird als Singleton über <code>EmployeeService.instance</code> bereitgestellt. Registriert bei der Initialisierung einen History-Adapter für <code>EmployeeValidSinceAttrDO</code>.</div>
+
+<h2>Architektur &amp; Design</h2>
+
+<h3>Abhängigkeiten &amp; Initialisierung</h3>
+<table>
+<tr><th>Abhängigkeit</th><th>Rolle</th></tr>
+<tr><td><code>PfCaches</code></td><td>Zugriff auf <code>UserGroupCache</code> zur Benutzerauflösung (verwendet in <code>isEmployeeActive()</code>).</td></tr>
+<tr><td><code>EmployeeDao</code></td><td>Entitätssuche und Auswahloperationen. Zirkuläre Abhängigkeit gelöst: <code>EmployeeService</code> setzt sich selbst auf <code>EmployeeDao.employeeService</code> während <code>@PostConstruct</code>.</td></tr>
+<tr><td><code>EmployeeServiceSupport</code></td><td>Interner Service, der die eigentliche Implementierungslogik enthält (Validierung, Einfügen, Aktualisieren, Suchen). Mit <code>internal</code>-Sichtbarkeit markiert.</td></tr>
+<tr><td><code>HistoryFormatService</code></td><td>Registriert <code>EmployeeValidSinceAttrHistoryAdapter</code> für die Historiendarstellung zeitabhängiger Attribute.</td></tr>
+<tr><td><code>TimesheetDao</code></td><td>Wird von <code>getReportOfMonth()</code> verwendet, um Zeiterfassungsdaten pro Mitarbeiter/Monat zu aggregieren.</td></tr>
+</table>
+
+<h3>Aktivitätsstatus-Logik</h3>
+<p><code>isEmployeeActive(employee, showRecentlyLeavers)</code>: Gibt true zurück, wenn:</p>
+<ul>
+<li><strong>Kein Austrittsdatum:</strong> Mitarbeiter ist aktiv, wenn der Benutzer weder gelöscht noch deaktiviert ist (null-Benutzer = aktiv, für Tests).</li>
+<li><strong>Hat Austrittsdatum:</strong> Mitarbeiter ist aktiv, wenn das Austrittsdatum am oder nach dem Referenzdatum liegt (<code>now</code>, oder <code>now minus 3 Monate</code> wenn <code>showRecentlyLeavers=true</code>).</li>
+</ul>
+
+<h3>Methoden für zeitabhängige Attribute</h3>
+<p>Alle zeitabhängigen Methoden durchlaufen <code>ValidSinceAttrDO</code>-Einträge, sortiert nach <code>validSince DESC</code>, und wählen den Eintrag aus, dessen <code>validSince</code> am oder vor dem Referenzdatum liegt. Die Methoden sind nach Attributtyp organisiert:</p>
+<ul>
+<li><strong>Jahresurlaub:</strong> <code>getAnnualLeaveDays()</code> (mit/ohne Datum), <code>selectAnnualLeaveDayEntries()</code> (nach Mitarbeiter oder ID), <code>insertAnnualLeaveDays()</code></li>
+<li><strong>Wochenstunden:</strong> <code>getWeeklyWorkingHours()</code> (mit/ohne Datum), <code>selectWeeklyWorkingHoursEntries()</code> (nach Mitarbeiter oder ID), <code>insertWeeklyHours()</code></li>
+<li><strong>Status:</strong> <code>getEmployeeStatus()</code>, <code>selectStatusEntries()</code>, <code>insertStatus()</code></li>
+</ul>
+
+<h3>ValidSinceAttr CRUD-Operationen</h3>
+<p>Der Service bietet eine vollständige CRUD-Oberfläche für <code>EmployeeValidSinceAttrDO</code>:</p>
+<ul>
+<li><code>insert()</code> — Einfügen mit Mitarbeiter-ID oder -Entität, delegiert an <code>EmployeeServiceSupport</code></li>
+<li><code>updateValidSinceAttr()</code> — Aktualisieren mit Kopiersemantik (behandelt Wiederverwendung gelöschter Einträge)</li>
+<li><code>markValidSinceAttrAsDeleted()</code> — Weiches Löschen</li>
+<li><code>undeleteValidSinceAttr()</code> — Löschung rückgängig machen/wiederherstellen</li>
+<li><code>validate()</code> — Gibt Fehlermeldungszeichenfolge oder null zurück, wenn gültig</li>
+</ul>
+
+<h3>Monatlicher Mitarbeiterbericht</h3>
+<p><code>getReportOfMonth(year, month, user)</code> erstellt einen <code>MonthlyEmployeeReport</code>, initialisiert Datumsgrenzen, fragt Zeiterfassungsdaten über <code>TimesheetFilter</code> für den angegebenen Benutzer und Monatsbereich ab, fügt jede Zeiterfassung (mit Zugriffsprüfinformationen) hinzu und berechnet aggregierte Dauern nach <code>Kost2</code>.</p>
+
+<h2>Git-Verlauf</h2>
+<div class="hist"><pre>868d6abb7 2025 -> 2026
+7893cea1e Auswahl von Benutzer/Mitarbeiter verbessert. EmployeeService.selectAllActive gibt jetzt sortierte Liste zurück.
+7cdc06ad7 MonthlyEmployeeReport[Week] -> Kotlin
+feb661d79 Mitarbeiter: Anzeige des Verlaufs für Zeitattribute
+28efde264 Mitarbeiter: weeklyWorkingHours jetzt als zeitabhängiges Attribut.
+63081666f Quelltextdatei-Header: 2024 -> 2025.
+4ae4f3ea3 Fehlerbehebungen während des Live-Gangs...
+ddf02927d Migrationskram in Arbeit...
+4942c854d Migrationskram in Arbeit...
+b71b5073d Migrationskram in Arbeit... (alle Tests aller Pakete: OK).
+ffb18cf8f Migrationskram in Arbeit...
+1012e347a Migrationskram in Arbeit... (alle Tests aller Pakete: OK).
+e74d3655b Migrationskram in Arbeit...
+6aca64431 Migrationskram in Arbeit... (alle Tests aller Pakete: OK).
+016699665 Migrationskram in Arbeit...
+8bd78b145 Migrationskram in Arbeit... (alle Tests aller Pakete: OK).
+ac2dbb269 Migrationskram in Arbeit...
+4b9ffbee2 Migrationskram in Arbeit... (alle Tests aller Pakete: OK).
+e80642c81 Migrationskram in Arbeit... (alle Tests aller Pakete: OK).
+1204b927b Migrationskram in Arbeit... (alle Tests aller Pakete: OK).
+9e38d3c0d Migrationskram in Arbeit...
+84e863624 Migrationskram in Arbeit... (alle Tests aller Pakete: OK).
+b79a1edca Migrationskram in Arbeit... (alle Tests aller Pakete: OK).
+d67bce18b Migrationskram in Arbeit...
+6f7e0fbc7 Migrationskram in Arbeit...
+1b50060c3 BaseDao: umbenannt: get -> find, save -> insert, getList -> select, load -> select
+87aaf6a5a Migrationskram in Arbeit... BaseDao umgestaltet.
+1faf30810 Migrationskram in Arbeit...
+3aeda5ef5 Große Änderung: alle save|update|...InTrans umbenannt.
+85b4e1175 PfPersistenceService und PfPersistenceContext: query umbenannt in executeQuery.
+b095e6f7d Große Änderung der Transaktionsverwaltung.
+f59810cf0 Migrationskram in Arbeit...
+4c04cfd65 GROSSE-ÄNDERUNG! Migration von Integer-IDs zu Long-IDs
+d54f93842 EmployeeServiceImpl -> EmployeeService.</pre></div>
+</body>
+</html>

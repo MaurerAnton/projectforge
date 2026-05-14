@@ -1,119 +1,14 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<title>#844: AddressService.kt</title>
-<style>
-  body { font-family: system-ui, sans-serif; max-width: 960px; margin: 2em auto; padding: 0 1em; background: #fafafa; color: #222; line-height: 1.6; }
-  h1 { border-bottom: 2px solid #333; padding-bottom: 0.3em; }
-  h2 { margin-top: 2.5em; border-bottom: 1px solid #ddd; padding-bottom: 0.2em; color: #333; }
-  h3 { margin-top: 2em; color: #444; }
-  a { color: #0366d6; }
-  .c { border-left: 3px solid #ddd; padding: .5em 1em; margin: 1em 0; background: #fff; }
-  .nav { font-size: .9em; color: #888; margin-bottom: 1em; }
-  .meta { font-size: .9em; margin: 1em 0; color: #555; }
-  code { background: #f0f0f0; padding: 0 .2em; font-size: .93em; }
-  pre { background: #f5f5f5; padding: .8em 1em; border: 1px solid #ddd; border-radius: 4px; overflow-x: auto; font-size: .88em; line-height: 1.4; }
-  table { border-collapse: collapse; width: 100%; margin: 1em 0; }
-  th, td { border: 1px solid #ddd; padding: .5em .8em; text-align: left; font-size: .9em; }
-  th { background: #f5f5f5; font-weight: 600; }
-  .hist { font-size: .85em; color: #555; }
-  .warn { background: #fff3cd; border-left: 3px solid #ffc107; padding: .5em 1em; margin: 1em 0; }
-  .tip { background: #d4edda; border-left: 3px solid #28a745; padding: .5em 1em; margin: 1em 0; }
-</style>
-</head>
-<body>
-<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="843.html">← Prev</a> · <a href="845.html">Next →</a></div>
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>#844: I18nHelperTest.java</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.lang{font-size:.85em;color:#888;float:right}.lang a{color:#888;text-decoration:none;padding:0 .3em}.lang a.active{color:#0366d6;font-weight:600;text-decoration:underline}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}.missing{background:#fff3cd;border:1px solid #ffc107;padding:.5em 1em;margin:1em 0;border-radius:4px}</style></head>
+<body><div class="lang"><a href="844.html" class="active">EN</a> · <a href="844_de.html">DE</a> · <a href="844_ru.html">RU</a> · <a href="844_fr.html">FR</a> · <a href="844_es.html">ES</a></div>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="843.html">← Prev</a> · <a href="845.html">Next →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/kotlin/org/projectforge/business/address/PersonalAddressDO.kt" target="_blank" title="View source on GitHub">📄 source</a></div>
+<h1>#844: <code>I18nHelperTest.java</code></h1>
+<div class="meta"><code>projectforge-business/src/main/kotlin/org/projectforge/business/address/PersonalAddressDO.kt</code> Source - i18n, <code>projectforge-commons/src/main/java/org/projectforge/common/i18n/I18nHelperTest.java</code> <span style="color:#888">135 lines · 80 code · 43 comments · 12 blank</span></div>
+<div class="c">Test for I18nHelper in the main source tree. Not present in the `fix/vite-eslint-upgrade` branch.</div>
 
-<h1>#844: <code>AddressService.kt</code></h1>
-<div class="meta"><strong>Kotlin Spring <code>@Service</code></strong> — CardDAV address book service facade. Exposes ProjectForge contacts (favorites only) via the CardDAV protocol for synchronization with external address books (Apple Contacts, Thunderbird, DAVx⁵, etc.). Location: <code>projectforge-carddav/src/main/kotlin/org/projectforge/carddav/service/AddressService.kt</code></div>
-
-<div class="c">
-<strong>Purpose:</strong> CardDAV is an address book extension to WebDAV (RFC 6352). This service acts as the bridge between the <code>projectforge-carddav</code> module's HTTP endpoints and the business-layer address data. It translates between ProjectForge's address domain objects and the CardDAV <code>Contact</code> model, enforcing the <strong>favorites-only</strong> access policy.
-</div>
-
-<h2>Architecture</h2>
-
-<div class="c">
-The service follows a <strong>read-only facade</strong> pattern. Create and Update operations are commented out and return empty <code>Contact()</code> objects — the CardDAV implementation is read-only. The <code>deleteContact()</code> method doesn't actually delete the address; it only <strong>removes the address from the user's favorites</strong> (sets <code>isFavoriteCard = false</code> in PersonalAddressDO). This is because:
-<ul>
-<li>Deleting the actual address would affect other users who have also favorited it</li>
-<li>CardDAV clients expect to "delete" contacts from their personal address book, not the shared corporate directory</li>
-<li>Write operations are complex: vCard parsing, conflict resolution, and sync semantics would require significant additional work</li>
-</ul>
-</div>
-
-<h3>Dependency Graph</h3>
-<pre>
-AddressService (@Service)
-  ├── AddressDAVCache (@Service + AbstractCache)
-  │     ├── AddressDao (core address persistence)
-  │     ├── AddressImageCache (contact photos)
-  │     └── VCardUtils (address → vCard conversion)
-  └── PersonalAddressDao (user's favorites list)
-</pre>
-
-<div class="c">
-The <code>AddressDAVCache</code> (<a href="844.html">#844</a> context) wraps the expensive vCard generation (which involves base64-encoding contact photos, field mapping, and format serialization) in a TTL-based cache. Without this cache, every CardDAV client sync would regenerate vCards for all contacts — a CPU-intensive operation for address books with hundreds of entries and photos.
-</div>
-
-<h3>API Surface</h3>
-<table>
-<tr><th>Method</th><th>Returns</th><th>Status</th><th>Behavior</th></tr>
-<tr><td><code>getContactList(userDO)</code></td><td><code>List&lt;Contact&gt;</code></td><td>Active</td><td>Returns all favorite addresses as vCard <code>Contact</code> objects, ordered by name</td></tr>
-<tr><td><code>getContact(id)</code></td><td><code>Contact?</code></td><td>Commented out</td><td>Would return single contact by ID if favorited</td></tr>
-<tr><td><code>createContact(ab, vcard)</code></td><td><code>Contact</code> (empty)</td><td>Commented out</td><td>Contact creation not supported — returns empty Contact</td></tr>
-<tr><td><code>updateContact(contact, vcard)</code></td><td><code>Contact</code> (empty)</td><td>Commented out</td><td>Contact updates not supported — returns empty Contact</td></tr>
-<tr><td><code>deleteContact(contactId)</code></td><td><code>Boolean</code></td><td>Active</td><td>Removes address from favorites (<code>isFavoriteCard = false</code>), returns true on success</td></tr>
-</table>
-
-<h2>CardDAV Protocol Context</h2>
-<div class="c">
-CardDAV clients (e.g., Apple Contacts on iOS/macOS, Thunderbird with CardBook, DAVx⁵ on Android) send HTTP requests to <code>/{username}/addressBooks/</code> endpoints. The service is invoked by the CardDAV servlet/handler layer when:<br><br>
-1. <strong>PROPFIND / address-query REPORT:</strong> Client lists all contacts → <code>getContactList()</code><br>
-2. <strong>GET /addressBooks/{uid}.vcf:</strong> Client fetches a single contact → <code>getContact()</code> (currently commented out)<br>
-3. <strong>DELETE /addressBooks/{uid}.vcf:</strong> Client removes from address book → <code>deleteContact()</code><br>
-4. <strong>PUT:</strong> Create/update → not supported<br><br>
-The favorites-only policy means a user must explicitly mark contacts as favorites in the ProjectForge web UI for them to appear in their synced address book. This acts as an intentional gate — the full company directory is typically too large for personal address books (1000+ entries would flood a phone's contacts app).
-</div>
-
-<h2>Git History</h2>
-<div class="hist">
-<pre>868d6abb7 2025 → 2026 (copyright year update)
-63081666f Source file headers: 2024→2025
-49cddf9a0 WIP: Carddav (development iterations)
-3527445db WIP: Carddav
-d0aed59ed Module rename: projectforge-caldav → projectforge-carddav
-8fc0c831f WIP: CardDav
-27692785d CardDav (readonly) started; Milton library removed (license cost issue)
-40e721b9c VCardUtils initial commit
-685cfc9bf caldav: AddressCache renamed to AddressDAVCache
-878cb7169 Compiler warning fixes
-ab1776d2a CardDAV.AddressService: unused code removed
-dc92ae34c CardDav: AddressCache implemented (vcard generation very slow, needed cache)
-24b4d2e5f WIP: CalDAV (initial work on CardDAV)
-562515f18 projectforge-caldav refactored; RestAuthenticationUtils introduced
-</pre>
-</div>
-
-<h3>Key Commit: <code>dc92ae34c</code></h3>
-<div class="c">
-This commit introduced the <code>AddressDAVCache</code> after discovering that vCard generation was "very slowly" — a critical performance fix. Generating vCards involves string manipulation, base64 image encoding, and date formatting for each contact. Without caching, every CardDAV sync request (which can happen every few minutes from mobile devices) would regenerate all vCards from scratch.
-</div>
-
-<h3>Key Commit: <code>d0aed59ed</code> — Module Rename</h3>
-<div class="c">
-The module was originally named <code>projectforge-caldav</code> (Calendar + Contact together) but was renamed to <code>projectforge-carddav</code> when the CalDAV (calendar sync) and CardDAV (contact sync) implementations were separated into distinct modules. This reflects the evolution from a monolithic DAV module to separate, protocol-specific implementations.
-</div>
-
-<h3>Key Commit: <code>27692785d</code> — Milton Removal</h3>
-<div class="c">
-The initial implementation used the <strong>Milton</strong> Java WebDAV library, but it was removed due to license costs. The DAV protocol implementation was rewritten using a custom, lightweight approach. This is a common pain point in open-source WebDAV/CardDAV implementations — the available Java libraries (Milton, Bedework) either have restrictive licenses or insufficient CardDAV support.
-</div>
-
-<div class="warn"><strong>Gotcha — Milton removal:</strong> The Milton library offered convenient annotations (<code>@AddressBooks</code>, <code>@AddressBook</code>) for CardDAV endpoint mapping. After its removal, the CardDAV endpoints had to be implemented manually using raw servlet handling or custom annotations. This increased implementation complexity for CardDAV protocol compliance (particularly <code>addressbook-query</code> REPORT requests and <code>PROPFIND</code> responses with <code>addressbook-description</code> properties).</div>
-
-<div class="tip"><strong>Favorites-only policy rationale:</strong> CardDAV is primarily used for syncing contacts to mobile devices and desktop mail clients. Exposing the entire company directory (potentially thousands of contacts) to every device would be impractical. Users selectively favorite the contacts they need, creating a personalized subset. The <code>deleteContact()</code> method respects the multi-user nature of the address book by only removing the user's favorite marker, not the underlying address record.</div>
-
-</body>
-</html>
+<h2>File Status</h2>
+<div class="c"><b>Note:</b> This file does not exist in the <code>fix/vite-eslint-upgrade</code> branch. It may have been removed, renamed, or not yet migrated from the original codebase.</div>
+<h3>Domain Context</h3>
+<p>These files belong to the <code>projectforge-commons</code> i18n (internationalization) module, which handles multi-language support, resource bundles, locale management, and message translation for Wicket-based UI components.</p>
+<h2>Git History</h2><div class="hist"><pre>No git history available (file not present in fix/vite-eslint-upgrade branch).</pre></div>
+</body></html>

@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="es"><head><meta charset="utf-8"><title>#2790: AbstractAjaxCallbackWithClientsideRevert.java [ES]</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:2em;color:#444}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.lang{font-size:.85em;color:#888;float:right}.lang a{color:#888;text-decoration:none;padding:0 .3em}.lang a.active{color:#0366d6;font-weight:600;text-decoration:underline}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}</style></head>
+<body><div class="lang"><a href="2790.html">EN</a> · <a href="2790_de.html">DE</a> · <a href="2790_ru.html">RU</a> · <a href="2790_fr.html">FR</a> · <a href="2790_es.html" class="active">ES</a></div>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Índice</a> · <a href="file-index.html">← Índice de archivos</a> · <a href="2789.html">← Anterior</a> · <a href="2791.html">Siguiente →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-wicket/src/main/java/net/ftlines/wicket/fullcalendar/callback/AbstractAjaxCallbackWithClientsideRevert.java" target="_blank" title="Ver fuente en GitHub">📄 fuente</a></div>
+<h1>#2790: <code>AbstractAjaxCallbackWithClientsideRevert.java</code></h1>
+<div class="meta"><code>projectforge-wicket/src/main/java/net/ftlines/wicket/fullcalendar/callback/AbstractAjaxCallbackWithClientsideRevert.java</code> Comportamiento abstracto de Wicket (FullCalendar Ajax con Reversión) · <code>projectforge-wicket/src/main/java/net/ftlines/wicket/fullcalendar/callback/AbstractAjaxCallbackWithClientsideRevert.java</code> <span style="color:#888">82 líneas · 35 código · 33 comentarios · 14 en blanco</span></div>
+<div class="c">Un comportamiento de devolución de llamada Ajax abstracto para interacciones de FullCalendar que necesitan reversión del lado del cliente en caso de fallo — específicamente operaciones de arrastrar y soltar y redimensionar. Cuando un usuario arrastra o redimensiona un evento del calendario, FullCalendar mueve/redimensiona inmediatamente el evento en la interfaz de usuario y envía una devolución de llamada Ajax al servidor. Si el servidor rechaza el cambio (por ejemplo, debido a un conflicto de programación o una violación de regla de negocio), este comportamiento envía un script de reversión de vuelta al cliente que devuelve el evento a su posición original. El mecanismo utiliza una combinación de oyentes de llamada Ajax de Wicket (onSuccess/onFailure) y un atributo de datos jQuery para comunicar la decisión de aceptación/rechazo del servidor a la lógica de reversión del lado del cliente.</div>
+<h2>Arquitectura</h2>
+<h3>Protocolo de confirmación en dos fases</h3>
+<p>FullCalendar implementa actualizaciones optimistas de la interfaz de usuario: el evento se mueve inmediatamente al arrastrar, y el servidor puede aceptar (nada cambia) o rechazar (el evento vuelve a su posición original). Esta clase implementa la parte del servidor de ese protocolo:</p>
+<ol>
+<li>En la solicitud Ajax, se llama a <code>onEvent(AjaxRequestTarget)</code> — la subclase implementa la lógica de negocio y devuelve <code>true</code> (aceptar) o <code>false</code> (rechazar)</li>
+<li>El resultado se almacena en un atributo de datos jQuery en el documento: <code>$.data(document, '{uuid}', {boolean})</code></li>
+<li>En caso de éxito de Ajax, el script de éxito lee el atributo de datos — si es falso, ejecuta el script de reversión (proporcionado por el método abstracto <code>getRevertScript()</code>)</li>
+<li>En caso de fallo de Ajax (error de red, excepción del servidor), el script de reversión siempre se ejecuta</li>
+<li>El atributo de datos se limpia después de la evaluación</li>
+</ol>
+<h3>Canal de estado basado en UUID</h3>
+<p>Un UUID aleatorio (prefijado con <code>"u"</code>) identifica la instancia de devolución de llamada. Este UUID se utiliza como clave de datos jQuery para almacenar el resultado booleano. Esto evita colisiones de estado global cuando hay múltiples instancias de calendario o múltiples tipos de devolución de llamada en la misma página. El UUID se genera una vez en el inicializador de campo y persiste durante la vida útil del comportamiento.</p>
+<h3>Integración del oyente de llamada Ajax</h3>
+<p><code>updateAjaxAttributes()</code> se sobrescribe para añadir dos oyentes:
+<ul>
+<li><code>onSuccess</code> — ejecuta el script de éxito que condicionalmente desencadena la reversión</li>
+<li><code>onFailure</code> — ejecuta incondicionalmente el script de reversión (los errores de red/servidor siempre revierten)</li>
+</ul>
+</p>
+<h3>Contrato de subclase</h3>
+<p>Las subclases concretas deben implementar:
+<ul>
+<li><code>getRevertScript()</code> — devuelve la expresión JavaScript de FullCalendar que revierte el evento a su estado original (por ejemplo, <code>$('#calendar').fullCalendarExt('revertEvent', eventId)</code>)</li>
+<li><code>onEvent(AjaxRequestTarget)</code> — la lógica de negocio para aceptar/rechazar el cambio</li>
+</ul>
+</p>
+<h2>Historial de Git</h2>
+<div class="hist"><table>
+<tr><th>Commit</th><th>Qué cambió</th></tr>
+<tr><td><code>868d6abb7</code> a <code>ceb63e8a1</code></td><td>Seis actualizaciones anuales del encabezado de derechos de autor. El protocolo de confirmación en dos fases y el canal de estado basado en UUID han sido estables — el mecanismo maneja correctamente el patrón de actualización optimista de FullCalendar y distingue entre rechazos por reglas de negocio (el servidor devuelve falso) y fallos de infraestructura (el error Ajax desencadena una reversión incondicional).</td></tr>
+</table></div>
+</body></html>

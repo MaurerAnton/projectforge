@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>#2766: vite.config.ts [RU]</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:2em;color:#444}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.lang{font-size:.85em;color:#888;float:right}.lang a{color:#888;text-decoration:none;padding:0 .3em}.lang a.active{color:#0366d6;font-weight:600;text-decoration:underline}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}</style>
+</head>
+<body>
+<div class="lang"><a href="2766.html">EN</a> · <a href="2766_de.html">DE</a> · <a href="2766_ru.html" class="active">RU</a> · <a href="2766_fr.html">FR</a> · <a href="2766_es.html">ES</a></div>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Индекс</a> · <a href="file-index.html">← Индекс файлов</a> · <a href="2765.html">← Предыдущий</a> · <a href="2767.html">Следующий →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-webapp/vite.config.ts" target="_blank" title="Посмотреть исходник на GitHub">📄 исходник</a></div>
+<h1>#2766: <code>vite.config.ts</code></h1>
+<div class="meta"><code>projectforge-webapp/vite.config.ts</code> Конфигурация сборки Vite · <code>projectforge-webapp/vite.config.ts</code> <span style="color:#888">62 строки · 59 кода · 1 комментарий · 2 пустых</span></div>
+<div class="c">Файл конфигурации системы сборки Vite, заменивший инструментарий на основе webpack от Create React App. Этот единственный файл управляет всем конвейером разработки и сборки: трансформация JSX/TSX через <code>@vitejs/plugin-react</code>, пользовательский плагин esbuild для обработки JSX в сторонних <code>.js</code> модулях node_modules (например, <code>react-rrule-generator</code>), компиляция SCSS, проксирование dev-сервера к Java-бэкенду и конфигурация тестового раннера Vitest. Создан в ходе масштабной миграции, устранившей 43 уязвимости npm путём замены устаревшей цепочки зависимостей <code>react-scripts</code> на более лёгкий стек инструментов Vite.</div>
+<h2>Архитектура</h2>
+<h3>Пользовательский плагин: rruleJsxPlugin</h3>
+<p>Это самая необычная часть конфигурации. Некоторые npm-пакеты (в частности, <code>react-rrule-generator</code>) поставляют <code>.js</code> файлы, содержащие синтаксис JSX, который Vite обычно обрабатывает только в файлах <code>.jsx</code>. Плагин <code>rruleJsxPlugin</code> перехватывает трансформации модулей с <code>enforce: 'pre'</code>, обнаруживает любые <code>.js</code> файлы из пакета <code>react-rrule-generator</code> (или любые файлы node_modules, содержащие JSX-подобные паттерны через регулярное выражение <code>/&lt;[A-Z]\w*[\s/&gt;]/</code>) и обрабатывает их через esbuild с <code>loader: 'jsx'</code>. Это предотвращает ошибки Vite при обнаружении "сырого" JSX в <code>.js</code> файлах. Выходные данные нацелены на формат <code>cjs</code> со стандартом <code>esnext</code>.</p>
+<h3>Конвейер плагинов</h3>
+<p><code>rruleJsxPlugin()</code> запускается первым (enforce: pre) для трансформации нестандартных JSX-файлов, затем <code>react()</code> (официальный плагин Vite для React) обрабатывает стандартную трансформацию JSX/TSX с поддержкой Fast Refresh.</p>
+<h3>Конфигурация SCSS</h3>
+<p>Настройка <code>css.preprocessorOptions.scss.loadPaths</code> добавляет <code>./node_modules</code> в путь импорта SCSS, что позволяет использовать импорт вида <code>@import "bootstrap/scss/bootstrap"</code> без обхода относительных путей.</p>
+<h3>Конфигурация сборки</h3>
+<p>Вывод осуществляется в папку <code>build/</code> (соответствует соглашению CRA), sourcemaps отключены, минификация выключена (серверный Wicket занимается оптимизацией ресурсов), а <code>maxParallelFileOps: 1</code> ограничивает параллельные файловые операции — это обходной путь для исчерпания файловых дескрипторов в некоторых системах.</p>
+<h3>Прокси dev-сервера</h3>
+<p>Два прокси-правила перенаправляют запросы <code>/rs</code> и <code>/rest</code> на <code>http://localhost:8080</code> (бэкенд Spring Boot). Это критически важный элемент, благодаря которому <code>baseURL</code> в <code>rest.js</code> работает как пустая строка — прокси Vite обрабатывает префиксную маршрутизацию, поэтому React-приложение всегда вызывает относительные URL, а dev-сервер прозрачно перенаправляет их на соответствующий бэкенд-эндпоинт.</p>
+<h3>Тестирование: Vitest</h3>
+<p>Заменяет Jest (тестовый раннер CRA). Настроен с окружением <code>jsdom</code> (браузероподобное DOM для компонентных тестов), <code>globals: true</code> (чтобы <code>it</code>, <code>expect</code>, <code>describe</code> работали без импортов) и шаблонами тестовых файлов, соответствующими суффиксам <code>.test.</code> и <code>.spec.</code> для всех вариантов JS/TS.</p>
+<h2>История Git</h2>
+<div class="hist"><table>
+<tr><th>Коммит</th><th>Что изменилось</th></tr>
+<tr><td><code>bf988bc6d</code></td><td>Создан файл в рамках комплексной миграции с react-scripts на Vite. Представлен полный инструментарий: плагины Vite, пользовательский обработчик JSX для rrule, поддержка SCSS, dev-прокси с двумя бэкенд-маршрутами, конфигурация сборки и настройка тестового раннера Vitest. Этот единственный файл заменил весь слой конфигурации webpack от CRA.</td></tr>
+</table></div>
+</body>
+</html>

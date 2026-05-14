@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>#2705: SearchFilter.jsx [RU]</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:2em;color:#444}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.lang{font-size:.85em;color:#888;float:right}.lang a{color:#888;text-decoration:none;padding:0 .3em}.lang a.active{color:#0366d6;font-weight:600;text-decoration:underline}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}</style>
+</head>
+<body>
+<div class="lang"><a href="2705.html">EN</a> · <a href="2705_de.html">DE</a> · <a href="2705_ru.html" class="active">RU</a> · <a href="2705_fr.html">FR</a> · <a href="2705_es.html">ES</a></div>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Индекс</a> · <a href="file-index.html">← Индекс файлов</a> · <a href="2776.html">← Пред.</a> · <a href="262.html">След. →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-webapp/src/containers/page/list/searchFilter/SearchFilter.jsx" target="_blank" title="Просмотр исходного кода на GitHub">📄 исходник</a></div>
+<h1>#2705: <code>SearchFilter.jsx</code></h1>
+<div class="meta"><code>projectforge-webapp/src/containers/page/list/searchFilter/SearchFilter.jsx</code> Тип: JavaScript/React · Роль: Страница · Источник: projectforge-webapp/src/containers/page/list/searchFilter/SearchFilter.jsx <span style="color:#888">185 строк · 175 кода · 2 комментария · 8 пустых</span></div>
+<div class="c">React-компонент поиска/фильтрации, предоставляющий поле ввода запроса, критерии фильтрации и управление результатами для представлений списков сущностей.</div>
+<h2>Структура кода</h2>
+<p>Используемые хуки: <code>Selector</code>, <code>Dispatch</code>, <code>Navigate</code>, <code>Location</code></p>
+<p>Импорты из: <code>../../../../actions</code>, <code>../../../../actions/list/filter</code>, <code>../../../../components/base/navigation</code>, <code>../../../../components/design</code>, <code>../../../../components/design/input/autoCompletion/TextAutoCompletion</code>, <code>../../../../components/design/popper/AdvancedPopperAction</code>, <code>../../../panel/favorite/FavoritesPanel</code>, <code>../ListPage.module.scss</code>, <code>./magicFilter/MagicFilters</code>, <code>@fortawesome/free-solid-svg-icons</code>, <code>@fortawesome/react-fontawesome</code>, <code>classnames</code>, <code>prop-types</code>, <code>react</code>, <code>react-redux</code>...</p>
+<p>Содержит PropTypes для: <code>SearchFilter</code></p>
+<p>Использует CSS-модули для стилизации.</p>
+<h2>Исходный код (сокращённый)</h2>
+<pre>import { faSearch, faSync } from &#x27;@fortawesome/free-solid-svg-icons&#x27;;
+import { FontAwesomeIcon } from &#x27;@fortawesome/react-fontawesome&#x27;;
+import classNames from &#x27;classnames&#x27;;
+import PropTypes from &#x27;prop-types&#x27;;
+import React from &#x27;react&#x27;;
+import { useSelector, useDispatch } from &#x27;react-redux&#x27;;
+import { Button, Navbar } from &#x27;reactstrap&#x27;;
+import { useNavigate, useLocation } from &#x27;react-router&#x27;;
+import {
+    createListFavorite,
+    deleteListFavorite,
+    dismissCurrentError,
+    fetchCurrentList,
+    exportCurrentList,
+    startMultiSelection,
+    renameListFavorite,
+    selectListFavorite,
+    updateListFavorite,
+} from &#x27;../../../../actions&#x27;;
+import { changeSearchString } from &#x27;../../../../actions/list/filter&#x27;;
+import Navigation from &#x27;../../../../components/base/navigation&#x27;;
+import { Alert, Col, Spinner } from &#x27;../../../../components/design&#x27;;
+import TextAutoCompletion
+    from &#x27;../../../../components/design/input/autoCompletion/TextAutoCompletion&#x27;;
+import AdvancedPopperAction from &#x27;../../../../components/design/popper/AdvancedPopperAction&#x27;;
+import FavoritesPanel from &#x27;../../../panel/favorite/FavoritesPanel&#x27;;
+import styles from &#x27;../ListPage.module.scss&#x27;;
+import MagicFilters from &#x27;./magicFilter/MagicFilters&#x27;;
+
+function SearchFilter() {
+    const category = useSelector((state) =&gt; {
+        const listState = state.list;
+        return listState.categories[listState.currentCategory];
+    });
+    const dispatch = useDispatch();
+    const onErrorDismiss = () =&gt; dispatch(dismissCurrentError());
+    const onFavoriteCreate = (name) =&gt; dispatch(createListFavorite({ name }));
+    const onFavoriteDelete = (id) =&gt; dispatch(deleteListFavorite({ id }));
+    const onFavoriteRename = (id, newName) =&gt; dispatch(renameListFavorite({ id, newName }));
+    const onFavoriteSelect = (id) =&gt; dispatch(selectListFavorite({ id }));
+    const onFavoriteUpdate = () =&gt; dispatch(updateListFavorite());
+    const onSearchStringBlur = () =&gt; dispatch(fetchCurrentList());
+    const onSearchStringChange = (completion) =&gt; dispatch(changeSearchString(completion));
+    const onSearchStringDelete = () =&gt; dispatch(changeSearchString(&#x27;&#x27;));
+    const onSyncButtonClick = () =&gt; dispatch(fetchCurrentList(true));
+    const onExportButtonClick = () =&gt; dispatch(exportCurrentList());
+    const onMultiSelectionButtonClick = () =&gt; dispatch(startMultiSelection());
+
+    const {
+        error,
+        filter,
+        filterFavorites,
+        isFetching,
+        newlySwitched,
+        quickSelectUrl,
+        standardEditPage,
+        ui,
+        useModalEditDialog,
+    } = category;
+
+    const navigate = useNavigate();
+    const location = useLocation();
+
+    const onSelectQuickSelection = ({ id }) =&gt; {
+        let url = `/${standardEditPage.replace(&#x27;:id&#x27;, id)}`;
+
+        if (useModalEditDialog) {
+            // Добавляем параметр запроса modal=true, чтобы бэкенд знал, что открыто в модальном окне
+            url += url.includes(&#x27;?&#x27;) ? &#x27;&amp;modal=true&#x27; : &#x27;?modal=true&#x27;;
+            navigate(url, { state: { background: location } });
+        } else {
+            navigate(url);
+        }
+    };
+
+    return (
+        &lt;&gt;
+            &lt;div className={styles.searchRow}&gt;
+                {/* НА БОЛЬШИХ ЭКРАНАХ FLEX-BOX УСТАНОВЛЕН В ОБРАТНОМ ПОРЯДКЕ */}
+                &lt;div className={classNames(styles.container, styles.flex)}&gt;
+                    {/* Отображаем меню, если оно загружено. */}
+                    {ui &amp;&amp; ui.pageMenu &amp;&amp; (
+                        &lt;Col&gt;
+                            &lt;Navbar&gt;
+                                &lt;Navigation
+                                    entries={ui.pageMenu}
+                                    // Позволяем меню плавать вправо.
+                                    className=&quot;ml-auto&quot;
+                                /&gt;
+                            &lt;/Navbar&gt;
+                        &lt;/Col&gt;
+                    )}
+                &lt;/div&gt;
+                &lt;div className={styles.container}&gt;
+                    &lt;FavoritesPanel
+                        onFavoriteCreate={onFavoriteCreate}
+                        onFavoriteDelete={onFavoriteDelete}
+                        onFavoriteRename={onFavoriteRename}
+                        onFavoriteSelect={onFavoriteSelect}
+                        onFavoriteUpdate={onFavoriteUpdate}
+                        favorites={filterFavorites}
+                        currentFavoriteId={filter.id}
+                        isModified
+                        closeOnSelect={false}
+                        translations={ui.translations}
+                        htmlId=&quot;searchFilterFavoritesPopover&quot;
+                        newFavoriteI18nKey=&quot;favorite.filter.addNew&quot;
+                    /&gt;
+                    {ui &amp;&amp; ui.excelExportSupported &amp;&amp; (
+                        &lt;Button
+                            id=&quot;excelExport&quot;
+                            color=&quot;primary&quot;
+                            onClick={onExportButtonClick}
+                            outline
+                        &gt;
+                            {ui.translations.exportAsXls}
+                        &lt;/Button&gt;
+                    )}
+                    {ui &amp;&amp; ui.multiSelectionSupported &amp;&amp; (
+                        &lt;Button
+// ... (сокращено, всего 185 строк)</pre>
+
+<h2>История Git</h2><div class="hist"><pre>bf988bc6d Устранение 43 уязвимостей npm: react-scripts→Vite, ESLint 9, очистка зависимостей, исправления ошибок
+d5a25864e SearchFilter.jsx открывает диалог редактирования в модальном окне, если AbstractPagesRest.useModalDialog == true
+0aea09df2 WIP: Разбор текста адреса
+8eb9bed9c Удалены страницы Wicket. Начат импорт vCard. Изменён макет кнопки «Экспорт в Excel» на страницах списков.
+b35853f98 Страницы адресов: страница просмотра теперь отображается как модальный диалог (ошибка исправлена в бэкенде с помощью Claude Code).</pre></div>
+</body>
+</html>

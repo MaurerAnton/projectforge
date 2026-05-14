@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>#1154 [DE]</title>
+<style>
+body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}
+h1{border-bottom:2px solid #333;padding-bottom:.3em}
+h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}
+h3{margin-top:2em;color:#444}
+a{color:#0366d6}
+.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}
+.nav{font-size:.9em;color:#888;margin-bottom:1em}
+.meta{font-size:.9em;margin:1em 0;color:#555}
+code{background:#f0f0f0;padding:0 .2em;font-size:.93em}
+pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}
+table{border-collapse:collapse;width:100%;margin:1em 0}
+th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}
+th{background:#f5f5f5;font-weight:600}
+.hist{font-size:.85em;color:#555}
+</style>
+</head>
+<body>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← Datei-Index</a> · <a href="1153.html">← Vorherige</a> · <a href="1155.html">Nächste →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/kotlin/org/projectforge/business/vacation/service/VacationSendMailService.kt" target="_blank" title="Quelltext auf GitHub anzeigen">📄 Quelle</a></div>
+<h1>#1154: <code>VacationSendMailService.kt</code></h1>
+<div class="meta"><code>projectforge-business/src/main/kotlin/org/projectforge/business/vacation/service/VacationSendMailService.kt</code> Service, projectforge-business/src/main/kotlin/org/projectforge/business/vacation/service/VacationSendMailService.kt <span style="color:#888">310 Zeilen · 234 Code · 50 Kommentare · 26 leer</span></div>
+<div class="c">Sendet E-Mail-Benachrichtigungen an Urlauber, Vorgesetzte, Vertretungen und HR-Mitarbeiter, wenn Urlaubseinträge erstellt, geändert oder gelöscht werden.</div>
+
+<h2>Architektur</h2>
+<p><code>VacationSendMailService</code> ist ein <code>@Service</code>, der <code>ConfigurationService</code> (Mailserver-Konfiguration, HR-E-Mail-Adresse), <code>EmployeeDao</code> (Mitarbeiter-/Benutzersuche) und <code>SendMail</code> (Mail-Infrastruktur) miteinander verbindet. Er wird ausschließlich von den <code>after*</code>-Lebenszyklus-Hooks des <code>VacationDao</code> aufgerufen.</p>
+
+<h3>Benachrichtigungsablauf</h3>
+<ol>
+<li><code>checkAndSendMail(obj, operationType, dbObj)</code> — Einstiegspunkt. Prüft, ob der Mailserver konfiguriert ist, und erstellt einen <code>VacationInfo</code>-Container.</li>
+<li>Für spezielle Urlaubseinträge mit Status IN_PROGRESS oder APPROVED wird eine E-Mail an die HR-E-Mail-Adresse gesendet (in der Administration konfiguriert).</li>
+<li>Sendet eine E-Mail an den Urlauber (falls er die Änderung nicht selbst vorgenommen hat – geprüft über <code>ThreadLocalUserContext.loggedInUserId</code>).</li>
+<li>Sendet eine E-Mail an den Vorgesetzten (falls nicht der Ausführende).</li>
+<li>Sendet eine E-Mail an die primäre Vertretung und alle weiteren Vertretungen (über ein Set dedupliziert).</li>
+</ol>
+
+<h3>E-Mail-Erstellung</h3>
+<p>Die Methode <code>prepareMail()</code> erstellt ein <code>Mail</code>-Objekt mit HTML-Inhalt, der aus der Groovy-Vorlage <code>mail/vacationMail.html</code> gerendert wird. Die Vorlage erhält eine Map mit:</p>
+<ul>
+<li><code>vacationInfo</code> — <code>VacationInfo</code>-Innere-Klasse mit allen aufgelösten Benutzernamen, E-Mails, formatierten Daten und Arbeitstagen</li>
+<li><code>vacation</code> — das rohe <code>VacationDO</code>-Objekt</li>
+<li><code>mailInfo</code> — Betreff, Vorgangstyp (insert/update/delete/undelete) und Modus (own/manager/replacement/HR)</li>
+</ul>
+
+<h3>Innere Klasse VacationInfo</h3>
+<p>Dieser Datenhalter löst alle Mitarbeiterreferenzen (Urlauber, Vorgesetzter, Vertretung, weitereVertretungen) in <code>PFUserDO</code>-Objekte auf und formatiert Daten, Arbeitstage, Halbtags-Flags und Sonderstatus. Die Methode <code>updateI18n(recipient)</code> löst die für den Benutzer sichtbaren Zeichenfolgen für das Gebietsschema des Empfängers neu auf und ermöglicht so die lokalisierte E-Mail-Zustellung an Empfänger mit unterschiedlichen Spracheinstellungen.</p>
+
+<h3>URL-Generierung</h3>
+<p>Das Begleitobjekt erstellt verzögert einen Link zur Urlaubsbearbeitungsseite über <code>SendMail.buildUrl()</code> in Kombination mit <code>MenuItemDefId.VACATION.url</code> und erzeugt Deep-Links wie <code>/vacation/edit/123?returnToCaller=account</code>.</p>
+
+<h2>Design-Entscheidungen</h2>
+<p>Der E-Mail-Versand ist vom DAO getrennt, um Persistenzbelange isoliert zu halten. Der Dienst verwendet <code>VacationInfo</code> als Zwischendatenklasse, anstatt die Entität direkt an die Vorlagen zu übergeben – dies stellt sicher, dass Vorlagen niemals auf Lazy-Geladene JPA-Proxys zugreifen (was außerhalb einer Transaktion fehlschlagen würde). Die Methode <code>updateI18n</code> unterstützt die Mehrsprachigkeitsanforderung eines deutschen Unternehmens mit internationalen Mitarbeitern. Der HR-Benachrichtigungspfad für spezielle Urlaube gewährleistet die Compliance-Überwachung, selbst wenn Mitarbeiter und Vorgesetzte dieselbe Person sind.</p>
+
+<h2>Git-Verlauf</h2>
+<div class="hist"><pre>868d6abb7 2025 -> 2026
+600951ee0 2025 -> 2026
+b131193e7 Membervariablen umgestaltet durch Verwendung von by lazy {}...
+d5cc73eb6 Membervariablen umgestaltet durch Verwendung von by lazy {}...
+63081666f Quelltext-Header: 2024 -> 2025.
+199c26801 Quelltext-Header: 2024 -> 2025.
+e1db80611 Hotfix: com.sun.mail hinzugefügt.
+0a78bc22c Hotfix: com.sun.mail hinzugefügt.
+1b50060c3 BaseDao: get->find, save->insert, getList->select, load->select umbenannt
+514533e99 BaseDao: get->find, save->insert, getList->select, load->select umbenannt
+87aaf6a5a Migrationskram: BaseDao umgestaltet...
+41217b065 Migrationskram: BaseDao umgestaltet...
+67805f2fc ThreadLocalUserContext.user -> loggedInUser
+58ffda82b ThreadLocalUserContext.user -> loggedInUser
+4c04cfd65 GROSSE-ÄNDERUNG! Migration von Integer-IDs zu Long-IDs.
+fd13c259a GROSSE-ÄNDERUNG! Migration von Integer-IDs zu Long-IDs.
+06828f490 Migrationskram in Arbeit...
+4b3872a1b Migrationskram in Arbeit...
+b6092df09 Copyright 2023 -> 2024
+9a0609dd1 Copyright 2023 -> 2024
+</pre></div>
+</body>
+</html>

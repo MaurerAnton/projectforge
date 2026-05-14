@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>#930: EmployeeServiceSupport.kt [DE]</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:2em;color:#444}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}</style>
+</head>
+<body>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← Dateiindex</a> · <a href="929.html">← Vorherige</a> · <a href="931.html">Nächste →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/kotlin/org/projectforge/business/fibu/EmployeeServiceSupport.kt" target="_blank" title="Quelle auf GitHub anzeigen">📄 Quelle</a></div>
+<h1>#930: <code>EmployeeServiceSupport.kt</code></h1>
+<div class="meta"><code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/EmployeeServiceSupport.kt</code> Typ: Spring Service (intern) · Zweck: Interne Implementierung von EmployeeService — Validierung, Persistenz und Suchlogik für zeitabhängige Attribute · Pfad: <code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/EmployeeServiceSupport.kt</code> <span style="color:#888">418 Zeilen · 304 Code · 88 Kommentare · 26 leer</span></div>
+<div class="c">Die Implementierungs-Engine hinter <code>EmployeeService</code>. Als <code>internal</code> markiert — nicht außerhalb des <code>fibu</code>-Pakets zugänglich. Enthält die gesamte tatsächliche Logik zum Abfragen, Validieren, Einfügen, Aktualisieren, weichen Löschen und Wiederherstellen von <code>EmployeeValidSinceAttrDO</code>-Einträgen. Löst auch aktuelle Attributwerte (Jahresurlaub, Wochenstunden, Status) aus den Gültigkeitszeitraum-Einträgen auf.</div>
+
+<h2>Architektur &amp; Design</h2>
+
+<h3>Abhängigkeiten</h3>
+<table>
+<tr><th>Abhängigkeit</th><th>Rolle</th></tr>
+<tr><td><code>BaseDOPersistenceService</code></td><td>Generische CRUD-Operationen (<code>insert</code>, <code>update</code>, <code>markAsDeleted</code>, <code>undelete</code>) mit Zugriffsprüfungsunterstützung.</td></tr>
+<tr><td><code>EmployeeCache</code></td><td>Wird nach jeder Mutation ungültig gemacht (<code>setExpired()</code>), um eine Cache-Aktualisierung zu erzwingen.</td></tr>
+<tr><td><code>EmployeeDao</code></td><td>Entitätssuche und Zugriffsprüfungsdelegation (<code>checkLoggedInUserSelectAccess</code>, <code>checkLoggedInUserInsertAccess</code>, <code>checkLoggedInUserUpdateAccess</code>).</td></tr>
+<tr><td><code>PfPersistenceService</code></td><td>Direkte Abfrageausführung für <code>ValidSinceAttr</code>-Suchen und Validierungen.</td></tr>
+</table>
+
+<h3>Abfragemethoden</h3>
+<ul>
+<li><strong><code>findValidSinceAttr(id, expectedType, checkAccess)</code></strong> — Einfache Entitätssuche nach ID mit optionaler Typvalidierung (wirft <code>IllegalArgumentException</code> bei Typkonflikt).</li>
+<li><strong><code>selectAllValidSinceAttrs(employee, type, deleted, checkAccess)</code></strong> — Kernabfrage: Ruft alle <code>ValidSinceAttr</code> für einen Mitarbeiter ab, optional gefiltert nach Typ und Löschstatus. Sortiert nach <code>validSince DESC</code>.</li>
+<li><strong><code>selectAnnualLeaveDayEntries()</code></strong> / <strong><code>selectWeeklyWorkingHoursEntries()</code></strong> — Komfort-Wrapper, die nach dem Typ <code>ANNUAL_LEAVE</code> oder <code>WEEKLY_HOURS</code> filtern. Verfügbar mit <code>employeeId</code>- oder <code>EmployeeDO</code>-Parametern.</li>
+</ul>
+
+<h3>Auflösung aktiver Einträge (<code>getActiveEntry</code>)</h3>
+<p>Die Methode <code>getActiveEntry(entries, validAtDate)</code> löst ein zentrales Geschäftsproblem: Gegeben eine Liste von <code>ValidSinceAttr</code>-Einträgen mit <code>validSince</code>-Daten, finden Sie denjenigen, der zu einem bestimmten Zeitpunkt aktuell gültig ist. Algorithmus:</p>
+<ol>
+<li>Alle nicht gelöschten Einträge durchlaufen.</li>
+<li>Für jeden Eintrag, bei dem <code>validAtDate >= entry.validSince</code> ist, mit dem bisher besten Fund vergleichen.</li>
+<li>Den Eintrag mit dem <strong>spätesten</strong> <code>validSince</code> auswählen, der noch vor/am Referenzdatum liegt.</li>
+</ol>
+<p>Dies unterstützt historische Abfragen — die Frage "Wie hoch war der Jahresurlaub für Mitarbeiter X am Datum Y?" — was für eine genaue Berichterstattung entscheidend ist.</p>
+
+<h3>Validierungslogik (<code>validate</code>)</h3>
+<p>Vor dem Einfügen oder Aktualisieren prüft das System, ob ein anderer <code>ValidSinceAttr</code> mit derselben Kombination aus <code>(employee, type, validSince)</code> existiert:</p>
+<ul>
+<li><strong>Neuer Eintrag (id==null):</strong> Verwendet die benannte Abfrage <code>FIND_BY_TYPE_AND_DATE</code>.</li>
+<li><strong>Vorhandener Eintrag:</strong> Verwendet <code>FIND_OTHER_BY_TYPE_AND_DATE</code> (schließt aktuelle ID aus).</li>
+<li><strong>Wiederverwendung gelöschter Einträge:</strong> Wenn ein gelöschter Eintrag mit demselben <code>validSince</code> existiert, wird dieser zur Wiederverwendung zurückgegeben, anstatt eine Ausnahme zu werfen. Dies behandelt das UX-Szenario, in dem Benutzer gelöschte Einträge nicht sehen können, aber versuchen, einen neuen hinzuzufügen, der kollidieren würde — das System stellt stattdessen stillschweigend den vorhandenen Datensatz wieder her und aktualisiert ihn.</li>
+<li>Wenn ein nicht gelöschtes Duplikat existiert, wird <code>IllegalArgumentException</code> geworfen.</li>
+</ul>
+
+<h3>CRUD-Operationen</h3>
+<ul>
+<li><strong><code>insert()</code></strong> — Validiert, fügt dann entweder einen neuen ein oder stellt einen vorhandenen wieder her (Wiederverwendungslogik). Setzt den Mitarbeiter-Cache stets zurück.</li>
+<li><strong><code>insertValidSinceAttr()</code></strong> — Komfort-Factory: Erstellt <code>EmployeeValidSinceAttrDO</code>, setzt alle Felder und fügt ein.</li>
+<li><strong><code>updateValidSinceAttr()</code></strong> — Komplexe Aktualisierung mit Kopiersemantik: Validiert, markiert potenziell vorhandenen Eintrag als gelöscht und stellt einen zuvor gelöschten mit dem Zieldatum wieder her/modifiziert ihn.</li>
+<li><strong><code>markValidSinceAttrAsDeleted()</code></strong> — Validiert, löscht dann weich mit Zugriffsprüfung.</li>
+<li><strong><code>undeleteValidSinceAttr()</code></strong> — Validiert, stellt dann mit Zugriffsprüfung wieder her.</li>
+</ul>
+
+<h3>Konkrete Werte-Getter</h3>
+<ul>
+<li><strong><code>getEmployeeStatus()</code></strong> — Wählt STATUS-Einträge aus, ermittelt aktiven Eintrag, konvertiert Wert in <code>EmployeeStatus</code>-Enum via <code>safeValueOf()</code>. Protokolliert Fehler, wenn unbekannter Statuswert auftritt.</li>
+<li><strong><code>getAnnualLeaveDays()</code></strong> — Wählt ANNUAL_LEAVE-Einträge aus, ermittelt aktiven Eintrag, konvertiert in <code>BigDecimal</code>.</li>
+<li><strong><code>getWeeklyWorkingHours()</code></strong> — Wählt WEEKLY_HOURS-Einträge aus, ermittelt aktiven Eintrag, konvertiert in <code>BigDecimal</code>.</li>
+</ul>
+<p>Alle geben null zurück, wenn Mitarbeiter oder validAtDate null ist (für Testkompatibilität mit CallAllPagesTest/Wicket).</p>
+
+<h2>Git-Verlauf</h2>
+<div class="hist"><pre>868d6abb7 2025 -> 2026
+28efde264 Employee: weeklyWorkingHours jetzt als zeitabhängiges Attribut. eintritt/austritt: timestamp -> date
+63081666f Quelltextdatei-Kopfzeilen: 2024 -> 2025.
+5f9bbfbd3 Tippfehler im Verzeichnis projectforge-business korrigiert
+4ae4f3ea3 Fehlerbehebungen während des Live-Gangs...
+b5dc26e24 Migration in Arbeit... (alle Tests aller Pakete: OK).
+b0efaddc2 Migration in Arbeit... (alle Tests aller Pakete: OK).
+6aca64431 Migration in Arbeit... (alle Tests aller Pakete: OK).</pre></div>
+</body>
+</html>

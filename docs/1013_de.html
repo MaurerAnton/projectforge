@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="utf-8">
+    <title>#1013 [DE]</title>
+    <style>
+        body {
+            font-family: system-ui, sans-serif;
+            max-width: 960px;
+            margin: 2em auto;
+            padding: 0 1em;
+            background: #fafafa;
+            color: #222;
+            line-height: 1.6
+        }
+        h1 {
+            border-bottom: 2px solid #333;
+            padding-bottom: .3em
+        }
+        h2 {
+            margin-top: 2.5em;
+            border-bottom: 1px solid #ddd;
+            padding-bottom: .2em;
+            color: #333
+        }
+        h3 {
+            margin-top: 2em;
+            color: #444
+        }
+        a {
+            color: #0366d6
+        }
+        .c {
+            border-left: 3px solid #ddd;
+            padding: .5em 1em;
+            margin: 1em 0;
+            background: #fff
+        }
+        .nav {
+            font-size: .9em;
+            color: #888;
+            margin-bottom: 1em
+        }
+        .meta {
+            font-size: .9em;
+            margin: 1em 0;
+            color: #555
+        }
+        code {
+            background: #f0f0f0;
+            padding: 0 .2em;
+            font-size: .93em
+        }
+        pre {
+            background: #f5f5f5;
+            padding: .8em 1em;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            overflow-x: auto;
+            font-size: .88em;
+            line-height: 1.4
+        }
+        table {
+            border-collapse: collapse;
+            width: 100%;
+            margin: 1em 0
+        }
+        th,
+        td {
+            border: 1px solid #ddd;
+            padding: .5em .8em;
+            text-align: left;
+            font-size: .9em
+        }
+        th {
+            background: #f5f5f5;
+            font-weight: 600
+        }
+        .hist {
+            font-size: .85em;
+            color: #555
+        }
+    </style>
+</head>
+<body>
+    <div class="nav">
+        <a href="https://maureranton.github.io/projectforge/">← Index</a> ·
+        <a href="file-index.html">← Datei-Index</a> ·
+        <a href="1012.html">← Vorherige</a> ·
+        <a href="1014.html">Nächste →</a> ·
+        <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/kotlin/org/projectforge/business/humanresources/HRPlanningDO.kt" target="_blank" title="Quelle auf GitHub anzeigen">📄 Quelle</a>
+    </div>
+    <h1>#1013: <code>HRPlanningDO.kt</code></h1>
+    <div class="meta"><code>projectforge-business/src/main/kotlin/org/projectforge/business/humanresources/HRPlanningDO.kt</code> JPA-Entität (HR-Planung), projectforge-business/src/main/kotlin/org/projectforge/business/humanresources/HRPlanningDO.kt <span style="color:#888">394 Zeilen · 269 Code · 95 Kommentare · 30 leer</span></div>
+    <div class="c">Zentrale Entität für die wöchentliche HR-Ressourcenplanung. Mappt auf die Tabelle <code>T_HR_PLANNING</code>, eindeutig eingeschränkt durch Benutzer+Woche. Enthält eine Liste von <code>HRPlanningEntryDO</code>-Kindentitäten und berechnet aggregierte Stundensummen (täglich, nicht zugewiesen, Wochenende).</div>
+
+    <h2>Entwurf der Entität</h2>
+    <p>Erweitert <code>DefaultBaseDO</code>. Wichtige Beziehungen:</p>
+    <ul>
+        <li><code>user</code> (PFUserDO, ManyToOne): Der Mitarbeiter, dem diese Planungswoche gehört. Wird nur als ID serialisiert über <code>@IdOnlySerializer</code>.</li>
+        <li><code>week</code> (LocalDate): Erster Tag der Woche (Montag gemäß Locale.GERMAN). Wird in der eindeutigen Einschränkung mit dem Benutzer verwendet.</li>
+        <li><code>entries</code> (List&lt;HRPlanningEntryDO&gt;, OneToMany): Kindentitäten für jede Projekt-/Statuszuweisung in dieser Woche. Markiert mit <code>@PersistenceBehavior(autoUpdateCollectionEntries=true)</code> für automatisches Kaskadenmanagement.</li>
+    </ul>
+
+    <h3>Berechnete Eigenschaften</h3>
+    <p>Alle <code>@Transient</code>-Eigenschaften berechnen Aggregate aus den Einträgen: <code>totalHours</code>, <code>totalUnassignedHours</code>, <code>totalMondayHours</code> bis <code>totalWeekendHours</code>. Jede überspringt gelöschte Einträge mittels <code>entry.deleted</code>-Prüfung. Die Eigenschaft <code>formattedWeekOfYear</code> delegiert an <code>DateTimeFormatter</code>.</p>
+
+    <h3>Wichtige Entscheidungen</h3>
+    <ul>
+        <li><strong>Wochenstart = Montag:</strong> Verwendet <code>PFDay.beginOfWeek</code> mit Locale.GERMAN, wodurch Montag der erste Arbeitstag ist.</li>
+        <li><strong>Weiches Löschen für Einträge:</strong> <code>deleteEntry()</code> markiert Einträge als gelöscht, anstatt sie zu entfernen, was ein Rückgängigmachen durch erneutes Hinzufügen desselben Status/Projekts ermöglicht.</li>
+        <li><strong>Lazy Loading:</strong> Alle Beziehungen verwenden <code>FetchType.LAZY</code>, um N+1-Abfrageprobleme zu vermeiden.</li>
+    </ul>
+
+    <h2>Git-Verlauf</h2>
+    <div class="hist"><pre>
+868d6abb7 2025 -> 2026
+63081666f Quelltext-Header: 2024 -> 2025.
+0237d5eba JSON-Serialisierung umgestaltet: IdOnlySerializer und IdsOnlySerializer eingeführt.
+4bc37b3a1 Migrationskram in Arbeit...
+c8f8ed935 Alle Entitäten als FetchType.LAZY deklariert (war EAGER).
+fa194d7f8 Migrationskram in Arbeit...
+4c04cfd65 GROSSE-ÄNDERUNG! Migration von Integer-IDs zu Long-IDs (inkl. Fremdschlüssel usw.)
+3cde2b1f6 Migrationskram in Arbeit...
+f5c09f87f Migrationskram in Arbeit...
+c04fb0d51 Migrationskram in Arbeit...
+06828f490 Migrationskram in Arbeit...
+b6092df09 Copyright 2023 -> 2024
+ab45d51fa Copyright 2001-2022 -> 2001-2023.
+5f7ef41b8 Copyright 2021 -> 2022
+c0f2b9de0 Mandanten-Funktionalität überall entfernt (ungtestet).
+ceb63e8a1 Quelltext-Header: (C) 2001-2021.
+daa67db68 HRPlanning(Entry): DTOs hinzugefügt und Spalten-IDs auf den jeweiligen Listenseiten korrigiert.
+878cb7169 Viele Compiler-Warnungen behoben.
+ca0d5470e DateBridges aus DOs entfernt.
+00d898341 HRPlanningList-Restpunkt hinzugefügt
+7c1c48782 Weitere Instanzen von java.sql.Date durch java.time.LocalDate ersetzt
+7c79f1922 Copyright des Quelltext-Headers -> 2020.
+a1c287b49 Kalenderwoche ist jetzt global gleich.
+19b97fcc3 DateBridge: encoding = EncodingType.STRING für alle DateBridges.
+e92b3afd0 Jackson: JsonBackReference/JsonManagedReference -> JsonIdentityInfo
+8675a1dbe Großes Performance-Problem gefunden: Alle Kotlin-JPA-Entitäten und ihre Eigenschaften als open deklariert.
+39cdd224c Hibernate-Suche: DateBridge...
+fe5a7c982 Umfangreiches WIP: NamedQueries überall...
+29e3c0399 GanttChartDO, HRPlanningDO: PropertyInfos hinzugefügt
+3223972db HRPlanningDO.java -> HRPlanningDO.kt
+    </pre></div>
+</body>
+</html>

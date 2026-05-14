@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>#592: TemplateEntry.java [RU]</title>
+<style>
+body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}
+h1{border-bottom:2px solid #333;padding-bottom:.3em}
+h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}
+h3{margin-top:2em;color:#444}
+a{color:#0366d6}
+.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}
+.nav{font-size:.9em;color:#888;margin-bottom:1em}
+.lang{font-size:.85em;color:#888;float:right}
+.lang a{color:#888;text-decoration:none;padding:0 .3em}
+.lang a.active{color:#0366d6;font-weight:600;text-decoration:underline}
+.meta{font-size:.9em;margin:1em 0;color:#555}
+code{background:#f0f0f0;padding:0 .2em;font-size:.93em}
+pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}
+table{border-collapse:collapse;width:100%;margin:1em 0}
+th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}
+th{background:#f5f5f5;font-weight:600}
+.hist{font-size:.85em;color:#555}
+</style>
+</head>
+<body>
+<div class="lang"><a href="592.html">EN</a> · <a href="592_de.html">DE</a> · <a href="592_ru.html" class="active">RU</a> · <a href="592_fr.html">FR</a> · <a href="592_es.html">ES</a></div>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Индекс</a> · <a href="file-index.html">← Индекс файлов</a> · <a href="2654.html">← Предыдущий</a> · <a href="1496.html">Следующий →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/java/org/projectforge/business/teamcal/filter/TemplateEntry.java" target="_blank" title="Просмотреть исходный код на GitHub">📄 исходник</a></div>
+<h1>#592: <code>TemplateEntry.java</code></h1>
+<div class="meta"><code>projectforge-business/src/main/java/org/projectforge/business/teamcal/filter/TemplateEntry.java</code> Тип: Java · Роль: Фильтр поиска · Источник: projectforge-business/src/main/java/org/projectforge/business/teamcal/filter/TemplateEntry.java <span style="color:#888">431 строка · 265 кода · 115 комментариев · 51 пустая</span></div>
+<div class="c">Файл исходного кода <code>projectforge-business/src/main/java/org/projectforge/business/teamcal/filter/TemplateEntry.java</code>, содержащий Java-код для уровня фильтра поиска.</div>
+<h2>Структура кода</h2>
+<p>Пакет: <code>org.projectforge.business.teamcal.filter</code></p>
+<p>Классы: <code>TemplateEntry</code></p>
+<p>Реализует: <code>Serializable, Comparable&lt;TemplateEntry&gt;, Cloneable</code></p>
+<p>Методы (36): <code>getCalendarProperties</code>, <code>getName</code>, <code>setName</code>, <code>addNewCalendarProperties</code>, <code>removeCalendarProperties</code>, <code>getColorCode</code>, <code>getCalendarProperties</code>, <code>contains</code>, <code>isVisible</code>, <code>getVisibleCalendarIds</code>, <code>getCalendars</code>, <code>getCalendarIds</code>, <code>setDirty</code>, <code>compareTo</code>, <code>hashCode</code>, <code>equals</code>, <code>clone</code>, <code>isModified</code>, <code>getDefaultCalendarId</code>, <code>setDefaultCalendarId</code>, <code>isShowBirthdays</code>, <code>setShowBirthdays</code>, <code>isShowBreaks</code>, <code>setShowBreaks</code>, <code>isShowPlanning</code>...</p>
+<p>Поля (11): <code>serialVersionUID</code>, <code>calendarProperties</code>, <code>visibleCalendarIds</code>, <code>name</code>, <code>defaultCalendarId</code>, <code>showBirthdays</code>, <code>showStatistics</code>, <code>timesheetUserId</code>, <code>selectedCalendar</code>, <code>showBreaks</code>, <code>showPlanning</code></p>
+<p>Импорты: 9 пакетов</p>
+<h2>Исходный код (сокращённый)</h2>
+<pre>
+package org.projectforge.business.teamcal.filter;
+
+import com.thoughtworks.xstream.annotations.XStreamAsAttribute;
+import org.apache.commons.lang3.StringUtils;
+import org.projectforge.Constants;
+import org.projectforge.business.teamcal.admin.TeamCalCache;
+import org.projectforge.business.teamcal.admin.model.TeamCalDO;
+import org.projectforge.framework.configuration.ApplicationContextProvider;
+import org.projectforge.framework.persistence.user.api.ThreadLocalUserContext;
+
+import java.io.Serializable;
+import java.util.*;
+
+/**
+ * Сохраняет настройки одного именованного элемента фильтра.
+ *
+ * @author M. Lauterbach (m.lauterbach@micromata.de)
+ * @author K. Reinhard (k.reinhard@micromata.de)
+ */
+public class TemplateEntry implements Serializable, Comparable&lt;TemplateEntry&gt;, Cloneable {
+    private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(TemplateEntry.class);
+
+    private static final long serialVersionUID = 409057949195992116L;
+
+    private final Set&lt;TemplateCalendarProperties&gt; calendarProperties = new TreeSet&lt;&gt;();
+
+    private Set&lt;Long&gt; visibleCalendarIds;
+
+    @XStreamAsAttribute
+    private String name;
+
+    @XStreamAsAttribute
+    private Long defaultCalendarId;
+
+    @XStreamAsAttribute
+    private Boolean showBirthdays;
+
+    @XStreamAsAttribute
+    private Boolean showStatistics;
+
+    @XStreamAsAttribute
+    private Long timesheetUserId;
+
+    @XStreamAsAttribute
+    private String selectedCalendar;
+
+    @XStreamAsAttribute
+    private Boolean showBreaks = true;
+
+    @XStreamAsAttribute
+    private Boolean showPlanning;
+
+    public Set&lt;TemplateCalendarProperties&gt; getCalendarProperties() {
+        return calendarProperties;
+    }
+
+    /**
+     * @return имя
+     */
+    public String getName() {
+        return name;
+    }
+
+    /**
+     * @param name имя для установки
+     * @return this для цепочки вызовов.
+     */
+    public TemplateEntry setName(final String name) {
+        this.name = name;
+        return this;
+    }
+
+    public TemplateCalendarProperties addNewCalendarProperties(final TeamCalCalendarFilter filter, final Long calId) {
+        Objects.requireNonNull(calId);
+        final TemplateCalendarProperties props = new TemplateCalendarProperties();
+        props.setCalId(calId);
+        props.setColorCode(filter.getUsedColor(calId));
+        this.calendarProperties.add(props);
+        this.visibleCalendarIds = null;
+        return props;
+    }
+
+    public void removeCalendarProperties(final Long calId) {
+        Objects.requireNonNull(calId);
+        final TemplateCalendarProperties props = getCalendarProperties(calId);
+        if (props != null) {
+            this.calendarProperties.remove(props);
+        }
+        this.visibleCalendarIds = null;
+    }
+
+    public String getColorCode(final Long calendarId) {
+        final TemplateCalendarProperties props = getCalendarProperties(calendarId);
+        if (props == null) {
+            return null;
+        }
+        return props.getColorCode();
+    }
+
+    public TemplateCalendarProperties getCalendarProperties(final Long calendarId) {
+        if (calendarId == null) {
+            return null;
+        }
+        for (final TemplateCalendarProperties props : calendarProperties) {
+            if (calendarId.equals(props.getCalId())) {
+                return props;
+            }
+        }
+        return null;
+    }
+
+    public boolean contains(final Long calendarId) {
+        return getCalendarProperties(calendarId) != null;
+    }
+
+    public boolean isVisible(final Long calendarId) {
+        final TemplateCalendarProperties props = getCalendarProperties(calendarId);
+        return props != null &amp;&amp; props.isVisible();
+    }
+// ... (сокращено, всего 409 строк)</pre>
+
+<h2>История Git</h2>
+<div class="hist"><pre>868d6abb7 2025 -> 2026
+63081666f Заголовки исходных файлов: 2024 -> 2025.
+b79a1edcad Работа по миграции в процессе... (все тесты всех пакетов: ОК).
+67805f2fc ThreadLocalUserContext.user -> ThreadLocalUserContext.loggedInUser (переименовано для избежания недопонимания в коде).
+4c04cfd65 КРУПНОЕ ИЗМЕНЕНИЕ! Миграция целочисленных id на Long id (включая внешние ключи и т.д.)</pre></div>
+</body>
+</html>

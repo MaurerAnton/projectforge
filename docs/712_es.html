@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>#712 [ES]</title>
+<style>
+body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}
+h1{border-bottom:2px solid #333;padding-bottom:.3em}
+h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}
+h3{margin-top:2em;color:#444}
+a{color:#0366d6}
+.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}
+.nav{font-size:.9em;color:#888;margin-bottom:1em}
+.meta{font-size:.9em;margin:1em 0;color:#555}
+code{background:#f0f0f0;padding:0 .2em;font-size:.93em}
+pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}
+table{border-collapse:collapse;width:100%;margin:1em 0}
+th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}
+th{background:#f5f5f5;font-weight:600}
+.hist{font-size:.85em;color:#555}
+.warn{background:#fff3cd;border-left:3px solid #ffc107;padding:.5em 1em;margin:1em 0}
+.tip{background:#d4edda;border-left:3px solid #28a745;padding:.5em 1em;margin:1em 0}
+</style>
+</head>
+<body>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Índice</a> · <a href="file-index.html">← Índice de archivos</a> · <a href="711.html">← Anterior</a> · <a href="713.html">Siguiente →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/java/org/projectforge/framework/persistence/xstream/XStreamMarshallingStrategy.java" target="_blank" title="Ver fuente en GitHub">📄 fuente</a></div>
+<h1>#712: <code>XStreamMarshallingStrategy.java</code></h1>
+<div class="meta"><code>projectforge-business/src/main/java/org/projectforge/framework/persistence/xstream/XStreamMarshallingStrategy.java</code> Estrategia de marshalling de XStream — fábrica que integra el marshalling XPath consciente de proxies de Hibernate en el pipeline de serialización de árbol de XStream, <code>projectforge-business/src/main/java/org/projectforge/framework/persistence/xstream/XStreamMarshallingStrategy.java</code> <span style="color:#888">49 líneas · 18 código · 25 comentarios · 6 en blanco</span></div>
+<div class="c">Extiende <code>ReferenceByXPathMarshallingStrategy</code> de XStream para servir como la plomería de alto nivel que conecta el marshaller consciente de proxies de Hibernate con el motor de serialización de XStream. Esta es la clase de estrategia que XStream está configurado para usar — sobrescribe el método de fábrica <code>createMarshallingContext()</code> para reemplazar el marshaller XPath predeterminado con <a href="707.html">HibernateProxyXPathMarshaller</a>, inyectando conciencia de proxies de Hibernate en cada operación de serialización de XStream. Este es el punto de configuración único que hace que toda la capa de puente XStream+Hibernate esté operativa. Sin esta estrategia, ninguna de las clases de convertidor, mapeador o marshaller en este paquete se activaría durante la serialización de XStream.</div>
+
+<h2>Arquitectura</h2>
+
+<h3>Jerarquía de clases</h3>
+<pre>MarshallingStrategy (interfaz)
+  └── AbstractTreeMarshallingStrategy
+       ├── ReferenceByXPathMarshallingStrategy  (manejo de referencias circulares basado en XPath)
+       │    └── XStreamMarshallingStrategy       (esta clase — intercambia HibernateProxyXPathMarshaller)
+       └── ReferenceByIdMarshallingStrategy      (manejo de referencias circulares basado en ID/IDREF)
+            └── ProxyIdRefMarshallingStrategy     (<a href="709.html">#709</a> — intercambia ProxyIdRefMarshaller)</pre>
+
+<h3>Constructor</h3>
+<pre>public XStreamMarshallingStrategy(int mode) {
+    super(mode);
+}</pre>
+<p>Acepta una constante de modo de referencia XPath (<code>RELATIVE</code>, <code>ABSOLUTE</code>, <code>SINGLE_NODE</code>, etc.) y la pasa a la superclase. El modo controla cómo se generan las expresiones XPath para las referencias inversas en grafos de entidades circulares.</p>
+
+<h3>createMarshallingContext() — El método de fábrica</h3>
+<pre>@Override
+protected TreeMarshaller createMarshallingContext(
+    HierarchicalStreamWriter writer,
+    ConverterLookup converterLookup,
+    Mapper mapper)
+{
+    return new HibernateProxyXPathMarshaller(writer, converterLookup, mapper, RELATIVE);
+}</pre>
+
+<p>Este es el único método sobrescrito — un ejemplo clásico del patrón Template Method. La superclase <code>ReferenceByXPathMarshallingStrategy</code> llama a <code>createMarshallingContext()</code> cada vez que necesita un <code>TreeMarshaller</code> para serializar un grafo de objetos. En lugar de devolver el <code>ReferenceByXPathMarshaller</code> predeterminado, esta sobrescritura devuelve una instancia de <a href="707.html">HibernateProxyXPathMarshaller</a>.</p>
+
+<div class="warn"><strong>Modo RELATIVE hardcodeado:</strong> A pesar de que el constructor acepta un parámetro <code>mode</code>, la sobrescritura de <code>createMarshallingContext()</code> hardcodea <code>RELATIVE</code> en lugar de usar el modo de la instancia. Esto significa que el parámetro del constructor es efectivamente ignorado para la creación del marshaller. Si se necesitara un modo XPath diferente, esta clase requeriría modificación o una subclase con una sobrescritura diferente.</div>
+
+<h2>Puntos de integración</h2>
+<ul>
+  <li><strong>Configuración de XStream:</strong> Se establece en una instancia de XStream mediante <code>xstream.setMarshallingStrategy(new XStreamMarshallingStrategy(ReferenceByXPathMarshallingStrategy.RELATIVE))</code>. Esto se hace típicamente una vez durante el inicio de la aplicación al configurar la instancia de XStream para la exportación XML.</li>
+  <li><strong>Crea:</strong> <a href="707.html">HibernateProxyXPathMarshaller</a> como el marshaller para todas las operaciones de serialización.</li>
+  <li><strong>Estrategia hermana:</strong> <a href="709.html">ProxyIdRefMarshallingStrategy</a> — proporciona el mismo marshalling consciente de proxies pero utilizando atributos ID/IDREF en lugar de referencias XPath. Ambas estrategias sirven al mismo propósito pero utilizan diferentes mecanismos de referencia XML. La aplicación puede elegir entre ellas según las preferencias de formato XML.</li>
+  <li><strong>Referencia a JIRA XSTR-226:</strong> El comentario de la fuente enlaza al issue de Codehaus JIRA que documentó la incompatibilidad original entre XStream y los proxies de Hibernate.</li>
+</ul>
+
+<h2>Comparación de estrategias: XPath vs. ID/IDREF</h2>
+<table>
+<tr><th></th><th><code>XStreamMarshallingStrategy</code> (esta clase)</th><th><a href="709.html">ProxyIdRefMarshallingStrategy</a></th></tr>
+<tr><td>Mecanismo de referencia</td><td>Expresiones XPath (ej., <code>reference="../../task"</code>)</td><td>Atributos ID/IDREF (ej., <code>id="1"</code>, <code>reference="1"</code>)</td></tr>
+<tr><td>Depende de la estructura del documento</td><td>Sí — las rutas XPath se rompen si la estructura XML cambia</td><td>No — los IDs son independientes de la estructura del documento</td></tr>
+<tr><td>Legibilidad humana</td><td>Menor — las rutas XPath son estructurales, no semánticas</td><td>Mayor — los IDs numéricos secuenciales son fáciles de seguir</td></tr>
+<tr><td>Desenvolvimiento de proxies</td><td>Solo en el marshaller (<a href="707.html">HibernateProxyXPathMarshaller</a>)</td><td>En el marshaller (<a href="708.html">ProxyIdRefMarshaller</a>) + eliminación de CGLIB</td></tr>
+<tr><td>Soporte para Spring CGLIB</td><td>No</td><td>Sí (elimina proxies <code>Enhancer</code>)</td></tr>
+</table>
+
+<h2>Cómo encaja toda la capa de puente</h2>
+<p>Cuando XStream serializa un grafo de entidades JPA en ProjectForge, se ejecuta el siguiente pipeline:</p>
+<ol>
+  <li><strong><code>XStreamMarshallingStrategy</code></strong> (esta clase) es invocada para crear un contexto de marshalling.</li>
+  <li>Instancia <strong><a href="707.html">HibernateProxyXPathMarshaller</a></strong> como el marshaller de árbol.</li>
+  <li>A medida que el marshaller recorre el grafo de objetos, llama a <code>convertAnother()</code>, que desenvuelve instancias de <strong>HibernateProxy</strong> antes de delegar en el seguimiento de referencias de XStream.</li>
+  <li>Cuando XStream necesita convertir una clase específica, <strong><a href="704.html">HibernateMapper</a></strong> resuelve el nombre de la clase (sustituyendo nombres de proxy con nombres de entidad reales, y nombres de colecciones de Hibernate con nombres de colecciones de JDK).</li>
+  <li>Cuando XStream encuentra una <code>PersistentCollection</code>, <strong><a href="702.html">HibernateCollectionConverter</a></strong> fuerza la inicialización y delega en el convertidor de colecciones JDK apropiado.</li>
+  <li>Cuando XStream encuentra un <code>HibernateProxy</code>, <strong><a href="705.html">HibernateProxyConverter</a></strong> lo desenvuelve a la entidad real antes de la serialización.</li>
+</ol>
+
+<h3>Decisiones de diseño y aspectos a tener en cuenta</h3>
+<ul>
+  <li><strong>Patrón Template Method:</strong> La estrategia utiliza el patrón Template Method — la superclase define el algoritmo (cómo serializar un grafo de objetos), y esta subclase proporciona la implementación específica de <code>TreeMarshaller</code>. Este es el punto de extensión canónico de XStream para comportamiento de marshalling personalizado.</li>
+  <li><strong>Hardcode del modo RELATIVE:</strong> El <code>RELATIVE</code> hardcodeado en <code>createMarshallingContext()</code> significa que el parámetro <code>mode</code> del constructor es vestigial. Esto es probablemente un descuido o una decisión deliberada para asegurar que el marshalling consciente de proxies siempre use XPaths relativos independientemente de lo que pasen los llamadores. En la práctica, <code>RELATIVE</code> es el modo más robusto para grafos de entidades porque las jerarquías de entidades pueden cambiar durante la refactorización.</li>
+  <li><strong>Implementación mínima:</strong> Esta clase tiene solo ~20 líneas — el trabajo real se delega a <a href="707.html">HibernateProxyXPathMarshaller</a>. Este es un buen ejemplo del Principio de Responsabilidad Única: el trabajo de la estrategia es conectar componentes, no implementar lógica de marshalling.</li>
+  <li><strong>No se registran convertidores ni mapeadores aquí:</strong> Esta estrategia solo se ocupa del marshaller. Los convertidores (<a href="702.html">HibernateCollectionConverter</a>, <a href="705.html">HibernateProxyConverter</a>) y los mapeadores (<a href="703.html">HibernateCollectionsMapper</a>, <a href="704.html">HibernateMapper</a>) se registran por separado en la instancia de XStream. La estrategia no sabe nada de ellos — operan de forma independiente en sus respectivas capas.</li>
+</ul>
+
+<h2>Historial de Git</h2><div class="hist"><pre>868d6abb7 2025 -> 2026
+63081666f Encabezados de archivos fuente: 2024-> 2025.
+b6092df09 Copyright 2023 -> 2024
+ab45d51fa Copyright 2001-2022 -> 2001-2023.
+5f7ef41b8 Copyright 2021 -> 2022
+ceb63e8a1 Encabezado de código fuente: (C) 2001-2021.
+7c79f1922 Copyright del encabezado fuente -> 2020.
+dd5ca38ac CopyRight de todos los encabezados de archivos Java actualizados o creados.
+9ebb88522 Commit inicial</pre></div>
+</body>
+</html>

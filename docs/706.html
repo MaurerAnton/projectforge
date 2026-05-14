@@ -1,64 +1,69 @@
 <!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>#706</title>
 <style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:2em;color:#444}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}.warn{background:#fff3cd;border-left:3px solid #ffc107;padding:.5em 1em;margin:1em 0}.tip{background:#d4edda;border-left:3px solid #28a745;padding:.5em 1em;margin:1em 0}</style></head>
-<body><div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="705.html">← Prev</a> · <a href="707.html">Next →</a></div>
-<h1>#706: <code>HibernateProxyHelper.java</code></h1>
-<div class="meta">Java utility — static helper that unwraps Hibernate proxy objects to their underlying entity instances, <code>projectforge-business/src/main/java/org/projectforge/framework/persistence/xstream/HibernateProxyHelper.java</code></div>
-<div class="c">A small static utility class providing a single generic method <code>get(T object)</code> that detects whether an object is a <code>HibernateProxy</code> and, if so, unwraps it to the real entity via <code>getHibernateLazyInitializer().getImplementation()</code>. If the object is not a proxy, it returns the object unchanged. This is the simplest and most reusable proxy-unwrapping utility in the XStream+Hibernate bridge layer — used by <a href="708.html">ProxyIdRefMarshaller</a> for ID-based reference tracking and available for any code that needs to inspect the real object behind a proxy wrapper.</div>
+<body><div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="705.html">← Prev</a> · <a href="707.html">Next →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/java/org/projectforge/framework/persistence/xstream/HibernateMapper.java" target="_blank" title="View source on GitHub">📄 source</a></div>
+<h1>#706: <code>HibernateMapper.java</code></h1>
+<div class="meta"><code>projectforge-business/src/main/java/org/projectforge/framework/persistence/xstream/HibernateMapper.java</code> XStream mapper — comprehensive Hibernate collection type mapper and proxy class resolver, <code>projectforge-business/src/main/java/org/projectforge/framework/persistence/xstream/HibernateMapper.java</code> <span style="color:#888">95 lines · 46 code · 35 comments · 14 blank</span></div>
+<div class="c">Extends XStream's <code>MapperWrapper</code> (Decorator pattern) to serve as the central mapper for all Hibernate-aware XStream serialization. It performs two critical functions: (1) substituting Hibernate's internal collection implementation classes with their standard JDK equivalents when determining default implementations during marshalling/unmarshalling, and (2) detecting <code>HibernateProxy</code> instances by checking implemented interfaces and resolving their real superclass names for XML element naming. This is the most comprehensive of the Hibernate XStream components — it handles <code>PersistentBag</code> (which the older <a href="703.html">HibernateCollectionsMapper</a> omits) and also detects <code>HibernateProxy</code> wrappers that <a href="703.html">HibernateCollectionsMapper</a> ignores.</div>
 
 <h2>Architecture</h2>
 
-<h3>Class Design</h3>
-<p><code>HibernateProxyHelper</code> is a pure utility class with a single public static generic method. It has no state, no dependencies (beyond <code>org.hibernate.proxy.HibernateProxy</code>), and no instance methods. The generic type parameter <code>&lt;T&gt;</code> preserves the compile-time type through the unwrap operation, so callers don't need to cast.</p>
+<h3>Class Hierarchy</h3>
+<p><code>HibernateMapper</code> extends <code>com.thoughtworks.xstream.mapper.MapperWrapper</code>, the base class for XStream mapper decorators. Two constructors accept either <code>MapperWrapper</code> or plain <code>Mapper</code> delegates and call <code>init()</code> to populate the collection substitution map.</p>
 
-<h3>get(T object) Method</h3>
-<pre>public static &lt;T&gt; T get(T object) {
-    if (object instanceof HibernateProxy) {
-        HibernateProxy proxy = (HibernateProxy) object;
-        return (T) proxy.getHibernateLazyInitializer().getImplementation();
-    }
-    return object;
-}</pre>
+<h3>Collection Mapping Table</h3>
+<p>The <code>init()</code> method populates a <code>Map&lt;Class&lt;?&gt;, Class&lt;?&gt;&gt;</code> with six Hibernate→JDK mappings:</p>
+<table>
+<tr><th>Hibernate Persistent Collection</th><th>JDK Replacement</th></tr>
+<tr><td><code>PersistentBag</code></td><td><code>ArrayList</code></td></tr>
+<tr><td><code>PersistentList</code></td><td><code>ArrayList</code></td></tr>
+<tr><td><code>PersistentMap</code></td><td><code>HashMap</code></td></tr>
+<tr><td><code>PersistentSet</code></td><td><code>HashSet</code></td></tr>
+<tr><td><code>PersistentSortedMap</code></td><td><code>TreeMap</code></td></tr>
+<tr><td><code>PersistentSortedSet</code></td><td><code>TreeSet</code></td></tr>
+</table>
+<div class="tip">Unlike <a href="703.html">HibernateCollectionsMapper</a>, this mapper includes <code>PersistentBag</code> — the default Hibernate collection for un-indexed <code>List</code> fields declared without <code>@OrderColumn</code>. This is the most common collection type in ProjectForge entities and its absence from the older mapper is a notable gap.</div>
 
-<p>The logic is straightforward:</p>
+<h3>Overridden Methods</h3>
+
+<h4>defaultImplementationOf(Class clazz)</h4>
+<p>Called by XStream when it needs to instantiate a concrete class for an interface or abstract type (e.g., when deserializing a <code>List</code> field, XStream asks what implementation to create). If the requested class is in the <code>collectionMap</code>, the JDK replacement is returned. This ensures deserialized XML produces plain <code>ArrayList</code>/<code>HashSet</code> objects rather than Hibernate-specific implementations that would be broken without a Hibernate session.</p>
+
+<h4>serializedClass(Class clazz)</h4>
+<p>Called by XStream to determine the class name to write into the XML. This method performs a two-step check:</p>
 <ol>
-  <li><strong>Proxy check:</strong> Uses <code>instanceof HibernateProxy</code> — the standard way to detect Hibernate proxies, since all Hibernate-generated proxies implement this interface.</li>
-  <li><strong>Unwrap:</strong> Calls <code>getHibernateLazyInitializer().getImplementation()</code> which forces proxy initialization (triggers lazy loading) and returns the real entity.</li>
-  <li><strong>Identity return:</strong> If not a proxy, returns the same object reference — a no-op pass-through.</li>
+  <li><strong>HibernateProxy detection:</strong> Iterates over <code>clazz.getInterfaces()</code> looking for <code>HibernateProxy.class</code>. If found, returns <code>clazz.getSuperclass().getName()</code> — the real entity class name. This ensures <code>&lt;org.projectforge.business.user.UserDO&gt;</code> appears in XML rather than <code>&lt;org.projectforge.business.user.UserDO_$$_jvstXXX&gt;</code> (the Javassist-generated proxy name).</li>
+  <li><strong>Collection substitution:</strong> If the class is in the <code>collectionMap</code>, returns the JDK replacement's fully-qualified name.</li>
+  <li><strong>Fallback:</strong> Delegates to the wrapped mapper via <code>super.serializedClass(clazz)</code>.</li>
 </ol>
-
-<div class="warn">The <code>getImplementation()</code> call <strong>forces proxy initialization</strong>. If the entity has not been loaded from the database, this triggers a SQL query. Callers must ensure an active Hibernate session is available, or handle the potential <code>LazyInitializationException</code>.</div>
 
 <h2>Integration Points</h2>
 <ul>
-  <li><strong>Primary consumer:</strong> <a href="708.html">ProxyIdRefMarshaller</a> — uses <code>HibernateProxyHelper.get(item)</code> to unwrap proxies before checking the ID reference dictionary and marshalling.</li>
-  <li>Can be used by any code in the <code>persistence.xstream</code> package or elsewhere that needs safe proxy unwrapping.</li>
-  <li>Authored by Wolfgang Jung (w.jung@micromata.de), unlike most of the XStream bridge classes which are attributed to Costin Leau.</li>
+  <li>Wraps the base XStream mapper when constructing XStream instances for XML export. Applied once during <code>XStream</code> initialization.</li>
+  <li>Works with <a href="705.html">HibernateProxyConverter</a> for proxy handling: the mapper fixes the <em>class name</em> written to XML, while the converter fixes the <em>instance data</em> marshalled.</li>
+  <li>Complements <a href="702.html">HibernateCollectionConverter</a>: the mapper handles type resolution, the converter handles value marshalling.</li>
+  <li>Both <code>HibernateMapper</code> and <code>HibernateCollectionsMapper</code> (<a href="703.html">#703</a>) should not both be active simultaneously — they would double-substitute and cause issues. <code>HibernateMapper</code> is the preferred, more complete implementation.</li>
+  <li>Used by the XML import/export infrastructure including <a href="710.html">XStreamMarshallingStrategy</a>.</li>
 </ul>
-
-<h2>Relationship to Other Proxy Handling</h2>
-<table>
-<tr><th>Class</th><th>Approach</th><th>Context</th></tr>
-<tr><td><strong>HibernateProxyHelper</strong> (this class)</td><td>Static utility method <code>get()</code></td><td>General-purpose unwrap for any code</td></tr>
-<tr><td><a href="705.html">HibernateProxyConverter</a></td><td>XStream converter that intercepts before reflection serialization</td><td>Integrated into XStream converter chain</td></tr>
-<tr><td><a href="707.html">HibernateProxyXPathMarshaller</a></td><td>Unwraps proxies before XPath reference tracking</td><td>Integrated into XStream marshalling strategy</td></tr>
-<tr><td><a href="704.html">HibernateMapper</a></td><td>Resolves proxy's real class name for XML element naming</td><td>Integrated into XStream mapper chain</td></tr>
-</table>
-<p>Each of these solves the proxy problem at a different layer of the XStream architecture. <code>HibernateProxyHelper</code> is the lowest-level, most reusable building block.</p>
 
 <h2>Design Decisions & Gotchas</h2>
 <ul>
-  <li><strong>Unchecked cast:</strong> The <code>(T)</code> cast is unchecked because <code>getImplementation()</code> returns <code>Object</code>. This is safe in practice because Hibernate proxies are always subclasses of the entity type, so the returned object is always assignable to <code>T</code>.</li>
-  <li><strong>No null check:</strong> The method does not guard against <code>null</code> input — <code>null instanceof HibernateProxy</code> evaluates to <code>false</code>, so <code>null</code> is returned unchanged. This is correct behavior.</li>
-  <li><strong>Simplicity vs. Hibernate.isInitialized():</strong> Unlike <a href="701.html">ReflectionToString</a>, this helper does not check <code>Hibernate.isInitialized()</code> first. It always tries to get the implementation, which forces initialization. This is intentional — the helper is used in contexts where the real object is needed (XML export), not for display purposes.</li>
+  <li><strong>Proxy detection via interface check:</strong> Iterating over <code>getInterfaces()</code> to find <code>HibernateProxy</code> is somewhat fragile — it assumes the Javassist/CGLIB proxy implements <code>HibernateProxy</code> as one of its interfaces. In modern Hibernate 5.x, this is reliable, but alternative proxy frameworks (like Spring's <code>@Transactional</code> proxies) may not implement this interface. The code has commented-out <code>System.err.println</code> debug lines suggesting this was iteratively debugged.</li>
+  <li><strong>Superclass name for proxies:</strong> Calling <code>clazz.getSuperclass().getName()</code> works because Hibernate proxies are generated as subclasses of the entity class (e.g., <code>UserDO_$$_jvstXXX extends UserDO</code>). This is correct for the class <em>name</em> but doesn't handle the case where the proxy chain is deeper (CGLIB nested proxies).</li>
+  <li><strong>Map-based substitution:</strong> Using a <code>HashMap</code> for <code>collectionMap</code> is cleaner and more maintainable than the parallel arrays in <a href="703.html">HibernateCollectionsMapper</a>. Adding new mappings is a one-line change to <code>init()</code>.</li>
+  <li><strong>Constructor overloads:</strong> Two constructors accepting both <code>MapperWrapper</code> and plain <code>Mapper</code> suggest this class was evolved over time and needs to integrate at different points in the mapper decorator chain.</li>
+  <li><strong>Attribution:</strong> Originally authored by Costin Leau, like most of the XStream+Hibernate bridge layer in this package.</li>
 </ul>
 
 <h2>Git History</h2><div class="hist"><pre>868d6abb7 2025 -> 2026
 63081666f Source file headers: 2024-> 2025.
+c1d14ecdb Migration stuff in progress...
 b6092df09 Copyright 2023 -> 2024
 ab45d51fa Copyright 2001-2022 -> 2001-2023.
 5f7ef41b8 Copyright 2021 -> 2022
 ceb63e8a1 Source code header: (C) 2001-2021.
 7c79f1922 Copyright of source header -> 2020.
+73a9755df More code cleanup
+32f634b88 Optimize imports
 dd5ca38ac CopyRight of all java file-header updated or created.
 9ebb88522 Initial commit</pre></div>
 </body></html>

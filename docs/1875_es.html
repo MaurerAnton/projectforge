@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="es"><head><meta charset="utf-8"><title>#1875: BeanHelper.java [ES]</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:2em;color:#444}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.lang{font-size:.85em;color:#888;float:right}.lang a{color:#888;text-decoration:none;padding:0 .3em}.lang a.active{color:#0366d6;font-weight:600;text-decoration:underline}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}.warn{background:#fff3cd;border-left:3px solid #ffc107;padding:.5em 1em;margin:1em 0}.tip{background:#d4edda;border-left:3px solid #28a745;padding:.5em 1em;margin:1em 0}</style></head>
+<body><div class="lang"><a href="1875.html">EN</a> · <a href="1875_de.html">DE</a> · <a href="1875_ru.html">RU</a> · <a href="1875_fr.html">FR</a> · <a href="1875_es.html" class="active">ES</a></div>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Índice</a> · <a href="file-index.html">← Índice de archivos</a> · <a href="1874.html">← Anterior</a> · <a href="1876.html">Siguiente →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-common/src/main/java/org/projectforge/common/BeanHelper.java" target="_blank" title="Ver fuente en GitHub">📄 fuente</a></div>
+<h1>#1875: <code>BeanHelper.java</code></h1>
+<div class="meta"><code>projectforge-common/src/main/java/org/projectforge/common/BeanHelper.java</code> Clase de utilidad — paquete org.projectforge.common, projectforge-common/src/main/java/org/projectforge/common/BeanHelper.java <span style="color:#888">678 líneas · 481 código · 150 comentarios · 47 en blanco</span></div>
+<div class="c">Utilidad integral de introspección y reflexión de JavaBeans. Infraestructura central para la capa de integración ORM/Wicket de ProjectForge — proporciona resolución de nombres de propiedades a partir de métodos getter/setter, búsqueda de métodos getter/setter con amplio almacenamiento en caché (cinco cachés internas para rendimiento), descubrimiento de anotaciones en campos, acceso a propiedades anidadas/indexadas, copia de propiedades con detección de diferencias e instanciación de objetos basada en reflexión. Ampliamente utilizado en todos los módulos de ProjectForge para ordenación de listas en Wicket, enlace de formularios y conversión DO a DTO.</div>
+<h2>Arquitectura</h2>
+<div class="c">
+<h3>Importaciones</h3>
+<ul>
+<li><code>org.apache.commons.lang3.ArrayUtils</code> — Concatenación de arreglos para recolección de campos/métodos en la jerarquía de clases</li>
+<li><code>org.apache.commons.lang3.StringUtils</code> — Manipulación de cadenas (capitalizar, descapitalizar, dividir)</li>
+<li><code>java.lang.annotation.Annotation</code> — Descubrimiento de anotaciones en campos</li>
+<li><code>java.lang.reflect.*</code> — API de reflexión central de Java: Field, Method, Constructor, Modifier, Array, InvocationTargetException</li>
+<li><code>java.util.*</code> — Colecciones, iteradores, mapas hash para almacenamiento en caché</li>
+<li><code>org.slf4j.Logger</code> — Registro de errores para fallos de reflexión</li>
+</ul>
+
+<h3>Arquitectura de almacenamiento en caché interno</h3>
+<p>BeanHelper utiliza <strong>cinco cachés sincronizadas estáticas</strong> para evitar llamadas de reflexión repetidas, que son costosas en Java. Esto es crítico para las páginas de listas de Wicket donde se llama a BeanHelper para cada celda en una tabla de datos ordenable.</p>
+<table>
+<tr><th>Caché</th><th>Clave</th><th>Valor</th><th>Beneficio</th></tr>
+<tr><td><code>declaredFieldsCache</code></td><td>Class</td><td>Field[]</td><td>Evita volver a escanear la jerarquía de clases en busca de campos</td></tr>
+<tr><td><code>declaredMethodsCache</code></td><td>Class</td><td>Method[]</td><td>Evita volver a escanear la jerarquía de clases en busca de métodos</td></tr>
+<tr><td><code>declaredFieldAnnotationsCache</code></td><td>"clase:nombrecampo"</td><td>Annotation[]</td><td>Evita volver a resolver campos anotados (crítico para la ordenación de columnas en Wicket)</td></tr>
+<tr><td><code>getterMethodsCache</code></td><td>"clase:nombrecampo"</td><td>Method</td><td>Evita volver a buscar métodos getter</td></tr>
+<tr><td><code>declaredGetterMethodsCache</code></td><td>String</td><td>Method[]</td><td>Declarado pero parece no usarse en el código proporcionado — puede poblarse en otro lugar</td></tr>
+</table>
+
+<h3>Operaciones clave</h3>
+
+<h4>Resolución de nombres de propiedades</h4>
+<ul>
+<li><code>determinePropertyName(Method)</code> — Elimina el prefijo <code>get</code>/<code>set</code>/<code>is</code>/<code>has</code> y convierte a minúscula el primer carácter</li>
+<li><code>determineGetter(Class, nombrecampo, soloGetterPublico)</code> — Encuentra el método getter (<code>getX()</code>, <code>isX()</code> para booleanos, <code>hasX()</code> para booleanos), maneja métodos puente (no devuelve métodos sintéticos puente)</li>
+<li><code>determineSetter(Class, nombrecampo)</code> — Encuentra el setter con un solo parámetro</li>
+<li><code>determinePropertyType(Class, nombrecampo)</code> — Obtiene el tipo de retorno del getter (tipo de propiedad)</li>
+</ul>
+
+<h4>Acceso a anotaciones</h4>
+<p><code>getDeclaredAnnotations(Class, nombrecampo)</code> soporta <strong>rutas de propiedades anidadas</strong> (separadas por puntos, ej., <code>"direccion.ciudad.nombre"</code>) recorriendo la cadena de campos a través de la reflexión para encontrar las anotaciones del campo terminal. Esto es esencial para las tablas de datos de Wicket que muestran propiedades de objetos anidados con columnas ordenables.</p>
+
+<h4>Acceso a propiedades (anidadas + indexadas)</h4>
+<ul>
+<li><code>getProperty(Object, String)</code> — Invoca el getter en un bean</li>
+<li><code>setProperty(Object, String, Object)</code> — Invoca el setter</li>
+<li><code>getIndexedProperty(Object, "prop[3]")</code> — Soporta acceso indexado a colecciones/arreglos</li>
+<li><code>getNestedProperty(Object, "a.b.c")</code> — Recorre la ruta de propiedades separadas por puntos, manejando nulos de forma segura (devuelve null si algún intermedio es nulo)</li>
+</ul>
+
+<h4>Copia de propiedades (copyProperties)</h4>
+<p>Copia las propiedades especificadas del objeto origen al destino, devolviendo true si alguna propiedad realmente cambió. Soporta:
+<ul>
+<li><strong>Comparación de colecciones</strong>: Verificación de igualdad elemento por elemento (sensible al orden, usando iteradores)</li>
+<li><strong>Comparación de arreglos</strong>: Usa <code>Arrays.equals()</code></li>
+<li><strong>Comparación escalar</strong>: Usa <code>Objects.equals()</code> (seguro para nulos)</li>
+<li><strong>Modo WhitespaceEqualsNull</strong>: Trata cadenas vacías/ausentes como equivalentes (solo copia si ambas no están vacías y son diferentes)</li>
+</ul>
+
+<h4>Utilidades de reflexión</h4>
+<ul>
+<li><code>getAllDeclaredFields(Class)</code> — Devuelve todos los campos, incluidos los heredados, recorriendo la cadena de superclases</li>
+<li><code>getAllDeclaredMethods(Class)</code> — Devuelve todos los métodos, incluidos los heredados</li>
+<li><code>getDeclaredPropertyFields(Class)</code> — Devuelve solo campos no transitorios, no estáticos y no finales (propiedades persistentes reales)</li>
+<li><code>getFieldValue(Object, Class/String, nombrecampo)</code> — Lee el valor del campo mediante reflexión (setAccessible para campos privados)</li>
+<li><code>newInstance(Class, ...)</code> — Múltiples sobrecargas para construcción reflexiva de objetos con varias firmas de constructores</li>
+<li><code>invoke(Object, Method, args)</code> — Invocación genérica de métodos con manejo de errores</li>
+</ul>
+
+<h3>Característica de modo de prueba</h3>
+<p>La bandera <code>TEST_MODE</code> (controlada por <code>enterTestMode()</code>/<code>exitTestMode()</code>) suprime el registro de errores durante la ejecución de pruebas. Esto permite que las pruebas intenten operaciones de reflexión que se espera que fallen sin contaminar los registros de prueba con trazas de pila. Los métodos <code>logInstantiationException()</code> respetan esta bandera.</p>
+
+<h3>Decisiones de diseño</h3>
+<ol>
+<li><strong>Almacenamiento en caché agresivo</strong>: Existen cinco cachés porque la reflexión es lenta y se llama a BeanHelper en rutas críticas (representación y ordenación de tablas de datos de Wicket)</li>
+<li><strong>Filtrado de métodos puente</strong>: <code>determineGetter()</code> omite los métodos puente (métodos sintéticos creados por el compilador para la eliminación de tipos genéricos) para devolver el método real implementado</li>
+<li><strong>Recorrido seguro para nulos</strong>: <code>getNestedProperty()</code> devuelve null en cualquier punto de la cadena donde un valor intermedio sea nulo, en lugar de lanzar NPE</li>
+<li><strong>Accesibilidad del constructor</strong>: <code>newInstance()</code> llama a <code>constructor.setAccessible(true)</code> para instanciar clases con constructores privados</li>
+<li><strong>Sin biblioteca de beans externa</strong>: A pesar de depender de <code>commons-beanutils</code> en la compilación de Gradle, BeanHelper implementa su propia resolución de propiedades en lugar de usar Apache BeanUtils directamente — probablemente para control de rendimiento y almacenamiento en caché</li>
+</ol>
+
+<div class="tip">El ayudante <code>isEqualList()</code> (privado del paquete) realiza una comparación elemento por elemento usando iteradores, no <code>equals()</code>. Esto significa que la igualdad de colecciones se basa en la identidad/igualdad de elementos en <em>posiciones correspondientes</em>, no en la igualdad de conjuntos — dos listas con los mismos elementos en diferente orden no son iguales.</div>
+</div>
+<h2>Historial de Git</h2><div class="hist"><pre>868d6abb7 2025 -> 2026
+63081666f Encabezados de archivos fuente: 2024 -> 2025.
+a73905c14 Corrección de errores tipográficos en directorios projectforge*/ Encontrados mediante codespell
+694987647 Migración en progreso... (todas las pruebas de todos los paquetes: OK).
+ae50b2522 BeanHelper.getProperty ahora soporta propiedades anidadas usando simplemente new PropertyUtils.
+b6092df09 Copyright 2023 -> 2024
+ab45d51fa Copyright 2001-2022 -> 2001-2023.
+0203e3261 AbstractListPage: consultas de larga duración: el cambio de orden de clasificación muestra la lista de resultados sin el botón de búsqueda. BeanHelper: muchas cachés para una clasificación más rápida en las listas de resultados de Wicket.</pre></div>
+</body></html>

@@ -1,12 +1,122 @@
-<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>#228</title><style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333}a{color:#0366d6}.meta{font-size:.9em;margin:1em 0}.nav{font-size:.9em;color:#888;margin-bottom:1em}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}code{background:#f0f0f0;padding:0 .2em}</style></head>
-<body><div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="227.html">← Prev</a> · <a href="229.html">Next →</a></div>
-<h1>#228: <code>MerlinRunner.kt</code></h1>
-<div class="meta"><strong>Lines:</strong> 548 · <strong>Type:</strong> Kotlin <code>@Service</code> — template execution engine</div>
-<div class="c"><p><strong>The execution engine — 548 lines, the biggest Merlin file.</strong> Runs Merlin templates against data and produces output files. Supports three template types:</p>
-<p><strong>1. Excel (.xlsx) templates:</strong> loads via <code>ExcelWorkbook</code>, injects variables from <code>DataTransferBridge</code> (address book data, timesheet data, fibu data) into named sheet/cell ranges, applies formatting, produces populated workbook. Uses <code>MerlinCoreI18n</code> for locale-aware date/number formatting.</p>
-<p><strong>2. Word (.docx) templates:</strong> loads via <code>WordTemplate</code> from Merlin, processes conditional blocks (<code>if</code>/<code>else-if</code>/<code>else</code> via <a href="222.html">MerlinConditional</a>), loop blocks, and variable substitutions. Produces populated .docx.</p>
-<p><strong>3. DOCX → PDF conversion:</strong> after Word template execution, optionally converts the .docx to .pdf using <code>PdfConverter</code> + <code>PdfOptions</code> + <a href="225.html">MerlinFontService</a> for font embedding. This is critical for IHK reports and certificates that need to be submitted as PDF.</p>
-<p><strong>ZIP mode:</strong> if the template produces multiple files (e.g. one Excel file per address in a campaign), <code>MerlinRunner</code> packages all outputs into a <code>ZipOutputStream</code> with proper <code>ZipEntry</code> names.</p>
-<p><strong>Variable injection:</strong> the runner uses <code>DataTransferBridge</code> to pull live data into template variables — e.g. <code>{{customer.name}}</code> maps to the current address's organization, <code>{{employee.salary}}</code> maps to the employee's current salary from fibu. The <code>replace()</code> utility from Merlin handles recursive variable resolution.</p>
-<p><strong>Statistics:</strong> every execution produces a <code>MerlinStatistics</code> object with file count, execution time, sheet/row counts, and error log — returned to the caller for display in the UI or stored via the job system.</p></div>
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>#228: MerlinPlugin.kt</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:2em;color:#444}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.lang{font-size:.85em;color:#888;float:right}.lang a{color:#888;text-decoration:none;padding:0 .3em}.lang a.active{color:#0366d6;font-weight:600;text-decoration:underline}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}</style></head>
+<body><div class="lang"><a href="228.html" class="active">EN</a> · <a href="228_de.html">DE</a> · <a href="228_ru.html">RU</a> · <a href="228_fr.html">FR</a> · <a href="228_es.html">ES</a></div>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="137.html">← Prev</a> · <a href="2717.html">Next →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/plugins/org.projectforge.plugins.merlin/src/main/kotlin/org/projectforge/plugins/merlin/MerlinPlugin.kt" target="_blank" title="View source on GitHub">📄 source</a></div>
+<h1>#228: <code>MerlinPlugin.kt</code></h1>
+<div class="meta"><code>plugins/org.projectforge.plugins.merlin/src/main/kotlin/org/projectforge/plugins/merlin/MerlinPlugin.kt</code> Type: Kotlin · Role: Plugin Registration · Source: plugins/org.projectforge.plugins.merlin/src/main/kotlin/org/projectforge/plugins/merlin/MerlinPlugin.kt <span style="color:#888">120 lines · 76 code · 33 comments · 11 blank</span></div>
+<div class="c">Plugin registration class extending AbstractPlugin. Declares module name, registers DAOs, menu entries, i18n resources, and checkAccess logic for the Merlin plugin.</div>
+<h2>Code Structure</h2>
+<p>Annotations: <code>author</code>, <code>micromata</code></p>
+<p>Classes: <code>MerlinPlugin</code></p>
+<p>Objects: <code>etc</code></p>
+<p>Supertype(s): <code>AbstractPlugin</code></p>
+<p>Functions (3): <code>initialize</code>, <code>ensureUserLogSubscription</code>, <code>createUserLogSubscriptionMenuItem</code></p>
+<p>Properties (7): <code>merlinTemplateDao</code>, <code>menuCreator</code>, <code>attachmentsService</code>, <code>attachmentsServicesRest</code>, <code>ID</code>, <code>RESOURCE_BUNDLE_NAME</code>, <code>username</code></p>
+<p>Imports: 18 packages</p>
+<p>Package: <code>org.projectforge.plugins.merlin</code></p>
+<h2>Source Code (abridged)</h2>
+<pre>
+package org.projectforge.plugins.merlin
+
+import org.projectforge.Constants
+import org.projectforge.common.logging.LogEventLoggerNameMatcher
+import org.projectforge.common.logging.LogSubscription
+import org.projectforge.framework.jcr.AttachmentsService
+import org.projectforge.framework.persistence.user.api.ThreadLocalUserContext
+import org.projectforge.menu.MenuItem
+import org.projectforge.menu.MenuItemTargetType
+import org.projectforge.menu.builder.MenuCreator
+import org.projectforge.menu.builder.MenuItemDef
+import org.projectforge.menu.builder.MenuItemDefId
+import org.projectforge.plugins.core.AbstractPlugin
+import org.projectforge.plugins.core.PluginAdminService
+import org.projectforge.plugins.merlin.rest.MerlinAttachmentsActionListener
+import org.projectforge.rest.AttachmentsServicesRest
+import org.projectforge.rest.admin.LogViewerPageRest
+import org.projectforge.rest.config.JacksonConfiguration
+import org.projectforge.rest.core.PagesResolver
+import org.projectforge.web.WicketSupport
+
+/**
+ * Your plugin initialization. Register all your components such as i18n files, data-access object etc.
+ *
+ * @author Kai Reinhard (k.reinhard@micromata.de)
+ */
+class MerlinPlugin :
+    AbstractPlugin(
+        ID,
+        &quot;Merlin-Word®-Templates&quot;,
+        &quot;Plugin for Microsoft Word® templating (with variables, dependant variables as well as serial execution). Useful for contracts, serial documents etc.&quot;
+    ) {
+
+    override fun initialize() {
+        val merlinTemplateDao = WicketSupport.get(MerlinTemplateDao::class.java)
+        val menuCreator = WicketSupport.get(MenuCreator::class.java)
+        val attachmentsService = WicketSupport.get(AttachmentsService::class.java)
+        val attachmentsServicesRest = WicketSupport.get(AttachmentsServicesRest::class.java)
+        // Register it:
+        register(MerlinTemplateDao::class.java, merlinTemplateDao, &quot;plugins.merlin&quot;)
+
+        // Will only delivered to client but has to be ignored on sending back from client:
+        JacksonConfiguration.registerAllowedUnknownProperties(
+            MerlinVariable::class.java,
+            &quot;allowedValuesFormatted&quot;,
+            &quot;mappingMasterValues&quot;,
+        )
+
+        menuCreator.register(
+            MenuItemDefId.MISC,
+            MenuItemDef(info.id, &quot;plugins.merlin.menu&quot;, &quot;${Constants.REACT_APP_PATH}merlin&quot;)
+        )
+
+        // All the i18n stuff:
+        addResourceBundle(RESOURCE_BUNDLE_NAME)
+
+        attachmentsServicesRest.register(
+            ID,
+            MerlinAttachmentsActionListener(attachmentsService, merlinTemplateDao)
+        )
+    }
+
+    companion object {
+        const val ID = PluginAdminService.PLUGIN_MERLIN_ID
+        const val RESOURCE_BUNDLE_NAME = &quot;MerlinI18nResources&quot;
+
+        fun ensureUserLogSubscription(): LogSubscription {
+            val username = ThreadLocalUserContext.loggedInUser!!.username ?: throw InternalError(&quot;User not given&quot;)
+            return LogSubscription.ensureSubscription(
+                title = &quot;Merlin&quot;,
+                user = username,
+                create = { title, user -&gt;
+                    LogSubscription(
+                        title,
+                        user,
+                        LogEventLoggerNameMatcher(&quot;de.micromata.merlin&quot;, &quot;org.projectforge.plugins.merlin&quot;),
+                        maxSize = 10000,
+                    )
+                })
+        }
+
+        /**
+         * Calls also [ensureUserLogSubscription].
+         */
+        fun createUserLogSubscriptionMenuItem(): MenuItem {
+            return MenuItem(
+                &quot;logViewer&quot;,
+                i18nKey = &quot;plugins.merlin.viewLogs&quot;,
+                url = PagesResolver.getDynamicPageUrl(
+                    LogViewerPageRest::class.java,
+                    id = ensureUserLogSubscription().id
+                ),
+                type = MenuItemTargetType.REDIRECT,
+            )
+        }
+    }
+}</pre>
+
+<h2>Git History</h2><div class="hist"><pre>868d6abb7 2025 -&gt; 2026
+63081666f Source file headers: 2024-&gt; 2025.
+3785f8347 Migration stuff in progress...
+67805f2fc ThreadLocalUserContext.user -&gt; ThreadLocalUserContext.loggedInUser (renamed for avoiding mis-understandings in code).
+b6092df09 Copyright 2023 -&gt; 2024</pre></div>
 </body></html>

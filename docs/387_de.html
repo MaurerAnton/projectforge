@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>387: ExcelImport.java [DE]</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:1.5em;color:#444;font-size:1em}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.lang{font-size:.85em;color:#888;float:right}.lang a{color:#888;text-decoration:none;padding:0 .3em}.lang a.active{color:#0366d6;font-weight:600;text-decoration:underline}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}pre.diff{background:#fff;font-size:.82em;max-height:300px;overflow-y:auto}</style>
+</head>
+<body>
+<div class="lang"><a href="387.html">EN</a> · <a href="387_de.html" class="active">DE</a> · <a href="387_ru.html">RU</a> · <a href="387_fr.html">FR</a> · <a href="387_es.html">ES</a></div>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← Datei-Index</a> · <a href="683.html">← Vorherige</a> · <a href="3170.html">Nächste →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/java/org/projectforge/business/excel/ExcelImport.java" target="_blank" title="Quelltext auf GitHub ansehen">📄 Quelle</a></div>
+<h1>#387: <code>ExcelImport.java</code></h1>
+<div class="meta"><code>projectforge-business/src/main/java/org/projectforge/business/excel/ExcelImport.java</code> Java-Klasse, <code>projectforge-business/src/main/java/org/projectforge/business/excel/ExcelImport.java</code> <span style="color:#888">353 Zeilen · 203 Code · 126 Kommentare · 24 leer</span></div>
+<div class="c"><strong>Zweck:</strong> Quelldatei: projectforge/business/excel/ExcelImport.java. ExcelImport.java ist Teil der Open-Source-Projektmanagement-Anwendung ProjectForge.</div>
+<h2>Quelltext (erste 100 Zeilen)</h2>
+<pre>/////////////////////////////////////////////////////////////////////////////
+//
+// Project ProjectForge Community Edition
+//         www.projectforge.org
+//
+// Copyright (C) 2001-2026 Micromata GmbH, Germany (www.micromata.com)
+//
+// ProjectForge ist dual-lizenziert.
+//
+// Diese Community-Edition ist freie Software; Sie können es weiterverteilen und/oder
+// modifizieren unter den Bedingungen der GNU General Public License, wie veröffentlicht
+// von der Free Software Foundation; Version 3 der Lizenz.
+//
+// Diese Community-Edition wird in der Hoffnung verteilt, dass sie nützlich sein wird,
+// aber OHNE JEDE GEWÄHRLEISTUNG; ohne sogar die stillschweigende Garantie der
+// MARKTGÄNGIGKEIT oder EIGNUNG FÜR EINEN BESTIMMTEN ZWECK. Siehe die GNU General
+// Public License für weitere Details.
+//
+// Sie sollten eine Kopie der GNU General Public License zusammen mit diesem
+// Programm erhalten haben; falls nicht, siehe http://www.gnu.org/licenses/.
+//
+/////////////////////////////////////////////////////////////////////////////
+
+package org.projectforge.business.excel;
+
+import org.apache.commons.beanutils.ConvertUtils;
+import org.apache.commons.beanutils.PropertyUtils;
+import org.apache.commons.lang3.ClassUtils;
+import org.apache.commons.lang3.StringUtils;
+import org.apache.poi.hssf.usermodel.HSSFCell;
+import org.apache.poi.hssf.usermodel.HSSFRow;
+import org.apache.poi.hssf.usermodel.HSSFSheet;
+import org.apache.poi.hssf.usermodel.HSSFWorkbook;
+
+import java.io.IOException;
+import java.io.InputStream;
+import java.lang.reflect.Array;
+import java.lang.reflect.InvocationTargetException;
+import java.util.ArrayList;
+import java.util.Date;
+import java.util.List;
+import java.util.Map;
+
+/**
+ * Konvertiert ein gegebenes Excel-Blatt in ein Objekt-Array.
+ *
+ * @param &lt;T&gt; Basisklasse für jede Zeile
+ * @author Wolfgang Jung (w.jung@micromata.de)
+ */
+public class ExcelImport&lt;T&gt;
+{
+  /**
+   * Der Logger
+   */
+  private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(ExcelImport.class);
+
+  /**
+   * Das Workbook, das die Werte enthält.
+   */
+  private final HSSFWorkbook work;
+
+  /**
+   * Eine optionale Map zum Abbilden von Spaltennamen auf Eigenschaftsnamen.
+   */
+  private Map&lt;String, String&gt; columnToPropertyMap;
+
+  /**
+   * Das Arbeitsblatt, aus dem die Werte gelesen werden sollen.
+   */
+  private int activeSheet = 0;
+
+  /**
+   * Der nullbasierte Index mit den Spaltennamen
+   */
+  private int columnNameRow = 0;
+
+  /**
+   * Der nullbasierte Index der ersten Zeile, die Werte enthält
+   */
+  private int startAtRow = 1;
+
+  /**
+   * Die Klassenfabrik zum Erstellen der Objekte.
+   */
+  private ClassFactory&lt;T&gt; clazzFactory;
+
+  /**
+   * Öffnet ein gegebenes Excel-Dokument. Der Stream wird immer geschlossen.
+   *
+   * @param xlsStream der Stream des Excel-Dokuments.
+   * @throws IOException wenn das Dokument nicht lesbar ist
+   */
+  public ExcelImport(final InputStream xlsStream) throws IOException
+  {
+    // Geschlossen von HSSFWorkbook
+    work = new HSSFWorkbook(xlsStream);
+  }
+
+  /**
+   * Gibt eine Referenz auf das Workbook für spezielle Funktionen zurück.</pre>
+<h2>Git-Verlauf</h2>
+<div class="hist">
+<pre>868d6abb7 2025 -> 2026
+63081666f Quelldatei-Header: 2024 -> 2025.
+b6092df09 Copyright 2023 -> 2024
+ab45d51fa Copyright 2001-2022 -> 2001-2023.
+c06db1dab Fast alle Jars aktualisiert (Code-Änderungen erforderlich).</pre>
+<h3>868d6abb7</h3><div class="c"><strong>2025 -> 2026</strong><pre class="diff">868d6abb75cd191a892911ac8e45058932cf9074
+diff --git a/projectforge-business/src/main/java/org/projectforge/business/excel/ExcelImport.java b/projectforge-business/src/main/java/org/projectforge/business/excel/ExcelImport.java
+index e3598d29b..dbb1c0d48 100644
+--- a/projectforge-business/src/main/java/org/projectforge/business/excel/ExcelImport.java
++++ b/projectforge-business/src/main/java/org/projectforge/business/excel/ExcelImport.java
+@@ -3,7 +3,7 @@
+ // Project ProjectForge Community Edition
+ //         www.projectforge.org
+ //
+-// Copyright (C) 2001-2025 Micromata GmbH, Germany (www.micromata.com)
++// Copyright (C) 2001-2026 Micromata GmbH, Germany (www.micromata.com)
+ //
+ // ProjectForge ist dual-lizenziert.
+ //</pre></div><h3>63081666f</h3><div class="c"><strong>Quelldatei-Header: 2024 -> 2025.</strong><pre class="diff">63081666f620fb87315f01b817e560e0b2f6a33a
+diff --git a/projectforge-business/src/main/java/org/projectforge/business/excel/ExcelImport.java b/projectforge-business/src/main/java/org/projectforge/business/excel/ExcelImport.java
+index 8a1c8f2d9..e3598d29b 100644
+--- a/projectforge-business/src/main/java/org/projectforge/business/excel/ExcelImport.java
++++ b/projectforge-business/src/main/java/org/projectforge/business/excel/ExcelImport.java
+@@ -3,7 +3,7 @@
+ // Project ProjectForge Community Edition
+ //         www.projectforge.org
+ //
+-// Copyright (C) 2001-2024 Micromata GmbH, Germany (www.micromata.com)
++// Copyright (C) 2001-2025 Micromata GmbH, Germany (www.micromata.com)
+ //
+ // ProjectForge ist dual-lizenziert.
+ //</pre></div><h3>b6092df09</h3><div class="c"><strong>Copyright 2023 -> 2024</strong><pre class="diff">b6092df0927c4a3b161e888445f31dcab57493f2
+diff --git a/projectforge-business/src/main/java/org/projectforge/business/excel/ExcelImport.java b/projectforge-business/src/main/java/org/projectforge/business/excel/ExcelImport.java
+index 3189f78de..8a1c8f2d9 100644
+--- a/projectforge-business/src/main/java/org/projectforge/business/excel/ExcelImport.java
++++ b/projectforge-business/src/main/java/org/projectforge/business/excel/ExcelImport.java
+@@ -3,7 +3,7 @@
+ // Project ProjectForge Community Edition
+ //         www.projectforge.org
+ //
+-// Copyright (C) 2001-2023 Micromata GmbH, Germany (www.micromata.com)
++// Copyright (C) 2001-2024 Micromata GmbH, Germany (www.micromata.com)
+ //
+ // ProjectForge ist dual-lizenziert.
+ //</pre></div><h3>ab45d51fa</h3><div class="c"><strong>Copyright 2001-2022 -> 2001-2023.</strong><pre class="diff">ab45d51fa419ede6174b31d69987f96d4b841ff9
+diff --git a/projectforge-business/src/main/java/org/projectforge/business/excel/ExcelImport.java b/projectforge-business/src/main/java/org/projectforge/business/excel/ExcelImport.java
+index 41f18bd64..3189f78de 100644
+--- a/projectforge-business/src/main/java/org/projectforge/business/excel/ExcelImport.java
++++ b/projectforge-business/src/main/java/org/projectforge/business/excel/ExcelImport.java
+@@ -3,7 +3,7 @@
+ // Project ProjectForge Community Edition
+ //         www.projectforge.org
+ //
+-// Copyright (C) 2001-2022 Micromata GmbH, Germany (www.micromata.com)
++// Copyright (C) 2001-2023 Micromata GmbH, Germany (www.micromata.com)
+ //
+ // ProjectForge ist dual-lizenziert.
+ //</pre></div><h3>c06db1dab</h3><div class="c"><strong>Fast alle Jars aktualisiert (Code-Änderungen erforderlich).</strong><pre class="diff">c06db1dab7a4f114f726cfa4ebcf3716bb1d321f
+diff --git a/projectforge-business/src/main/java/org/projectforge/business/excel/ExcelImport.java b/projectforge-business/src/main/java/org/projectforge/business/excel/ExcelImport.java
+index a0c4b4380..41f18bd64 100644
+--- a/projectforge-business/src/main/java/org/projectforge/business/excel/ExcelImport.java
++++ b/projectforge-business/src/main/java/org/projectforge/business/excel/ExcelImport.java
+@@ -325,7 +325,7 @@ public class ExcelImport&lt;T&gt;
+     if (cell == null) {
+       return null;
+     }
+-    switch (cell.getCellTypeEnum()) {
++    switch (cell.getCellType()) {
+       case NUMERIC:
+         log.debug("using numeric");
+         if (Date.class.isAssignableFrom(destClazz)) {</pre></div>
+</div>
+</body>
+</html>

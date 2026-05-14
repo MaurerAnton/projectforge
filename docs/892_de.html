@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>#892: AuftragDao.kt [DE]</title>
+<style>
+body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}
+h1{border-bottom:2px solid #333;padding-bottom:.3em}
+h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}
+h3{margin-top:2em;color:#444}
+a{color:#0366d6}
+.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}
+.nav{font-size:.9em;color:#888;margin-bottom:1em}
+.meta{font-size:.9em;margin:1em 0;color:#555}
+code{background:#f0f0f0;padding:0 .2em;font-size:.93em}
+pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}
+table{border-collapse:collapse;width:100%;margin:1em 0}
+th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}
+th{background:#f5f5f5;font-weight:600}
+.hist{font-size:.85em;color:#555}
+</style>
+</head>
+<body>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← Dateiindex</a> · <a href="891.html">← Vorherige</a> · <a href="893.html">Nächste →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/kotlin/org/projectforge/business/fibu/AuftragDao.kt" target="_blank" title="Quellcode auf GitHub anzeigen">📄 Quelle</a></div>
+
+<h1>#892: <code>AuftragDao.kt</code></h1>
+
+<div class="meta"><code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/AuftragDao.kt</code> 
+<p><strong>Typ:</strong> Spring <code>@Service</code> — Datenzugriffsobjekt</p>
+<p><strong>Paket:</strong> <code>org.projectforge.business.fibu</code></p>
+<p><strong>Vollständiger Pfad:</strong> <code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/AuftragDao.kt</code></p>
+ <span style="color:#888">644 Zeilen · 481 Code · 93 Kommentare · 70 Leerzeichen</span></div>
+
+<div class="c">
+<p>Das primäre Datenzugriffsobjekt für <code>AuftragDO</code> (Aufträge/Angebote). Erweitert <code>BaseDao&lt;AuftragDO&gt;</code> und bietet umfassende CRUD-Operationen, erweiterte Filterung (nach Status, Positionstyp, Zahlungsart, Benutzerzuordnung, Projekt, Datumsbereichen), Validierung beim Einfügen/Ändern, E-Mail-Benachrichtigungen, Laden des Verlaufs und Integration mit dem <code>AuftragsCache</code>. Verantwortlich für die „zu fakturieren“-Logik und mehrstufige Filterung von Auftragspositionen.</p>
+</div>
+
+<h2>Klassendefinition</h2>
+<pre>@Service
+open class AuftragDao : BaseDao&lt;AuftragDO&gt;(AuftragDO::class.java)</pre>
+
+<h2>Injectierte Abhängigkeiten</h2>
+<table>
+<tr><th>Abhängigkeit</th><th>Typ</th><th>Anmerkungen</th></tr>
+<tr><td><code>auftragsCache</code></td><td><code>AuftragsCache</code></td><td>Nicht automatisch verdrahtet (zyklische Abhängigkeit); gesetzt über <code>@PostConstruct</code> in <code>AuftragsCache</code></td></tr>
+<tr><td><code>configurationService</code></td><td><code>ConfigurationService</code></td><td>Prüft, ob E-Mail konfiguriert ist</td></tr>
+<tr><td><code>flatHistoryFormatService</code></td><td><code>FlatHistoryFormatService</code></td><td>Abruf von Verlaufseinträgen für Benachrichtigungen</td></tr>
+<tr><td><code>kundeDao</code></td><td><code>KundeDao</code></td><td>Kundenauflösung</td></tr>
+<tr><td><code>projektDao</code></td><td><code>ProjektDao</code></td><td>Projektauflösung</td></tr>
+<tr><td><code>sendMail</code></td><td><code>SendMail</code></td><td>Zustellung von E-Mail-Benachrichtigungen</td></tr>
+<tr><td><code>taskDao</code></td><td><code>TaskDao</code></td><td>Aufgabenauflösung für Positionen</td></tr>
+<tr><td><code>userDao</code></td><td><code>UserDao</code></td><td>Auflösung der Kontaktperson</td></tr>
+</table>
+
+<h2>Wichtige Operationen</h2>
+
+<h3>Abfrage &amp; Auswahl</h3>
+<p><code>select(filter, checkAccess)</code> — Die Kernabfragemethode, überschrieben von <code>BaseDao</code>. Erstellt einen komplexen <code>QueryFilter</code> mit Unterstützung für:</p>
+<ul>
+<li><strong>Fakturiert-Filter:</strong> Bei <code>ZU_FAKTURIEREN</code> werden Aufträge/Positionen mit Status <code>ABGESCHLOSSEN</code> oder erreichten Zahlungsplänen über einen LEFT JOIN abgefragt</li>
+<li><strong>Benutzerfilter:</strong> Findet Aufträge, bei denen der Benutzer Kontaktperson, Projektleiter, Geschäftsführer oder Vertriebsleiter ist</li>
+<li><strong>Projektfilter:</strong> <code>isIn</code> auf Projektliste</li>
+<li><strong>Datumsfilter:</strong> <code>between/ge/le</code> auf <code>erfassungsDatum</code> (Erstellungsdatum)</li>
+<li><strong>Leistungszeitraum:</strong> Delegiert an <code>AuftragAndRechnungDaoHelper</code></li>
+<li><strong>Positionstyp-Filter:</strong> <code>filterPositionsArten</code> mittels <code>AuftragsPositionsArtFilter</code></li>
+<li><strong>Positionsstatus-Filter:</strong> <code>filterPositionsStatus</code> — findet Aufträge, bei denen mindestens eine nicht gelöschte Position den angegebenen Status hat</li>
+<li><strong>Zahlungsart-Filter:</strong> <code>filterPositionsPaymentTypes</code> mittels <code>AuftragsPositionsPaymentTypeFilter</code></li>
+<li>Ergebnisse sortiert nach <code>nummer</code> absteigend</li>
+</ul>
+
+<h3>Validierung: <code>onInsertOrModify(obj, operationType)</code></h3>
+<p>Erzwingt Geschäftsregeln vor dem Persistieren:</p>
+<ol>
+<li><code>nummer</code> darf nicht null sein</li>
+<li><code>status</code> darf nicht null oder <code>OPTIONAL</code> sein</li>
+<li>Beim Einfügen: <code>nummer</code> muss die nächste fortlaufende Nummer sein (keine Lücken)</li>
+<li>Beim Aktualisieren: <code>nummer</code> darf nicht mit einem anderen vorhandenen Auftrag kollidieren</li>
+<li>Es muss mindestens eine Position vorhanden sein</li>
+<li>Nachgestellte leere Positionen (id=null, isEmpty=true) werden am Ende entfernt (die erste Position wird jedoch nie entfernt)</li>
+<li>Das Flag <code>vollstaendigFakturiert</code> jeder Position wird über <code>checkVollstaendigFakturiert()</code> geprüft</li>
+<li>Der UI-Status wird in XML serialisiert und in <code>uiStatusAsXml</code> gespeichert</li>
+<li>Nachgestellte leere Zahlungspläne werden entfernt</li>
+<li><code>validateDatesInPaymentScheduleWithinPeriodOfPerformanceOfPosition()</code> — stellt sicher, dass alle Zahlungsplandaten innerhalb des Leistungszeitraums der Position liegen (plus 3 Monate Toleranz für das Enddatum)</li>
+<li><code>validateAmountsInPaymentScheduleNotGreaterThanNetSumOfPosition()</code> — die Summe aller Zahlungsplanbeträge für eine Position darf die Nettosumme der Position nicht überschreiten</li>
+</ol>
+
+<h3>Nummernverwaltung</h3>
+<ul>
+<li><code>nextNumber</code> — Gibt die nächste verfügbare Auftragsnummer zurück (höchste vorhandene + 1)</li>
+<li><code>getNextNumber(auftrag)</code> — Wenn der Auftrag bereits eine ID hat, wird seine ursprüngliche Nummer abgerufen, um sie zu erhalten; andernfalls wird die nächste fortlaufende Nummer zugewiesen</li>
+<li>Die Startnummer ist definiert als <code>START_NUMBER = 1</code></li>
+</ul>
+
+<h3>Benachrichtigung: <code>sendNotificationIfRequired(auftrag, operationType, requestUrl)</code></h3>
+<p>Sendet eine HTML-E-Mail-Benachrichtigung an die Kontaktperson, wenn ein Auftrag erstellt/geändert/gelöscht wird. Verwendet die Groovy-Vorlage <code>mail/orderChangeNotification.html</code>. Enthält bis zu 10 aktuellste Verlaufseinträge. Gibt <code>false</code> zurück, wenn E-Mail nicht konfiguriert ist, keine Kontaktperson zugewiesen ist oder die Kontaktperson keinen SELECT-Zugriff hat.</p>
+
+<h3>Verlaufsintegration</h3>
+<ul>
+<li><code>addOwnHistoryEntries(obj, context)</code> — Lädt und führt den Verlauf für alle Positionen (einschließlich gelöschter) und Zahlungspläne zusammen</li>
+<li><code>getHistoryPropertyPrefix(context)</code> — Gibt <code>"pos#N"</code> für Positionsverlaufseinträge und <code>"payment#N"</code> für Zahlungsplanverlaufseinträge zurück</li>
+<li><code>additionalHistorySearchDOs</code> — Enthält <code>AuftragsPositionDO</code> für die Volltext-Verlaufssuche</li>
+</ul>
+
+<h3>Suchmethoden</h3>
+<ul>
+<li><code>getAuftragsPosition(posString)</code> — Analysiert das Format <code>"###.##"</code> (Auftragsnummer.Positionsnummer) und gibt die passende Position zurück</li>
+<li><code>getAuftragsPosition(id)</code> — Findet eine Position anhand ihrer Datenbank-ID</li>
+<li><code>years</code> — Gibt ein Array aller Jahre mit Auftragsaktivität zurück (min/max von <code>angebotsDatum</code>)</li>
+<li><code>buildStatistik(list)</code> — Aggregiert Statistiken für eine Liste von Aufträgen</li>
+</ul>
+
+<h3>Setter-Hilfsmethoden</h3>
+<p>Die Methoden <code>setContactPerson()</code>, <code>setTask()</code>, <code>setKunde()</code> und <code>setProjekt()</code> lösen verwandte Entitäten anhand der ID mittels <code>findOrLoad</code> auf und setzen sie auf den Auftrag oder die Position.</p>
+
+<h2>Zusätzliche Suchfelder</h2>
+<p>Das Array <code>ADDITIONAL_SEARCH_FIELDS</code> erweitert die Hibernate-Suche um Felder aus verwandten Entitäten zu indizieren:</p>
+<pre>contactPerson.username, contactPerson.firstname, contactPerson.lastname,
+kunde.name, projekt.name, projekt.kunde.name,
+positionen.position, positionen.art, positionen.status,
+positionen.titel, positionen.bemerkung, positionen.nettoSumme</pre>
+
+<h2>Begleitobjekt</h2>
+<table>
+<tr><th>Konstante</th><th>Wert</th></tr>
+<tr><td><code>USER_RIGHT_ID</code></td><td><code>UserRightId.PM_ORDER_BOOK</code></td></tr>
+<tr><td><code>START_NUMBER</code></td><td><code>1</code></td></tr>
+</table>
+
+<h2>Git-Verlauf</h2>
+<div class="hist"><pre>868d6abb7 2025 -> 2026
+4550ccc8a MonthlyEmployeeReport: wöchentliche Netto- und Bruttostunden anzeigen. Korrektur der Auswahl in AuftragDao.positionen.status
+63081666f Quellcode-Dateiköpfe: 2024 -> 2025.
+db2599ab8 Verlauf im Auftragsbuch, eingehende/ausgehende Rechnungen und Projekte.
+18bf92219 WIP: Behandlung von Verlaufseinträgen. VisitorBookDao.
+9c633d4ce AuftragDao/AuftragFilter: zu-fakturieren und vollständig-fakturiert korrigiert.
+ae2c04ee0 Migration läuft noch... (alle Tests aller Pakete: OK).
+(150+ Commits insgesamt, die Migration zu Long-IDs, Spring-Refactoring, Hibernate-Search-Updates usw. umfassen.)</pre></div>
+</body>
+</html>

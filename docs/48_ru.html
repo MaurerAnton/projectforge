@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>#48: BankAccountBalanceDao.kt [RU]</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em}a{color:#0366d6;text-decoration:none}.meta{background:#f0f0f0;border-radius:6px;padding:1em;margin:1em 0;font-size:.9em}.code-block{background:#f8f8f8;border:1px solid #ddd;border-radius:4px;padding:.5em;margin:.5em 0;overflow-x:auto}.code-block pre{margin:0;font-family:'Consolas',monospace;font-size:.85em;line-height:1.5}.commentary{margin:1em 0;line-height:1.7;background:#fff;padding:.5em 1em;border-radius:6px;border-left:4px solid #ddd}code{background:#e8e8e8;border-radius:3px;padding:.1em .3em;font-size:.9em}.nav{font-size:.9em;color:#888;margin-bottom:1em}table{border-collapse:collapse;width:100%;margin:1em 0;font-size:.9em}th,td{border:1px solid #ddd;padding:.5em;text-align:left}th{background:#f0f0f0}.warn{background:#fff3cd;border:1px solid #ffc107;border-radius:4px;padding:.5em 1em;margin:.5em 0}</style>
+</head>
+<body>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Документация</a> · <a href="file-index.html">← Список файлов</a> · <a href="47.html">← Назад</a> · <a href="49.html">Вперёд →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/plugins/org.projectforge.plugins.banking/src/main/kotlin/org/projectforge/plugins/banking/BankAccountBalanceDao.kt" target="_blank" title="Просмотреть исходник на GitHub">📄 исходник</a></div>
+<h1>#48: <code>BankAccountBalanceDao.kt</code></h1>
+<div class="meta"><code>plugins/org.projectforge.plugins.banking/src/main/kotlin/org/projectforge/plugins/banking/BankAccountBalanceDao.kt</code> <p><strong>Путь:</strong> <code>./plugins/org.projectforge.plugins.banking/.../BankAccountBalanceDao.kt</code> · <strong>Тип:</strong> Исходный код Kotlin (DAO) · <strong>Строк:</strong> 84 · <strong>Источник:</strong> <a href="https://github.com/micromata/projectforge/blob/9ed5fbe0f/plugins/org.projectforge.plugins.banking/src/main/kotlin/org/projectforge/plugins/banking/BankAccountBalanceDao.kt">GitHub</a></p> <span style="color:#888">84 строки · 54 кода · 23 комментария · 7 пустых</span></div>
+
+<h2>Что делает</h2>
+<div class="commentary"><p><strong>Объект доступа к данным</strong> для балансов банковских счетов — первый фактический исходный файл Kotlin в документации. Следует стандартному шаблону DAO ProjectForge: заголовок GPLv3 (строки 1-22), расширяет <code>BaseDao&lt;T&gt;</code> (строка 38), реализует <code>hasAccess()</code> для авторизации (строки 42-69), предоставляет метод именованного запроса <code>getByTimePeriod()</code> (строки 75-83). Аннотирован <code>@Service</code> для внедрения зависимостей Spring.</p></div>
+
+<h2>Архитектура</h2>
+<div class="code-block"><pre>38 class BankAccountBalanceDao : <mark style="background:#e8e8e8">BaseDao&lt;BankAccountBalanceDO&gt;</mark>(BankAccountBalanceDO::class.java)</pre></div>
+<div class="commentary"><p><code>BaseDao</code> — это основная структура персистентности ProjectForge: предоставляет CRUD-операции, инфраструктуру проверки доступа и выполнение именованных запросов. Каждая сущность в системе имеет соответствующий DAO, расширяющий этот базовый класс, переопределяя <code>hasAccess()</code> и <code>newInstance()</code>.</p></div>
+
+<h2>Цепочка авторизации (строки 42-69)</h2>
+<div class="code-block"><pre>42 override fun hasAccess(user, obj, oldObj, operationType, throwException): Boolean {
+49   val bankAccount = obj?.bankAccount
+50   if (obj != null && bankAccount == null)
+51     return BaseDOPersistenceService.returnFalseOrThrowException(...)  <span style="color:#888">← #1: отсутствует банковский счёт</span>
+58   if (!accessChecker.isLoggedInUserMemberOfGroup(ProjectForgeGroup.FINANCE_GROUP))
+60     return BaseDOPersistenceService.returnFalseOrThrowException(...)  <span style="color:#888">← #2: не в финансовой группе</span>
+68   return bankAccountDao.hasAccess(user, bankAccount, oldBankAccount, ...) <span style="color:#888">← #3: делегирование родителю</span>
+69 }</pre></div>
+<div class="commentary"><p>Трёхэтапная проверка доступа:</p>
+<table><tr><th>Шаг</th><th>Проверка</th><th>Сообщение об ошибке</th></tr>
+<tr><td>1</td><td>Объект имеет ссылку на банковский счёт</td><td>"Банковский счёт не указан."</td></tr>
+<tr><td>2</td><td>Пользователь является членом <code>FINANCE_GROUP</code></td><td>"Пользователь не является членом финансового персонала."</td></tr>
+<tr><td>3</td><td>Делегирует <code>bankAccountDao.hasAccess()</code> — проверяет доступ к родительскому объекту банковского счёта</td><td>Как определено в BankAccountDao</td></tr></table></div>
+
+<h2>Именованный запрос (строки 75-83)</h2>
+<div class="code-block"><pre>75 fun getByTimePeriod(accountId: Int): List&lt;BankAccountBalanceDO&gt; {
+76   val account = bankAccountDao.find(accountId)<span style="color:#ff6b6b">!!</span>
+78   return persistenceService.executeNamedQuery(
+79     BankAccountBalanceDO.<span style="background:#d4edda">FIND_BY_BANK_ACCOUNT</span>, ...)</pre></div>
+<div class="commentary"><div class="warn"><strong>Строка 76: оператор <code>!!</code></strong> — вызовет <code>NullPointerException</code>, если <code>bankAccountDao.find(accountId)</code> вернёт null (банковский счёт не найден). Комментарий гласит: "Для проверки доступа" — вызов <code>find()</code> неявно проверяет существование счёта перед получением балансов.</div></div>
+
+<h2>Ключевые выводы</h2>
+<div class="commentary"><ul><li><strong>84 строки, стандартный шаблон DAO:</strong> Расширяет BaseDao, переопределяет hasAccess и newInstance, добавляет бизнес-специфичные методы запросов.</li>
+<li><strong>Трёхуровневая проверка доступа:</strong> Целостность объекта → членство в группе → разрешение родительского объекта — вложенный шаблон авторизации, общий для всех DAO.</li>
+<li><strong>FINANCE_GROUP:</strong> Только члены финансовой команды могут получать доступ к балансам банковских счетов — ролевая авторизация, жёстко заданная в DAO, а не в аннотациях Spring Security.</li>
+<li><strong>KotlinLogging:</strong> Использует <code>mu.KotlinLogging</code> из <a href="33.html">#33</a> (kotlin-logging 3.0.5) — стандартная структура логирования во всех исходных файлах Kotlin.</li></ul></div>
+
+<div class="nav" style="margin-top:2em;padding-top:1em;border-top:1px solid #ddd"><a href="44.html">← #44: build.gradle.kts</a> · <a href="46.html">#46: BankAccountBalanceDO.kt →</a></div>
+</body>
+</html>

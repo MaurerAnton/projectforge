@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>#825: AddressImageCache — Кэш изображений адресов [RU]</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:2em;color:#444}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.lang{font-size:.85em;color:#888;float:right}.lang a{color:#888;text-decoration:none;padding:0 .3em}.lang a.active{color:#0366d6;font-weight:600;text-decoration:underline}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}</style>
+</head>
+<body>
+<div class="lang"><a href="825.html">EN</a> · <a href="825_de.html">DE</a> · <a href="825_ru.html" class="active">RU</a> · <a href="825_fr.html">FR</a> · <a href="825_es.html">ES</a></div>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Индекс</a> · <a href="file-index.html">← Индекс файлов</a> · <a href="824.html">← Пред.</a> · <a href="826.html">След. →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/kotlin/org/projectforge/business/address/AddressImageCache.kt" target="_blank" title="Просмотреть исходный код на GitHub">📄 исходник</a></div>
+<h1>#825: <code>AddressImageCache.kt</code></h1>
+<div class="meta"><code>projectforge-business/src/main/kotlin/org/projectforge/business/address/AddressImageCache.kt</code> @Component — Кэш уровня приложения, <code>projectforge-business/src/main/kotlin/org/projectforge/business/address/AddressImageCache.kt</code> <span style="color:#888">102 строки · 54 кода · 38 комментариев · 10 пустых</span></div>
+<div class="c">Кэш в памяти, сопоставляющий идентификаторы адресов с метаданными <code>AddressImageDO</code> (исключая двоичные данные изображений). Обеспечивает быстрый поиск наличия изображения у адреса и его типа.</div>
+
+<h2>Архитектура</h2>
+<p><code>AddressImageCache</code> расширяет <code>AbstractCache</code> — базовый класс ProjectForge для обновляемых кэшей. Фреймворк вызывает <code>refresh()</code> периодически или по требованию, синхронизируя вызовы для предотвращения конкурентных изменений.</p>
+
+<h3>Модель данных</h3>
+<p>Кэш хранит <code>Map&lt;Long, AddressImageDO&gt;</code>, где каждое значение — это облегчённый <code>AddressImageDO</code>, содержащий только:</p>
+<ul>
+  <li><code>lastUpdate</code> — временная метка изменения для проверки актуальности кэша.</li>
+  <li><code>imageType</code> — формат изображения (<code>ImageType.PNG</code> по умолчанию).</li>
+</ul>
+<p><strong>Двоичные данные исключены</strong> — ни <code>preview</code>, ни <code>image</code> массивы байтов не загружаются. Это сохраняет эффективность использования памяти кэшем, одновременно мгновенно отвечая на запросы «есть ли у адреса X изображение?».</p>
+
+<h3>Стратегия обновления</h3>
+<p><code>refresh()</code> выполняется внутри изолированного контекста персистентности только для чтения (для чистых границ транзакций). Он использует JPQL-запрос, выбирающий <code>addressId</code>, <code>lastUpdate</code> и <code>imageType</code> как проекцию <code>Tuple</code>, атомарно перестраивая всю карту во избежание проблем конкурентного чтения.</p>
+
+<h3>Использование</h3>
+<p><code>getImage(addressId)</code> — единственный публичный API. Он вызывает <code>checkRefresh()</code> (унаследованный от <code>AbstractCache</code>) для проверки актуальности перед поиском в карте. Возврат null означает, что изображение для данного адреса отсутствует.</p>
+
+<h3>Доступ через синглтон</h3>
+<p>Объект-компаньон содержит <code>lateinit var instance</code>, устанавливаемый в <code>@PostConstruct</code>, что обеспечивает статический доступ из кода, не использующего внедрение Spring.</p>
+
+<h2>История Git</h2><div class="hist"><pre>868d6abb7 2025 -> 2026
+63081666f Заголовки исходных файлов: 2024 -> 2025.
+943947aaa Адреса: поддержка gif и jpeg
+0ceceb28f Все обновления кэша теперь выполняются в изолированных транзакциях
+5989b32fd BaseDao: механизм onChangeLister реорганизован.
+1b50060c3 BaseDao: переименовано: get -> find, save -> insert, getList -> select, load -> select</pre></div>
+</body>
+</html>

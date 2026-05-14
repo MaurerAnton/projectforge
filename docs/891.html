@@ -2,7 +2,8 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>#891: AuftragsCacheService.kt</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>#891: AuftragDO.kt</title>
 <style>
 body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}
 h1{border-bottom:2px solid #333;padding-bottom:.3em}
@@ -21,77 +22,118 @@ th{background:#f5f5f5;font-weight:600}
 </style>
 </head>
 <body>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="890.html">← Prev</a> · <a href="892.html">Next →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/kotlin/org/projectforge/business/fibu/AuftragDO.kt" target="_blank" title="View source on GitHub">📄 source</a></div>
 
-<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="890.html">← Prev</a> · <a href="892.html">Next →</a></div>
+<h1>#891: <code>AuftragDO.kt</code></h1>
 
-<h1>#891: <code>AuftragsCacheService.kt</code></h1>
-
-<div class="meta">
-  <strong>Type:</strong> Spring Service &middot;
-  <strong>Purpose:</strong> Fast tuple-based database queries for order data &middot;
-  <strong>Package:</strong> <code>org.projectforge.business.fibu</code><br>
-  <strong>Source path:</strong> <code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/AuftragsCacheService.kt</code>
-</div>
+<div class="meta"><code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/AuftragDO.kt</code> 
+<p><strong>Type:</strong> JPA <code>@Entity</code> — Domain Object</p>
+<p><strong>Package:</strong> <code>org.projectforge.business.fibu</code></p>
+<p><strong>Full path:</strong> <code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/AuftragDO.kt</code></p>
+ <span style="color:#888">520 lines · 354 code · 105 comments · 61 blank</span></div>
 
 <div class="c">
-  <strong>Purpose:</strong> Provides high-performance read-only database access for orders (<code>AuftragDO</code>), order positions (<code>AuftragsPositionDO</code>), and payment schedules (<code>PaymentScheduleDO</code>) using native JPQL tuple queries. Avoids full entity hydration and lazy-loading overhead by selecting only the columns needed for list rendering and cache population.
+<p>The primary domain entity representing an order (<em>Auftrag</em>) or quote (<em>Angebot</em>) in ProjectForge's order book module. A quote may be rejected or replaced — it does not necessarily become an actual order. All fields are historized, so changes capture valuable information such as the commissioning history (e.g., LOI on 2022-03-05 by Mr. Müller, written confirmation on 2022-04-04 by procurement). Mapped to database table <code>t_fibu_auftrag</code>.</p>
 </div>
 
-<h2>Architecture &amp; Design</h2>
-
-<h3>Service Declaration</h3>
-<p>The class is annotated with <code>@Service</code> and depends on <code>PfPersistenceService</code> via <code>@Autowired</code>. All methods use <code>runIsolatedReadOnly</code> to execute queries in a fresh persistence context, preventing pollution of the caller's session cache.</p>
-
+<h2>Database Table</h2>
 <table>
-  <tr><th>Dependency</th><th>Type</th><th>Role</th></tr>
-  <tr><td><code>PfPersistenceService</code></td><td>Framework</td><td>Provides isolated read-only JPA contexts for fast tuple queries</td></tr>
+<tr><th>Table</th><td><code>t_fibu_auftrag</code></td></tr>
+<tr><th>Unique Constraint</th><td><code>nummer</code> (order number)</td></tr>
+<tr><th>Indexes</th><td>8 indexes on FK columns (contact_person, projectmanager, headofbusinessmanager, salesmanager, kunde, projekt)</td></tr>
 </table>
 
-<h3>Methods</h3>
-
-<h4><code>selectAuftragsList(): List&lt;AuftragDO&gt;</code></h4>
-<p>Returns all orders (including deleted) with a curated column set. Maps each <code>Tuple</code> to a partially-populated <code>AuftragDO</code> using <code>TupleUtils</code> getter helpers. Foreign keys (<code>kundeId</code>, <code>projektId</code>, <code>contactPersonId</code>) are resolved via <code>em.getReference()</code> to avoid additional queries — Hibernate returns a lazy proxy without hitting the database.</p>
-
-<h4><code>selectNonDeletedAuftragsPositions(): List&lt;AuftragsPositionDO&gt;</code></h4>
-<p>Returns non-deleted order positions. Similar tuple mapping pattern with an additional performance optimization: <code>bemerkung</code> (comment) is abbreviated to 30 characters via <code>abbreviate(30)</code>, reducing memory footprint for list views. The task reference (<code>taskId</code>) creates a stub <code>TaskDO</code> with only the ID set.</p>
-
-<h4><code>selectNonDeletedPaymentSchedules(): List&lt;PaymentScheduleDO&gt;</code></h4>
-<p>Returns non-deleted payment schedules, creating stub <code>AuftragDO</code> objects (ID-only) for the foreign key reference <code>auftragId</code>.</p>
-
-<h3>Query Definitions (Companion Object)</h3>
-<p>Three JPQL queries are defined as <code>private val</code> constants in the companion object, using <code>${AuftragDO::class.simpleName}</code> interpolation for type-safe entity references:</p>
-
+<h2>Entity Relationships</h2>
 <table>
-  <tr><th>Constant</th><th>Target Entity</th><th>Filter</th></tr>
-  <tr><td><code>SELECT_ORDERS</code></td><td><code>AuftragDO</code></td><td>None (all records, including deleted)</td></tr>
-  <tr><td><code>SELECT_POSITIONS</code></td><td><code>AuftragsPositionDO</code></td><td><code>WHERE deleted = false</code></td></tr>
-  <tr><td><code>SELECT_PAYMENTS_SCHEDULES</code></td><td><code>PaymentScheduleDO</code></td><td><code>WHERE deleted = false</code></td></tr>
+<tr><th>Relation</th><th>Type</th><th>Target</th><th>Fetch</th></tr>
+<tr><td><code>positionen</code></td><td><code>@OneToMany</code> (ordered)</td><td><code>AuftragsPositionDO</code></td><td>LAZY</td></tr>
+<tr><td><code>paymentSchedules</code></td><td><code>@OneToMany</code> (ordered)</td><td><code>PaymentScheduleDO</code></td><td>LAZY</td></tr>
+<tr><td><code>contactPerson</code></td><td><code>@ManyToOne</code></td><td><code>PFUserDO</code></td><td>LAZY</td></tr>
+<tr><td><code>kunde</code></td><td><code>@ManyToOne</code></td><td><code>KundeDO</code></td><td>LAZY</td></tr>
+<tr><td><code>projekt</code></td><td><code>@ManyToOne</code></td><td><code>ProjektDO</code></td><td>LAZY</td></tr>
+<tr><td><code>projectManager</code></td><td><code>@ManyToOne</code></td><td><code>PFUserDO</code></td><td>LAZY</td></tr>
+<tr><td><code>headOfBusinessManager</code></td><td><code>@ManyToOne</code></td><td><code>PFUserDO</code></td><td>LAZY</td></tr>
+<tr><td><code>salesManager</code></td><td><code>@ManyToOne</code></td><td><code>PFUserDO</code></td><td>LAZY</td></tr>
 </table>
 
-<h3>Performance Strategy</h3>
+<h2>Core Properties</h2>
+<table>
+<tr><th>Property</th><th>Type</th><th>DB Column</th><th>Description</th></tr>
+<tr><td><code>nummer</code></td><td><code>Int?</code></td><td><code>nummer</code> (non-null)</td><td>Unique, auto-incrementing order number</td></tr>
+<tr><td><code>referenz</code></td><td><code>String?</code></td><td><code>referenz</code> (255)</td><td>Legacy order numbers or customer references</td></tr>
+<tr><td><code>status</code></td><td><code>AuftragsStatus?</code></td><td><code>status</code> (30)</td><td>Order status (enum, stored as string)</td></tr>
+<tr><td><code>titel</code></td><td><code>String?</code></td><td><code>titel</code> (1000)</td><td>Order title</td></tr>
+<tr><td><code>kundeText</code></td><td><code>String?</code></td><td><code>kunde_text</code> (1000)</td><td>Free-text customer name (fallback if no KundeDO)</td></tr>
+<tr><td><code>bemerkung</code></td><td><code>String?</code></td><td><code>bemerkung</code> (4000)</td><td>General comment</td></tr>
+<tr><td><code>statusBeschreibung</code></td><td><code>String?</code></td><td><code>status_beschreibung</code> (4000)</td><td>Status description</td></tr>
+<tr><td><code>angebotsDatum</code></td><td><code>LocalDate?</code></td><td><code>angebots_datum</code></td><td>Quote date</td></tr>
+<tr><td><code>erfassungsDatum</code></td><td><code>LocalDate?</code></td><td><code>erfassungs_datum</code></td><td>Creation/recording date</td></tr>
+<tr><td><code>entscheidungsDatum</code></td><td><code>LocalDate?</code></td><td><code>entscheidungs_datum</code></td><td>Decision date</td></tr>
+<tr><td><code>bindungsFrist</code></td><td><code>LocalDate?</code></td><td><code>bindungs_frist</code></td><td>Binding deadline</td></tr>
+<tr><td><code>beauftragungsDatum</code></td><td><code>LocalDate?</code></td><td><code>beauftragungs_datum</code></td><td>Commissioning date</td></tr>
+<tr><td><code>beauftragungsBeschreibung</code></td><td><code>String?</code></td><td><code>beauftragungs_beschreibung</code> (4000)</td><td>Who commissioned when and how</td></tr>
+<tr><td><code>periodOfPerformanceBegin</code></td><td><code>LocalDate?</code></td><td><code>period_of_performance_begin</code></td><td>Start of performance period</td></tr>
+<tr><td><code>periodOfPerformanceEnd</code></td><td><code>LocalDate?</code></td><td><code>period_of_performance_end</code></td><td>End of performance period</td></tr>
+<tr><td><code>probabilityOfOccurrence</code></td><td><code>Int?</code></td><td><code>probability_of_occurrence</code></td><td>Probability of occurrence (forecast)</td></tr>
+<tr><td><code>forecastType</code></td><td><code>AuftragForecastType?</code></td><td><code>forecast_type</code> (20)</td><td>Forecast distribution type (default: FOLLOWING_MONTH)</td></tr>
+<tr><td><code>uiStatusAsXml</code></td><td><code>String?</code></td><td><code>ui_status_as_xml</code> (10000)</td><td>Serialized UI state (marked @NoHistory)</td></tr>
+</table>
+
+<h2>Attachment Support</h2>
+<p>Implements <code>AttachmentsInfo</code> with fields: <code>attachmentsNames</code>, <code>attachmentsIds</code>, <code>attachmentsCounter</code>, <code>attachmentsSize</code>, <code>attachmentsLastUserAction</code>. All marked <code>@NoHistory</code>.</p>
+
+<h2>Computed / Transient Properties</h2>
+<table>
+<tr><th>Property</th><th>Type</th><th>Description</th></tr>
+<tr><td><code>displayName</code></td><td><code>String</code></td><td>Format: <code>"&lt;nummer&gt;: &lt;titel&gt;"</code></td></tr>
+<tr><td><code>nummerAsString</code></td><td><code>String</code></td><td><code>nummer</code> as string for Hibernate Search auto-complete</td></tr>
+<tr><td><code>projektKundeAsString</code></td><td><code>String</code></td><td>Formatted project/customer string</td></tr>
+<tr><td><code>kundeAsString</code></td><td><code>String</code></td><td>Formatted customer string (with free-text fallback)</td></tr>
+<tr><td><code>projektAsString</code></td><td><code>String</code></td><td>Alias for <code>projektKundeAsString</code></td></tr>
+<tr><td><code>assignedPersons</code></td><td><code>String</code></td><td>Semicolon-separated list of project manager, head of business, sales manager, contact person</td></tr>
+<tr><td><code>positionenExcludingDeleted</code></td><td><code>List</code></td><td>Filtered list excluding soft-deleted positions</td></tr>
+<tr><td><code>paymentSchedulesExcludingDeleted</code></td><td><code>List</code></td><td>Filtered list excluding soft-deleted payment schedules</td></tr>
+<tr><td><code>info</code></td><td><code>OrderInfo</code></td><td>Cached order calculations (must be set via <code>AuftragsCache.setOrderInfo</code>)</td></tr>
+<tr><td><code>statusAsString</code></td><td><code>String?</code></td><td>"FAKTURIERT" if fully invoiced, otherwise localized status</td></tr>
+</table>
+
+<h2>Deprecated Computed Properties</h2>
+<p>Delegated to <code>info.*</code> equivalents:</p>
 <ul>
-  <li>Tuple queries select only the columns needed; no full entity graphs are loaded.</li>
-  <li><code>em.getReference()</code> creates lazy proxies for FK associations, avoiding JOINs.</li>
-  <li><code>runIsolatedReadOnly</code> ensures each call has a clean persistence context, preventing interference with the caller's active transaction.</li>
-  <li>The <code>abbreviate(30)</code> call on <code>bemerkung</code> minimizes heap pressure for large comment fields during list rendering.</li>
+<li><code>nettoSumme</code> → <code>info.netSum</code></li>
+<li><code>beauftragtNettoSumme</code> → <code>info.commissionedNetSum</code></li>
+<li><code>invoicedSum</code> → <code>info.invoicedSum</code></li>
+<li><code>notYetInvoicedSum</code> → <code>info.notYetInvoicedSum</code></li>
 </ul>
 
-<h2>Related Classes</h2>
+<h2>Collection Management Methods</h2>
 <ul>
-  <li><strong>Consumed by:</strong> <code>AuftragsCache</code> — uses these tuple results to build the in-memory order book cache</li>
-  <li><strong>Uses:</strong> <code>TupleUtils</code> — type-safe tuple column accessors (<code>getLong</code>, <code>getString</code>, <code>getBigDecimal</code>, etc.)</li>
-  <li><strong>Uses:</strong> <code>PfPersistenceService</code> — framework persistence abstraction</li>
+<li><code>addPosition(position)</code> — Appends a position with auto-incremented number</li>
+<li><code>getPosition(number)</code> — Finds a position by its number</li>
+<li><code>ensureAndGetPositionen()</code> — Lazily initializes the positions list</li>
+<li><code>addPaymentSchedule(schedule)</code> — Appends a payment schedule with auto-incremented number</li>
+<li><code>getPaymentSchedule(number)</code> — Finds a payment schedule by its number</li>
+<li><code>ensureAndGetPaymentSchedules()</code> — Lazily initializes the payment schedules list</li>
+<li><code>getUiStatus()</code> — Deserializes the UI status from XML (using <code>XmlObjectReader</code>)</li>
 </ul>
+
+<h2>Named Queries</h2>
+<table>
+<tr><th>Name</th><th>Query</th></tr>
+<tr><td><code>AuftragDO_SelectMinMaxDate</code></td><td><code>select min(angebotsDatum), max(angebotsDatum) from AuftragDO</code></td></tr>
+<tr><td><code>AuftragDO_FindByNummer</code></td><td><code>from AuftragDO where nummer=:nummer</code></td></tr>
+<tr><td><code>AuftragDO_FindOtherByNummer</code></td><td><code>from AuftragDO where nummer=:nummer and id!=:id</code></td></tr>
+</table>
 
 <h2>Git History</h2>
-<div class="hist"><pre>
-868d6abb7 2025 -> 2026
+<div class="hist"><pre>868d6abb7 2025 -> 2026
 49b1d6b8d Forecast and orderbook: forecast-Type for orders/positions added (current month or following month)
-7163b8c4e WIP: Order book snapshots, ForecastExport fixed (customer and project name were missing)
+4550ccc8a MonthlyEmployeeReport: show weekly net and gross hours. Fix select in AuftragDao.positionen.status
 63081666f Source file headers: 2024-> 2025.
-ae2c04ee0 Migration stuff in progress... (all tests of all packages: OK).
-89ea9a532 Migration stuff in progress... (all tests of all packages: OK).
-</pre></div>
-
+0237d5eba Json serialization refactored: IdOnlySerializer and IdsOnlySerializer introduced.
+a35971f85 Issues from last pull request resolved.
+42dc9fa16 Orders: ordered -> commissioned.
+91f087e17 AuftragsPositionFormComponent: search for order numbers fixed.
+(100+ commits total, spanning migration to Long IDs, LAZY loading, Kotlin conversion, Hibernate Search updates, etc.)</pre></div>
 </body>
 </html>

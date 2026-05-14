@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>#411: InvoicesExcelExport.java [ES]</title>
+<style>
+body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}
+h1{border-bottom:2px solid #333;padding-bottom:.3em}
+h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}
+h3{margin-top:2em;color:#444}
+a{color:#0366d6}
+.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}
+.nav{font-size:.9em;color:#888;margin-bottom:1em}
+.lang{font-size:.85em;color:#888;float:right}
+.lang a{color:#888;text-decoration:none;padding:0 .3em}
+.lang a.active{color:#0366d6;font-weight:600;text-decoration:underline}
+.meta{font-size:.9em;margin:1em 0;color:#555}
+code{background:#f0f0f0;padding:0 .2em;font-size:.93em}
+pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}
+table{border-collapse:collapse;width:100%;margin:1em 0}
+th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}
+th{background:#f5f5f5;font-weight:600}
+.hist{font-size:.85em;color:#555}
+</style>
+</head>
+<body>
+<div class="lang">
+<a href="411.html">EN</a> · <a href="411_de.html">DE</a> · <a href="411_ru.html">RU</a> · <a href="411_fr.html">FR</a> · <a href="411_es.html" class="active">ES</a>
+</div>
+<div class="nav">
+<a href="https://maureranton.github.io/projectforge/">← Índice</a> · 
+<a href="file-index.html">← Índice de archivos</a> · 
+<a href="600.html">← Anterior</a> · 
+<a href="511.html">Siguiente →</a> · 
+<a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/java/org/projectforge/business/fibu/InvoicesExcelExport.java" target="_blank" title="Ver fuente en GitHub">📄 fuente</a>
+</div>
+<h1>#411: <code>InvoicesExcelExport.java</code></h1>
+<div class="meta">
+<code>projectforge-business/src/main/java/org/projectforge/business/fibu/InvoicesExcelExport.java</code> 
+Tipo: Java · Rol: Contabilidad financiera · 
+Fuente: projectforge-business/src/main/java/org/projectforge/business/fibu/InvoicesExcelExport.java 
+<span style="color:#888">108 líneas · 75 código · 24 comentarios · 9 en blanco</span>
+</div>
+<div class="c">
+Utilidad de exportación a Excel/CSV para datos de facturas. Configura encabezados de columna (i18n), formateadores de campo (moneda, fecha) y llena filas desde colecciones de datos.
+</div>
+<h2>Estructura del código</h2>
+<p>Paquete: <code>org.projectforge.business.fibu</code></p>
+<p>Clases: <code>InvoicesExcelExport</code></p>
+<p>Métodos (3): <code>addDebitorInvoicesSheet</code>, <code>addCreditorInvoicesSheet</code>, <code>createColumn</code></p>
+<p>Importaciones: 6 paquetes</p>
+<h2>Código fuente (resumido)</h2>
+<pre>
+package org.projectforge.business.fibu;
+
+import org.projectforge.business.excel.*;
+import org.projectforge.common.anots.PropertyInfo;
+import org.projectforge.common.props.PropUtils;
+import org.projectforge.export.MyExcelExporter;
+
+import java.lang.reflect.Field;
+import java.util.Collection;
+
+public class InvoicesExcelExport
+{
+  public InvoicesExcelExport()
+  {
+  }
+
+  public void addDebitorInvoicesSheet(final MyExcelExporter exporter, final String title, final Collection&lt;RechnungDO&gt; list)
+  {
+    final ExportSheet sheet = exporter.addSheet(title);
+    sheet.createFreezePane(0, 1);
+    final ContentProvider sheetProvider = sheet.getContentProvider();
+
+    final ExportColumn[] cols = new ExportColumn[6];
+    int i = 0;
+    cols[i++] = createColumn(exporter, sheet, AbstractRechnungDO.class, &quot;datum&quot;);
+    cols[i++] = createColumn(exporter, sheet, AbstractRechnungDO.class, &quot;faelligkeit&quot;);
+    cols[i] = new I18nExportColumn(&quot;gross&quot;, &quot;fibu.rechnung.bruttoBetrag&quot;, 10);
+    exporter.putCurrencyFormat(sheetProvider, cols[i++]);
+    cols[i++] = new I18nExportColumn(&quot;number&quot;, &quot;fibu.rechnung.nummer&quot;, 6);
+    cols[i++] = new I18nExportColumn(&quot;debitor&quot;, &quot;fibu.common.debitor&quot;, 60);
+    cols[i++] = new I18nExportColumn(&quot;subject&quot;, PropUtils.getI18nKey(AbstractRechnungDO.class, &quot;betreff&quot;), 100);
+    // nombres de propiedades de columna
+    sheet.setColumns(cols);
+    final PropertyMapping mapping = new PropertyMapping();
+    for (final RechnungDO entry : list) {
+      entry.recalculate();
+      mapping.add(&quot;datum&quot;, entry.getDatum());
+      mapping.add(&quot;faelligkeit&quot;, entry.getFaelligkeit());
+      mapping.add(&quot;gross&quot;, entry.info.getGrossSum());
+      mapping.add(&quot;number&quot;, entry.getNummer());
+      mapping.add(&quot;debitor&quot;, entry.getKundeAsString());
+      mapping.add(&quot;subject&quot;, entry.getBetreff());
+      sheet.addRow(mapping.getMapping(), 0);
+    }
+  }
+
+  public void addCreditorInvoicesSheet(final MyExcelExporter exporter, final String title, final Collection&lt;EingangsrechnungDO&gt; list)
+  {
+    final ExportSheet sheet = exporter.addSheet(title);
+    sheet.createFreezePane(0, 1);
+    final ContentProvider sheetProvider = sheet.getContentProvider();
+
+    final ExportColumn[] cols = new ExportColumn[5];
+    int i = 0;
+    cols[i++] = createColumn(exporter, sheet, AbstractRechnungDO.class, &quot;datum&quot;);
+    cols[i++] = createColumn(exporter, sheet, AbstractRechnungDO.class, &quot;faelligkeit&quot;);
+    cols[i] = new I18nExportColumn(&quot;gross&quot;, &quot;fibu.rechnung.bruttoBetrag&quot;, 10);
+    exporter.putCurrencyFormat(sheetProvider, cols[i++]);
+    cols[i++] = new I18nExportColumn(&quot;creditor&quot;, &quot;fibu.common.creditor&quot;, 60);
+    cols[i++] = new I18nExportColumn(&quot;subject&quot;, PropUtils.getI18nKey(AbstractRechnungDO.class, &quot;betreff&quot;), 100);
+    // nombres de propiedades de columna
+    sheet.setColumns(cols);
+    final PropertyMapping mapping = new PropertyMapping();
+    if (list != null) {
+      for (final EingangsrechnungDO entry : list) {
+        entry.recalculate();
+        mapping.add(&quot;datum&quot;, entry.getDatum());
+        mapping.add(&quot;faelligkeit&quot;, entry.getFaelligkeit());
+        mapping.add(&quot;gross&quot;, entry.getInfo().getGrossSum());
+        mapping.add(&quot;creditor&quot;, entry.getKreditor());
+        mapping.add(&quot;subject&quot;, entry.getBetreff());
+        sheet.addRow(mapping.getMapping(), 0);
+      }
+    }
+  }
+
+  private I18nExportColumn createColumn(final ExcelExporter exporter, final ExportSheet sheet, final Class&lt;?&gt; clazz, final String property)
+  {
+    final Field field = PropUtils.getField(clazz, property);
+    final PropertyInfo propInfo = PropUtils.get(field);
+    final I18nExportColumn exportColumn = new I18nExportColumn(property, propInfo.i18nKey(), 100);
+    exporter.putFieldFormat(sheet, field, propInfo, exportColumn);
+    return exportColumn;
+  }
+}</pre>
+
+<h2>Historial de Git</h2>
+<div class="hist">
+<pre>868d6abb7 2025 -&gt; 2026
+63081666f Encabezados de archivos fuente: 2024 -&gt; 2025.
+b47c21af6 Refactorización de caché y cálculos con facturas (aún no finalizado)
+b6092df09 Derechos de autor 2023 -&gt; 2024
+ab45d51fa Derechos de autor 2001-2022 -&gt; 2001-2023.</pre>
+</div>
+</body>
+</html>

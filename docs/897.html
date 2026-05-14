@@ -2,7 +2,8 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>#897: AuftragsPositionsPaymentType.kt</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>#897: AuftragsCache.kt</title>
 <style>
 body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}
 h1{border-bottom:2px solid #333;padding-bottom:.3em}
@@ -21,62 +22,110 @@ th{background:#f5f5f5;font-weight:600}
 </style>
 </head>
 <body>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="896.html">← Prev</a> · <a href="898.html">Next →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/kotlin/org/projectforge/business/fibu/AuftragsCache.kt" target="_blank" title="View source on GitHub">📄 source</a></div>
 
-<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="896.html">← Prev</a> · <a href="898.html">Next →</a></div>
+<h1>#897: <code>AuftragsCache.kt</code></h1>
 
-<h1>#897: <code>AuftragsPositionsPaymentType.kt</code></h1>
-
-<div class="meta">
-  <strong>Type:</strong> Enum (I18nEnum) &middot;
-  <strong>Purpose:</strong> Defines the payment/billing model for an order position &middot;
-  <strong>Package:</strong> <code>org.projectforge.business.fibu</code><br>
-  <strong>Source path:</strong> <code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/AuftragsPositionsPaymentType.kt</code>
-</div>
+<div class="meta"><code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/AuftragsCache.kt</code> 
+<p><strong>Type:</strong> Spring <code>@Service</code> — timed cache (<code>AbstractCache</code>)</p>
+<p><strong>Package:</strong> <code>org.projectforge.business.fibu</code></p>
+<p><strong>Full path:</strong> <code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/AuftragsCache.kt</code></p>
+ <span style="color:#888">252 lines · 174 code · 48 comments · 30 blank</span></div>
 
 <div class="c">
-  An <code>I18nEnum</code> that specifies how a position is billed: fixed-price package, time &amp; materials, or flat rate. Used by <code>AuftragsPositionDO.paymentType</code> and the <code>AuftragsPositionsPaymentTypeFilter</code>. I18n keys follow the pattern <code>fibu.auftrag.position.paymenttype.{key}</code>.
+<p>Performance-critical timed cache that preloads and maintains all order (<em>Auftrag</em>) information for the order book. Extends <code>AbstractCache</code> with an 8-hour refresh cycle. Loads all non-deleted orders, their positions, and payment schedules into in-memory maps to avoid repeated database queries. Calculates invoiced sums, fully-invoiced status, "to be invoiced" flags, and tracks counts of orders needing invoicing. Listens for changes via <code>BaseDOModifiedListener</code> hooks on both <code>AuftragDO</code> and <code>RechnungDO</code> to invalidate cached data. Handles a cyclic dependency with <code>AuftragDao</code> via post-construction wiring.</p>
 </div>
 
-<h2>Enum Values</h2>
+<h2>Class Definition</h2>
+<pre>@Service
+class AuftragsCache : AbstractCache(8 * TICKS_PER_HOUR)</pre>
+
+<h2>Dependencies</h2>
 <table>
-  <tr><th>Value</th><th>Key</th><th>Description</th></tr>
-  <tr><td><code>FESTPREISPAKET</code></td><td><code>festpreispaket</code></td><td>Fixed-price package — total price agreed upfront</td></tr>
-  <tr><td><code>TIME_AND_MATERIALS</code></td><td><code>time_and_materials</code></td><td>Time &amp; materials — billed based on actual effort</td></tr>
-  <tr><td><code>PAUSCHALE</code></td><td><code>pauschale</code></td><td>Flat rate / lump sum</td></tr>
+<tr><th>Dependency</th><th>Type</th><th>Notes</th></tr>
+<tr><td><code>auftragsCacheService</code></td><td><code>@Autowired AuftragsCacheService</code></td><td>Provides bulk SELECT queries for orders, positions, and payment schedules</td></tr>
+<tr><td><code>rechnungDao</code></td><td><code>@Autowired RechnungDao</code></td><td>Listened for invoice changes that invalidate order data</td></tr>
+<tr><td><code>auftragDao</code></td><td><code>@Autowired AuftragDao</code></td><td>Wired back to <code>AuftragDao.auftragsCache</code> via <code>init()</code>; listened for order changes</td></tr>
 </table>
 
-<h2>Methods</h2>
+<h2>Internal Data Structures</h2>
+<table>
+<tr><th>Map</th><th>Key</th><th>Value</th><th>Description</th></tr>
+<tr><td><code>orderInfoMap</code></td><td><code>Long</code> (order ID)</td><td><code>OrderInfo</code></td><td>All cached order info by order ID</td></tr>
+<tr><td><code>orderPositionMapByPosId</code></td><td><code>Long</code> (position ID)</td><td><code>OrderPositionInfo</code></td><td>All cached position info by position ID</td></tr>
+<tr><td><code>toBeInvoicedCounter</code></td><td>—</td><td><code>Int?</code></td><td>Cached count of orders with <code>toBeInvoiced == true</code> (lazily calculated)</td></tr>
+</table>
+
+<h2>Initialization (<code>@PostConstruct init()</code>)</h2>
+<p>Sets the singleton <code>instance</code>, wires <code>this</code> into <code>auftragDao.auftragsCache</code>, and registers two change listeners:</p>
 <ul>
-  <li><code>getKey(): String</code> — returns the i18n key fragment</li>
-  <li><code>isIn(vararg type: AuftragsPositionsPaymentType?): Boolean</code> — membership check</li>
-  <li><code>i18nKey</code> — computed as <code>"fibu.auftrag.position.paymenttype." + key</code></li>
-  <li><code>safeValueOf(name: String?): AuftragsPositionsPaymentType?</code> (companion) — null-safe lookup by name</li>
+<li><strong>Invoice listener:</strong> Any insert/modify on <code>RechnungDO</code> calls <code>setExpired()</code> to invalidate the entire cache (since invoices affect order position invoiced sums)</li>
+<li><strong>Order listener:</strong> Any insert/modify on <code>AuftragDO</code> calls <code>setExpired()</code></li>
+</ul>
+
+<h2>Public Lookup Methods</h2>
+<table>
+<tr><th>Method</th><th>Returns</th><th>Description</th></tr>
+<tr><td><code>getOrderInfo(orderId)</code></td><td><code>OrderInfo?</code></td><td>Get cached info by order ID</td></tr>
+<tr><td><code>getOrderInfo(order)</code></td><td><code>OrderInfo</code></td><td>Get cached info for an order object (falls back to empty <code>OrderInfo</code> if not found)</td></tr>
+<tr><td><code>findOrderInfoByNumber(orderNumber)</code></td><td><code>OrderInfo?</code></td><td>Lookup by <code>AuftragDO.nummer</code></td></tr>
+<tr><td><code>getOrderInfoByPositionId(positionInfoId)</code></td><td><code>OrderInfo?</code></td><td>Get the parent order info for a given position ID</td></tr>
+<tr><td><code>getOrderPositionInfo(positionId)</code></td><td><code>OrderPositionInfo?</code></td><td>Get cached position info by position ID</td></tr>
+<tr><td><code>getOrderPositionInfosByAuftragId(auftragId)</code></td><td><code>Collection&lt;OrderPositionInfo&gt;?</code></td><td>Get all position infos for an order</td></tr>
+<tr><td><code>setOrderInfo(order)</code></td><td><code>Unit</code></td><td>Fills <code>order.info</code> with cached calculated data</td></tr>
+<tr><td><code>getFakturiertSum(order)</code></td><td><code>BigDecimal</code></td><td>Convenience for <code>getOrderInfo(order).invoicedSum</code></td></tr>
+<tr><td><code>isVollstaendigFakturiert(order)</code></td><td><code>Boolean</code></td><td>Convenience for <code>getOrderInfo(order).isVollstaendigFakturiert</code></td></tr>
+<tr><td><code>isPositionAbgeschlossenUndNichtVollstaendigFakturiert(order)</code></td><td><code>Boolean</code></td><td>Convenience lookup</td></tr>
+<tr><td><code>isPaymentSchedulesReached(order)</code></td><td><code>Boolean</code></td><td>Convenience lookup</td></tr>
+<tr><td><code>getToBeInvoicedCounter()</code></td><td><code>Int</code></td><td>Lazily counts orders with <code>toBeInvoiced == true</code></td></tr>
+</table>
+
+<h2>Cache Invalidation</h2>
+<ul>
+<li><code>setExpired()</code> — Overrides <code>AbstractCache.setExpired()</code> to also reset <code>toBeInvoicedCounter</code> to null, forcing recalculation on next access</li>
+<li><code>setExpired(order)</code> — Same as above (formerly updated individual entries; now expires the full cache)</li>
+<li>Both listener implementations (<code>auftragListener</code>, <code>rechnungListener</code>) call <code>setExpired()</code> on any change</li>
+</ul>
+
+<h2>Refresh Logic (<code>refresh()</code>)</h2>
+<p>Called when the cache TTL expires (every 8 hours) or when manually expired:</p>
+<ol>
+<li>Logs refresh start with <code>LogDuration</code> timer</li>
+<li>Loads all non-deleted order positions via <code>auftragsCacheService.selectNonDeletedAuftragsPositions()</code>, groups by <code>auftrag.id</code></li>
+<li>Loads all orders via <code>auftragsCacheService.selectAuftragsList()</code></li>
+<li>Loads all non-deleted payment schedules via <code>auftragsCacheService.selectNonDeletedPaymentSchedules()</code>, groups by <code>auftrag.id</code></li>
+<li>Initializes <code>OrderInfo</code> objects for each order (calling <code>updateFields(order)</code> to copy basic data)</li>
+<li>Creates <code>OrderPositionInfo</code> objects for each position (note: constructor uses <code>AuftragsRechnungCache</code>, which in turn uses <code>AuftragsCache</code> — the cyclic dependency is resolved by running caches twice on initialization)</li>
+<li>Assigns positions and payment schedules to each order, calling <code>order.info.calculateAll(order, positions, paymentSchedules)</code></li>
+<li>Replaces the immutable maps atomically</li>
+<li>Resets <code>toBeInvoicedCounter</code> to null</li>
+<li>Logs completion time</li>
+</ol>
+
+<h2>Thread Safety</h2>
+<p>Maps (<code>orderInfoMap</code>, <code>orderPositionMapByPosId</code>) are replaced atomically with new immutable maps during refresh. The comment "No sync, immutable map" on all read accesses indicates a read-only snapshot pattern: on each <code>checkRefresh()</code> call, the cache may rebuild a fresh map and swap the reference.</p>
+
+<h2>Design Notes</h2>
+<ul>
+<li>The <code>checkRefresh</code> parameter on <code>getOrderInfo(order, checkRefresh)</code> exists to avoid deadlocks during cache initialization — when the cache is already being refreshed, recursive calls skip refresh</li>
+<li>The cyclic dependency between <code>AuftragsCache</code>, <code>AuftragsRechnungCache</code>, and <code>OrderPositionInfo</code> is documented in commit <code>51d352133</code> — resolved by running caches twice on initialization</li>
+<li>The <code>toBeInvoicedCounter</code> uses a lazy calculation pattern with debug logging of which order numbers are counted</li>
+<li>All convenience getter methods call <code>checkRefresh()</code> before access to ensure fresh data</li>
 </ul>
 
 <h2>Git History</h2>
-<div class="hist"><pre>
-868d6abb7 2025 -> 2026
+<div class="hist"><pre>868d6abb7 2025 -> 2026
+51d352133 AuftragsCache / AuftragsRechnungsCache handling refactored (cyclic usage resolved by running caches twice on initialization)
+0043cbdb5 WIP Forecast
 63081666f Source file headers: 2024-> 2025.
+ae2c04ee0 Migration stuff in progress... (all tests of all packages: OK).
+9aff90908 Migration stuff in progress... (all tests of all packages: OK).
+89ea9a532 Migration stuff in progress... (all tests of all packages: OK).
+d02c8a770 Migration stuff in progress...
+3159cfa6c Migration stuff in progress... (all tests of all packages: OK).
+ff2cc4cfa Migration stuff in progress... (all tests of all packages: OK).
+714452019 Migration stuff in progress... (all tests of all packages: OK).
 567ca70cd Migration in progress... spring.datasource.hikari.auto-commit=false
-ac2dbb269 Migration stuff in progress...
-b79a1edca Migration stuff in progress... (all tests of all packages: OK).
-b6092df09 Copyright 2023 -> 2024
-ab45d51fa Copyright 2001-2022 -> 2001-2023.
-5f7ef41b8 Copyright 2021 -> 2022
-ceb63e8a1 Source code header: (C) 2001-2021.
-c526c1bbb I18nEnum, IUserRightId -> Kotlin.
-54bd2e890 WIP: vacation mail notifications.
-bc0a52bc7 Vacation stuff...
-b2657ec3a Vacation list, MagicFilterProcessort supports now I18nEnum values.
-d9c01bcef Formatter.jsx: Address book fixed (is now displayName).
-7c79f1922 Copyright of source header -> 2020.
-af35917ac More code cleanup
-1fcfe0b45 Doc. BookStatus and BookType converted to Kotlin.
-680cef262 Doc. BookStatus and BookType converted to Kotlin.
-dd5ca38ac CopyRight of all java file-header updated or created.
-2d86a8cd6 PROJECTFORGE-2306 Refactorings for keeping access check at update time
-9ebb88522 Initial commit
-</pre></div>
-
+(40+ commits spanning migration, refactoring, java.time conversion, Jakarta migration, etc.)</pre></div>
 </body>
 </html>

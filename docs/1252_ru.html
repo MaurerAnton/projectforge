@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>#1252 [RU]</title>
+<style>
+body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}
+h1{border-bottom:2px solid #333;padding-bottom:.3em}
+h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}
+h3{margin-top:2em;color:#444}
+a{color:#0366d6}
+.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}
+.nav{font-size:.9em;color:#888;margin-bottom:1em}
+.meta{font-size:.9em;margin:1em 0;color:#555}
+code{background:#f0f0f0;padding:0 .2em;font-size:.93em}
+pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}
+table{border-collapse:collapse;width:100%;margin:1em 0}
+th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}
+th{background:#f5f5f5;font-weight:600}
+.hist{font-size:.85em;color:#555}
+</style>
+</head>
+<body>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">&#8592; Индекс</a> &#183; <a href="file-index.html">&#8592; Индекс файлов</a> &#183; <a href="1231.html">&#8592; Пред.</a> &#183; <a href="1233.html">След. &#8594;</a></div>
+<h1>#1252: <code>DBQueryBuilderByCriteria.kt</code></h1>
+<div class="meta"><code>projectforge-business/src/main/kotlin/org/projectforge/framework/persistence/api/impl/DBQueryBuilderByCriteria.kt</code> Движок запросов (Criteria), projectforge-business/src/main/kotlin/org/projectforge/framework/persistence/api/impl/DBQueryBuilderByCriteria.kt <span style="color:#888">87 строк · 54 кода · 25 комментариев · 8 пустых</span></div>
+<div class="c">Внутренний построитель запросов JPA Criteria API, используемый <code>QueryFilter</code> для структурированных запросов к базе данных. Преобразует объекты <code>DBPredicate</code> в экземпляры JPA <code>Predicate</code> через <code>CriteriaBuilder</code>, управляет объединениями и создаёт <code>DBCriteriaResultIterator</code> для итерации по результатам с фильтрацией в памяти.</div>
+
+<h2>Архитектура</h2>
+<h3>Зависимости конструктора</h3>
+<ul>
+  <li><strong>baseDao</strong> <code>BaseDao&lt;O&gt;</code> — предоставляет класс сущности для корневого запроса</li>
+  <li><strong>entityManager</strong> — JPA EntityManager для CriteriaBuilder/CriteriaQuery</li>
+  <li><strong>queryFilter</strong> — <code>QueryFilter</code>, предоставляющий определения объединений и предикаты</li>
+</ul>
+
+<h3>Ленивая инициализация</h3>
+<pre>private val ctx: DBCriteriaContext&lt;O&gt; by lazy {
+    val cb = entityManager.criteriaBuilder
+    val cr = cb.createQuery(baseDao.doClass)
+    DBCriteriaContext(cb, cr, cr.from(baseDao.doClass), baseDao.doClass).also {
+        queryFilter.joinList.forEach { join -> it.addJoin(join) }
+    }
+}</pre>
+<p><code>DBCriteriaContext</code> создаётся лениво, чтобы отложить вызов JPA root.from() до момента необходимости.</p>
+
+<h3>Основные методы</h3>
+<table>
+  <tr><th>Метод</th><th>Описание</th></tr>
+  <tr><td><code>add(matcher: DBPredicate)</code></td><td>Преобразует DBPredicate в JPA Predicate через <code>matcher.asPredicate(ctx)</code></td></tr>
+  <tr><td><code>addOrder(sortProperty)</code></td><td>Добавляет сортировку ASC/DESC с помощью <code>ctx.cb.asc()</code> или <code>ctx.cb.desc()</code></td></tr>
+  <tr><td><code>createResultIterator(predicates, queryFilter)</code></td><td>Строит финальный CriteriaQuery с условиями where/orderBy, оборачивает в <code>DBCriteriaResultIterator</code></td></tr>
+</table>
+
+<h3>Обработка ошибок</h3>
+<ul>
+  <li><code>addOrder</code> перехватывает исключения и логирует ошибку для неизвестных имён свойств вместо молчаливого отказа</li>
+</ul>
+
+<h2>История Git</h2><div class="hist"><pre>
+868d6abb7 2025 -> 2026
+b131193e7 Переменные-члены рефакторизованы с использованием by lazy {}.
+63081666f Заголовки исходных файлов: 2024 -> 2025.
+b71b5073d Миграция в процессе... (все тесты OK).
+3264694a8 Миграция в процессе... (все тесты OK).
+4c04cfd65 MAJOR-CHANGE! Миграция целочисленных id на Long id.
+06828f490 Миграция в процессе...
+b6092df09 Авторское право 2023 -> 2024
+ab45d51fa Авторское право 2001-2022 -> 2001-2023.
+5f7ef41b8 Авторское право 2021 -> 2022
+ceb63e8a1 Заголовок исходного кода: (C) 2001-2021.
+7c79f1922 Авторское право в заголовке -> 2020.
+012e046df DBQueryBuilderByCriteria: исключение для неизвестных свойств в order by перехвачено.
+2609f511f Тяжёлый WIP: session -> em
+ee355d979 WIP: Session -> EntityManager...
+9896ea5c5 WIP: Session -> EntityManager...
+bf3d20864 DB.SortProperty исправлен.
+14af0e09e DBAlias -> DBJoin.
+66d9e3a30 WiP: DBQuery* и QueryFilter: псевдонимы....
+efb8e0b16 WiP: DBQuery* и QueryFilter: псевдонимы....
+88bf1de7c WiP: DBQuery* и QueryFilter...
+39cdd224c Hibernate search: DateBridge...
+7998890ea WiP: DBQuery* и QueryFilter...
+a59e59eb1 WiP: DBQuery* и QueryFilter...
+5e65f6b22 WiP: DBQuery*
+a48f5a193 WIP: JPA...
+7e54bd634 MagicFilter: нерекомендуемый полнотекстовый поиск с Hibernate запросом удалён.
+257c6cb6f WIP: MagicFilter... (порядок сортировки)
+cb2ea2e24 WIP: MagicFilter... (порядок сортировки)
+6c179b06f WIP: MagicFilter...
+d32dbc8b4 WIP: MagicFilter...
+</pre></div>
+</body>
+</html>

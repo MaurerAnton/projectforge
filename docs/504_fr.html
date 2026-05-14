@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>#504 : LdapSambaAccountsUtils.java [FR]</title>
+<style>
+body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}
+h1{border-bottom:2px solid #333;padding-bottom:.3em}
+h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}
+h3{margin-top:2em;color:#444}
+a{color:#0366d6}
+.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}
+.nav{font-size:.9em;color:#888;margin-bottom:1em}
+.lang{font-size:.85em;color:#888;float:right}
+.lang a{color:#888;text-decoration:none;padding:0 .3em}
+.lang a.active{color:#0366d6;font-weight:600;text-decoration:underline}
+.meta{font-size:.9em;margin:1em 0;color:#555}
+code{background:#f0f0f0;padding:0 .2em;font-size:.93em}
+pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}
+table{border-collapse:collapse;width:100%;margin:1em 0}
+th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}
+th{background:#f5f5f5;font-weight:600}
+.hist{font-size:.85em;color:#555}
+</style>
+</head>
+<body>
+<div class="lang"><a href="504.html">EN</a> · <a href="504_de.html">DE</a> · <a href="504_ru.html">RU</a> · <a href="504_fr.html" class="active">FR</a> · <a href="504_es.html">ES</a></div>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← Index des fichiers</a> · <a href="617.html">← Précédent</a> · <a href="3273.html">Suivant →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/java/org/projectforge/business/ldap/LdapSambaAccountsUtils.java" target="_blank" title="Voir la source sur GitHub">📄 source</a></div>
+<h1>#504 : <code>LdapSambaAccountsUtils.java</code></h1>
+<div class="meta"><code>projectforge-business/src/main/java/org/projectforge/business/ldap/LdapSambaAccountsUtils.java</code> Type : Java · Rôle : Intégration LDAP · Source : projectforge-business/src/main/java/org/projectforge/business/ldap/LdapSambaAccountsUtils.java <span style="color:#888">141 lignes · 70 code · 60 commentaires · 11 vides</span></div>
+<div class="c">Méthodes utilitaires statiques pour LdapSambaAccounts. Ensemble de fonctions pures sans effets secondaires, fournissant des opérations d’assistance courantes.</div>
+<h2>Structure du code</h2>
+<p>Paquetage : <code>org.projectforge.business.ldap</code></p>
+<p>Classes : <code>LdapSambaAccountsUtils</code></p>
+<p>Méthodes (5) : <code>getNextFreeSambaSIDNumber</code>, <code>isGivenNumberFree</code>, <code>isGivenNumberFree</code>, <code>setDefaultValues</code>, <code>setDefaultValues</code></p>
+<p>Champs (2) : <code>ldapService</code>, <code>userGroupCache</code></p>
+<p>Importations : 6 paquetages</p>
+<h2>Code source (abrégé)</h2>
+<pre>
+package org.projectforge.business.ldap;
+
+import org.projectforge.business.user.UserGroupCache;
+import org.projectforge.framework.persistence.user.entities.PFUserDO;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
+
+import java.util.Collection;
+import java.util.Objects;
+
+/**
+ * @author Kai Reinhard (k.reinhard@micromata.de)
+ */
+@Service
+public class LdapSambaAccountsUtils {
+  private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(LdapSambaAccountsUtils.class);
+
+  @Autowired
+  private LdapService ldapService;
+
+  @Autowired
+  private UserGroupCache userGroupCache;
+
+  /**
+   * Récupère tous les numéros uid donnés de tous les utilisateurs ProjectForge, y compris les utilisateurs supprimés,
+   * et obtient le numéro libre le plus élevé suivant. Le numéro est 1000 si aucun numéro uid (avec une valeur supérieure à 999) n’est trouvé.
+   */
+  public int getNextFreeSambaSIDNumber() {
+    final Collection&lt;PFUserDO&gt; allUsers = userGroupCache.getAllUsers();
+    int currentMaxNumber = 999;
+    for (final PFUserDO user : allUsers) {
+      final LdapUserValues ldapUserValues = PFUserDOConverter.readLdapUserValues(user.getLdapValues());
+      if (ldapUserValues == null) {
+        continue;
+      }
+      if (ldapUserValues.getSambaSIDNumber() != null
+          &amp;&amp; ldapUserValues.getSambaSIDNumber() &gt; currentMaxNumber) {
+        currentMaxNumber = ldapUserValues.getUidNumber();
+      }
+    }
+    return currentMaxNumber + 1;
+  }
+
+  /**
+   * Pour éviter les doublons de uidNumbers.
+   *
+   * @param currentUser
+   * @param sambaSIDNumber
+   * @return Retourne true si un utilisateur (y compris les utilisateurs supprimés) autre que l’utilisateur donné possède le uidNumber donné, sinon false.
+   */
+  public boolean isGivenNumberFree(final PFUserDO currentUser, final Integer sambaSIDNumber) {
+    return isGivenNumberFree(currentUser.getId(), sambaSIDNumber);
+  }
+
+  /**
+   * Pour éviter les doublons de uidNumbers.
+   *
+   * @param currentUserId
+   * @param sambaSIDNumber
+   * @return Retourne true si un utilisateur (y compris les utilisateurs supprimés) autre que l’utilisateur donné possède le uidNumber donné, sinon false.
+   */
+  public boolean isGivenNumberFree(final Long currentUserId, final Integer sambaSIDNumber) {
+    if (sambaSIDNumber == null) {
+      // Rien à vérifier.
+      return true;
+    }
+    final Collection&lt;PFUserDO&gt; allUsers = userGroupCache.getAllUsers();
+    for (final PFUserDO user : allUsers) {
+      final LdapUserValues ldapUserValues = PFUserDOConverter.readLdapUserValues(user.getLdapValues());
+      if (Objects.equals(user.getId(), currentUserId)) {
+        // L’utilisateur actuel peut déjà avoir le sambaSIDNumber donné, donc ignorer cette entrée.
+        continue;
+      }
+      if (ldapUserValues != null
+          &amp;&amp; ldapUserValues.getSambaSIDNumber() != null
+          &amp;&amp; ldapUserValues.getSambaSIDNumber().intValue() == sambaSIDNumber) {
+        // Le numéro n’est pas libre.
+        log.info(&quot;Le getSambaSIDNumber (compte samba) &#x27;&quot; + sambaSIDNumber + &quot;&#x27; est déjà occupé par l’utilisateur : &quot; + user);
+        return false;
+      }
+    }
+    return true;
+  }
+
+  /**
+   * Définit le prochain SambaSID libre ou, s’il est libre et donné, le même identifiant que le posix UID.
+   *
+   * @param ldapUserValues
+   * @param user
+   */
+  public void setDefaultValues(final LdapUserValues ldapUserValues, final PFUserDO user) {
+    setDefaultValues(ldapUserValues, user.getId());
+  }
+
+  /**
+   * Définit le prochain SambaSID libre ou, s’il est libre et donné, le même identifiant que le posix UID.
+   *
+   * @param ldapUserValues
+   * @param userId
+   */
+  public void setDefaultValues(final LdapUserValues ldapUserValues, final Long userId) {
+    final LdapConfig ldapConfig = ldapService.getLdapConfig();
+    LdapSambaAccountsConfig ldapSambaAccountsConfig = ldapConfig != null ? ldapConfig.getSambaAccountsConfig() : null;
+    if (ldapSambaAccountsConfig == null) {
+      ldapSambaAccountsConfig = new LdapSambaAccountsConfig();
+    }
+    if (ldapUserValues.getUidNumber() != null &amp;&amp; isGivenNumberFree(userId, ldapUserValues.getUidNumber())) {
+      ldapUserValues.setSambaSIDNumber(ldapUserValues.getUidNumber());
+    } else {
+      ldapUserValues.setSambaSIDNumber(getNextFreeSambaSIDNumber());
+    }
+    if (ldapSambaAccountsConfig.getDefaultSambaPrimaryGroupSID() != null) {
+      ldapUserValues.setSambaPrimaryGroupSIDNumber(ldapSambaAccountsConfig.getDefaultSambaPrimaryGroupSID());
+    }
+  }
+}</pre>
+
+<h2>Historique Git</h2><div class="hist"><pre>868d6abb7 2025 -> 2026
+63081666f En-têtes des fichiers source : 2024 -> 2025.
+4c04cfd65 CHANGEMENT-MAJEUR ! Migration des identifiants integer vers Long (y compris les clés étrangères, etc.)
+b6092df09 Copyright 2023 -> 2024
+ab45d51fa Copyright 2001-2022 -> 2001-2023.</pre></div>
+</body></html>

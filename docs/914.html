@@ -3,108 +3,59 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>#914: EingangsrechnungDao.kt</title>
+<title>#914: CurrencyPairDao.kt</title>
 <style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:2em;color:#444}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}</style>
 </head>
 <body>
-<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="913.html">← Prev</a> · <a href="915.html">Next →</a></div>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="913.html">← Prev</a> · <a href="915.html">Next →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/kotlin/org/projectforge/business/fibu/CurrencyPairDao.kt" target="_blank" title="View source on GitHub">📄 source</a></div>
 
-<h1>#914: <code>EingangsrechnungDao.kt</code></h1>
+<h1>#914: <code>CurrencyPairDao.kt</code></h1>
 
-<div class="meta">
+<div class="meta"><code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/CurrencyPairDao.kt</code> 
   <strong>Type:</strong> DAO (Data Access Object) / Spring Service<br>
   <strong>Package:</strong> <code>org.projectforge.business.fibu</code><br>
-  <strong>Path:</strong> <code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/EingangsrechnungDao.kt</code><br>
+  <strong>Path:</strong> <code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/CurrencyPairDao.kt</code><br>
   <strong>Author:</strong> Kai Reinhard (k.reinhard@micromata.de)
-</div>
+ <span style="color:#888">87 lines · 45 code · 30 comments · 12 blank</span></div>
 
 <div class="c">
-  <p>DAO for <strong>EingangsrechnungDO</strong> (incoming invoices). Extends <code>BaseDao&lt;EingangsrechnungDO&gt;</code> providing CRUD, filtered listing, history merging, and payment-state filtering. Collaborates with <code>EingangsrechnungCache</code> for high-performance payment status queries and <code>CurrencyConversionService</code> for multi-currency statistics.</p>
+  <p>DAO for <strong>CurrencyPairDO</strong> entities. Extends <code>BaseDao&lt;CurrencyPairDO&gt;</code>, inheriting standard CRUD operations, access control, and search. Provides merged history by also loading history entries from child <code>CurrencyConversionRateDO</code> records.</p>
 </div>
 
 <h2>Architecture</h2>
 
 <h3>Inheritance</h3>
 <ul>
-  <li><strong>BaseDao&lt;EingangsrechnungDO&gt;</strong> — standard DAO with filtering, sorting, history, access checks</li>
+  <li><strong>BaseDao&lt;CurrencyPairDO&gt;</strong> — standard DAO with filtering, sorting, history, access checks</li>
 </ul>
 
 <h3>Dependencies</h3>
 <table>
   <tr><th>Dependency</th><th>Role</th></tr>
-  <tr><td><code>EingangsrechnungCache</code></td><td>Cached payment-status lookup via <code>RechnungJdbcService</code></td></tr>
-  <tr><td><code>KontoDao</code></td><td>Sets account (Konto) on incoming invoice records</td></tr>
-  <tr><td><code>CurrencyConversionService</code></td><td>Currency conversion for statistics</td></tr>
-  <tr><td><code>ConfigurationService</code></td><td>System default currency for statistics</td></tr>
+  <tr><td><code>CurrencyConversionService</code></td><td>Used in <code>addOwnHistoryEntries()</code> to load all child rates for history merging</td></tr>
 </table>
 
-<h3>Access Control</h3>
-<p>Guarded by <code>UserRightId.FIBU_EINGANGSRECHNUNGEN</code>, set in <code>init</code>.</p>
-
-<h2>Key Methods</h2>
-
-<h3>Year Range</h3>
-<p>The <code>years</code> property executes a named query <code>EingangsrechnungDO.SELECT_MIN_MAX_DATE</code> (selecting <code>min(datum)</code> and <code>max(datum)</code>) and converts the result to an <code>IntArray</code> via <code>getYearsByTupleOfLocalDate()</code>.</p>
-
-<h3>Statistics</h3>
-<p><code>buildStatistik(list)</code> creates an <code>EingangsrechnungsStatistik</code> accumulator and adds each invoice to it. Before processing, it initializes the static <code>currencyConversionService</code> and <code>configurationService</code> on the shared <code>AbstractRechnungsStatistik</code> base class (companion object dependency injection pattern).</p>
-
-<h3>Konto Assignment</h3>
-<p><code>setKonto(eingangsrechnung, kontoId)</code> looks up the <code>KontoDO</code> via <code>kontoDao.findOrLoad()</code> and assigns it. If <code>kontoId</code> is null, the konto is set to null.</p>
-
-<h3>Filtered Listing (<code>select</code>)</h3>
-<p>Wraps the filter in an <code>EingangsrechnungListFilter</code> if needed. Creates a <code>QueryFilter</code> with date restrictions and payment type filters. Orders by <code>datum DESC</code>, then <code>kreditor DESC</code>. After querying, applies <strong>payment-state post-filtering</strong> based on <code>RechnungInfo</code> from the cache:</p>
-<ul>
-  <li><code>isShowUnbezahlt</code> — filter to unpaid invoices</li>
-  <li><code>isShowBezahlt</code> — filter to paid invoices</li>
-  <li><code>isShowUeberFaellig</code> — filter to overdue invoices</li>
-</ul>
-
-<h3>Lifecycle Hooks</h3>
-<table>
-  <tr><th>Hook</th><th>Behavior</th></tr>
-  <tr><td><code>afterLoad(obj)</code></td><td>Sets <code>obj.info</code> from cache via <code>rechnungCache.ensureRechnungInfo(obj)</code></td></tr>
-  <tr><td><code>onInsertOrModify(obj, opType)</code></td><td>Delegates to <code>AuftragAndRechnungDaoHelper.onSaveOrModify()</code>; scales <code>zahlBetrag</code> to 2 decimal places; calls <code>recalculate()</code>; ensures at least one position exists (throws <code>UserException</code> if empty); removes trailing empty positions; writes UI status to XML.</td></tr>
-  <tr><td><code>afterInsertOrModify(obj, opType)</code></td><td>Calls <code>rechnungCache.update(obj)</code> to refresh the cache</td></tr>
-</table>
-
-<h3>History Merging</h3>
-<p><code>addOwnHistoryEntries()</code> iterates over all positions and their cost assignments (<code>KostZuweisungDO</code>), merging each child's history into the parent context. <code>getHistoryPropertyPrefix()</code> provides contextual prefixes: position numbers and <code>"kost #N"</code> for cost assignments.</p>
-
-<h3>Additional Queries</h3>
-<table>
-  <tr><th>Method</th><th>Description</th></tr>
-  <tr><td><code>findNewestByKreditor(kreditor)</code></td><td>Finds the most recent (by <code>created</code> desc) non-deleted invoice for a given creditor</td></tr>
-  <tr><td><code>getByDateRange(from, until)</code></td><td>Finds all non-deleted invoices in a date range, sorted by date and creditor. Used for import reconciliation.</td></tr>
-  <tr><td><code>contains(idSet, entry)</code></td><td>Checks if any position id is in the given set (for bulk selection)</td></tr>
-</table>
-
-<h3>Additional Search Fields</h3>
-<p>Includes <code>"positionen.text"</code> in search queries, allowing full-text search across invoice line items.</p>
-
-<h3>Additional History Search DOs</h3>
-<p>Includes <code>EingangsrechnungsPositionDO</code> for cross-entity history searches.</p>
+<h3>Default Sorting</h3>
+<p>By <code>sourceCurrency</code> then <code>targetCurrency</code>.</p>
 
 <h3>Autocompletion</h3>
-<p>Enabled for <code>"kreditor"</code> (creditor name).</p>
+<p>Enabled for <code>sourceCurrency</code> and <code>targetCurrency</code> fields (3-letter currency codes).</p>
+
+<h3>History Merging</h3>
+<p><code>addOwnHistoryEntries()</code> iterates over all child <code>CurrencyConversionRateDO</code> entries (including deleted) and merges their history into the parent's history context. This provides a unified audit trail showing both pair-level and rate-level changes.</p>
+
+<h3>Access Control</h3>
+<p>Guarded by <code>UserRightId.FIBU_CURRENCY_CONVERSION</code>, set in <code>init</code>.</p>
+
+<h3>Factory</h3>
+<p><code>newInstance()</code> returns a bare <code>CurrencyPairDO()</code>.</p>
 
 <h2>Git History</h2>
 <div class="hist"><pre>
 868d6abb7 2025 -> 2026
-6be9c2b84 WIP: currency conversion with Claude Code.
-363d3b836 WIP: Import of creditor invoices.
-63081666f Source file headers: 2024-> 2025.
-db2599ab8 History in orderbook, incming/outgoing invoices and projects.
-18bf92219 WIP: History entries handling. VisitorBookDao.
-b71b5073d Migration stuff in progress... (all tests of all packages: OK).
-bbc198d03 Migration stuff in progress... (all tests of all packages: OK).
-ba2479571 Migration stuff in progress...
-b47c21af6 Refactored caching and calculations with invoices (not yet finished)
-9e3c523c7 Migration stuff in progress... (all tests of all packages: OK).
-c97135a57 Migration stuff in progress...
-d18c899b5 Refactoring of history entries, FlatDisplayHistoryEntries and DisplayHistoryEntries...
-b79a1edca Migration stuff in progress... (all tests of all packages: OK).
-d67bce18b Migration stuff in progress...
+75ea9dc1a WIP: currency conversion with Claude Code.
+357ebee61 WIP: currency conversion with Claude Code.
+bd69407de Initial revision with Claude Code.
 </pre></div>
 
 </body>

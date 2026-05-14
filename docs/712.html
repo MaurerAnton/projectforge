@@ -1,35 +1,84 @@
 <!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>#712</title>
 <style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:2em;color:#444}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}.warn{background:#fff3cd;border-left:3px solid #ffc107;padding:.5em 1em;margin:1em 0}.tip{background:#d4edda;border-left:3px solid #28a745;padding:.5em 1em;margin:1em 0}</style></head>
-<body><div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="711.html">← Prev</a> · <a href="713.html">Next →</a></div>
-<h1>#712: <code>CellHolder.java</code></h1>
-<div class="meta">Data Holder, projectforge-business/src/main/java/org/projectforge/framework/renderer/CellHolder.java</div>
-<div class="c">Simple bean for storing a single table cell's content, colspan, and rowspan values. Used by the XSL-FO / PDF rendering pipeline to compose tabular data.</div>
+<body><div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="711.html">← Prev</a> · <a href="713.html">Next →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/java/org/projectforge/framework/persistence/xstream/XStreamMarshallingStrategy.java" target="_blank" title="View source on GitHub">📄 source</a></div>
+<h1>#712: <code>XStreamMarshallingStrategy.java</code></h1>
+<div class="meta"><code>projectforge-business/src/main/java/org/projectforge/framework/persistence/xstream/XStreamMarshallingStrategy.java</code> XStream marshalling strategy — factory that wires Hibernate proxy-aware XPath marshalling into XStream's tree serialization pipeline, <code>projectforge-business/src/main/java/org/projectforge/framework/persistence/xstream/XStreamMarshallingStrategy.java</code> <span style="color:#888">49 lines · 18 code · 25 comments · 6 blank</span></div>
+<div class="c">Extends XStream's <code>ReferenceByXPathMarshallingStrategy</code> to serve as the top-level plumbing that connects the Hibernate proxy-aware marshaller to XStream's serialization engine. This is the strategy class that XStream is configured to use — it overrides the factory method <code>createMarshallingContext()</code> to replace the default XPath marshaller with <a href="707.html">HibernateProxyXPathMarshaller</a>, injecting Hibernate proxy awareness into every XStream serialization operation. This is the single configuration point that makes the entire XStream+Hibernate bridge layer operational. Without this strategy, none of the converter, mapper, or marshaller classes in this package would be activated during XStream serialization.</div>
 
-<h2>Structure</h2>
-<p>A plain Java bean (POJO) with three fields:</p>
-<table>
-<tr><th>Field</th><th>Type</th><th>Default</th><th>Description</th></tr>
-<tr><td><code>content</code></td><td>String</td><td>null ("" if constructed with null)</td><td>The textual content of the cell. <code>toString()</code> returns this directly.</td></tr>
-<tr><td><code>colspan</code></td><td>int</td><td>1</td><td>Number of columns this cell spans.</td></tr>
-<tr><td><code>rowspan</code></td><td>int</td><td>1</td><td>Number of rows this cell spans.</td></tr>
-</table>
+<h2>Architecture</h2>
 
-<h3>Constructors</h3>
+<h3>Class Hierarchy</h3>
+<pre>MarshallingStrategy (interface)
+  └── AbstractTreeMarshallingStrategy
+       ├── ReferenceByXPathMarshallingStrategy  (XPath-based circular reference handling)
+       │    └── XStreamMarshallingStrategy       (this class — swaps in HibernateProxyXPathMarshaller)
+       └── ReferenceByIdMarshallingStrategy      (ID/IDREF-based circular reference handling)
+            └── ProxyIdRefMarshallingStrategy     (<a href="709.html">#709</a> — swaps in ProxyIdRefMarshaller)</pre>
+
+<h3>Constructor</h3>
+<pre>public XStreamMarshallingStrategy(int mode) {
+    super(mode);
+}</pre>
+<p>Accepts an XPath reference mode constant (<code>RELATIVE</code>, <code>ABSOLUTE</code>, <code>SINGLE_NODE</code>, etc.) and passes it to the superclass. The mode controls how XPath expressions are generated for back-references in circular entity graphs.</p>
+
+<h3>createMarshallingContext() — The Factory Method</h3>
+<pre>@Override
+protected TreeMarshaller createMarshallingContext(
+    HierarchicalStreamWriter writer,
+    ConverterLookup converterLookup,
+    Mapper mapper)
+{
+    return new HibernateProxyXPathMarshaller(writer, converterLookup, mapper, RELATIVE);
+}</pre>
+
+<p>This is the single overridden method — a textbook Template Method pattern. The superclass <code>ReferenceByXPathMarshallingStrategy</code> calls <code>createMarshallingContext()</code> whenever it needs a <code>TreeMarshaller</code> to serialize an object graph. Instead of returning the default <code>ReferenceByXPathMarshaller</code>, this override returns a <a href="707.html">HibernateProxyXPathMarshaller</a> instance.</p>
+
+<div class="warn"><strong>Hardcoded RELATIVE mode:</strong> Despite the constructor accepting a <code>mode</code> parameter, the <code>createMarshallingContext()</code> override hardcodes <code>RELATIVE</code> rather than using the instance's mode. This means the constructor parameter is effectively ignored for marshaller creation. If a different XPath mode were needed, this class would need modification or a subclass with a different override.</div>
+
+<h2>Integration Points</h2>
 <ul>
-<li><strong>No-arg</strong>: Fields remain at defaults.</li>
-<li><strong><code>CellHolder(String content)</code></strong>: Sets content; if the argument is null, content becomes empty string.</li>
+  <li><strong>XStream configuration:</strong> Set on an XStream instance via <code>xstream.setMarshallingStrategy(new XStreamMarshallingStrategy(ReferenceByXPathMarshallingStrategy.RELATIVE))</code>. This is typically done once during application startup when configuring the XStream instance for XML export.</li>
+  <li><strong>Creates:</strong> <a href="707.html">HibernateProxyXPathMarshaller</a> as the marshaller for all serialization operations.</li>
+  <li><strong>Sibling strategy:</strong> <a href="709.html">ProxyIdRefMarshallingStrategy</a> — provides the same proxy-aware marshalling but using ID/IDREF attributes instead of XPath references. Both strategies serve the same purpose but use different XML reference mechanisms. The application can choose between them based on XML format preferences.</li>
+  <li><strong>References JIRA XSTR-226:</strong> The source comment links to the Codehaus JIRA issue that documented the original XStream/Hibernate proxy incompatibility.</li>
 </ul>
 
-<h3>Notable Behavior</h3>
-<p>The null-safe constructor ensures <code>getContent()</code> never returns null, preventing NPEs in template rendering. Standard getters/setters are provided for all fields. No validation is performed on colspan/rowspan values.</p>
+<h2>Strategy Comparison: XPath vs. ID/IDREF</h2>
+<table>
+<tr><th></th><th><code>XStreamMarshallingStrategy</code> (this class)</th><th><a href="709.html">ProxyIdRefMarshallingStrategy</a></th></tr>
+<tr><td>Reference mechanism</td><td>XPath expressions (e.g., <code>reference="../../task"</code>)</td><td>ID/IDREF attributes (e.g., <code>id="1"</code>, <code>reference="1"</code>)</td></tr>
+<tr><td>Depends on document structure</td><td>Yes — XPath paths break if XML structure changes</td><td>No — IDs are document-structure independent</td></tr>
+<tr><td>Human readability</td><td>Lower — XPath paths are structural, not semantic</td><td>Higher — sequential numeric IDs are easy to follow</td></tr>
+<tr><td>Proxy unwrapping</td><td>In marshaller only (<a href="707.html">HibernateProxyXPathMarshaller</a>)</td><td>In marshaller (<a href="708.html">ProxyIdRefMarshaller</a>) + CGLIB stripping</td></tr>
+<tr><td>Spring CGLIB support</td><td>No</td><td>Yes (strips <code>Enhancer</code> proxies)</td></tr>
+</table>
 
-<h2>Git History</h2><div class="hist"><pre>868d6abb7 2026-01-01 2025 -> 2026
-63081666f 2025-01-01 Source file headers: 2024-> 2025.
-b6092df09 2024-01-09 Copyright 2023 -> 2024
-ab45d51fa 2023-01-01 Copyright 2001-2022 -> 2001-2023.
-5f7ef41b8 2022-02-18 Copyright 2021 -> 2022
-ceb63e8a1 2021-03-08 Source code header: (C) 2001-2021.
-7c79f1922 2020-01-03 Copyright of source header -> 2020.
-dd5ca38ac 2019-06-07 CopyRight of all java file-header updated or created.
-9ebb88522 2016-07-18 Initial commit</pre></div>
+<h2>How the Entire Bridge Layer Fits Together</h2>
+<p>When XStream serializes a JPA entity graph in ProjectForge, the following pipeline executes:</p>
+<ol>
+  <li><strong><code>XStreamMarshallingStrategy</code></strong> (this class) is invoked to create a marshalling context.</li>
+  <li>It instantiates <strong><a href="707.html">HibernateProxyXPathMarshaller</a></strong> as the tree marshaller.</li>
+  <li>As the marshaller traverses the object graph, it calls <code>convertAnother()</code>, which unwraps <strong>HibernateProxy</strong> instances before delegating to XStream's reference tracking.</li>
+  <li>When XStream needs to convert a specific class, <strong><a href="704.html">HibernateMapper</a></strong> resolves the class name (substituting proxy names with real entity names, and Hibernate collection names with JDK collection names).</li>
+  <li>When XStream encounters a <code>PersistentCollection</code>, <strong><a href="702.html">HibernateCollectionConverter</a></strong> forces initialization and delegates to the appropriate JDK collection converter.</li>
+  <li>When XStream encounters a <code>HibernateProxy</code>, <strong><a href="705.html">HibernateProxyConverter</a></strong> unwraps it to the real entity before serialization.</li>
+</ol>
+
+<h3>Design Decisions & Gotchas</h3>
+<ul>
+  <li><strong>Template Method pattern:</strong> The strategy uses the Template Method pattern — the superclass defines the algorithm (how to marshal an object graph), and this subclass provides the specific <code>TreeMarshaller</code> implementation. This is the canonical XStream extension point for custom marshalling behavior.</li>
+  <li><strong>RELATIVE mode hardcode:</strong> The hardcoded <code>RELATIVE</code> in <code>createMarshallingContext()</code> means the constructor's <code>mode</code> parameter is vestigial. This is likely an oversight or a deliberate decision to ensure proxy-aware marshalling always uses relative XPaths regardless of what callers pass. In practice, <code>RELATIVE</code> is the most robust mode for entity graphs because entity hierarchies can shift during refactoring.</li>
+  <li><strong>Minimal implementation:</strong> This class is only ~20 lines — the real work is delegated to <a href="707.html">HibernateProxyXPathMarshaller</a>. This is a good example of the Single Responsibility Principle: the strategy's job is to wire components together, not to implement marshalling logic.</li>
+  <li><strong>No converters or mappers registered here:</strong> This strategy only deals with the marshaller. Converters (<a href="702.html">HibernateCollectionConverter</a>, <a href="705.html">HibernateProxyConverter</a>) and mappers (<a href="703.html">HibernateCollectionsMapper</a>, <a href="704.html">HibernateMapper</a>) are registered separately on the XStream instance. The strategy does not know about them — they operate independently at their respective layers.</li>
+</ul>
+
+<h2>Git History</h2><div class="hist"><pre>868d6abb7 2025 -> 2026
+63081666f Source file headers: 2024-> 2025.
+b6092df09 Copyright 2023 -> 2024
+ab45d51fa Copyright 2001-2022 -> 2001-2023.
+5f7ef41b8 Copyright 2021 -> 2022
+ceb63e8a1 Source code header: (C) 2001-2021.
+7c79f1922 Copyright of source header -> 2020.
+dd5ca38ac CopyRight of all java file-header updated or created.
+9ebb88522 Initial commit</pre></div>
 </body></html>

@@ -1,9 +1,70 @@
-<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>File #60: BankingServicesRest.kt</title>
-<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333}a{color:#0366d6;text-decoration:none}.meta{background:#f0f0f0;border-radius:6px;padding:1em;margin:1em 0;font-size:.9em}.commentary{margin:1em 0;background:#fff;padding:.5em 1em;border-radius:6px;border-left:4px solid #ddd}code{background:#e8e8e8;border-radius:3px;padding:.1em .3em;font-size:.9em}.nav{font-size:.9em;color:#888;margin-bottom:1em}</style></head>
-<body>
-<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="59.html">← Prev</a> · Next →</div>
-<h1>File #60: <code>BankingServicesRest.kt</code></h1>
-<div class="meta"><p><strong>Path:</strong> <code>./plugins/.../BankingServicesRest.kt</code> · <strong>Source:</strong> <a href="https://github.com/micromata/projectforge/blob/9ed5fbe0f/plugins/org.projectforge.plugins.banking/src/main/kotlin/org/projectforge/plugins/banking/BankingServicesRest.kt">GitHub</a></p></div>
-<div class="commentary"><p>REST endpoint for <strong>bank statement file upload</strong>. Accepts <code>POST /banking/import/{id}</code> with a <code>MultipartFile</code>. Validates via <code>FileCheck.checkFile()</code> (CSV only, max 100MB). Parses CSV with <code>CsvImporter</code>, then delegates to <code>TransactionsImporter</code> for the import workflow. Redirects to the <code>BankAccountRecordImportPageRest</code> preview page. <strong>Excel not yet supported</strong> — throws if <code>.xls</code>/<code>.xlsx</code> detected. Called from the <code>UIDropArea</code> in <a href="50.html">BankAccountPagesRest (#50)</a> line 119.</p></div>
-<div class="nav" style="margin-top:2em;padding-top:1em;border-top:1px solid #ddd"><a href="59.html">← #59</a> · <a href="file-index.html">File index</a></div>
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>#60: BankingPlugin.kt</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:2em;color:#444}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.lang{font-size:.85em;color:#888;float:right}.lang a{color:#888;text-decoration:none;padding:0 .3em}.lang a.active{color:#0366d6;font-weight:600;text-decoration:underline}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}</style></head>
+<body><div class="lang"><a href="60.html" class="active">EN</a> · <a href="60_de.html">DE</a> · <a href="60_ru.html">RU</a> · <a href="60_fr.html">FR</a> · <a href="60_es.html">ES</a></div>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="2467.html">← Prev</a> · <a href="2590.html">Next →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/plugins/org.projectforge.plugins.banking/src/main/kotlin/org/projectforge/plugins/banking/BankingPlugin.kt" target="_blank" title="View source on GitHub">📄 source</a></div>
+<h1>#60: <code>BankingPlugin.kt</code></h1>
+<div class="meta"><code>plugins/org.projectforge.plugins.banking/src/main/kotlin/org/projectforge/plugins/banking/BankingPlugin.kt</code> Type: Kotlin · Role: Plugin Registration · Source: plugins/org.projectforge.plugins.banking/src/main/kotlin/org/projectforge/plugins/banking/BankingPlugin.kt <span style="color:#888">69 lines · 33 code · 28 comments · 8 blank</span></div>
+<div class="c">Plugin registration class extending AbstractPlugin. Declares module name, registers DAOs, menu entries, i18n resources, and checkAccess logic for the Banking plugin.</div>
+<h2>Code Structure</h2>
+<p>Annotations: <code>author</code>, <code>micromata</code></p>
+<p>Classes: <code>BankingPlugin</code></p>
+<p>Supertype(s): <code>AbstractPlugin</code></p>
+<p>Functions (1): <code>initialize</code></p>
+<p>Properties (3): <code>bankAccountDao</code>, <code>menuCreator</code>, <code>RESOURCE_BUNDLE_NAME</code></p>
+<p>Imports: 8 packages</p>
+<p>Package: <code>org.projectforge.plugins.banking</code></p>
+<h2>Source Code (abridged)</h2>
+<pre>
+package org.projectforge.plugins.banking
+
+import mu.KotlinLogging
+import org.projectforge.Constants
+import org.projectforge.menu.builder.MenuCreator
+import org.projectforge.menu.builder.MenuItemDef
+import org.projectforge.menu.builder.MenuItemDefId
+import org.projectforge.plugins.core.AbstractPlugin
+import org.projectforge.plugins.core.PluginAdminService
+import org.projectforge.web.WicketSupport
+
+private val log = KotlinLogging.logger {}
+
+/**
+ *
+ * @author Kai Reinhard (k.reinhard@micromata.de)
+ */
+class BankingPlugin : AbstractPlugin(
+    PluginAdminService.PLUGIN_BANKING_ID,
+    &quot;Banking&quot;,
+    &quot;You may import and browse your bank accounts here.&quot;
+) {
+
+    override fun initialize() {
+        val bankAccountDao = WicketSupport.get(BankAccountDao::class.java)
+        val menuCreator = WicketSupport.get(MenuCreator::class.java)
+        // Register it:
+        register(id, BankAccountDao::class.java, bankAccountDao, &quot;plugins.banking&quot;)
+
+        menuCreator.register(
+            MenuItemDefId.FIBU,
+            MenuItemDef(info.id,
+                &quot;plugins.banking.menu&quot;,
+                &quot;${Constants.REACT_APP_PATH}bankAccount&quot;,
+                checkAccess =
+                { bankAccountDao.hasLoggedInUserSelectAccess(false) }),
+        );
+
+        // All the i18n stuff:
+        addResourceBundle(RESOURCE_BUNDLE_NAME)
+    }
+
+    companion object {
+        const val RESOURCE_BUNDLE_NAME = &quot;BankingI18nResources&quot;
+    }
+}</pre>
+
+<h2>Git History</h2><div class="hist"><pre>868d6abb7 2025 -&gt; 2026
+63081666f Source file headers: 2024-&gt; 2025.
+3785f8347 Migration stuff in progress...
+b6092df09 Copyright 2023 -&gt; 2024
+ab45d51fa Copyright 2001-2022 -&gt; 2001-2023.</pre></div>
 </body></html>

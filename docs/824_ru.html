@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>#824 [RU]</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:2em;color:#444}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.lang{font-size:.85em;color:#888;float:right}.lang a{color:#888;text-decoration:none;padding:0 .3em}.lang a.active{color:#0366d6;font-weight:600;text-decoration:underline}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}</style>
+</head>
+<body>
+<div class="lang"><a href="824.html">EN</a> · <a href="824_de.html">DE</a> · <a href="824_ru.html" class="active">RU</a> · <a href="824_fr.html">FR</a> · <a href="824_es.html">ES</a></div>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Индекс</a> · <a href="file-index.html">← Индекс файлов</a> · <a href="823.html">← Пред.</a> · <a href="825.html">След. →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/kotlin/org/projectforge/business/address/AddressExport.kt" target="_blank" title="Просмотр исходного кода на GitHub">📄 исходник</a></div>
+<h1>#824: <code>AddressExport.kt</code></h1>
+<div class="meta"><code>projectforge-business/src/main/kotlin/org/projectforge/business/address/AddressExport.kt</code> @Service("addressExport") — Сервис экспорта в Excel, <code>projectforge-business/src/main/kotlin/org/projectforge/business/address/AddressExport.kt</code> <span style="color:#888">216 строк · 157 кода · 35 комментариев · 24 пустых</span></div>
+<div class="c">Spring-сервис, который экспортирует данные адресов в книги Excel (<code>.xlsx</code>). Обрабатывает регистрацию столбцов, фильтрацию с контролем доступа и многосекционные объединённые строки заголовков для блоков почтовых, деловых, почтовых и частных адресов.</div>
+
+<h2>Архитектура</h2>
+
+<h3>Иерархия классов</h3>
+<p><code>AddressExport</code> — это <code>открытый</code> класс с аннотацией <code>@Service("addressExport")</code>, предназначенный для расширения плагинами. Плагин маркетинга <code>AddressCampaignValueExport</code> расширяет его, переопределяя <code>registerAdditionalCols()</code>, <code>configureSheet()</code> и <code>handleAddressCampaign()</code> для добавления полей, специфичных для кампаний.</p>
+
+<h3>Регистрация столбцов (<code>registerCols</code>)</h3>
+<p>Регистрирует ~40 столбцов в следующем порядке:</p>
+<ol>
+  <li><strong>Идентификация:</strong> name, firstName, form, title, contactStatus</li>
+  <li><strong>Организация:</strong> organization, division, positionText, communicationLanguage</li>
+  <li><strong>Хук плагина:</strong> <code>registerAdditionalCols()</code> — точка расширения для значений кампаний</li>
+  <li><strong>Контакты:</strong> email, website</li>
+  <li><strong>Почтовый адрес:</strong> addressText, addressText2, zipCode, city, country, state</li>
+  <li><strong>Деловой адрес:</strong> полный блок (авторегистрация через <code>registerAddress(sheet, "")</code>)</li>
+  <li><strong>Почтовый адрес:</strong> полный блок (<code>registerAddress(sheet, "postal")</code>)</li>
+  <li><strong>Телефоны:</strong> businessPhone, fax, mobilePhone</li>
+  <li><strong>Частный:</strong> полный блок адреса, privateEmail, privatePhone, privateMobilePhone</li>
+  <li><strong>Метаданные:</strong> birthday, lastUpdate, comment, fingerprint, publicKey, id</li>
+</ol>
+<p>Константы размеров из <code>ExcelUtils.Size</code> управляют шириной столбцов: STANDARD (по умолчанию), EMAIL, ZIPCODE, PHONENUMBER, EXTRA_LONG.</p>
+
+<h3>Процесс экспорта (<code>export()</code>)</h3>
+<ol>
+  <li><strong>Контроль доступа:</strong> Участники FINANCE_GROUP или MARKETING_GROUP получают все адреса; остальные пользователи получают только свои личные избранные (сопоставление через <code>personalAddressMap</code>).</li>
+  <li><strong>Создание книги:</strong> Использует <code>ExcelWorkbook</code> от Merlin с try-with-resources через <code>.use { }</code>.</li>
+  <li><strong>Настройка листа:</strong> Строка заголовка, строка заголовка с жирным стилем, закрепление панели на (2,2) и автофильтр на строке заголовка.</li>
+  <li><strong>Объединённые области заголовков:</strong> Четыре объединённые области ячеек в строке 0 группируют столбцы почтового, делового, почтового и частного адресов под жирными заголовками секций.</li>
+  <li><strong>Вызов хука:</strong> <code>configureSheet(sheet, *params)</code> для настройки подклассами.</li>
+  <li><strong>Заполнение строк:</strong> Каждый адрес становится строкой Excel. Вызывает <code>ExcelUtils.autoFill()</code> для стандартного сопоставления свойств, вручную заполняет ячейки почтового адреса и язык общения, затем вызывает <code>handleAddressCampaign()</code> для данных кампании.</li>
+</ol>
+
+<h3>Точки расширения</h3>
+<ul>
+  <li><code>registerAdditionalCols(sheet)</code> — Хук плагина для дополнительных столбцов (например, значения кампаний).</li>
+  <li><code>configureSheet(sheet, *params)</code> — Настройка после установки.</li>
+  <li><code>handleAddressCampaign(row, address, *params)</code> — Вставка данных кампании для каждой строки.</li>
+  <li><code>addressCampaignSupported</code> — Логический флаг, по умолчанию false.</li>
+  <li><code>sheetTitle</code> — I18n ключ, по умолчанию <code>"address.addresses"</code>.</li>
+</ul>
+
+<h2>История Git</h2>
+<div class="hist"><pre>868d6abb7 2025 -> 2026
+83cbccb11 ExcelUtils AddressExport: stream.use (потоки не закрывались раньше?)
+78a38ca8f ExcelUtils.createFont и используется всеми подпрограммами создания шрифтов Excel.
+63081666f Заголовки исходных файлов: 2024-> 2025.
+4c04cfd65 MAJOR-CHANGE! Миграция целочисленных id на Long id
+b6092df09 Авторские права 2023 -> 2024
+ab45d51fa Авторские права 2001-2022 -> 2001-2023.
+dce7927f4 заменена устаревшая функция Kotlin decapitalize()
+5f7ef41b8 Авторские права 2021 -> 2022
+e1538819c Merlin: теперь используется Autoclosure для ExcelWorkbook
+91554ea83 Новая версия Merlin.</pre></div>
+</body>
+</html>

@@ -1,6 +1,129 @@
-<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>#258</title><style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333}a{color:#0366d6}.meta{font-size:.9em;margin:1em 0}.nav{font-size:.9em;color:#888;margin-bottom:1em}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}</style></head>
-<body><div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="257.html">← Prev</a> · <a href="259.html">Next →</a></div>
-<h1>#258: <code>SkillEntry.kt</code></h1>
-<div class="meta"><strong>Lines:</strong> 35 · <strong>Type:</strong> Kotlin REST DTO</div>
-<div class="c"><p><strong>Flat DTO for React skill matrix grid.</strong> Fields: <code>id</code>, <code>owner</code> (resolved User DTO), <code>skillName</code>, <code>rating</code>, <code>experience</code>, <code>description</code>, <code>lastUsed</code>, <code>certificate</code>, <code>sinceYear</code>. Used by <a href="259.html">SkillEntryPagesRest</a> to render the matrix grid in the React UI.</div>
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>#258: SkillEntryDO.kt</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:2em;color:#444}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.lang{font-size:.85em;color:#888;float:right}.lang a{color:#888;text-decoration:none;padding:0 .3em}.lang a.active{color:#0366d6;font-weight:600;text-decoration:underline}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}</style></head>
+<body><div class="lang"><a href="258.html" class="active">EN</a> · <a href="258_de.html">DE</a> · <a href="258_ru.html">RU</a> · <a href="258_fr.html">FR</a> · <a href="258_es.html">ES</a></div>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="3053.html">← Prev</a> · <a href="1464.html">Next →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/plugins/org.projectforge.plugins.skillmatrix/src/main/kotlin/org/projectforge/plugins/skillmatrix/SkillEntryDO.kt" target="_blank" title="View source on GitHub">📄 source</a></div>
+<h1>#258: <code>SkillEntryDO.kt</code></h1>
+<div class="meta"><code>plugins/org.projectforge.plugins.skillmatrix/src/main/kotlin/org/projectforge/plugins/skillmatrix/SkillEntryDO.kt</code> Type: Kotlin · Role: Plugin Registration · Source: plugins/org.projectforge.plugins.skillmatrix/src/main/kotlin/org/projectforge/plugins/skillmatrix/SkillEntryDO.kt <span style="color:#888">127 lines · 74 code · 35 comments · 18 blank</span></div>
+<div class="c">JPA entity (Data Object) representing SkillEntry in the database. Maps to a table with Hibernate annotations, JPA relationships, and transient computed properties.</div>
+<h2>Code Structure</h2>
+<p>Annotations: <code>IndexingDependency</code>, <code>Indexed</code>, <code>micromata</code>, <code>FullTextField</code>, <code>Transient</code>, <code>Table</code>, <code>author</code>, <code>PropertyInfo</code>, <code>GenericField</code>, <code>get</code>, <code>IndexedEmbedded</code>, <code>NamedQueries</code>, <code>JsonSerialize</code>, <code>Entity</code></p>
+<p>Classes: <code>SkillEntryDO</code></p>
+<p>Supertype(s): <code>AbstractBaseDO</code></p>
+<p>JPA Entities: <code>SkillEntryDO</code> (table: T_PLUGIN_SKILLMATRIX_ENTRY)</p>
+<p>Functions (1): <code>getNormalizedSkill</code></p>
+<p>Properties (14): <code>id</code>, <code>skill</code>, <code>normalizedSkill</code>, <code>owner</code>, <code>rating</code>, <code>interest</code>, <code>comment</code>, <code>ownerId</code>, <code>FIND_OF_OWNER</code>, <code>DELETE_ALL_OF_USER</code>, <code>MIN_VAL_RATING</code>, <code>MAX_VAL_RATING</code>, <code>MIN_VAL_INTEREST</code>, <code>MAX_VAL_INTEREST</code></p>
+<p>Imports: 10 packages</p>
+<p>Package: <code>org.projectforge.plugins.skillmatrix</code></p>
+<h2>Source Code (abridged)</h2>
+<pre>
+package org.projectforge.plugins.skillmatrix
+
+import com.fasterxml.jackson.databind.annotation.JsonSerialize
+import org.projectforge.common.StringHelper
+import org.projectforge.common.anots.PropertyInfo
+import org.projectforge.Constants
+import org.projectforge.framework.persistence.entities.AbstractBaseDO
+import org.projectforge.framework.persistence.user.entities.PFUserDO
+import jakarta.persistence.*
+import org.hibernate.search.mapper.pojo.automaticindexing.ReindexOnUpdate
+import org.hibernate.search.mapper.pojo.mapping.definition.annotation.*
+import org.projectforge.framework.json.IdOnlySerializer
+
+/**
+ * @author Kai Reinhard (k.reinhard@micromata.de)
+ */
+@Entity
+@Indexed
+@Table(
+  name = &quot;T_PLUGIN_SKILLMATRIX_ENTRY&quot;,
+  indexes = [jakarta.persistence.Index(name = &quot;idx_fk_t_plugin_skillmatrix_entry_owner_fk&quot;, columnList = &quot;owner_fk&quot;)]
+)
+@NamedQueries(
+  NamedQuery(
+    name = SkillEntryDO.FIND_OF_OWNER,
+    query = &quot;from SkillEntryDO where owner.id=:ownerId and deleted=false&quot;
+  ),
+  NamedQuery(
+    name = SkillEntryDO.DELETE_ALL_OF_USER,
+    query = &quot;delete from SkillEntryDO where owner.id=:userId&quot;
+  ),
+)
+open class SkillEntryDO : AbstractBaseDO&lt;Long&gt;() {
+
+  @get:Column(name = &quot;pk&quot;)
+  @get:GeneratedValue(strategy = GenerationType.SEQUENCE, generator = &quot;hibernate_sequence&quot;)
+  @get:Id
+  @PropertyInfo(i18nKey = &quot;id&quot;)
+  override var id: Long? = null
+
+  @PropertyInfo(i18nKey = &quot;plugins.skillmatrix.skill&quot;)
+  @FullTextField
+  @get:Column(length = 255, nullable = false)
+  open var skill: String? = null
+
+  @get:Transient
+  val normalizedSkill: String
+    get() = getNormalizedSkill(skill)
+
+  /**
+   * Don&#x27;t index this field (due to privacy protection). No one should filter all skills of one user by simply entering user&#x27;s name into the
+   * search field.
+   */
+  @PropertyInfo(i18nKey = &quot;plugins.skillmatrix.owner&quot;)
+  @IndexedEmbedded(includeDepth = 1)
+  @IndexingDependency(reindexOnUpdate = ReindexOnUpdate.SHALLOW)
+  @get:ManyToOne(fetch = FetchType.LAZY)
+  @get:JoinColumn(name = &quot;owner_fk&quot;)
+  @JsonSerialize(using = IdOnlySerializer::class)
+  open var owner: PFUserDO? = null
+
+  /**
+   * 1 - basic knowledge, 2 - established knowledge, 3 - expert knowledge
+   */
+  @PropertyInfo(i18nKey = &quot;plugins.skillmatrix.rating&quot;)
+  @GenericField
+  @get:Column
+  open var rating: Int? = null
+
+  /**
+   * 1 - interested, 2 - vested interest, 3 - going crazy
+   */
+  @PropertyInfo(i18nKey = &quot;plugins.skillmatrix.interest&quot;)
+  @GenericField
+  @get:Column
+  open var interest: Int? = null
+
+  @PropertyInfo(i18nKey = &quot;comment&quot;)
+  @FullTextField
+  @get:Column(length = Constants.LENGTH_COMMENT)
+  open var comment: String? = null
+
+  val ownerId: Long?
+    @Transient
+    get() = owner?.id
+
+  companion object {
+    const val FIND_OF_OWNER = &quot;SkillEntryDO_FindSkillsOfOwner&quot;
+
+    internal const val DELETE_ALL_OF_USER = &quot;SkillEntryDO_DeleteAllOfUser&quot;
+
+    const val MIN_VAL_RATING = 0
+
+    const val MAX_VAL_RATING = 3
+
+    const val MIN_VAL_INTEREST = 0
+
+    const val MAX_VAL_INTEREST = 3
+
+    fun getNormalizedSkill(skill: String?): String {
+      return StringHelper.normalize(skill, true)!!
+    }
+  }
+}</pre>
+
+<h2>Git History</h2><div class="hist"><pre>868d6abb7 2025 -&gt; 2026
+63081666f Source file headers: 2024-&gt; 2025.
+0237d5eba Json serialization refactored: IdOnlySerializer and IdsOnlySerializer introduced.
+44253baee WIP: Setup of ProjectForge...
+66ec668f6 Migration stuff in progress...</pre></div>
 </body></html>

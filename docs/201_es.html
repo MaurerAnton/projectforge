@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="es"><head><meta charset="utf-8"><title>#201: AddressCampaignValueMultiSelectedPageRest.kt [ES]</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:2em;color:#444}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.lang{font-size:.85em;color:#888;float:right}.lang a{color:#888;text-decoration:none;padding:0 .3em}.lang a.active{color:#0366d6;font-weight:600;text-decoration:underline}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}</style></head>
+<body><div class="lang"><a href="201.html">EN</a> · <a href="201_de.html">DE</a> · <a href="201_ru.html">RU</a> · <a href="201_fr.html">FR</a> · <a href="201_es.html" class="active">ES</a></div>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Índice</a> · <a href="file-index.html">← Índice de archivos</a> · <a href="652.html">← Anterior</a> · <a href="353.html">Siguiente →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/plugins/org.projectforge.plugins.marketing/src/main/kotlin/org/projectforge/plugins/marketing/rest/AddressCampaignValueMultiSelectedPageRest.kt" target="_blank" title="Ver fuente en GitHub">📄 fuente</a></div>
+<h1>#201: <code>AddressCampaignValueMultiSelectedPageRest.kt</code></h1>
+<div class="meta"><code>plugins/org.projectforge.plugins.marketing/src/main/kotlin/org/projectforge/plugins/marketing/rest/AddressCampaignValueMultiSelectedPageRest.kt</code> Tipo: Kotlin · Rol: Registro de Plugin · Fuente: plugins/org.projectforge.plugins.marketing/src/main/kotlin/org/projectforge/plugins/marketing/rest/AddressCampaignValueMultiSelectedPageRest.kt <span style="color:#888">229 líneas · 172 código · 35 comentarios · 22 en blanco</span></div>
+<div class="c">Endpoint de la API REST para AddressCampaignValueMultiSelected. Maneja solicitudes HTTP y devuelve respuestas JSON para el frontend React.</div>
+<h2>Estructura del Código</h2>
+<p>Anotaciones: <code>RequestMapping</code>, <code>PostConstruct</code>, <code>RestController</code>, <code>Autowired</code></p>
+<p>Clases: <code>AddressCampaignValueMultiSelectedPageRest</code></p>
+<p>Super-tipo(s): <code>AbstractMultiSelectedPage</code></p>
+<p>Funciones (5): <code>getId</code>, <code>getTitleKey</code>, <code>postConstruct</code>, <code>fillForm</code>, <code>proceedMassUpdate</code></p>
+<p>Propiedades (18): <code>addressDao</code>, <code>addressCampaignValueDao</code>, <code>addressCampaignValuePagesRest</code>, <code>layoutContext</code>, <code>lc</code>, <code>addressCampaign</code>, <code>values</code>, <code>params</code>, <code>addressCampaign</code>, <code>addressCampaignDO</code>, <code>realCampaignValueIds</code>, <code>addressIdsFromNegative</code>, <code>longId</code>, <code>existingCampaignValues</code>, <code>addressCampaignValue</code>, <code>addresses</code>, <code>addressCampaignValueDO</code>, <code>addressCampaignValue</code></p>
+<p>Importaciones: 17 paquetes</p>
+<p>Paquete: <code>org.projectforge.plugins.marketing.rest</code></p>
+<h2>Código Fuente (resumido)</h2>
+<pre>
+package org.projectforge.plugins.marketing.rest
+
+import jakarta.annotation.PostConstruct
+import jakarta.servlet.http.HttpServletRequest
+import org.projectforge.business.address.AddressDao
+import org.projectforge.framework.persistence.api.EntityCopyStatus
+import org.projectforge.plugins.marketing.AddressCampaignValueDO
+import org.projectforge.plugins.marketing.AddressCampaignValueDao
+import org.projectforge.plugins.marketing.dto.AddressCampaignValue
+import org.projectforge.rest.config.Rest
+import org.projectforge.rest.multiselect.AbstractMultiSelectedPage
+import org.projectforge.rest.multiselect.MassUpdateContext
+import org.projectforge.rest.multiselect.MassUpdateParameter
+import org.projectforge.ui.*
+import org.springframework.beans.factory.annotation.Autowired
+import org.springframework.http.ResponseEntity
+import org.springframework.web.bind.annotation.RequestMapping
+import org.springframework.web.bind.annotation.RestController
+import java.io.Serializable
+
+
+/**
+ * Actualización masiva después de la selección.
+ */
+@RestController
+@RequestMapping(&quot;${Rest.URL}/addressCampaignValue${AbstractMultiSelectedPage.URL_SUFFIX_SELECTED}&quot;)
+class AddressCampaignValueMultiSelectedPageRest : AbstractMultiSelectedPage&lt;AddressCampaignValue&gt;() {
+    @Autowired
+    private lateinit var addressDao: AddressDao
+
+    @Autowired
+    private lateinit var addressCampaignValueDao: AddressCampaignValueDao
+
+    @Autowired
+    private lateinit var addressCampaignValuePagesRest: AddressCampaignValuePagesRest
+
+    override val layoutContext: LayoutContext = LayoutContext(AddressCampaignValueDO::class.java)
+
+    override fun getId(obj: AddressCampaignValue): Long {
+        return obj.id ?: obj.addressId ?: -1
+    }
+
+    override fun getTitleKey(): String {
+        return &quot;plugins.marketing.addressCampaignValue.multiselected.title&quot;
+    }
+
+    @PostConstruct
+    private fun postConstruct() {
+        pagesRest = addressCampaignValuePagesRest
+    }
+
+    override fun fillForm(
+        request: HttpServletRequest,
+        layout: UILayout,
+        massUpdateData: MutableMap&lt;String, MassUpdateParameter&gt;,
+        selectedIds: Collection&lt;Serializable&gt;?,
+        variables: MutableMap&lt;String, Any&gt;,
+    ) {
+        /*
+              // Encabezado
+          gridBuilder.newFormHeading(
+              getString(&quot;plugins.marketing.addressCampaignValue&quot;) + &quot;: &quot; + data.getAddressCampaign().getTitle());
+
+         */
+        val lc = LayoutContext(AddressCampaignValueDO::class.java)
+
+        val addressCampaign = addressCampaignValuePagesRest.getAddressCampaign(request)
+        if (addressCampaign != null) {
+            layout.add(UIReadOnlyField(label = &quot;plugins.marketing.addressCampaign&quot;, value = addressCampaign.title))
+        }
+        val values = addressCampaign?.values?.map { UISelectValue(it, it) }
+        layout.add(
+            createInputFieldRow(
+                &quot;value&quot;,
+                UISelect(&quot;value.textValue&quot;, values = values),
+                massUpdateData,
+                showDeleteOption = true
+            )
+        )
+        createAndAddFields(lc, massUpdateData, layout, &quot;comment&quot;, showAppendOption = true)
+    }
+
+    override fun proceedMassUpdate(
+        request: HttpServletRequest,
+        selectedIds: Collection&lt;Serializable&gt;,
+        massUpdateContext: MassUpdateContext&lt;AddressCampaignValue&gt;,
+    ): ResponseEntity&lt;*&gt;? {
+        val params = massUpdateContext.massUpdateParams
+        val addressCampaign = addressCampaignValuePagesRest.getAddressCampaign(request)
+        params[&quot;value&quot;]?.let { param -&gt;
+            param.textValue?.let { value -&gt;
+                if (!value.isEmpty() &amp;&amp; addressCampaign?.values?.contains(value) != true) {
+                    return showValidationErrors(
+                        ValidationError(
+                            &quot;plugins.marketing.addressCampaignValue.error.unknownValue&quot;,
+                            &quot;value.textValue&quot;
+                        )
+                    )
+                }
+            }
+        }
+        val addressCampaignDO = addressCampaignValuePagesRest.getAddressCampaignDO(request)
+        if (addressCampaignDO == null) {
+            return showValidationErrors(
+                ValidationError(&quot;plugins.marketing.addressCampaignValue.error.addressOrCampaignNotGiven&quot;)
+            )
+        }
+
+        // Dividir IDs seleccionados en positivos (valores de campaña existentes) y negativos (IDs de dirección)
+        val realCampaignValueIds = mutableListOf&lt;Long&gt;()
+        val addressIdsFromNegative = mutableListOf&lt;Long&gt;()
+
+        selectedIds.forEach { id -&gt;
+            val longId = (id as? Long) ?: (id as? String)?.toLongOrNull()
+            if (longId != null) {
+                if (longId &gt; 0) {
+                    realCampaignValueIds.add(longId)
+                } else {
+                    // ID negativo = ID sintético, convertir de vuelta a addressId
+// ... (truncado, total 207 líneas)</pre>
+
+<h2>Historial Git</h2><div class="hist"><pre>868d6abb7 2025 -&gt; 2026
+961941b12 WIP: Valores de campaña de dirección
+03502905d MarkdownBuilder ahora escapa las cadenas de entrada.
+8548c532b AG grid: renderizador de celdas multilínea, WIP campañas de dirección
+4827c5769 WIP: selección múltiple (dirección y todo)</pre></div>
+</body></html>

@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>#885: AuftragDO.kt</title>
+<title>#885: TradingPartner.kt</title>
 <style>
 body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}
 h1{border-bottom:2px solid #333;padding-bottom:.3em}
@@ -22,118 +22,154 @@ th{background:#f5f5f5;font-weight:600}
 </style>
 </head>
 <body>
-<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="884.html">← Prev</a> · <a href="886.html">Next →</a></div>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="884.html">← Prev</a> · <a href="886.html">Next →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/kotlin/org/projectforge/business/dvelop/TradingPartner.kt" target="_blank" title="View source on GitHub">📄 source</a></div>
 
-<h1>#885: <code>AuftragDO.kt</code></h1>
+<h1>#885: <code>TradingPartner.kt</code></h1>
 
-<div class="meta">
-<p><strong>Type:</strong> JPA <code>@Entity</code> — Domain Object</p>
-<p><strong>Package:</strong> <code>org.projectforge.business.fibu</code></p>
-<p><strong>Full path:</strong> <code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/AuftragDO.kt</code></p>
-</div>
+<div class="meta"><code>projectforge-business/src/main/kotlin/org/projectforge/business/dvelop/TradingPartner.kt</code> 
+<p><strong>Type:</strong> Kotlin class — D-velop domain model</p>
+<p><strong>Purpose:</strong> Represents a trading partner (vendor, customer, or both) in the D-velop platform. This is the primary entity transferred between ProjectForge and D-velop during synchronization.</p>
+<p><strong>Source path:</strong> <code>projectforge-business/src/main/kotlin/org/projectforge/business/dvelop/TradingPartner.kt</code></p>
+ <span style="color:#888">201 lines · 103 code · 72 comments · 26 blank</span></div>
 
 <div class="c">
-<p>The primary domain entity representing an order (<em>Auftrag</em>) or quote (<em>Angebot</em>) in ProjectForge's order book module. A quote may be rejected or replaced — it does not necessarily become an actual order. All fields are historized, so changes capture valuable information such as the commissioning history (e.g., LOI on 2022-03-05 by Mr. Müller, written confirmation on 2022-04-04 by procurement). Mapped to database table <code>t_fibu_auftrag</code>.</p>
+<p>The <strong>central domain model</strong> for D-velop integration. A trading partner represents a business entity (company or person) that ProjectForge exchanges invoices with — suppliers (vendors), customers, or entities that are both. This class maps directly to D-velop's REST API JSON structure for trading partners and includes all fields needed for address management (bill-to, ship-to, and physical addresses), contact info, organizational assignment, and a custom field mechanism that bridges ProjectForge's DATEV account number to D-velop's custom fields API.</p>
 </div>
 
-<h2>Database Table</h2>
+<h2>Enum Value Wrappers</h2>
+<p>D-velop uses enum-like value objects rather than plain strings. ProjectForge wraps these as inner classes:</p>
+
 <table>
-<tr><th>Table</th><td><code>t_fibu_auftrag</code></td></tr>
-<tr><th>Unique Constraint</th><td><code>nummer</code> (order number)</td></tr>
-<tr><th>Indexes</th><td>8 indexes on FK columns (contact_person, projectmanager, headofbusinessmanager, salesmanager, kunde, projekt)</td></tr>
+<tr><th>Inner Class</th><th>Enum Values</th><th>JSON Structure</th></tr>
+<tr><td><code>Type</code></td><td><code>VENDOR</code>, <code>CUSTOMER</code>, <code>PARTNER</code></td><td><code>{ "value": "VENDOR" }</code></td></tr>
+<tr><td><code>ContactType</code></td><td><code>COMPANY</code>, <code>PRIVATE</code></td><td><code>{ "value": "COMPANY" }</code></td></tr>
+<tr><td><code>Active</code></td><td><code>TRUE</code>, <code>FALSE</code></td><td><code>{ "value": "TRUE" }</code></td></tr>
+<tr><td><code>Organization</code></td><td><code>id</code>, <code>number?</code>, <code>name?</code></td><td><code>{ "id": "...", "number": null, "name": null }</code></td></tr>
 </table>
 
-<h2>Entity Relationships</h2>
-<table>
-<tr><th>Relation</th><th>Type</th><th>Target</th><th>Fetch</th></tr>
-<tr><td><code>positionen</code></td><td><code>@OneToMany</code> (ordered)</td><td><code>AuftragsPositionDO</code></td><td>LAZY</td></tr>
-<tr><td><code>paymentSchedules</code></td><td><code>@OneToMany</code> (ordered)</td><td><code>PaymentScheduleDO</code></td><td>LAZY</td></tr>
-<tr><td><code>contactPerson</code></td><td><code>@ManyToOne</code></td><td><code>PFUserDO</code></td><td>LAZY</td></tr>
-<tr><td><code>kunde</code></td><td><code>@ManyToOne</code></td><td><code>KundeDO</code></td><td>LAZY</td></tr>
-<tr><td><code>projekt</code></td><td><code>@ManyToOne</code></td><td><code>ProjektDO</code></td><td>LAZY</td></tr>
-<tr><td><code>projectManager</code></td><td><code>@ManyToOne</code></td><td><code>PFUserDO</code></td><td>LAZY</td></tr>
-<tr><td><code>headOfBusinessManager</code></td><td><code>@ManyToOne</code></td><td><code>PFUserDO</code></td><td>LAZY</td></tr>
-<tr><td><code>salesManager</code></td><td><code>@ManyToOne</code></td><td><code>PFUserDO</code></td><td>LAZY</td></tr>
-</table>
+<p><code>Organization</code> implements <code>equals()</code> and <code>hashCode()</code> based solely on <code>id</code> for set-based deduplication.</p>
+
+<h2>Companion Object</h2>
+<pre>companion object {
+    var datevKontoFieldId: String? = null
+}</pre>
+<p>The <code>datevKontoFieldId</code> is a globally cached ID of the D-velop custom field definition for "datevKonto". It is set once during D-velop bootstrapping (by discovering the custom field definitions) and then used by the <code>customFields</code> property to serialize/deserialize the DATEV account number through D-velop's custom field mechanism.</p>
 
 <h2>Core Properties</h2>
 <table>
-<tr><th>Property</th><th>Type</th><th>DB Column</th><th>Description</th></tr>
-<tr><td><code>nummer</code></td><td><code>Int?</code></td><td><code>nummer</code> (non-null)</td><td>Unique, auto-incrementing order number</td></tr>
-<tr><td><code>referenz</code></td><td><code>String?</code></td><td><code>referenz</code> (255)</td><td>Legacy order numbers or customer references</td></tr>
-<tr><td><code>status</code></td><td><code>AuftragsStatus?</code></td><td><code>status</code> (30)</td><td>Order status (enum, stored as string)</td></tr>
-<tr><td><code>titel</code></td><td><code>String?</code></td><td><code>titel</code> (1000)</td><td>Order title</td></tr>
-<tr><td><code>kundeText</code></td><td><code>String?</code></td><td><code>kunde_text</code> (1000)</td><td>Free-text customer name (fallback if no KundeDO)</td></tr>
-<tr><td><code>bemerkung</code></td><td><code>String?</code></td><td><code>bemerkung</code> (4000)</td><td>General comment</td></tr>
-<tr><td><code>statusBeschreibung</code></td><td><code>String?</code></td><td><code>status_beschreibung</code> (4000)</td><td>Status description</td></tr>
-<tr><td><code>angebotsDatum</code></td><td><code>LocalDate?</code></td><td><code>angebots_datum</code></td><td>Quote date</td></tr>
-<tr><td><code>erfassungsDatum</code></td><td><code>LocalDate?</code></td><td><code>erfassungs_datum</code></td><td>Creation/recording date</td></tr>
-<tr><td><code>entscheidungsDatum</code></td><td><code>LocalDate?</code></td><td><code>entscheidungs_datum</code></td><td>Decision date</td></tr>
-<tr><td><code>bindungsFrist</code></td><td><code>LocalDate?</code></td><td><code>bindungs_frist</code></td><td>Binding deadline</td></tr>
-<tr><td><code>beauftragungsDatum</code></td><td><code>LocalDate?</code></td><td><code>beauftragungs_datum</code></td><td>Commissioning date</td></tr>
-<tr><td><code>beauftragungsBeschreibung</code></td><td><code>String?</code></td><td><code>beauftragungs_beschreibung</code> (4000)</td><td>Who commissioned when and how</td></tr>
-<tr><td><code>periodOfPerformanceBegin</code></td><td><code>LocalDate?</code></td><td><code>period_of_performance_begin</code></td><td>Start of performance period</td></tr>
-<tr><td><code>periodOfPerformanceEnd</code></td><td><code>LocalDate?</code></td><td><code>period_of_performance_end</code></td><td>End of performance period</td></tr>
-<tr><td><code>probabilityOfOccurrence</code></td><td><code>Int?</code></td><td><code>probability_of_occurrence</code></td><td>Probability of occurrence (forecast)</td></tr>
-<tr><td><code>forecastType</code></td><td><code>AuftragForecastType?</code></td><td><code>forecast_type</code> (20)</td><td>Forecast distribution type (default: FOLLOWING_MONTH)</td></tr>
-<tr><td><code>uiStatusAsXml</code></td><td><code>String?</code></td><td><code>ui_status_as_xml</code> (10000)</td><td>Serialized UI state (marked @NoHistory)</td></tr>
+<tr><th>Property</th><th>Type</th><th>Required?</th><th>Description</th></tr>
+<tr><td><code>id</code></td><td><code>String?</code></td><td>—</td><td>Unique identifier assigned by D-velop after creation</td></tr>
+<tr><td><code>number</code></td><td><code>String?</code></td><td>Required</td><td>Business partner number (external identifier)</td></tr>
+<tr><td><code>name</code></td><td><code>String?</code></td><td>Read-only</td><td>Calculated by D-velop from company or firstName+lastName</td></tr>
+<tr><td><code>shortName</code></td><td><code>String?</code></td><td>—</td><td>Short identifier for list displays</td></tr>
+<tr><td><code>contactType</code></td><td><code>ContactType?</code></td><td>Required</td><td>COMPANY or PRIVATE</td></tr>
+<tr><td><code>firstName</code></td><td><code>String?</code></td><td>—</td><td>First name (for PRIVATE contacts)</td></tr>
+<tr><td><code>lastName</code></td><td><code>String?</code></td><td>If PRIVATE</td><td>Last name (required if contactType=PRIVATE)</td></tr>
+<tr><td><code>company</code></td><td><code>String?</code></td><td>If COMPANY</td><td>Company name (required if contactType=COMPANY)</td></tr>
+<tr><td><code>type</code></td><td><code>Type?</code></td><td>Required</td><td>VENDOR, CUSTOMER, or PARTNER</td></tr>
+<tr><td><code>active</code></td><td><code>Active?</code></td><td>Required</td><td>Whether the partner is active</td></tr>
+<tr><td><code>organization</code></td><td><code>Organization?</code></td><td>Required</td><td>The D-velop organization this partner belongs to</td></tr>
 </table>
 
-<h2>Attachment Support</h2>
-<p>Implements <code>AttachmentsInfo</code> with fields: <code>attachmentsNames</code>, <code>attachmentsIds</code>, <code>attachmentsCounter</code>, <code>attachmentsSize</code>, <code>attachmentsLastUserAction</code>. All marked <code>@NoHistory</code>.</p>
+<h2>Address Properties (Physical Address)</h2>
+<table>
+<tr><th>Property</th><th>Type</th></tr>
+<tr><td><code>street</code></td><td><code>String?</code></td></tr>
+<tr><td><code>zip</code></td><td><code>String?</code></td></tr>
+<tr><td><code>city</code></td><td><code>String?</code></td></tr>
+<tr><td><code>region</code></td><td><code>String?</code></td></tr>
+<tr><td><code>country</code></td><td><code>String?</code></td></tr>
+<tr><td><code>postBoxZip</code></td><td><code>String?</code></td></tr>
+<tr><td><code>postBox</code></td><td><code>String?</code></td></tr>
+<tr><td><code>addressAdditional</code></td><td><code>String?</code></td></tr>
+</table>
 
-<h2>Computed / Transient Properties</h2>
+<h2>Billing Address Properties (<code>billTo*</code>)</h2>
 <table>
 <tr><th>Property</th><th>Type</th><th>Description</th></tr>
-<tr><td><code>displayName</code></td><td><code>String</code></td><td>Format: <code>"&lt;nummer&gt;: &lt;titel&gt;"</code></td></tr>
-<tr><td><code>nummerAsString</code></td><td><code>String</code></td><td><code>nummer</code> as string for Hibernate Search auto-complete</td></tr>
-<tr><td><code>projektKundeAsString</code></td><td><code>String</code></td><td>Formatted project/customer string</td></tr>
-<tr><td><code>kundeAsString</code></td><td><code>String</code></td><td>Formatted customer string (with free-text fallback)</td></tr>
-<tr><td><code>projektAsString</code></td><td><code>String</code></td><td>Alias for <code>projektKundeAsString</code></td></tr>
-<tr><td><code>assignedPersons</code></td><td><code>String</code></td><td>Semicolon-separated list of project manager, head of business, sales manager, contact person</td></tr>
-<tr><td><code>positionenExcludingDeleted</code></td><td><code>List</code></td><td>Filtered list excluding soft-deleted positions</td></tr>
-<tr><td><code>paymentSchedulesExcludingDeleted</code></td><td><code>List</code></td><td>Filtered list excluding soft-deleted payment schedules</td></tr>
-<tr><td><code>info</code></td><td><code>OrderInfo</code></td><td>Cached order calculations (must be set via <code>AuftragsCache.setOrderInfo</code>)</td></tr>
-<tr><td><code>statusAsString</code></td><td><code>String?</code></td><td>"FAKTURIERT" if fully invoiced, otherwise localized status</td></tr>
+<tr><td><code>billToStreet</code></td><td><code>String?</code></td><td>Billing street address</td></tr>
+<tr><td><code>billToZip</code></td><td><code>String?</code></td><td>Billing postal code</td></tr>
+<tr><td><code>billToCity</code></td><td><code>String?</code></td><td>Billing city</td></tr>
+<tr><td><code>billToRegion</code></td><td><code>String?</code></td><td>Billing region/state</td></tr>
+<tr><td><code>billToCountry</code></td><td><code>String?</code></td><td>Billing country</td></tr>
+<tr><td><code>billToAddressAdditional</code></td><td><code>String?</code></td><td>Additional billing address lines</td></tr>
+<tr><td><code>isBillToAddressEmpty</code></td><td><code>Boolean</code> (computed)</td><td>True if all billTo fields are blank</td></tr>
 </table>
 
-<h2>Deprecated Computed Properties</h2>
-<p>Delegated to <code>info.*</code> equivalents:</p>
-<ul>
-<li><code>nettoSumme</code> → <code>info.netSum</code></li>
-<li><code>beauftragtNettoSumme</code> → <code>info.commissionedNetSum</code></li>
-<li><code>invoicedSum</code> → <code>info.invoicedSum</code></li>
-<li><code>notYetInvoicedSum</code> → <code>info.notYetInvoicedSum</code></li>
-</ul>
-
-<h2>Collection Management Methods</h2>
-<ul>
-<li><code>addPosition(position)</code> — Appends a position with auto-incremented number</li>
-<li><code>getPosition(number)</code> — Finds a position by its number</li>
-<li><code>ensureAndGetPositionen()</code> — Lazily initializes the positions list</li>
-<li><code>addPaymentSchedule(schedule)</code> — Appends a payment schedule with auto-incremented number</li>
-<li><code>getPaymentSchedule(number)</code> — Finds a payment schedule by its number</li>
-<li><code>ensureAndGetPaymentSchedules()</code> — Lazily initializes the payment schedules list</li>
-<li><code>getUiStatus()</code> — Deserializes the UI status from XML (using <code>XmlObjectReader</code>)</li>
-</ul>
-
-<h2>Named Queries</h2>
+<h2>Shipping Address Properties (<code>shipTo*</code>)</h2>
 <table>
-<tr><th>Name</th><th>Query</th></tr>
-<tr><td><code>AuftragDO_SelectMinMaxDate</code></td><td><code>select min(angebotsDatum), max(angebotsDatum) from AuftragDO</code></td></tr>
-<tr><td><code>AuftragDO_FindByNummer</code></td><td><code>from AuftragDO where nummer=:nummer</code></td></tr>
-<tr><td><code>AuftragDO_FindOtherByNummer</code></td><td><code>from AuftragDO where nummer=:nummer and id!=:id</code></td></tr>
+<tr><th>Property</th><th>Type</th></tr>
+<tr><td><code>shipToStreet</code></td><td><code>String?</code></td></tr>
+<tr><td><code>shipToZip</code></td><td><code>String?</code></td></tr>
+<tr><td><code>shipToCity</code></td><td><code>String?</code></td></tr>
+<tr><td><code>shipToRegion</code></td><td><code>String?</code></td></tr>
+<tr><td><code>shipToCountry</code></td><td><code>String?</code></td></tr>
+<tr><td><code>shipToAddressAdditional</code></td><td><code>String?</code></td></tr>
 </table>
+
+<h2>Contact &amp; Metadata</h2>
+<table>
+<tr><th>Property</th><th>Type</th><th>Description</th></tr>
+<tr><td><code>phoneNumber</code></td><td><code>String?</code></td><td>Phone number</td></tr>
+<tr><td><code>faxNumber</code></td><td><code>String?</code></td><td>Fax number</td></tr>
+<tr><td><code>eMail</code></td><td><code>String?</code></td><td>Email address</td></tr>
+<tr><td><code>website</code></td><td><code>String?</code></td><td>Website URL</td></tr>
+<tr><td><code>remarks</code></td><td><code>String?</code></td><td>Free-text notes</td></tr>
+<tr><td><code>responsible</code></td><td><code>String?</code></td><td>User ID of the responsible person</td></tr>
+<tr><td><code>relationSince</code></td><td><code>String?</code></td><td>Start date of business relation (format: "2022-05-11 00:00:00")</td></tr>
+<tr><td><code>relationUntil</code></td><td><code>String?</code></td><td>End date of business relation</td></tr>
+<tr><td><code>importCode</code></td><td><code>String?</code></td><td>Leading ID in the external system (used during migration)</td></tr>
+</table>
+
+<h2>Custom Fields Mechanism</h2>
+<p>The <code>customFields</code> property with custom getter/setter is the bridge between ProjectForge's <code>datevKonto</code> field and D-velop's generic custom field API:</p>
+
+<h3>Getter</h3>
+<pre>get() {
+    if (datevKonto == null || datevKontoFieldId == null) return null
+    return mapOf(datevKontoFieldId!! to CustomField(
+        configID = datevKontoFieldId!!,
+        name = "datevKonto",
+        value = datevKonto
+    ))
+}</pre>
+<p>If a DATEV account number is set and the <code>datevKontoFieldId</code> is known, it creates a single-entry map with the custom field wrapper.</p>
+
+<h3>Setter</h3>
+<pre>set(value) {
+    value?.values?.find { it.name == "datevKonto" }?.value?.let {
+        datevKonto = it as Int?
+    }
+    if (value == null) { datevKonto = null }
+}</pre>
+<p>When deserializing D-velop JSON responses, finds the "datevKonto" custom field and extracts its integer value.</p>
+
+<h2>Architecture Notes</h2>
+<ul>
+<li><code>@JsonIgnore</code> on <code>datevKonto</code> prevents it from being serialized directly — it must go through the <code>customFields</code> mechanism</li>
+<li>All enum values are wrapped in container objects (<code>Type(value)</code>) to match D-velop's JSON structure <code>{"value": "..."}</code></li>
+<li><code>isBillToAddressEmpty</code> is annotated with <code>@JsonIgnore</code> to prevent serialization</li>
+<li>The class uses regular <code>var</code> properties (not a data class) because it has custom getters/setters and companion object logic</li>
+<li>Address is split across three separate groups: physical (<code>street/zip/city</code>), billing (<code>billTo*</code>), and shipping (<code>shipTo*</code>)</li>
+</ul>
 
 <h2>Git History</h2>
 <div class="hist"><pre>868d6abb7 2025 -> 2026
-49b1d6b8d Forecast and orderbook: forecast-Type for orders/positions added (current month or following month)
-4550ccc8a MonthlyEmployeeReport: show weekly net and gross hours. Fix select in AuftragDao.positionen.status
 63081666f Source file headers: 2024-> 2025.
-0237d5eba Json serialization refactored: IdOnlySerializer and IdsOnlySerializer introduced.
-a35971f85 Issues from last pull request resolved.
-42dc9fa16 Orders: ordered -> commissioned.
-91f087e17 AuftragsPositionFormComponent: search for order numbers fixed.
-(100+ commits total, spanning migration to Long IDs, LAZY loading, Kotlin conversion, Hibernate Search updates, etc.)</pre></div>
+b6092df09 Copyright 2023 -> 2024
+510974f0f D-velop: test fixed.
+adc61b60b Nothing real
+bf2e51373 WIP D.velop
+be750e77e WIP D.velop
+9ebb99c88 WIP D.velop
+cb2915283 WIP D.velop
+aec5b4be0 Nothing real.
+cb6d633f9 WIP D-velop
+6a4ee1932 WIP D-velop
+50926baa8 WIP D-velop
+912400e42 WIP D-velop
+c2418da24 dvelop package moved from projectforge-business to projectforge-rest.
+f993107db Initial revision. Spring boot 2.7.6->2.7.7
+</pre></div>
 </body>
 </html>

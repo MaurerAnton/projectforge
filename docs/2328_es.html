@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>#2328 [ES]</title>
+<style>
+body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}
+h1{border-bottom:2px solid #333;padding-bottom:.3em}
+h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}
+h3{margin-top:2em;color:#444}
+a{color:#0366d6}
+.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}
+.nav{font-size:.9em;color:#888;margin-bottom:1em}
+.meta{font-size:.9em;margin:1em 0;color:#555}
+code{background:#f0f0f0;padding:0 .2em;font-size:.93em}
+pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}
+table{border-collapse:collapse;width:100%;margin:1em 0}
+th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}
+th{background:#f5f5f5;font-weight:600}
+.hist{font-size:.85em;color:#555}
+</style>
+</head>
+<body>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Índice</a> · <a href="file-index.html">← Índice de archivos</a> · <a href="2327.html">← Anterior</a> · <a href="2329.html">Siguiente →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-rest/src/main/kotlin/org/projectforge/rest/sipgate/SipgateService.kt" target="_blank" title="Ver fuente en GitHub">📄 fuente</a></div>
+<h1>#2328: <code>SipgateService.kt</code></h1>
+<div class="meta"><code>projectforge-rest/src/main/kotlin/org/projectforge/rest/sipgate/SipgateService.kt</code> Servicio, projectforge-rest/src/main/kotlin/org/projectforge/rest/sipgate/SipgateService.kt <span style="color:#888">226 líneas · 153 código · 56 comentarios · 17 en blanco</span></div>
+<div class="c">Cliente REST para la API de telefonía Sipgate: lista usuarios, dispositivos, números, direcciones, registros de llamadas; inicia llamadas y envía SMS mediante WebClient.</div>
+
+<h2>Arquitectura</h2>
+<p><code>SipgateService</code> es un <code>@Service</code> en la capa REST que envuelve la API REST de Sipgate. Depende de <code>SipgateClient</code> (que proporciona un <code>WebClient</code> autenticado con OAuth2). La propiedad <code>webClient</code> se inicializa de forma diferida en <code>@PostConstruct</code>.</p>
+
+<h3>Cobertura de la API</h3>
+<table>
+<tr><th>Método</th><th>Endpoint de la API Sipgate</th><th>Retorna</th></tr>
+<tr><td><code>getLogs()</code></td><td><code>GET /log/webhooks</code></td><td>Lista de SipgateIoLogsResponse (registros de llamadas)</td></tr>
+<tr><td><code>getUsers()</code></td><td><code>GET /users</code></td><td>Lista de SipgateUser</td></tr>
+<tr><td><code>getDevices(user)</code></td><td><code>GET /{userId}/devices</code></td><td>Lista de SipgateDevice por usuario</td></tr>
+<tr><td><code>getNumbers()</code></td><td><code>GET /numbers</code></td><td>Lista de SipgateNumber (números telefónicos)</td></tr>
+<tr><td><code>getAddresses()</code></td><td><code>GET /addresses</code></td><td>Lista de SipgateAddress</td></tr>
+<tr><td><code>initCall(...)</code></td><td><code>POST /sessions/calls</code></td><td>Booleano éxito (inicia una llamada telefónica)</td></tr>
+<tr><td><code>sendSms(...)</code></td><td><code>POST /sessions/sms</code></td><td>Booleano éxito (envía un SMS)</td></tr>
+</table>
+
+<h3>Manejo de paginación</h3>
+<p>El método genérico <code>getList()</code> del objeto complementario maneja la paginación por desplazamiento/límite de Sipgate. Itera hasta <code>maxNumberOfPages</code> (por defecto 100), realizando solicitudes GET con los parámetros de consulta <code>offset</code> y <code>limit</code> hasta que <code>currentOffset > totalCount</code>. Las respuestas se deserializan desde JSON usando <code>JsonUtils.fromJson</code> en clases de datos de lista tipadas (ej. <code>UserListData</code>, <code>DeviceListData</code>) que extienden <code>ListData&lt;T&gt;</code>.</p>
+
+<h3>Inicio de llamada</h3>
+<p><code>initCall(deviceId, caller, callee, callerId)</code> envía un JSON <code>NewCallRequest</code> mediante POST a <code>/sessions/calls</code> esperando HTTP 200. El <code>deviceId</code> es opcional (necesario solo cuando <code>caller</code> es un número telefónico, no un dispositivo). El parámetro <code>callerId</code> establece el número telefónico mostrado para el destinatario.</p>
+
+<h3>Envío de SMS</h3>
+<p><code>sendSms(smsId, recipient, message)</code> envía un <code>SendWebSmsRequest</code> mediante POST a <code>/sessions/sms</code> esperando HTTP 204 (Sin contenido). El <code>smsId</code> identifica el número/extensión telefónica de envío.</p>
+
+<h3>Privacidad</h3>
+<p>Tanto <code>NewCallRequest.toString()</code> como <code>SendWebSmsRequest.toString()</code> ocultan el número telefónico del destinatario usando <code>StringHelper.hideStringEnding()</code>, mostrando solo los últimos 5 caracteres enmascarados, para privacidad en registros.</p>
+
+<h2>Justificación del diseño</h2>
+<p>El servicio reside en el módulo REST (no en el módulo de negocio) porque es puramente un cliente de API externo — sin lógica de negocio, sin persistencia. El método genérico <code>getList</code> con clases de datos de lista tipadas evita la duplicación de código en cinco endpoints con paginación idéntica. El manejo de errores es silencioso (captura excepciones, registra, retorna listas vacías / falso) porque las fallas de la API de Sipgate no son críticas para la operación central de ProjectForge. La separación de <code>SipgateClient</code> (autenticación/HTTP) de <code>SipgateService</code> (conocimiento de endpoints) sigue el principio de responsabilidad única.</p>
+
+<h2>Historial de Git</h2>
+<div class="hist"><pre>868d6abb7 2025 -> 2026
+600951ee0 2025 -> 2026
+63081666f Encabezados de archivos fuente: 2024-> 2025.
+199c26801 Encabezados de archivos fuente: 2024-> 2025.
+77bade6df javax.* -> jakarta.*
+3afa03fb1 javax.* -> jakarta.*
+b6092df09 Copyright 2023 -> 2024
+9a0609dd1 Copyright 2023 -> 2024
+9cee83a03 WIP: llamadas telefónicas para Sipgate
+5d7cb9d07 WIP: llamadas telefónicas para Sipgate
+97645bd38 WIP Sipgate; exportación Excel de SipgateConfiguration
+86d7f8391 WIP Sipgate; exportación Excel de SipgateConfiguration
+539f41cf3 WIP Sipgate.
+6fb0c1828 WIP Sipgate.
+876e0b188 WIP Sipgate.
+0ece18fb2 WIP Sipgate.
+eafdb76c0 WIP Sipgate.
+4d1412659 WIP Sipgate.
+b4a0462a1 Nada real.
+73ee6a1a4 Nada real.
+</pre></div>
+</body>
+</html>

@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>#909: CurrencyConversionCache.kt [RU]</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:2em;color:#444}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}</style>
+</head>
+<body>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Индекс</a> · <a href="file-index.html">← Индекс файлов</a> · <a href="908.html">← Предыдущий</a> · <a href="910.html">Следующий →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/kotlin/org/projectforge/business/fibu/CurrencyConversionCache.kt" target="_blank" title="Просмотреть исходник на GitHub">📄 исходник</a></div>
+
+<h1>#909: <code>CurrencyConversionCache.kt</code></h1>
+
+<div class="meta"><code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/CurrencyConversionCache.kt</code> 
+  <strong>Тип:</strong> Spring-компонент (кэш)<br>
+  <strong>Пакет:</strong> <code>org.projectforge.business.fibu</code><br>
+  <strong>Путь:</strong> <code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/CurrencyConversionCache.kt</code><br>
+  <strong>Автор:</strong> Кай Райнхард (k.reinhard@micromata.de)
+ <span style="color:#888">268 строк · 143 кода · 97 комментариев · 28 пустых</span></div>
+
+<div class="c">
+  <p>Кэш в памяти для <strong>валютных пар</strong> и их <strong>курсов конвертации</strong>. Расширяет <code>AbstractCache</code>, реализуя шаблон кэширования ProjectForge с ленивым обновлением. Также выступает в роли <code>BaseDOModifiedListener</code> для <code>CurrencyPairDO</code>, чтобы инвалидировать кэш при вставках/обновлениях. Предоставляет двунаправленный поиск курса с автоматическим вычислением обратного курса.</p>
+</div>
+
+<h2>Архитектура</h2>
+
+<h3>Наследование и интерфейсы</h3>
+<ul>
+  <li><strong>AbstractCache</strong> — предоставляет <code>checkRefresh()</code>/<code>refresh()</code>/<code>setExpired()</code></li>
+  <li><strong>BaseDOModifiedListener&lt;CurrencyPairDO&gt;</strong> — инвалидирует кэш при изменении валютных пар</li>
+</ul>
+
+<h3>Внутренние структуры данных</h3>
+<table>
+  <tr><th>Поле</th><th>Тип</th><th>Назначение</th></tr>
+  <tr><td><code>currencyPairMap</code></td><td><code>Map&lt;Long, CurrencyPairDO&gt;</code></td><td>Первичный поиск по первичному ключу базы данных</td></tr>
+  <tr><td><code>currencyPairLookupMap</code></td><td><code>Map&lt;Pair&lt;String,String&gt;, Long&gt;</code></td><td>Быстрый поиск по (исходная, целевая) → id пары</td></tr>
+</table>
+
+<h3>Стратегия обновления</h3>
+<p>Метод <code>refresh()</code> выполняется в транзакции только для чтения через <code>persistenceService.runIsolatedReadOnly()</code>. Он загружает все неудалённые записи <code>CurrencyPairDO</code> и все их неудалённые курсы (отсортированные по <code>validFrom</code> DESC). Курсы группируются по id валютной пары и присваиваются временному списку <code>rates</code> пары.</p>
+
+<h3>Поиск обратного курса</h3>
+<p><code>findCurrencyPairForConversion(source, target)</code> сначала пытается выполнить прямой поиск (например, EUR→USD). Если не найдено, он пробует обратное направление (USD→EUR) и возвращает <code>CurrencyPairLookup</code> с <code>useInverseRate=true</code>, сигнализируя вызывающему коду использовать <code>1/rate</code>.</p>
+
+<h3>Запасной вариант на самый старый курс</h3>
+<p><code>findActiveRate()</code> с <code>useFallbackToOldestRate=true</code> запишет предупреждение и вернёт самый старый доступный курс, если ни один курс не действителен для запрошенной даты. Это явно задокументировано как потенциально несоответствующее требованиям финансового учёта.</p>
+
+<h2>Класс данных: CurrencyPairLookup</h2>
+<table>
+  <tr><th>Свойство</th><th>Тип</th><th>Описание</th></tr>
+  <tr><td><code>pair</code></td><td><code>CurrencyPairDO</code></td><td>Соответствующая валютная пара</td></tr>
+  <tr><td><code>useInverseRate</code></td><td><code>Boolean</code></td><td>Если <code>true</code>, вызывающий код должен применить <code>1/conversionRate</code></td></tr>
+</table>
+
+<h2>Ключевые методы</h2>
+<table>
+  <tr><th>Метод</th><th>Описание</th></tr>
+  <tr><td><code>getCurrencyPair(id)</code></td><td>Получить валютную пару по её первичному ключу</td></tr>
+  <tr><td><code>findCurrencyPair(src, tgt)</code></td><td>Прямой поиск по кодам исходной и целевой валюты</td></tr>
+  <tr><td><code>findCurrencyPairForConversion(src, tgt)</code></td><td>Двунаправленный поиск с поддержкой обратного курса</td></tr>
+  <tr><td><code>getConversionRate(pairId, date)</code></td><td>Находит активный курс для пары на заданную дату (опционально обратный)</td></tr>
+  <tr><td><code>getActiveRateDate(pairId, date)</code></td><td>Возвращает <code>validFrom</code> активного курса</td></tr>
+  <tr><td><code>getRates(pairId)</code></td><td>Возвращает все курсы для валютной пары</td></tr>
+</table>
+
+<h2>Жизненный цикл</h2>
+<ol>
+  <li><code>@PostConstruct</code>: регистрирует себя в <code>currencyPairDao</code> как слушатель и сохраняет синглтон в сопутствующем объекте.</li>
+  <li>При первом обращении к кэшу через любой публичный метод <code>checkRefresh()</code> запускает <code>refresh()</code>.</li>
+  <li>Когда <code>CurrencyPairDO</code> изменяется, <code>afterInsertOrModify()</code> вызывает <code>setExpired()</code>.</li>
+  <li>Все операции на уровне курсов (в <code>CurrencyConversionServiceSupport</code>) также напрямую вызывают <code>cache.setExpired()</code>.</li>
+</ol>
+
+<h2>История Git</h2>
+<div class="hist"><pre>
+868d6abb7 2025 -> 2026
+f4a839e3a CurrencyConversion: Показывать дату активных курсов в представлении списка.
+472fbc977 WIP: конвертация валют с Claude Code.
+8c2bf04f0 WIP: конвертация валют с Claude Code.
+abdac2e1b WIP: конвертация валют с Claude Code.
+e1323795d WIP: конвертация валют с Claude Code.
+357ebee61 WIP: конвертация валют с Claude Code.
+</pre></div>
+
+</body>
+</html>

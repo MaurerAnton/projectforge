@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head><meta charset="UTF-8"><title>#998: KostCache.kt [RU]</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:2em;color:#444}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}</style></head>
+<body>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Индекс</a> · <a href="file-index.html">← Индекс файлов</a> · <a href="997.html">← Назад</a> · <a href="999.html">Вперёд →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/kotlin/org/projectforge/business/fibu/kost/KostCache.kt" target="_blank" title="Просмотр исходного кода на GitHub">📄 исходник</a></div>
+<h1>#998: <code>KostCache.kt</code></h1>
+<div class="meta"><code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/kost/KostCache.kt</code> Тип: Компонент кэша · Назначение: Кэш в памяти для сущностей Kost1, Kost2 и Kost2Art · Исходник: projectforge-business/src/main/kotlin/org/projectforge/business/fibu/kost/KostCache.kt <span style="color:#888">361 строка · 249 кода · 77 комментариев · 35 пустых</span></div>
+<div class="c">Центральный компонент кэширования для всех данных по центрам затрат (<code>Kost1DO</code>, <code>Kost2DO</code>, <code>Kost2ArtDO</code>). Расширяет <code>AbstractCache</code> для использования фреймворка кэширования ProjectForge. Поддерживает синхронизированные хэш-карты для быстрого поиска по ID и числовым компонентам, избегая повторных JPA-запросов к часто запрашиваемым данным центров затрат.</div>
+<h2>Структура кэша</h2>
+<table>
+<tr><th>Карта</th><th>Ключ</th><th>Значение</th><th>Описание</th></tr>
+<tr><td><code>kost1Map</code></td><td><code>Long</code> (Kost1DO.id)</td><td><code>Kost1DO</code></td><td>Синхронизированная изменяемая карта; обновляется при вставке/изменении</td></tr>
+<tr><td><code>kost2Map</code></td><td><code>Long</code> (Kost2DO.id)</td><td><code>Kost2DO</code></td><td>Синхронизированная изменяемая карта; обновляется при вставке/изменении</td></tr>
+<tr><td><code>kost2ArtMap</code></td><td><code>Long</code> (Kost2ArtDO.id)</td><td><code>Kost2ArtDO</code></td><td>Только для чтения после обновления, заменяется при полном обновлении</td></tr>
+<tr><td><code>allKost2Arts</code></td><td>—</td><td><code>List&lt;Kost2Art&gt;</code></td><td>Список-обёртка для отчётности (Kost2ArtImpl)</td></tr>
+</table>
+<h2>Ключевые методы</h2>
+<table>
+<tr><th>Метод</th><th>Описание</th></tr>
+<tr><td><code>getKost2(id)</code></td><td>Получить Kost2 по ID из кэша (основной поиск)</td></tr>
+<tr><td><code>getKost2IfNotInitialized(kost2)</code></td><td>Если ленивый прокси, перезагрузить из кэша для предотвращения N+1 при ленивой загрузке</td></tr>
+<tr><td><code>getKost2(str)</code></td><td>Получить Kost2 по форматированной строке (парсит "5.123.45.67")</td></tr>
+<tr><td><code>getKost2(nk, b, tb, art)</code></td><td>Получить Kost2 по отдельным числовым компонентам</td></tr>
+<tr><td><code>getActiveKost2(nk, b, tb)</code></td><td>Фильтровать кэшированные Kost2 по префиксу и статусу активности</td></tr>
+<tr><td><code>getKost1(id)</code> / <code>getKost1(str)</code></td><td>Аналогичные поиски для Kost1</td></tr>
+<tr><td><code>findKost1(obj)</code> / <code>findKost2(obj)</code></td><td>Полиморфный поиск по Kost1DO, String или Number</td></tr>
+<tr><td><code>getKost2Art(id)</code></td><td>Получить тип затрат по 2-значному ID</td></tr>
+<tr><td><code>getKost2ArtsForProjekt(projektId)</code></td><td>Типы затрат, используемые в записях Kost2 проекта</td></tr>
+<tr><td><code>getAllKost2ArtsForProjekt(projektId)</code></td><td>Все типы затрат с отметкой, использует ли их проект</td></tr>
+<tr><td><code>getKost2ForProjekt(projektId)</code></td><td>Все записи Kost2 для заданного проекта</td></tr>
+</table>
+<h2>Механизм обновления</h2>
+<p>Метод <code>refresh()</code> вызывается инфраструктурой <code>AbstractCache</code> (через <code>checkRefresh()</code>, который вызывается в начале каждого публичного метода). Обновление загружает все записи Kost1, Kost2 и Kost2Art в одной изолированной транзакции только для чтения:</p>
+<ol>
+<li>Загружает все сущности <code>Kost1DO</code> и <code>Kost2DO</code> в изменяемые карты</li>
+<li>Проверяет, существуют ли неудалённые записи Kost2 (флаг <code>kost2EntriesExists</code>)</li>
+<li>Перестраивает список <code>allKost2Arts</code>, обёрнутый как <code>Kost2ArtImpl</code> для отчётности</li>
+</ol>
+<h2>Инвалидация кэша</h2>
+<ul>
+<li>После вставки/изменения любого Kost2: <code>Kost2Dao.afterInsertOrModify</code> → <code>KostCache.updateKost2(kost2)</code></li>
+<li>После вставки/изменения любого Kost1: <code>KostCache.updateKost1(kost1)</code></li>
+<li>После изменения любого Kunde: срок действия кэша истекает (зарегистрированный слушатель в <code>@PostConstruct</code>)</li>
+</ul>
+<h2>Защита от инициализации Hibernate</h2>
+<p>Методы <code>get*IfNotInitialized()</code> предотвращают критическую проблему производительности: когда ленивый прокси Hibernate запрашивается вне транзакции, это вызывает N+1 запросов. Эти методы используют <code>HibernateUtils.isFullyInitialized()</code> для обнаружения прокси и перезагрузки из кэша. Эта защита применяется к Kost1DO, Kost2DO и Kost2ArtDO.</p>
+<h2>Потокобезопасность</h2>
+<ul>
+<li><code>kost1Map</code> и <code>kost2Map</code>: Изменяемые, синхронизированный доступ через блоки <code>synchronized(kost2Map)</code></li>
+<li><code>kost2ArtMap</code> и <code>allKost2Arts</code>: Атомарно заменяются при обновлении (только для чтения после присваивания)</li>
+</ul>
+<h2>Исходный код (сокращён)</h2>
+<pre>@Component
+class KostCache : AbstractCache() {
+    @Autowired private lateinit var persistenceService: PfPersistenceService
+    @Autowired private lateinit var kundeDao: KundeDao
+
+    private lateinit var kost1Map: MutableMap&lt;Long, Kost1DO&gt;
+    private lateinit var kost2Map: MutableMap&lt;Long, Kost2DO&gt;
+    private lateinit var kost2ArtMap: Map&lt;Long, Kost2ArtDO&gt;
+
+    fun getKost2(id: Long?): Kost2DO? {
+        id ?: return null
+        checkRefresh()
+        synchronized(kost2Map) { return kost2Map[id] }
+    }
+
+    override fun refresh() {
+        persistenceService.runIsolatedReadOnly { context ->
+            this.kost1Map = persistenceService
+                .executeQuery("from Kost1DO t", Kost1DO::class.java)
+                .filter { it.id != null }
+                .associateBy { it.id!! }.toMutableMap()
+            this.kost2Map = persistenceService
+                .executeQuery("from Kost2DO t", Kost2DO::class.java)
+                .filter { it.id != null }
+                .associateBy { it.id!! }.toMutableMap()
+            // ... updateKost2Arts()
+        }
+    }
+    companion object { lateinit var instance: KostCache }
+}</pre>
+<h2>История Git</h2>
+<div class="hist"><pre>868d6abb7 2025 -> 2026
+8239a53ee Kost2: Виртуальное наследование статуса от ProjektDO
+581988c45 WIP: Разбор кредиторских счетов.
+6a32032d6 Hibernate.isInitialized -> HibernateUtils.isFullyInitialized
+63081666f Заголовки исходных файлов: 2024-> 2025.
+db2599ab8 История в книге заказов, счетах и проектах.
+50c3b7b46 Миграция (все тесты OK).
+b3782c8a8 Материалы миграции...
+4942c854d Материалы миграции...
+d394f410f Миграция (все тесты OK).
+f928d12b1 Миграция (все тесты OK).
+2e9839891 Материалы миграции...
+ba2479571 Материалы миграции...
+b3293f0cc PersistenceService: улучшена обработка статистики.
+85b4e1175 PfPersistenceService: query -> executeQuery.
+b095e6f7d Большое изменение обработки транзакций.
+4c04cfd65 MAJOR-CHANGE! Integer id's to Long id's. (файл создан)</pre></div>
+</body>
+</html>

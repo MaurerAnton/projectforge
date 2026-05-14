@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>#882 [RU]</title>
+<style>
+body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}
+h1{border-bottom:2px solid #333;padding-bottom:.3em}
+h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}
+h3{margin-top:2em;color:#444}
+a{color:#0366d6}
+.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}
+.nav{font-size:.9em;color:#888;margin-bottom:1em}
+.meta{font-size:.9em;margin:1em 0;color:#555}
+code{background:#f0f0f0;padding:0 .2em;font-size:.93em}
+pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}
+table{border-collapse:collapse;width:100%;margin:1em 0}
+th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}
+th{background:#f5f5f5;font-weight:600}
+.hist{font-size:.85em;color:#555}
+</style>
+</head>
+<body>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Индекс</a> · <a href="file-index.html">← Индекс файлов</a> · <a href="881.html">← Предыдущий</a> · <a href="883.html">Следующий →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/kotlin/org/projectforge/business/dvelop/ExtractPFTradingPartners.kt" target="_blank" title="Просмотреть исходный код на GitHub">📄 исходный код</a></div>
+
+<h1>#882: <code>ExtractPFTradingPartners.kt</code></h1>
+
+<div class="meta"><code>projectforge-business/src/main/kotlin/org/projectforge/business/dvelop/ExtractPFTradingPartners.kt</code> 
+<p><strong>Тип:</strong> Spring <code>@Service</code> — механизм извлечения данных</p>
+<p><strong>Назначение:</strong> Извлекает торговых партнёров (поставщиков, клиентов) из финансовых таблиц базы данных ProjectForge и преобразует их в объекты <code>TradingPartner</code>, пригодные для первоначального импорта в D-velop.</p>
+<p><strong>Путь к исходнику:</strong> <code>projectforge-business/src/main/kotlin/org/projectforge/business/dvelop/ExtractPFTradingPartners.kt</code></p>
+ <span style="color:#888">385 строк · 319 кода · 38 комментариев · 28 пустых</span></div>
+
+<div class="c">
+<p>Выступает в качестве <strong>моста</strong> между устаревшими финансовыми данными ProjectForge (входящие счета, исходящие счета и основные данные клиентов) и моделью торговых партнёров D-velop. Он сканирует 5 лет данных счетов, дедублицирует сущности по счетам, обрабатывает шаблон счёта "разное", разбирает текстовые платёжные адреса в структурированные поля и классифицирует сущности как ПОСТАВЩИК, КЛИЕНТ или ПАРТНЁР. Также предоставляет функциональность экспорта в Excel для сверки.</p>
+</div>
+
+<h2>Архитектура</h2>
+
+<h3>Внутренний класс: <code>Context</code></h3>
+<p>Изменяемый аккумулятор, который собирает извлечённых торговых партнёров в процессе многофазного извлечения:</p>
+<table>
+<tr><th>Член</th><th>Описание</th></tr>
+<tr><td><code>vendors</code></td><td><code>MutableList&lt;TradingPartner&gt;</code> — Партнёры-кредиторы/поставщики, извлечённые из входящих счетов</td></tr>
+<tr><td><code>customers</code></td><td><code>MutableList&lt;TradingPartner&gt;</code> — Партнёры-клиенты, извлечённые из исходящих счетов + основные данные клиентов</td></tr>
+<tr><td><code>sequence</code></td><td>Автоинкрементный счётчик, начинающийся с 7 000 000 для генерации уникальных номеров партнёров</td></tr>
+<tr><td><code>allPartners</code></td><td>Объединённый, дедублицированный и отсортированный список всех партнёров (поставщики + клиенты)</td></tr>
+<tr><td><code>nextVal</code></td><td>Возвращает и увеличивает счётчик последовательности</td></tr>
+<tr><td><code>getVendorByDatevKonto(konto)</code></td><td>Ищет поставщика по номеру счёта (konto) через <code>importCode</code></td></tr>
+<tr><td><code>cleanUp()</code></td><td>Очищает временное поле <code>importCode</code>, если оно совпадает с номером партнёра (больше не нужно после миграции)</td></tr>
+</table>
+
+<h3>Фазы извлечения</h3>
+
+<h4>Фаза 1: <code>extractTradingVendors(invoices)</code></h4>
+<p>Обрабатывает <code>EingangsrechnungDO</code> (входящие/кредиторские счета):</p>
+<ul>
+<li>Пропускает счета без имени <code>kreditor</code> или назначения <code>konto</code></li>
+<li><strong>Счета "Разное":</strong> Если описание счёта содержит "разное", каждое уникальное имя кредитора получает новый синтетический номер партнёра (из <code>nextVal</code>), поскольку несколько кредиторов используют один и тот же счёт</li>
+<li><strong>Обычные счета:</strong> Один партнёр на номер счёта; <code>importCode</code> устанавливается равным номеру счёта для перекрёстных ссылок на последующих фазах</li>
+<li>Все поставщики получают <code>datevKonto</code>, установленный на номер счёта, а к примечаниям добавляется информация о счёте</li>
+</ul>
+
+<h4>Фаза 2: <code>extractTradingCustomersInvoices(invoices, context)</code></h4>
+<p>Обрабатывает <code>RechnungDO</code> (исходящие/клиентские счета):</p>
+<ul>
+<li>Если счёт имеет связанного <code>kunde</code> (клиента), делегирует обработку <code>handleKunde()</code></li>
+<li>Если клиента нет, но есть счёт (konto), пытается сопоставить существующих поставщиков (повышая их до ПАРТНЁРА) или создаёт новые записи клиентов</li>
+<li>Пропускает счета "разное" (торговый партнёр не требуется)</li>
+</ul>
+
+<h4>Фаза 3: <code>extractTradingCustomers(customers, context)</code></h4>
+<p>Обрабатывает <code>KundeDO</code> (основные данные клиентов) для клиентов, ещё не захваченных через счета. В конце вызывает <code>context.cleanUp()</code>.</p>
+
+<h3>Основная логика дедубликации: <code>handleKunde()</code></h3>
+<p>Самый сложный метод в этом сервисе. Для каждого <code>KundeDO</code>:</p>
+<ol>
+<li>Проверяет, существует ли уже клиент с таким же номером → пропускает создание, опционально заполняя <code>datevKonto</code></li>
+<li>Проверяет, соответствует ли счёт существующему поставщику → повышает поставщика до ПАРТНЁРА, переназначает номер клиента как основной номер</li>
+<li>В противном случае создаёт нового клиента; активными клиентами считаются те, у кого статус <code>ACQUISITION</code> или <code>ACTIVE</code> (или null)</li>
+</ol>
+
+<h3>Разбор адреса: <code>checkBillAddress()</code></h3>
+<p>Разбирает текстовые платёжные адреса из строк <code>customerAddress</code> счетов, используя эвристику снизу вверх:</p>
+<ol>
+<li>Разделяет адрес на непустые строки</li>
+<li>Отфильтровывает начальные строки, соответствующие известным словам-заполнителям ("Господин", "Госпожа", "Компания", "Кому", "Портал", "Клиникдинст")</li>
+<li>Последняя строка: страна или индекс+город (пытается использовать <code>extractZipCodeCity()</code>)</li>
+<li>Предпоследняя: строка с улицей</li>
+<li>Любые оставшиеся строки добавляются в начало <code>billToAddressAdditional</code></li>
+</ol>
+
+<h3><code>extractZipCodeCity(line)</code></h3>
+<p>Использует регулярное выражение <code>^[0-9 ]{5,10}</code> для извлечения немецкого почтового индекса из 5+ цифр. Удаляет префиксы страны "D-" и "D ". Возвращает <code>Pair&lt;String, String&gt;</code> (индекс, город) или null, если совпадения нет.</p>
+
+<h3>Вспомогательные методы</h3>
+<table>
+<tr><th>Метод</th><th>Описание</th></tr>
+<tr><td><code>appendRemarks(partner, remarks)</code></td><td>Добавляет текст к <code>partner.remarks</code> с разделителем новой строки</td></tr>
+<tr><td><code>prependRemarks(partner, konto)</code></td><td>Добавляет информацию DATEV-Konto (номер + описание) в начало примечаний</td></tr>
+<tr><td><code>checkIfGiven(vararg str)</code></td><td>Возвращает <code>true</code>, если любая строка непустая</td></tr>
+<tr><td><code>lineEquals(line, vararg strs)</code></td><td>Сравнение без учёта регистра с обрезанными строками</td></tr>
+<tr><td><code>createVendor(number, kreditor, konto)</code></td><td>Фабрика для TradingPartners поставщиков</td></tr>
+<tr><td><code>createCustomer(...)</code></td><td>Фабрика для TradingPartners клиентов</td></tr>
+</table>
+
+<h3>Экспорт в Excel: <code>extractTradingPartnersAsExcel()</code></h3>
+<p>Создаёт книгу Excel с двумя листами, используя <code>ExcelWorkbook</code>:</p>
+<ul>
+<li><strong>Лист 1:</strong> "D.velop TradingPartners" — список, переданный как параметр</li>
+<li><strong>Лист 2:</strong> "ProjectForge TradingPartners" — свежеизвлечённый список из базы данных</li>
+</ul>
+<p>Колонки включают номер, datevKonto, importCode, тип, компанию, краткое имя, примечания, активность и все поля платёжного адреса. Значения перечислений (<code>contactType</code>, <code>type</code>, <code>active</code>) преобразуются в их строковое представление <code>value</code>.</p>
+
+<h3>Внедрённые зависимости</h3>
+<table>
+<tr><th>Dao</th><th>Назначение</th></tr>
+<tr><td><code>EingangsrechnungDao</code></td><td>Запрос входящих/кредиторских счетов</td></tr>
+<tr><td><code>KundeDao</code></td><td>Запрос основных данных клиентов</td></tr>
+<tr><td><code>RechnungDao</code></td><td>Запрос исходящих/клиентских счетов</td></tr>
+</table>
+
+<h2>История Git</h2>
+<div class="hist"><pre>868d6abb7 2025 -> 2026
+78a38ca8f ExcelUtils.createFont и используется всеми процедурами создания шрифтов Excel.
+63081666f Заголовки исходных файлов: 2024 -> 2025.
+1b50060c3 BaseDao: переименовано: get -> find, save -> insert, getList -> select, load -> select
+87aaf6a5a Миграция в процессе... BaseDao рефакторинг (ещё не завершён) внутренние методы переименованы.
+e33c8b9c2 Миграция в процессе...
+b6092df09 Авторские права 2023 -> 2024
+b710c3267 WIP D.velop
+3ef41086d WIP D.velop
+be750e77e WIP D.velop
+5145a8199 WIP D.velop
+9ebb99c88 WIP D.velop
+cb2915283 WIP D.velop
+b46787d5f WIP D-velop
+2fe7d6f33 WIP D-velop
+975af1cd6 WIP D-velop
+1dee5f23f WIP D-velop
+3ec5c7354 WIP D-velop
+cb6d633f9 WIP D-velop
+eb005b878 WIP D-velop
+</pre></div>
+</body>
+</html>

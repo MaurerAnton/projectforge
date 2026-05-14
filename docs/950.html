@@ -1,88 +1,30 @@
-<!DOCTYPE html>
-<html lang="en">
-<head><meta charset="UTF-8"><title>#950: KostZuweisungDO.kt</title>
-<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:2em;color:#444}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}</style></head>
-<body>
-<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="949.html">← Prev</a> · <a href="951.html">Next →</a></div>
-<h1>#950: <code>KostZuweisungDO.kt</code></h1>
-<div class="meta">Type: JPA Entity (DO) · Purpose: Cost assignment linking invoices/salaries to Kost1/Kost2 · Source: projectforge-business/src/main/kotlin/org/projectforge/business/fibu/kost/KostZuweisungDO.kt</div>
-<div class="c">Represents a cost assignment (KostZuweisung) — the allocation of invoice amounts or employee salary payments to specific cost centers (Kost1 and Kost2). Each assignment records a net amount and links to exactly one of: an outgoing invoice position, an incoming invoice position, or an employee salary entry.</div>
-<h2>Entity Design</h2>
-<table>
-<tr><th>Field</th><th>Type</th><th>DB Column</th><th>Description</th></tr>
-<tr><td><code>index</code></td><td><code>Short</code></td><td>INT</td><td>Array index within the position's assignment list</td></tr>
-<tr><td><code>netto</code></td><td><code>BigDecimal?</code></td><td>DECIMAL(12,2)</td><td>Net amount allocated to this cost center</td></tr>
-<tr><td><code>kost1</code></td><td><code>Kost1DO?</code></td><td>FK kost1_fk</td><td>Cost center level 1 (ManyToOne, lazy)</td></tr>
-<tr><td><code>kost2</code></td><td><code>Kost2DO?</code></td><td>FK kost2_fk</td><td>Cost center level 2 (ManyToOne, lazy)</td></tr>
-<tr><td><code>rechnungsPosition</code></td><td><code>RechnungsPositionDO?</code></td><td>FK rechnungs_pos_fk</td><td>Outgoing invoice position (nullable)</td></tr>
-<tr><td><code>eingangsrechnungsPosition</code></td><td><code>EingangsrechnungsPositionDO?</code></td><td>FK eingangsrechnungs_pos_fk</td><td>Incoming invoice position (nullable)</td></tr>
-<tr><td><code>employeeSalary</code></td><td><code>EmployeeSalaryDO?</code></td><td>FK employee_salary_fk</td><td>Employee salary entry (nullable)</td></tr>
-<tr><td><code>comment</code></td><td><code>String?</code></td><td>VARCHAR(4000)</td><td>Optional comment</td></tr>
-</table>
-<h3>Computed (Transient) Properties</h3>
-<table>
-<tr><th>Property</th><th>Type</th><th>Description</th></tr>
-<tr><td><code>brutto</code></td><td><code>BigDecimal</code></td><td>Gross amount calculated from net + VAT of parent position</td></tr>
-<tr><td><code>kost1Id</code></td><td><code>Long?</code></td><td>Shortcut for kost1.id</td></tr>
-<tr><td><code>kost2Id</code></td><td><code>Long?</code></td><td>Shortcut for kost2.id</td></tr>
-<tr><td><code>isEmpty</code></td><td><code>Boolean</code></td><td>True if netto is null or zero</td></tr>
-</table>
-<h2>Mutual Exclusion Constraint</h2>
-<p>A KostZuweisung must be assigned to exactly one financial object. The setter for each of the three references enforces mutual exclusivity at the Java level: setting <code>rechnungsPosition</code> throws if <code>eingangsrechnungsPosition</code> or <code>employeeSalary</code> is already set, and vice versa. The <code>hasErrors()</code> method validates that exactly one is assigned (returns an i18n error key if violated).</p>
-<h2>Persistence Details</h2>
-<ul>
-<li>Mapped to <code>T_FIBU_KOST_ZUWEISUNG</code></li>
-<li><strong>Three unique constraints</strong>, one for each financial object type: (index, rechnungs_pos_fk, kost1_fk, kost2_fk), (index, eingangsrechnungs_pos_fk, kost1_fk, kost2_fk), (index, employee_salary_fk, kost1_fk, kost2_fk)</li>
-<li>Five indexes for FK-based query performance</li>
-<li>Extends <code>DefaultBaseDO</code>, implements <code>DisplayNameCapable</code></li>
-<li><code>@JsonBackReference</code> on <code>rechnungsPosition</code> and <code>eingangsrechnungsPosition</code> prevents infinite recursion during JSON serialization</li>
-<li><code>@JsonSerialize(using = IdOnlySerializer)</code> on all ManyToOne references for compact API responses</li>
-</ul>
-<h2>Utility Methods</h2>
-<ul>
-<li><code>setAbstractRechnungsPosition(position)</code> — polymorphic setter dispatching by type</li>
-<li><code>newClone()</code> — creates a deep copy (without IDs) for invoice cloning</li>
-<li>Equals/hashCode based on index + parent position IDs (business key across all three parent types)</li>
-</ul>
-<h2>Source Code (abridged)</h2>
-<pre>@Entity @Indexed @Table(name = "T_FIBU_KOST_ZUWEISUNG", ...)
-open class KostZuweisungDO : DefaultBaseDO(), DisplayNameCapable {
-    open var index: Short = 0
-    open var netto: BigDecimal? = null
-    open var kost1: Kost1DO? = null
-    open var kost2: Kost2DO? = null
-    open var rechnungsPosition: RechnungsPositionDO? = null
-        set(value) { if (value != null && (eingangsrechnungsPosition != null
-            || employeeSalary != null)) throw IllegalStateException(...) }
-
-    val brutto: BigDecimal
-        @Transient get() {
-            val vat = when {
-                rechnungsPosition != null -> rechnungsPosition!!.vat
-                eingangsrechnungsPosition != null -> eingangsrechnungsPosition!!.vat
-                else -> null
-            }
-            return CurrencyHelper.getGrossAmount(netto, vat)
-        }
-    // newClone(), hasErrors(), setAbstractRechnungsPosition(), etc.
-}</pre>
-<h2>Git History</h2>
-<div class="hist"><pre>868d6abb7 2025 -> 2026
-63081666f Source file headers: 2024-> 2025.
-0237d5eba Json: IdOnlySerializer and IdsOnlySerializer.
-db2599ab8 History in orderbook, invoices and projects.
-c8f8ed935 All entities FetchType.LAZY.
-b04a74ffb DisplayHistoryEntry: new concept.
-0b32a3f37 Migration stuff...
-4c04cfd65 MAJOR-CHANGE! Integer id's to Long id's.
-f984352a0 JsonBackReference/JsonManagedReference: KostZuweisungDO
-ca27394ef Constants refactored.
-b78b870bd ShortDisplayNameCapable -> DisplayNameCapable.
-8675a1dbe Kotlin JPA entities declared open (lazy loading fix)
-1cf12f943 Kostzuweisung: Infinite loop in json serialization fixed.
-812b5b751 Heavy WIP: refactoring (Eingangs)Rechnung* perf killer
-339e017b4 @PropertyInfo supported for getter methods.
-3bd2b6e9d RechnungRest: Add position list
-100cc30f0 KostZuweisungDO.java -> KostZuweisungDO.kt</pre></div>
-</body>
-</html>
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>#950</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}.hist{font-size:.85em;color:#555}</style></head>
+<body><div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="949.html">← Prev</a> · <a href="951.html">Next →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/kotlin/org/projectforge/business/fibu/InvoiceService.kt" target="_blank" title="View source on GitHub">📄 source</a></div>
+<h1>#950: <code>InvoiceService.kt</code></h1>
+<div class="meta"><code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/InvoiceService.kt</code> Service, projectforge-business/src/main/kotlin/org/projectforge/business/fibu/InvoiceService.kt <span style="color:#888">305 lines · 253 code · 35 comments · 17 blank</span></div>
+<div class="c">Business logic service orchestrating DAO calls and implementing domain rules.</div>
+<h2>Git History</h2><div class="hist"><pre>868d6abb7 2025 -&gt; 2026
+7b32b554a WIP: Forecast of orders.... AuftragFilter refactored.
+63081666f Source file headers: 2024-&gt; 2025.
+b47c21af6 Refactored caching and calculations with invoices (not yet finished)
+67805f2fc ThreadLocalUserContext.user -&gt; ThreadLocalUserContext.loggedInUser (renamed for avoiding mis-understandings in code).
+85176f8c7 InvoiceService: variants of templates will now be ordered.
+b51dc3b93 Invoice templates: more templates are now supported (customer specific and/or language specific ones).
+b6092df09 Copyright 2023 -&gt; 2024
+522866720 BirthdayTemplate/InvoiceTemplate use new Configuration.getOfficeTemplateFile function.
+ab45d51fa Copyright 2001-2022 -&gt; 2001-2023.
+38bec971a ThreadLocal -&gt; Kotlin
+4def09990 Deprecated Kotlin functions: toLowerCase -&gt; lowerCase, toUpperCase -&gt; uppercase.
+5f7ef41b8 Copyright 2021 -&gt; 2022
+e1538819c Merlin: WIP. IHK, SkillMatrix, DatevImport, AddressExport, ForecastExport, InvoiceService, AbstractImportStoragePanel, AbstractImportPage, ScriptExecutePage and ScriptingPage: using now Autoclosure of ExcelWorkbook and WordDocument.
+867476f85 ConfigurationService -&gt; Kotlin (not yet tested).
+c5bb9c802 Invoice service: decimal format of currencies fixed (trailing zeros).
+ceb63e8a1 Source code header: (C) 2001-2021.
+25fbeecb8 VAT added as variable to InoivceService for Word generator of invoices.
+878cb7169 Lots of compiler warnings fixed.
+e10f9c73f InvoiceService.formatBigDecimal: NPE fix.
+461831f76 Wicket: LocalDate converter.
+b634cecd8 InvoiceService: Date -&gt; LocalDate.
+747801928 Merge branch &#x27;develop&#x27; into TimeClassReplacements</pre></div>
+</body></html>

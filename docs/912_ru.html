@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>#912: CurrencyConversionServiceSupport.kt [RU]</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:2em;color:#444}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}</style>
+</head>
+<body>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Индекс</a> · <a href="file-index.html">← Индекс файлов</a> · <a href="911.html">← Предыдущий</a> · <a href="913.html">Следующий →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/kotlin/org/projectforge/business/fibu/CurrencyConversionServiceSupport.kt" target="_blank" title="Просмотреть исходный код на GitHub">📄 исходник</a></div>
+
+<h1>#912: <code>CurrencyConversionServiceSupport.kt</code></h1>
+
+<div class="meta"><code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/CurrencyConversionServiceSupport.kt</code> 
+  <strong>Тип:</strong> Внутренний Spring-сервис<br>
+  <strong>Пакет:</strong> <code>org.projectforge.business.fibu</code><br>
+  <strong>Путь:</strong> <code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/CurrencyConversionServiceSupport.kt</code><br>
+  <strong>Автор:</strong> Kai Reinhard (k.reinhard@micromata.de)
+ <span style="color:#888">304 строки · 183 кода · 103 комментария · 18 пустых</span></div>
+
+<div class="c">
+  <p><strong>Внутренний вспомогательный класс</strong> для операций конвертации валют. Обрабатывает сохранение в БД, валидацию и контроль доступа. Помечен как <code>internal</code> — не является частью публичного API. <code>CurrencyConversionService</code> — публичный фасад; этот класс выполняет фактические операции с данными и инвалидацию кэша.</p>
+</div>
+
+<h2>Архитектура</h2>
+
+<h3>Зависимости</h3>
+<table>
+  <tr><th>Зависимость</th><th>Роль</th></tr>
+  <tr><td><code>BaseDOPersistenceService</code></td><td>Общие операции insert/update/markAsDeleted/undelete</td></tr>
+  <tr><td><code>PfPersistenceService</code></td><td>Прямые JPA-запросы (именованные запросы, поиск по id)</td></tr>
+  <tr><td><code>CurrencyPairDao</code></td><td>Проверки контроля доступа</td></tr>
+  <tr><td><code>CurrencyConversionCache</code></td><td>Инвалидация после операций записи</td></tr>
+</table>
+
+<h2>Ключевые методы</h2>
+
+<h3>Методы запросов</h3>
+<table>
+  <tr><th>Метод</th><th>Описание</th></tr>
+  <tr><td><code>findRate(id)</code></td><td>Выбирает курс по id; опционально проверяет доступ пользователя на чтение</td></tr>
+  <tr><td><code>selectAllRates(pair, deleted?)</code></td><td>Использует именованный запрос <code>FIND_ALL_BY_PAIR</code>; опционально фильтрует по флагу удаления</td></tr>
+  <tr><td><code>getActiveRate(rates, date)</code></td><td>Находит активный курс из списка по последнему <code>validFrom</code>, не позднее указанной даты</td></tr>
+</table>
+
+<h3>Валидация</h3>
+<p><code>validate(rate)</code> проверяет уникальность через именованные запросы:</p>
+<ul>
+  <li>Новые записи: <code>FIND_BY_PAIR_AND_DATE</code> — проверяет, существует ли уже курс для этой пары+даты</li>
+  <li>Существующие записи: <code>FIND_OTHER_BY_PAIR_AND_DATE</code> — исключает текущий курс</li>
+</ul>
+<p>Если найден соответствующий <strong>удалённый</strong> курс, он возвращается вызывающему коду для <strong>повторного использования</strong> (паттерн undelete + copy-from). Это позволяет пользователям воссоздавать курсы на даты, которые ранее были активны, но мягко удалены.</p>
+
+<h3>CRUD с повторным использованием удалённых записей</h3>
+<p>Оба метода <code>insert()</code> и <code>updateRate()</code> реализуют специальный алгоритм обработки мягко удалённых записей:</p>
+<ol>
+  <li><code>validate(rate)</code> возвращает существующую удалённую запись, если она соответствует</li>
+  <li>Если найдена удалённая запись: поля удалённой записи копируются из нового курса, затем она восстанавливается, а новая запись отбрасывается</li>
+  <li>Для обновлений: существующая запись помечается как удалённая, а ранее удалённая соответствующая запись восстанавливается и обновляется</li>
+  <li>Кэш инвалидируется в блоке <code>finally</code></li>
+</ol>
+
+<h3>Вспомогательные методы сохранения/обновления и удаления</h3>
+<table>
+  <tr><th>Метод</th><th>Описание</th></tr>
+  <tr><td><code>saveOrUpdate(rate)</code></td><td>Общая вставка или обновление, инвалидирует кэш</td></tr>
+  <tr><td><code>delete(rate)</code></td><td>Мягкое удаление курса, инвалидирует кэш</td></tr>
+  <tr><td><code>markRateAsDeleted(pair, rate)</code></td><td>Полный поток пометки удаления: валидация + markDeleted + инвалидация кэша</td></tr>
+  <tr><td><code>markRateAsDeleted(pairId, rateId)</code></td><td>Удобная перегрузка, разрешающая пару по id</td></tr>
+  <tr><td><code>insert(pairId, rate)</code></td><td>Вставка с паттерном отложенного вызова: разрешить пару, затем делегировать</td></tr>
+  <tr><td><code>insert(pair, rate)</code></td><td>Фактическая логика вставки с валидацией и повторным использованием удалённых записей</td></tr>
+  <tr><td><code>updateRate(pair, rate)</code></td><td>Обновление с валидацией, проверкой доступа и повторным использованием удалённых записей при изменении даты</td></tr>
+</table>
+
+<h3>Контроль доступа</h3>
+<p>Все изменяющие методы (insert, update, delete) проверяют, что у вошедшего пользователя есть соответствующее право доступа через <code>currencyPairDao.checkLoggedInUser*Access()</code>. Параметр <code>checkAccess</code> (по умолчанию <code>true</code>) позволяет обходить эти проверки для операций импорта/пакетной обработки.</p>
+
+<h2>История Git</h2>
+<div class="hist"><pre>
+868d6abb7 2025 -> 2026
+b78da69bc BaseDao.baseDOChangedRegistry теперь private.
+75ea9dc1a WIP: конвертация валют с Claude Code.
+07edc85de WIP: конвертация валют с Claude Code.
+bd69407de Начальная ревизия с Claude Code.
+</pre></div>
+
+</body>
+</html>

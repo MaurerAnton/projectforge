@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>#258: SkillEntryDO.kt [ES]</title>
+<style>
+body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}
+h1{border-bottom:2px solid #333;padding-bottom:.3em}
+h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}
+h3{margin-top:2em;color:#444}
+a{color:#0366d6}
+.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}
+.nav{font-size:.9em;color:#888;margin-bottom:1em}
+.lang{font-size:.85em;color:#888;float:right}
+.lang a{color:#888;text-decoration:none;padding:0 .3em}
+.lang a.active{color:#0366d6;font-weight:600;text-decoration:underline}
+.meta{font-size:.9em;margin:1em 0;color:#555}
+code{background:#f0f0f0;padding:0 .2em;font-size:.93em}
+pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}
+table{border-collapse:collapse;width:100%;margin:1em 0}
+th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}
+th{background:#f5f5f5;font-weight:600}
+.hist{font-size:.85em;color:#555}
+</style>
+</head>
+<body>
+<div class="lang"><a href="258.html">EN</a> · <a href="258_de.html">DE</a> · <a href="258_ru.html">RU</a> · <a href="258_fr.html">FR</a> · <a href="258_es.html" class="active">ES</a></div>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Índice</a> · <a href="file-index.html">← Índice de archivos</a> · <a href="3053.html">← Anterior</a> · <a href="1464.html">Siguiente →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/plugins/org.projectforge.plugins.skillmatrix/src/main/kotlin/org/projectforge/plugins/skillmatrix/SkillEntryDO.kt" target="_blank" title="Ver fuente en GitHub">📄 fuente</a></div>
+<h1>#258: <code>SkillEntryDO.kt</code></h1>
+<div class="meta"><code>plugins/org.projectforge.plugins.skillmatrix/src/main/kotlin/org/projectforge/plugins/skillmatrix/SkillEntryDO.kt</code> Tipo: Kotlin · Rol: Registro de Plugin · Fuente: plugins/org.projectforge.plugins.skillmatrix/src/main/kotlin/org/projectforge/plugins/skillmatrix/SkillEntryDO.kt <span style="color:#888">127 líneas · 74 código · 35 comentarios · 18 en blanco</span></div>
+<div class="c">Entidad JPA (Objeto de Datos) que representa SkillEntry en la base de datos. Mapea a una tabla con anotaciones Hibernate, relaciones JPA y propiedades computadas transitorias.</div>
+<h2>Estructura del Código</h2>
+<p>Anotaciones: <code>IndexingDependency</code>, <code>Indexed</code>, <code>micromata</code>, <code>FullTextField</code>, <code>Transient</code>, <code>Table</code>, <code>author</code>, <code>PropertyInfo</code>, <code>GenericField</code>, <code>get</code>, <code>IndexedEmbedded</code>, <code>NamedQueries</code>, <code>JsonSerialize</code>, <code>Entity</code></p>
+<p>Clases: <code>SkillEntryDO</code></p>
+<p>Super-tipo(s): <code>AbstractBaseDO</code></p>
+<p>Entidades JPA: <code>SkillEntryDO</code> (tabla: T_PLUGIN_SKILLMATRIX_ENTRY)</p>
+<p>Funciones (1): <code>getNormalizedSkill</code></p>
+<p>Propiedades (14): <code>id</code>, <code>skill</code>, <code>normalizedSkill</code>, <code>owner</code>, <code>rating</code>, <code>interest</code>, <code>comment</code>, <code>ownerId</code>, <code>FIND_OF_OWNER</code>, <code>DELETE_ALL_OF_USER</code>, <code>MIN_VAL_RATING</code>, <code>MAX_VAL_RATING</code>, <code>MIN_VAL_INTEREST</code>, <code>MAX_VAL_INTEREST</code></p>
+<p>Importaciones: 10 paquetes</p>
+<p>Paquete: <code>org.projectforge.plugins.skillmatrix</code></p>
+<h2>Código Fuente (resumido)</h2>
+<pre>
+package org.projectforge.plugins.skillmatrix
+
+import com.fasterxml.jackson.databind.annotation.JsonSerialize
+import org.projectforge.common.StringHelper
+import org.projectforge.common.anots.PropertyInfo
+import org.projectforge.Constants
+import org.projectforge.framework.persistence.entities.AbstractBaseDO
+import org.projectforge.framework.persistence.user.entities.PFUserDO
+import jakarta.persistence.*
+import org.hibernate.search.mapper.pojo.automaticindexing.ReindexOnUpdate
+import org.hibernate.search.mapper.pojo.mapping.definition.annotation.*
+import org.projectforge.framework.json.IdOnlySerializer
+
+/**
+ * @author Kai Reinhard (k.reinhard@micromata.de)
+ */
+@Entity
+@Indexed
+@Table(
+  name = &quot;T_PLUGIN_SKILLMATRIX_ENTRY&quot;,
+  indexes = [jakarta.persistence.Index(name = &quot;idx_fk_t_plugin_skillmatrix_entry_owner_fk&quot;, columnList = &quot;owner_fk&quot;)]
+)
+@NamedQueries(
+  NamedQuery(
+    name = SkillEntryDO.FIND_OF_OWNER,
+    query = &quot;from SkillEntryDO where owner.id=:ownerId and deleted=false&quot;
+  ),
+  NamedQuery(
+    name = SkillEntryDO.DELETE_ALL_OF_USER,
+    query = &quot;delete from SkillEntryDO where owner.id=:userId&quot;
+  ),
+)
+open class SkillEntryDO : AbstractBaseDO&lt;Long&gt;() {
+
+  @get:Column(name = &quot;pk&quot;)
+  @get:GeneratedValue(strategy = GenerationType.SEQUENCE, generator = &quot;hibernate_sequence&quot;)
+  @get:Id
+  @PropertyInfo(i18nKey = &quot;id&quot;)
+  override var id: Long? = null
+
+  @PropertyInfo(i18nKey = &quot;plugins.skillmatrix.skill&quot;)
+  @FullTextField
+  @get:Column(length = 255, nullable = false)
+  open var skill: String? = null
+
+  @get:Transient
+  val normalizedSkill: String
+    get() = getNormalizedSkill(skill)
+
+  /**
+   * No indexar este campo (debido a protección de privacidad). Nadie debería poder filtrar todas las habilidades de un usuario simplemente ingresando el nombre del usuario en el
+   * campo de búsqueda.
+   */
+  @PropertyInfo(i18nKey = &quot;plugins.skillmatrix.owner&quot;)
+  @IndexedEmbedded(includeDepth = 1)
+  @IndexingDependency(reindexOnUpdate = ReindexOnUpdate.SHALLOW)
+  @get:ManyToOne(fetch = FetchType.LAZY)
+  @get:JoinColumn(name = &quot;owner_fk&quot;)
+  @JsonSerialize(using = IdOnlySerializer::class)
+  open var owner: PFUserDO? = null
+
+  /**
+   * 1 - conocimiento básico, 2 - conocimiento establecido, 3 - conocimiento experto
+   */
+  @PropertyInfo(i18nKey = &quot;plugins.skillmatrix.rating&quot;)
+  @GenericField
+  @get:Column
+  open var rating: Int? = null
+
+  /**
+   * 1 - interesado, 2 - interés especial, 3 - apasionado
+   */
+  @PropertyInfo(i18nKey = &quot;plugins.skillmatrix.interest&quot;)
+  @GenericField
+  @get:Column
+  open var interest: Int? = null
+
+  @PropertyInfo(i18nKey = &quot;comment&quot;)
+  @FullTextField
+  @get:Column(length = Constants.LENGTH_COMMENT)
+  open var comment: String? = null
+
+  val ownerId: Long?
+    @Transient
+    get() = owner?.id
+
+  companion object {
+    const val FIND_OF_OWNER = &quot;SkillEntryDO_FindSkillsOfOwner&quot;
+
+    internal const val DELETE_ALL_OF_USER = &quot;SkillEntryDO_DeleteAllOfUser&quot;
+
+    const val MIN_VAL_RATING = 0
+
+    const val MAX_VAL_RATING = 3
+
+    const val MIN_VAL_INTEREST = 0
+
+    const val MAX_VAL_INTEREST = 3
+
+    fun getNormalizedSkill(skill: String?): String {
+      return StringHelper.normalize(skill, true)!!
+    }
+  }
+}</pre>
+
+<h2>Historial Git</h2>
+<div class="hist"><pre>868d6abb7 2025 -> 2026
+63081666f Encabezados de archivos fuente: 2024 -> 2025.
+0237d5eba Serialización JSON refactorizada: IdOnlySerializer e IdsOnlySerializer introducidos.
+44253baee WIP: Configuración de ProjectForge...
+66ec668f6 Migración en progreso...</pre></div>
+</body>
+</html>

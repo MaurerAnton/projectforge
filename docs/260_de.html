@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>260: SkillEntryPagesRest.kt [DE]</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:1.5em;color:#444;font-size:1em}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.lang{font-size:.85em;color:#888;float:right}.lang a{color:#888;text-decoration:none;padding:0 .3em}.lang a.active{color:#0366d6;font-weight:600;text-decoration:underline}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}pre.diff{background:#fff;font-size:.82em;max-height:300px;overflow-y:auto}</style>
+</head>
+<body>
+<div class="lang"><a href="260.html">EN</a> · <a href="260_de.html" class="active">DE</a> · <a href="260_ru.html">RU</a> · <a href="260_fr.html">FR</a> · <a href="260_es.html">ES</a></div>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← Dateiindex</a> · <a href="509.html">← Vorherige</a> · <a href="88.html">Nächste →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/plugins/org.projectforge.plugins.skillmatrix/src/main/kotlin/org/projectforge/plugins/skillmatrix/SkillEntryPagesRest.kt" target="_blank" title="Quelle auf GitHub anzeigen">📄 Quelle</a></div>
+<h1>#260: <code>SkillEntryPagesRest.kt</code></h1>
+<div class="meta"><code>plugins/org.projectforge.plugins.skillmatrix/src/main/kotlin/org/projectforge/plugins/skillmatrix/SkillEntryPagesRest.kt</code> Kotlin-Klasse, <code>plugins/org.projectforge.plugins.skillmatrix/src/main/kotlin/org/projectforge/plugins/skillmatrix/SkillEntryPagesRest.kt</code> <span style="color:#888">188 Zeilen · 142 Code · 34 Kommentare · 12 Leer</span></div>
+<div class="c"><strong>Zweck:</strong> Quelldatei: projectforge/plugins/skillmatrix/SkillEntryPagesRest.kt. SkillEntryPagesRest.kt ist Teil der Open-Source-Projektmanagement-Anwendung ProjectForge.</div>
+<h2>Quelle (erste 100 Zeilen)</h2>
+<pre>/////////////////////////////////////////////////////////////////////////////
+//
+// Project ProjectForge Community Edition
+//         www.projectforge.org
+//
+// Copyright (C) 2001-2026 Micromata GmbH, Germany (www.micromata.com)
+//
+// ProjectForge ist dual-lizenziert.
+//
+// Diese Community Edition ist freie Software; Sie können es weiterverteilen und/oder
+// modifizieren unter den Bedingungen der GNU General Public License, wie veröffentlicht
+// von der Free Software Foundation; Version 3 der Lizenz.
+//
+// Diese Community Edition wird in der Hoffnung verteilt, dass sie nützlich sein wird,
+// aber OHNE JEGLICHE GEWÄHRLEISTUNG; ohne sogar die stillschweigende Garantie der
+// MARKTGÄNGIGKEIT oder EIGNUNG FÜR EINEN BESTIMMTEN ZWECK. Siehe die GNU General
+// Public License für weitere Details.
+//
+// Sie sollten eine Kopie der GNU General Public License zusammen mit
+// diesem Programm erhalten haben; wenn nicht, siehe http://www.gnu.org/licenses/.
+//
+/////////////////////////////////////////////////////////////////////////////
+
+package org.projectforge.plugins.skillmatrix
+
+import jakarta.servlet.http.HttpServletRequest
+import org.projectforge.business.PfCaches
+import org.projectforge.business.fibu.EmployeeDO
+import org.projectforge.framework.i18n.translate
+import org.projectforge.framework.persistence.api.MagicFilter
+import org.projectforge.framework.persistence.api.QueryFilter
+import org.projectforge.framework.persistence.api.impl.CustomResultFilter
+import org.projectforge.framework.persistence.user.api.ThreadLocalUserContext
+import org.projectforge.menu.MenuItem
+import org.projectforge.menu.MenuItemTargetType
+import org.projectforge.rest.config.Rest
+import org.projectforge.rest.core.AbstractDTOPagesRest
+import org.projectforge.rest.dto.Employee
+import org.projectforge.rest.dto.Kost1
+import org.projectforge.rest.dto.SkillEntry
+import org.projectforge.rest.dto.User
+import org.projectforge.ui.*
+import org.projectforge.ui.filter.UIFilterElement
+import org.springframework.beans.factory.annotation.Autowired
+import org.springframework.web.bind.annotation.RequestMapping
+import org.springframework.web.bind.annotation.RestController
+
+@RestController
+@RequestMapping("${Rest.URL}/skillentry")
+class SkillEntryPagesRest() : AbstractDTOPagesRest&lt;SkillEntryDO, SkillEntry, SkillEntryDao&gt;(
+    SkillEntryDao::class.java,
+    "plugins.skillmatrix.title",
+    cloneSupport = CloneSupport.CLONE
+) {
+    @Autowired
+    private lateinit var caches: PfCaches
+
+    /**
+     * Initialisiert neue Memos zum Hinzufügen.
+     */
+    override fun newBaseDO(request: HttpServletRequest?): SkillEntryDO {
+        val memo = super.newBaseDO(request)
+        memo.owner = ThreadLocalUserContext.loggedInUser
+        return memo
+    }
+
+    override fun transformFromDB(obj: SkillEntryDO, editMode: Boolean): SkillEntry {
+        val entry = SkillEntry()
+        entry.copyFrom(obj)
+        caches.getUser(obj.owner?.id)?.let { userDO -&gt;
+            entry.owner = User(userDO)
+        }
+        return entry
+    }
+
+    override fun transformForDB(dto: SkillEntry): SkillEntryDO {
+        val entryDO = SkillEntryDO()
+        dto.copyTo(entryDO)
+        return entryDO
+    }
+
+    /**
+     * LAYOUT Listenseite
+     */
+    override fun createListLayout(
+        request: HttpServletRequest,
+        layout: UILayout,
+        magicFilter: MagicFilter,
+        userAccess: UILayout.UserAccess
+    ) {
+        agGridSupport.prepareUIGrid4ListPage(
+            request,
+            layout,
+            magicFilter,
+            this,
+            userAccess = userAccess,
+        )
+            .add(lc, "lastUpdate", "skill", "owner")
+            .add(lc, "rating", formatter = UIAgGridColumnDef.Formatter.RATING)
+            .add(lc, "interest", formatter = UIAgGridColumnDef.Formatter.RATING)</pre>
+<h2>Git-Verlauf</h2>
+<div class="hist">
+<pre>868d6abb7 2025 -> 2026
+b1742cefd SkillMatrix: Feld owner in Listen- und Bearbeitungsseite korrigiert.
+63081666f Quelldatei-Header: 2024 -> 2025.
+67805f2fc ThreadLocalUserContext.user -> ThreadLocalUserContext.loggedInUser (umbenannt, um Missverständnisse im Code zu vermeiden).
+77bade6df javax.* -> jakarta.*</pre>
+<h3>868d6abb7</h3><div class="c"><strong>2025 -> 2026</strong><pre class="diff">868d6abb75cd191a892911ac8e45058932cf9074
+diff --git a/plugins/org.projectforge.plugins.skillmatrix/src/main/kotlin/org/projectforge/plugins/skillmatrix/SkillEntryPagesRest.kt b/plugins/org.projectforge.plugins.skillmatrix/src/main/kotlin/org/projectforge/plugins/skillmatrix/SkillEntryPagesRest.kt
+index 0b6c1d285..f4de97b7d 100644
+--- a/plugins/org.projectforge.plugins.skillmatrix/src/main/kotlin/org/projectforge/plugins/skillmatrix/SkillEntryPagesRest.kt
++++ b/plugins/org.projectforge.plugins.skillmatrix/src/main/kotlin/org/projectforge/plugins/skillmatrix/SkillEntryPagesRest.kt
+@@ -3,7 +3,7 @@
+ // Project ProjectForge Community Edition
+ //         www.projectforge.org
+ //
+-// Copyright (C) 2001-2025 Micromata GmbH, Germany (www.micromata.com)
++// Copyright (C) 2001-2026 Micromata GmbH, Germany (www.micromata.com)
+ //
+ // ProjectForge ist dual-lizenziert.
+ //</pre></div><h3>b1742cefd</h3><div class="c"><strong>SkillMatrix: Feld owner in Listen- und Bearbeitungsseite korrigiert.</strong><pre class="diff">b1742cefdb88b9fd401b51009387280af816a5a4
+diff --git a/plugins/org.projectforge.plugins.skillmatrix/src/main/kotlin/org/projectforge/plugins/skillmatrix/SkillEntryPagesRest.kt b/plugins/org.projectforge.plugins.skillmatrix/src/main/kotlin/org/projectforge/plugins/skillmatrix/SkillEntryPagesRest.kt
+index 1b33f262a..0b6c1d285 100644
+--- a/plugins/org.projectforge.plugins.skillmatrix/src/main/kotlin/org/projectforge/plugins/skillmatrix/SkillEntryPagesRest.kt
++++ b/plugins/org.projectforge.plugins.skillmatrix/src/main/kotlin/org/projectforge/plugins/skillmatrix/SkillEntryPagesRest.kt
+@@ -23,6 +23,9 @@
+ 
+ package org.projectforge.plugins.skillmatrix
+ 
++import jakarta.servlet.http.HttpServletRequest
++import org.projectforge.business.PfCaches
++import org.projectforge.business.fibu.EmployeeDO
+ import org.projectforge.framework.i18n.translate
+ import org.projectforge.framework.persistence.api.MagicFilter
+ import org.projectforge.framework.persistence.api.QueryFilter
+@@ -31,123 +34,155 @@ import org.projectforge.framework.persistence.user.api.ThreadLocalUserContext
+ import org.projectforge.menu.MenuItem
+ import org.projectforge.menu.MenuItemTargetType
+ import org.projectforge.rest.config.Rest
+-import org.projectforge.rest.core.AbstractDOPagesRest
++import org.projectforge.rest.core.AbstractDTOPagesRest
++import org.projectforge.rest.dto.Employee
++import org.projectforge.rest.dto.Kost1
++import org.projectforge.rest.dto.SkillEntry
++import org.projectforge.rest.dto.User
+ import org.projectforge.ui.*
+ import org.projectforge.ui.filter.UIFilterElement
++import org.springframework.beans.factory.annotation.Autowired
+ import org.springframework.web.bind.annotation.RequestMapping
+ import org.springframework.web.bind.annotation.RestController
+-import jakarta.servlet.http.HttpServletRequest
+ 
+ @RestController
+ @RequestMapping("${Rest.URL}/skillentry")
+-class SkillEntryPagesRest() : AbstractDOPagesRest&lt;SkillEntryDO, SkillEntryDao&gt;(
+-  SkillEntryDao::class.java,
+-  "plugins.skillmatrix.title",
+-  cloneSupport = CloneSupport.CLONE
++class SkillEntryPagesRest() : AbstractDTOPagesRest&lt;SkillEntryDO, SkillEntry, SkillEntryDao&gt;(
++    SkillEntryDao::class.java,
++    "plugins.skillmatrix.title",
++    cloneSupport = CloneSupport.CLONE
+ ) {
+-  /**
+-   * Initialisiert neue Memos zum Hinzufügen.
+-   */
+-  override fun newBaseDO(request: HttpServletRequest?): SkillEntryDO {
+-    val memo = super.newBaseDO(request)
+-    memo.owner = ThreadLocalUserContext.loggedInUser
+-    return memo
+-  }
++    @Autowired
++    private lateinit var caches: PfCaches
++
++    /**
++     * Initialisiert neue Memos zum Hinzufügen.
++     */
++    override fun newBaseDO(request: HttpServletRequest?): SkillEntryDO {
++        val memo = super.newBaseDO(request)
++        memo.owner = ThreadLocalUserContext.loggedInUser</pre></div><h3>63081666f</h3><div class="c"><strong>Quelldatei-Header: 2024 -> 2025.</strong><pre class="diff">63081666f620fb87315f01b817e560e0b2f6a33a
+diff --git a/plugins/org.projectforge.plugins.skillmatrix/src/main/kotlin/org/projectforge/plugins/skillmatrix/SkillEntryPagesRest.kt b/plugins/org.projectforge.plugins.skillmatrix/src/main/kotlin/org/projectforge/plugins/skillmatrix/SkillEntryPagesRest.kt
+index ca41ffe0d..1b33f262a 100644
+--- a/plugins/org.projectforge.plugins.skillmatrix/src/main/kotlin/org/projectforge/plugins/skillmatrix/SkillEntryPagesRest.kt
++++ b/plugins/org.projectforge.plugins.skillmatrix/src/main/kotlin/org/projectforge/plugins/skillmatrix/SkillEntryPagesRest.kt
+@@ -3,7 +3,7 @@
+ // Project ProjectForge Community Edition
+ //         www.projectforge.org
+ //
+-// Copyright (C) 2001-2024 Micromata GmbH, Germany (www.micromata.com)
++// Copyright (C) 2001-2025 Micromata GmbH, Germany (www.micromata.com)
+ //
+ // ProjectForge ist dual-lizenziert.
+ //</pre></div><h3>67805f2fc</h3><div class="c"><strong>ThreadLocalUserContext.user -> ThreadLocalUserContext.loggedInUser (umbenannt, um Missverständnisse im Code zu vermeiden).</strong><pre class="diff">67805f2fc1f3e6a6393accb4a757a8f4049b001c
+diff --git a/plugins/org.projectforge.plugins.skillmatrix/src/main/kotlin/org/projectforge/plugins/skillmatrix/SkillEntryPagesRest.kt b/plugins/org.projectforge.plugins.skillmatrix/src/main/kotlin/org/projectforge/plugins/skillmatrix/SkillEntryPagesRest.kt
+index c750001aa..ca41ffe0d 100644
+--- a/plugins/org.projectforge.plugins.skillmatrix/src/main/kotlin/org/projectforge/plugins/skillmatrix/SkillEntryPagesRest.kt
++++ b/plugins/org.projectforge.plugins.skillmatrix/src/main/kotlin/org/projectforge/plugins/skillmatrix/SkillEntryPagesRest.kt
+@@ -50,7 +50,7 @@ class SkillEntryPagesRest() : AbstractDOPagesRest&lt;SkillEntryDO, SkillEntryDao&gt;(
+    */
+   override fun newBaseDO(request: HttpServletRequest?): SkillEntryDO {
+     val memo = super.newBaseDO(request)
+-    memo.owner = ThreadLocalUserContext.user
++    memo.owner = ThreadLocalUserContext.loggedInUser
+     return memo
+   }
+ 
+@@ -100,7 +100,7 @@ class SkillEntryPagesRest() : AbstractDOPagesRest&lt;SkillEntryDO, SkillEntryDao&gt;(
+     if (ownerFilterEntry?.isTrueValue == true) {
+       ownerFilterEntry.synthetic = true
+       target.createJoin("owner")
+-      target.add(QueryFilter.eq("owner", ThreadLocalUserContext.user!!)) // Zeige nur eigene Fähigkeiten, nicht die von anderen.
++      target.add(QueryFilter.eq("owner", ThreadLocalUserContext.loggedInUser!!)) // Zeige nur eigene Fähigkeiten, nicht die von anderen.
+     }
+     return null
+   }
+@@ -110,7 +110,7 @@ class SkillEntryPagesRest() : AbstractDOPagesRest&lt;SkillEntryDO, SkillEntryDao&gt;(
+    */
+   override fun prepareClone(dto: SkillEntryDO): SkillEntryDO {
+     val clone = super.prepareClone(dto)
+-    clone.owner = ThreadLocalUserContext.user
++    clone.owner = ThreadLocalUserContext.loggedInUser
+     return clone
+   }
+ </pre></div><h3>77bade6df</h3><div class="c"><strong>javax.* -> jakarta.*</strong><pre class="diff">77bade6dfb148c87638c71951accb03942157fcf
+diff --git a/plugins/org.projectforge.plugins.skillmatrix/src/main/kotlin/org/projectforge/plugins/skillmatrix/SkillEntryPagesRest.kt b/plugins/org.projectforge.plugins.skillmatrix/src/main/kotlin/org/projectforge/plugins/skillmatrix/SkillEntryPagesRest.kt
+index 36e60182c..c750001aa 100644
+--- a/plugins/org.projectforge.plugins.skillmatrix/src/main/kotlin/org/projectforge/plugins/skillmatrix/SkillEntryPagesRest.kt
++++ b/plugins/org.projectforge.plugins.skillmatrix/src/main/kotlin/org/projectforge/plugins/skillmatrix/SkillEntryPagesRest.kt
+@@ -36,7 +36,7 @@ import org.projectforge.ui.*
+ import org.projectforge.ui.filter.UIFilterElement
+ import org.springframework.web.bind.annotation.RequestMapping
+ import org.springframework.web.bind.annotation.RestController
+-import javax.servlet.http.HttpServletRequest
++import jakarta.servlet.http.HttpServletRequest
+ 
+ @RestController
+ @RequestMapping("${Rest.URL}/skillentry")</pre></div>
+</div>
+</body></html>

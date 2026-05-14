@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="ru"><head><meta charset="utf-8"><title>#335: ProjectForgeHomeFinder.kt [RU]</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:2em;color:#444}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.lang{font-size:.85em;color:#888;float:right}.lang a{color:#888;text-decoration:none;padding:0 .3em}.lang a.active{color:#0366d6;font-weight:600;text-decoration:underline}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}</style></head>
+<body><div class="lang"><a href="335.html">EN</a> · <a href="335_de.html">DE</a> · <a href="335_ru.html" class="active">RU</a> · <a href="335_fr.html">FR</a> · <a href="335_es.html">ES</a></div>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Индекс</a> · <a href="file-index.html">← Индекс файлов</a> · <a href="2658.html">← Пред.</a> · <a href="2827.html">След. →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-application/src/main/kotlin/org/projectforge/start/ProjectForgeHomeFinder.kt" target="_blank" title="Просмотреть исходный код на GitHub">📄 исходник</a></div>
+<h1>#335: <code>ProjectForgeHomeFinder.kt</code></h1>
+<div class="meta"><code>projectforge-application/src/main/kotlin/org/projectforge/start/ProjectForgeHomeFinder.kt</code> Тип: Kotlin · Роль: Компонент · Источник: projectforge-application/src/main/kotlin/org/projectforge/start/ProjectForgeHomeFinder.kt <span style="color:#888">403 строки · 285 кода · 88 комментариев · 30 пустых</span></div>
+<div class="c">Файл исходного кода по пути <code>projectforge-application/src/main/kotlin/org/projectforge/start/ProjectForgeHomeFinder.kt</code>, содержащий код Kotlin для слоя Компонентов.</div>
+<h2>Структура кода</h2>
+<p>Аннотации: <code>param</code>, <code>return</code>, <code>JvmStatic</code></p>
+<p>Классы: <code>ProjectForgeHomeFinder</code>, <code>WizardMode</code></p>
+<p>Объекты: <code>and</code></p>
+<p>Enum-классы: <code>WizardMode</code></p>
+<p>Функции (16): <code>findAndEnsureAppHomeDir</code>, <code>proceedForced</code>, <code>searchAndProceed</code>, <code>proceed</code>, <code>answerValid</code>, <code>saveUserPrefHomeDir</code>, <code>checkAndAdd</code>, <code>checkAndAdd</code>, <code>getExecutableDir</code>, <code>findBaseDirAndAncestors</code>, <code>findBaseDirOnly</code>, <code>checkDirectory</code>, <code>isStandardProjectForgeUserDir</code>, <code>isProjectForgeSourceCodeRepository</code>, <code>isProjectForgeConfigured</code>, <code>isProjectForgeConfigured</code></p>
+<p>Свойства (28): <code>userAcceptsGraphicalTerminal</code>, <code>appHomeDir</code>, <code>prefHomeDir</code>, <code>appHomeDir</code>, <code>appHomeDir</code>, <code>setupContext</code>, <code>answer</code>, <code>setupData</code>, <code>userPrefHomeDir</code>, <code>preferences</code>, <code>preferences</code>, <code>savedHomeDir</code>, <code>absolutePath</code>, <code>ENV_PROJECTFORGE_HOME</code>, <code>COMMAND_LINE_VAR_HOME_DIR</code>, <code>DIR_NAMES</code>, <code>homeEnvironmentVariableDefinition</code>, <code>suggestedDirectories</code>, <code>files</code>, <code>canonicalDir</code>, <code>locationUrl</code>, <code>location</code>, <code>file</code>, <code>currentDir</code>, <code>recursiveCounter</code>...</p>
+<p>Импорты: 17 пакетов</p>
+<p>Пакет: <code>org.projectforge.start</code></p>
+<h2>Исходный код (сокращён)</h2>
+<pre>
+package org.projectforge.start
+
+import mu.KotlinLogging
+import org.apache.commons.lang3.StringUtils
+import org.apache.commons.lang3.SystemUtils
+import org.projectforge.ProjectForgeApp
+import org.projectforge.common.CanonicalFileUtils
+import org.projectforge.common.EmphasizedLogSupport
+import org.projectforge.setup.ProjectForgeInitializer.initialize
+import org.projectforge.setup.SetupContext
+import org.projectforge.setup.SetupData
+import org.projectforge.setup.wizard.lanterna.LantSetupWizard.Companion.run
+import org.projectforge.setup.wizard.swing.SwingSetupWizard.Companion.run
+import java.awt.GraphicsEnvironment
+import java.io.File
+import java.io.IOException
+import java.net.URI
+import java.net.URISyntaxException
+import java.util.prefs.Preferences
+
+private val log = KotlinLogging.logger {}
+
+/**
+ * Вспомогательный класс для поиска домашнего каталога ProjectForge:&lt;br&gt;&lt;/br&gt;
+ *
+ *  1. Создайте ProjectForge как каталог верхнего уровня в вашем домашнем каталоге: &#x27;$HOME/ProjectForge&#x27;, или
+ *  1. создайте каталог и поместите jar-файл где-нибудь внутри этого каталога. ProjectForge обнаружит папку относительно запущенного jar, или
+ *  1. создайте каталог и укажите его как параметр командной строки: java -Dhome.dir=ваш_каталог -jar ..., или
+ *  1. создайте каталог и укажите его как системную переменную окружения $PROJECTFORGE_HOME.
+ *
+ */
+class ProjectForgeHomeFinder {
+  private var userAcceptsGraphicalTerminal: WizardMode? = null
+
+  private enum class WizardMode { DESKTOP, CONSOLE, NONE }
+
+  /**
+   * Пытается найти домашний каталог ProjectForge. Если не найден или не инициализирован, запускается мастер настройки.
+   *
+   * @return Домашний каталог. Если не найден, выполняется System.exit() и пользователю показывается информация о дальнейших действиях.
+   */
+  fun findAndEnsureAppHomeDir(): File? {
+    // Попытка найти каталог, заданный через командную строку: -Dhome.dir:
+    var appHomeDir = proceedForced(
+      System.getProperty(COMMAND_LINE_VAR_HOME_DIR),
+      &quot;Домашний каталог ProjectForge задан параметром командной строки, но ещё не инициализирован: -D&quot;
+          + COMMAND_LINE_VAR_HOME_DIR + &quot;=\$APP_HOME_DIR&quot;
+    )
+    if (appHomeDir != null) return appHomeDir
+
+    // Попытка найти каталог, заданный через командную строку: -Dprojectforge.base.dir:
+    appHomeDir = proceedForced(
+      System.getProperty(ProjectForgeApp.CONFIG_PARAM_BASE_DIR),
+      &quot;Домашний каталог ProjectForge задан параметром командной строки, но ещё не инициализирован: -D&quot;
+          + ProjectForgeApp.CONFIG_PARAM_BASE_DIR + &quot;=\$APP_HOME_DIR&quot;
+    )
+    if (appHomeDir != null) return appHomeDir
+
+    // Попытка найти каталог, заданный через переменную окружения:
+    appHomeDir = proceedForced(
+      System.getenv(ENV_PROJECTFORGE_HOME),
+      &quot;Домашний каталог ProjectForge задан системной переменной окружения $&quot; + ENV_PROJECTFORGE_HOME + &quot;: \$APP_HOME_DIR&quot;
+    )
+    if (appHomeDir != null) return appHomeDir
+
+    // Попытка найти каталог, заданный через пользовательские настройки:
+    val prefHomeDir = userPrefHomeDir
+    if (prefHomeDir != null) {
+      appHomeDir = proceed(
+        File(prefHomeDir),
+        &quot;Домашний каталог ProjectForge задан в пользовательских настройках Java &quot; + ENV_PROJECTFORGE_HOME + &quot;: \$APP_HOME_DIR&quot;,
+        false
+      )
+      if (appHomeDir != null) return appHomeDir
+    }
+
+    // Попытка найти каталог, где находится исполняемый jar-файл:
+    appHomeDir = searchAndProceed(
+      File(System.getProperty(&quot;user.home&quot;)),
+      &quot;Домашний каталог ProjectForge найден в домашнем каталоге пользователя: \$APP_HOME_DIR&quot;,
+      false
+    )
+    if (appHomeDir != null) return appHomeDir
+
+    // Попытка найти каталог, где находится исполняемый jar-файл:
+    appHomeDir = searchAndProceed(
+      getExecutableDir(true),
+      &quot;Домашний каталог ProjectForge найден относительно исполняемого jar: \$APP_HOME_DIR&quot;,
+      false
+    )
+    if (appHomeDir != null) return appHomeDir
+
+    // Попытка найти текущий каталог (запуск мастера, так как это последний шанс):
+    appHomeDir = searchAndProceed(
+      File(&quot;.&quot;),
+      &quot;&quot;&quot;Домашний каталог ProjectForge не найден, поиск осуществлялся в:
+  ${StringUtils.join(suggestedDirectories, &quot;\n  &quot;)}&quot;&quot;&quot;,
+      true
+    )
+    if (appHomeDir != null) return appHomeDir
+    ProjectForgeApplication.giveUpAndSystemExit(&quot;Домашний каталог ProjectForge не найден и не настроен, завершение работы :-(&quot;)
+    return null // недостижимо, так как перед этим был вызван SystemExit().
+  }
+
+  /**
+   *
+   *  1.
+   * Если переданный appHomeDir равен null или пуст, возвращается null.
+   *
+   *  1.
+   * Проверяет, существует ли переданный appHomeDir. Если да, возвращается объект File для этого каталога, и ProjectForge
+   * продолжает фазу запуска с этим каталогом.
+   *
+   *  1.
+   * Если переданный appHomeDir не существует или не инициализирован, запускается мастер настройки и установка.
+   * Если пользователь прервал процесс или произошла ошибка, вызывается System.exit(1), иначе возвращается файл с новым
+   * установленным домашним каталогом.
+   *
+   *
+// ... (сокращено, всего 381 строка)</pre>
+
+<h2>История Git</h2><div class="hist"><pre>868d6abb7 2025 -&gt; 2026
+63081666f Заголовки исходных файлов: 2024 -&gt; 2025.
+b6092df09 Авторские права 2023 -&gt; 2024
+ab45d51fa Авторские права 2001-2022 -&gt; 2001-2023.
+7fe9b2c1d Новая библиотека jdbc для postgresql: 42.3.4 -&gt; 42.5.0</pre></div>
+</body></html>

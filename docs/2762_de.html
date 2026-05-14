@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>#2762: webauthn.js [DE]</title>
+<style>
+body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}
+h1{border-bottom:2px solid #333;padding-bottom:.3em}
+h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}
+h3{margin-top:2em;color:#444}
+a{color:#0366d6}
+.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}
+.nav{font-size:.9em;color:#888;margin-bottom:1em}
+.lang{font-size:.85em;color:#888;float:right}
+.lang a{color:#888;text-decoration:none;padding:0 .3em}
+.lang a.active{color:#0366d6;font-weight:600;text-decoration:underline}
+.meta{font-size:.9em;margin:1em 0;color:#555}
+code{background:#f0f0f0;padding:0 .2em;font-size:.93em}
+pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}
+table{border-collapse:collapse;width:100%;margin:1em 0}
+th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}
+th{background:#f5f5f5;font-weight:600}
+.hist{font-size:.85em;color:#555}
+</style>
+</head>
+<body>
+<div class="lang"><a href="2762.html">EN</a> · <a href="2762_de.html" class="active">DE</a> · <a href="2762_ru.html">RU</a> · <a href="2762_fr.html">FR</a> · <a href="2762_es.html">ES</a></div>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← Dateiindex</a> · <a href="2761.html">← Vorherige</a> · <a href="2763.html">Nächste →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-webapp/src/utilities/webauthn.js" target="_blank" title="Quelltext auf GitHub ansehen">📄 Quelle</a></div>
+<h1>#2762: <code>webauthn.js</code></h1>
+<div class="meta"><code>projectforge-webapp/src/utilities/webauthn.js</code> Dienstprogramme zur Konvertierung von WebAuthn-Anmeldeinformationen · <code>projectforge-webapp/src/utilities/webauthn-json.js</code> <span style="color:#888">86 Zeilen · 80 Code · 1 Kommentar · 5 leer</span></div>
+<div class="c">ProjectForge's handgefertigte WebAuthn (FIDO2/U2F) Konvertierungsschicht für Anmeldeinformationen. Dieses Modul stellt die Kodierungs-/Dekodierungsbrücke zwischen der nativen <code>PublicKeyCredential</code>-API des Browsers (die binäre <code>ArrayBuffer</code>-Werte verwendet) und der serverseitigen JSON-API (die base64url-kodierte Zeichenfolgen erwartet) bereit. Drei Hauptfunktionen kümmern sich um unterschiedliche Lebenszyklusphasen: <code>convertPublicKeyCredentialRequestOptions</code> dekodiert vom Server bereitgestellte Challenge-/Benutzer-IDs in <code>ArrayBuffer</code>-Form für die Browser-API; <code>convertRegisterCredential</code> verpackt eine neu erstellte Anmeldeinformation in die JSON-Form, die der Server für die Registrierung erwartet; <code>convertAuthenticateCredential</code> macht dasselbe für Authentifizierungsassertionen.</div>
+<h2>Architektur</h2>
+<h3>Interne Helfer</h3>
+<p><code>decodeBase64url</code> — Konvertiert eine URL-sichere base64-Zeichenfolge in einen <code>ArrayBuffer</code>. Verwendet die <code>atob</code>-Brücke: Rekonstruiert zunächst Standard-Base64 (Ersetzung von <code>-</code>→<code>+</code>, <code>_</code>→<code>/</code>, Hinzufügen von Padding), dekodiert dann über <code>atob</code> und kopiert den charCode jedes Zeichens in ein <code>Uint8Array</code>, das von einem neuen <code>ArrayBuffer</code> gestützt wird.</p>
+<p><code>bufferToBase64url</code> — Die Umkehrung: Iteriert über eine <code>Uint8Array</code>-Ansicht, erstellt einen binären String via <code>String.fromCharCode</code>, kodiert mit <code>btoa</code> und konvertiert dann in die URL-sichere Form.</p>
+<p><code>convertCredentials</code> — Helfer, der während der Refaktorisierung extrahiert wurde und ein Array von Credential-Descriptor-Objekten (mit <code>rawId</code>- und <code>id</code>-Feldern) von base64url-Strings in <code>ArrayBuffer</code> konvertiert, sowohl für <code>allowCredentials</code>- als auch für <code>excludeCredentials</code>-Listen.</p>
+<h3>Registrierung vs. Authentifizierung</h3>
+<p>Registrierung (<code>convertRegisterCredential</code>) verpackt: <code>rawId</code>, <code>clientDataJSON</code>, <code>attestationObject</code> und <code>transports</code> aus der Credential-Antwort, plus Anfragemetadaten (<code>requestId</code>, <code>challenge</code>, <code>sessionToken</code>). Authentifizierung (<code>convertAuthenticateCredential</code>) verpackt: <code>authenticatorData</code>, <code>signature</code>, <code>userHandle</code> anstelle der Attestierungsfelder. Beide verpacken das Ergebnis in dieselbe Hüllenstruktur, die die serverseitigen REST-Endpunkte erwarten.</p>
+<h3>Entwicklung des Ansatzes</h3>
+<p>Diese Datei repräsentiert die produktive WebAuthn-Implementierung, die sich von der eingekauften <code>webauthn-json.js</code>-Bibliothek unterscheidet. Das Team begann mit manueller Bit-Manipulation-Base64-Dekodierung (unter Verwendung einer Reverse-Lookup-Tabelle) und refaktorierte dann zu dem einfacheren <code>atob</code>/<code>btoa</code>-basierten Ansatz. Die separaten Registrierungs-/Authentifizierungsfunktionen und der <code>convertCredentials</code>-Helfer wurden aus einer anfänglich monolithischen Credential-Konvertierung extrahiert.</p>
+<h2>Git-Verlauf</h2>
+<div class="hist"><table>
+<tr><th>Commit</th><th>Was sich geändert hat</th></tr>
+<tr><td><code>9c86a74e5</code></td><td>Extraktion der Inline-<code>allowCredentials</code>/<code>excludeCredentials</code>-Konvertierungsschleifen in eine gemeinsame Helferfunktion <code>convertCredentials(dest, src)</code>. Reduzierte Doppelarbeit: Beide Credential-Listen rufen nun denselben Helfer auf. Die <code>excludeCredentials</code>-Konvertierung aus dem ursprünglichen <code>convertPublicKeyCredentialRequestOptions</code> wurde hier ebenfalls hinzugefügt, wodurch die Credential-Listenverarbeitung vervollständigt wurde.</td></tr>
+<tr><td><code>c6ba8d11c</code></td><td>Zwei bedeutende Ergänzungen: (1) Hinzufügung der Credential-Listenkonvertierung innerhalb von <code>convertPublicKeyCredentialRequestOptions</code> zur Verarbeitung von <code>allowCredentials</code>-Arrays – <code>rawId</code> und <code>id</code> jedes Credentials werden aus base64url dekodiert; (2) Hinzufügung von <code>convertAuthenticateCredential</code> als dedizierte Funktion für Authentifizierungsassertionen (zuvor wurden Registrierung und Authentifizierung von einer einzigen <code>convertCredential</code>-Funktion behandelt). Die alte Funktion wurde zur Klarstellung in <code>convertRegisterCredential</code> umbenannt.</td></tr>
+<tr><td><code>4c5cc21e9</code></td><td>Refaktorisierung von <code>convertCredential</code>, um das Ergebnisobjekt direkt zurückzugeben, anstatt es einer Zwischenvariablen <code>result</code> zuzuweisen, und Hinzufügung des Feldes <code>challenge</code> zur Ausgabehülle – eine kritische Korrektur, da der Server die ursprüngliche Challenge benötigt, um das Credential zu verifizieren.</td></tr>
+<tr><td><code>4a70ca329</code></td><td>Behebung der Extraktion der Credential-Antwortfelder mittels Destrukturierung: <code>const { response } = credential;</code> – der vorherige Code las <code>clientDataJSON</code>, <code>attestationObject</code> und <code>transports</code> fälschlicherweise aus dem Objekt der obersten Ebene <code>credential</code> anstatt aus <code>credential.response</code>, was <code>undefined</code>-Werte erzeugt hätte. Dies war eine kritische Fehlerbehebung.</td></tr>
+<tr><td><code>ddccb2e68</code></td><td>Große Refaktorisierung des base64url-Kodierungs-/Dekodierungsansatzes. Der ursprüngliche handgefertigte Bit-Manipulations-Dekodierer (unter Verwendung einer Reverse-Lookup-Tabelle und manueller Bitverschiebung) wurde durch den einfacheren <code>atob</code>/<code>btoa</code>-basierten Ansatz ersetzt. Außerdem wurde <code>convertPublicKeyCredentialRequestOptions</code> von mutationsbasiert (Änderung der Eingabe an Ort und Stelle) zu kopierbasiert (Verwendung von <code>JSON.parse(JSON.stringify(...))</code> zur Tiefenkopie zuerst) konvertiert. Erste Version von <code>convertCredential</code> für die Registrierungskodierung hinzugefügt.</td></tr>
+<tr><td><code>05c32c27f</code></td><td>Erster WebAuthn-Commit: Erstellung des base64url-Dekodierers und der ersten Version von <code>convertPublicKeyCredentialRequestOptions</code>. Verwendung des Parameternamens <code>registerData</code> und Zugriff auf challenge/user.id über <code>registerData.publicKey.challenge</code>, was eine frühere API-Form widerspiegelt, die später vereinfacht wurde.</td></tr>
+</table></div>
+</body>
+</html>

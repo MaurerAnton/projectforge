@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="es"><head><meta charset="utf-8"><title>#2467: authentication.js [ES]</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:2em;color:#444}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.lang{font-size:.85em;color:#888;float:right}.lang a{color:#888;text-decoration:none;padding:0 .3em}.lang a.active{color:#0366d6;font-weight:600;text-decoration:underline}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}</style></head>
+<body><div class="lang"><a href="2467.html">EN</a> · <a href="2467_de.html">DE</a> · <a href="2467_ru.html">RU</a> · <a href="2467_fr.html">FR</a> · <a href="2467_es.html" class="active">ES</a></div>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Índice</a> · <a href="file-index.html">← Índice de archivos</a> · <a href="7.html">← Anterior</a> · <a href="60.html">Siguiente →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-webapp/src/actions/authentication.js" target="_blank" title="Ver fuente en GitHub">📄 fuente</a></div>
+<h1>#2467: <code>authentication.js</code></h1>
+<div class="meta"><code>projectforge-webapp/src/actions/authentication.js</code> Tipo: JavaScript/React · Rol: Componente · Fuente: projectforge-webapp/src/actions/authentication.js <span style="color:#888">85 líneas · 73 código · 3 comentarios · 9 en blanco</span></div>
+<div class="c">Módulo de autenticación de React que maneja el estado de inicio de sesión, la gestión de tokens y la persistencia de la sesión.</div>
+<h2>Estructura del código</h2>
+<p>Componentes: <code>USER_LOGIN_BEGIN</code>, <code>USER_LOGIN_SUCCESS</code>, <code>USER_LOGIN_FAILURE</code></p>
+<p>Hooks utilizados: <code>rLoginFailure</code>, <code>rLoginBegin</code>, <code>rLoginSuccess</code>, <code>rLoginBegin</code></p>
+<p>Exportaciones: <code>USER_LOGIN_BEGIN</code>, <code>USER_LOGIN_SUCCESS</code>, <code>USER_LOGIN_FAILURE</code>, <code>userLoginBegin</code>, <code>userLoginSuccess</code>, <code>userLoginFailure</code>, <code>loadUserStatus</code>, <code>login</code></p>
+<p>Importaciones de: <code>../utilities/rest</code></p>
+<h2>Código fuente (resumido)</h2>
+<pre>import { getServiceURL, handleHTTPErrors } from &#x27;../utilities/rest&#x27;;
+
+export const USER_LOGIN_BEGIN = &#x27;USER_LOGIN_BEGIN&#x27;;
+export const USER_LOGIN_SUCCESS = &#x27;USER_LOGIN_SUCCESS&#x27;;
+export const USER_LOGIN_FAILURE = &#x27;USER_LOGIN_FAILURE&#x27;;
+
+export const userLoginBegin = () =&gt; ({
+    type: USER_LOGIN_BEGIN,
+});
+
+export const userLoginSuccess = (user, version, buildTimestamp, alertMessage) =&gt; ({
+    type: USER_LOGIN_SUCCESS,
+    payload: {
+        user,
+        version,
+        buildTimestamp,
+        alertMessage,
+    },
+});
+
+export const userLoginFailure = (error) =&gt; ({
+    type: USER_LOGIN_FAILURE,
+    payload: {
+        error,
+    },
+});
+
+const catchError = (dispatch) =&gt; (error) =&gt; dispatch(userLoginFailure(error.message));
+
+export const loadUserStatus = () =&gt; (dispatch) =&gt; {
+    dispatch(userLoginBegin());
+
+    return fetch(
+        getServiceURL(&#x27;userStatus&#x27;),
+        {
+            method: &#x27;GET&#x27;,
+            credentials: &#x27;include&#x27;,
+        },
+    )
+        .then(handleHTTPErrors)
+        .then((response) =&gt; response.json())
+        .then(({ userData, systemData, alertMessage }) =&gt; {
+            dispatch(userLoginSuccess(
+                userData,
+                systemData.version,
+                systemData.buildTimestamp,
+                alertMessage,
+            ));
+        })
+        .catch(() =&gt; {
+            const { pathname, search } = window.location;
+            const href = pathname + search;
+            if (!pathname.startsWith(&#x27;/react/public/login&#x27;)
+                // /react/public/datatransfer/ es un caso especial donde el usuario no ha iniciado sesión.
+                // El formulario de inicio de sesión es devuelto por la transferencia de datos.
+                &amp;&amp; !pathname.startsWith(&#x27;/react/public/datatransfer/&#x27;)) {
+                // establecer la URL para redirigir después del inicio de sesión:
+                window.location.href = `/react/public/login?url=${encodeURIComponent(href)}`;
+            }
+
+            catchError(dispatch)({ message: undefined });
+        });
+};
+
+export const login = (username, password, keepSignedIn) =&gt; (dispatch) =&gt; {
+    dispatch(userLoginBegin());
+    return fetch(
+        getServiceURL(&#x27;/rsPublic/login&#x27;),
+        {
+            method: &#x27;POST&#x27;,
+            headers: {
+                &#x27;Content-Type&#x27;: &#x27;application/json&#x27;,
+            },
+            body: JSON.stringify({
+                username,
+                password,
+                stayLoggedIn: keepSignedIn,
+            }),
+            credentials: &#x27;include&#x27;,
+        },
+    )
+        .then(handleHTTPErrors)
+        .then(() =&gt; loadUserStatus()(dispatch))
+        .catch(catchError(dispatch));
+};</pre>
+
+<h2>Historial de Git</h2><div class="hist"><pre>e2061d7db UserPrefDao: Suprimir registro de error en TimesheetPrefData antiguo. Manejo de inicio de sesión mejorado: redirigir a la URL de origen después del inicio de sesión.
+cc0eb7b56 DataTransferPublicPagesRest: no mostrar token de acceso en el formulario de inicio de sesión. Inicio de sesión corregido.
+7c88abd0f wip dependencias de elevación
+bbd81edc3 es-lint, nuevas versiones de js.
+4f5a06d6f AppVersion eliminado. Información de Git añadida a ProjectForgeVersion.</pre></div>
+</body></html>

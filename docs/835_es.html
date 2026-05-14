@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>#835: BirthdayCache.kt [ES]</title>
+<style>
+  body { font-family: system-ui, sans-serif; max-width: 960px; margin: 2em auto; padding: 0 1em; background: #fafafa; color: #222; line-height: 1.6; }
+  h1 { border-bottom: 2px solid #333; padding-bottom: 0.3em; }
+  h2 { margin-top: 2.5em; border-bottom: 1px solid #ddd; padding-bottom: 0.2em; color: #333; }
+  h3 { margin-top: 2em; color: #444; }
+  a { color: #0366d6; }
+  .c { border-left: 3px solid #ddd; padding: .5em 1em; margin: 1em 0; background: #fff; }
+  .nav { font-size: .9em; color: #888; margin-bottom: 1em; }
+  .meta { font-size: .9em; margin: 1em 0; color: #555; }
+  code { background: #f0f0f0; padding: 0 .2em; font-size: .93em; }
+  pre { background: #f5f5f5; padding: .8em 1em; border: 1px solid #ddd; border-radius: 4px; overflow-x: auto; font-size: .88em; line-height: 1.4; }
+  table { border-collapse: collapse; width: 100%; margin: 1em 0; }
+  th, td { border: 1px solid #ddd; padding: .5em .8em; text-align: left; font-size: .9em; }
+  th { background: #f5f5f5; font-weight: 600; }
+  .hist { font-size: .85em; color: #555; }
+  .warn { background: #fff3cd; border-left: 3px solid #ffc107; padding: .5em 1em; margin: 1em 0; }
+</style>
+</head>
+<body>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Índice</a> · <a href="file-index.html">← Índice de archivos</a> · <a href="834.html">← Anterior</a> · <a href="836.html">Siguiente →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/kotlin/org/projectforge/business/address/BirthdayCache.kt" target="_blank" title="Ver fuente en GitHub">📄 fuente</a></div>
+
+<h1>#835: <code>BirthdayCache.kt</code></h1>
+<div class="meta"><code>projectforge-business/src/main/kotlin/org/projectforge/business/address/BirthdayCache.kt</code> <strong>Clase de caché Kotlin</strong> — índice en caché de todos los cumpleaños de la libreta de direcciones para consultas rápidas por rango de fechas. Extiende <code>AbstractCache</code> para actualización automática basada en TTL. Ubicación: <code>projectforge-business/src/main/kotlin/org/projectforge/business/address/BirthdayCache.kt</code> <span style="color:#888">124 líneas · 81 código · 33 comentarios · 10 en blanco</span></div>
+
+<div class="c">
+<strong>Propósito:</strong> El panel de control del calendario y el sistema de notificación de cumpleaños necesitan responder eficientemente a "¿de quién es el cumpleaños esta semana/este mes?". Sin una caché, cada consulta escanearía toda la tabla de direcciones. BirthdayCache carga en memoria todas las direcciones no eliminadas con fecha de cumpleaños una vez y realiza el filtrado por rango de fechas en memoria, logrando un costo de consulta O(1) después de la carga inicial.
+</div>
+
+<h2>Arquitectura</h2>
+
+<h3>Cadena de herencia</h3>
+<div class="c">
+<code>BirthdayCache</code> extiende <strong><code>AbstractCache</code></strong> (de <code>org.projectforge.framework.cache</code>), la clase base de ProjectForge para cachés basadas en TTL. Esto le proporciona:<br>
+• <code>checkRefresh()</code> — llama automáticamente a <code>refresh()</code> si el TTL ha expirado<br>
+• <code>setExpireInMinutes()</code> — TTL configurable<br>
+• Registro seguro para subprocesos en <code>PfCaches</code> (<a href="820.html">#820</a>)<br>
+• Participación en <code>SystemService.refreshCaches()</code> actualización masiva
+</div>
+
+<h3>Protector de singleton</h3>
+<div class="c">
+La caché utiliza un <strong>objeto companion</strong> con una <code>lateinit var instance</code> y un protector <code>instanceCounter</code>. Si Spring (o el código de prueba) crea una segunda instancia, se registra una advertencia. Esto evita que la clase base <code>AbstractCache</code> registre dos veces la caché en <code>PfCaches</code>, lo que provocaría llamadas de actualización duplicadas.
+</div>
+
+<h3>Modelo de datos</h3>
+<div class="c">
+La caché almacena un <code>MutableList&lt;BirthdayAddress&gt;</code> donde cada <code>BirthdayAddress</code> envuelve un <code>AddressDO</code> e implementa <code>Comparable</code>. La comparación ordena primero por mes/día de cumpleaños, luego por nombre, lo que permite que el <code>TreeSet</code> utilizado en <code>getBirthdays()</code> produzca resultados ordenados naturalmente sin llamadas de ordenación explícitas.
+</div>
+
+<h2>Algoritmo de consulta</h2>
+<div class="c">
+<code>getBirthdays(fromDate, toDate, all, favorites)</code> filtra la lista en caché con cuatro condiciones de guarda aplicadas en este orden de prioridad para mayor eficiencia:<br><br>
+<strong>1. Control de acceso</strong> (<code>addressDao.hasLoggedInUserSelectAccess</code>): Omite las direcciones que el usuario actual no puede ver. Esto es esencial porque la caché carga TODAS las direcciones (usando <code>checkAccess = false</code> en la consulta DAO).<br>
+<strong>2. Filtro de favoritos</strong> (<code>!all && !favorites.contains(address.id)</code>): Si no está en modo "todos", solo se incluyen las direcciones en la lista de favoritos del usuario.<br>
+<strong>3. Disponibilidad de cumpleaños</strong>: Omite direcciones donde <code>PFDateTime.fromOrNull(address.birthday)</code> devuelve null.<br>
+<strong>4. Verificación de rango de fechas</strong> (<code>DateHelper.dateOfYearBetween</code>): Compara mes/día (ignorando el año) con el rango. Esto maneja rangos que abarcan años (ej., 15 dic — 15 ene).<br><br>
+Los resultados se recopilan en un <code>TreeSet&lt;BirthdayAddress&gt;</code> para ordenación automática.
+</div>
+
+<h2>Lógica de actualización</h2>
+<div class="c">
+<code>refresh()</code> se ejecuta dentro de <strong><code>persistenceService.runIsolatedReadOnly { }</code></strong> — un contexto de transacción dedicado separado de cualquier transacción de solicitud HTTP activa. Este aislamiento evita:<br>
+• Contención con sesiones de Hibernate de ámbito de solicitud<br>
+• Problemas de carga diferida (todos los datos se obtienen de manera ansiosa)<br>
+• Fenómenos de lectura de escrituras no confirmadas en la transacción de solicitud<br><br>
+La consulta utiliza <code>QueryFilter.isNotNull("birthday")</code> para excluir direcciones sin fecha de cumpleaños (que son la mayoría). El filtro <code>deleted = false</code> asegura que las direcciones eliminadas de forma suave sean excluidas.<br><br>
+Una verificación defensiva adicional (<code>if (it.deleted != true)</code>) protege contra entidades donde el filtro JPA podría no haberse aplicado (ej., durante la migración o si la configuración del filtro cambia).
+</div>
+
+<h2>Historial de Git</h2>
+<div class="hist">
+<pre>868d6abb7 2025 → 2026 (actualización de año de derechos de autor)
+b131193e7 Variables miembro refactorizadas usando by lazy {} (BirthdayCache entre otros)
+63081666f Encabezados de archivos fuente: 2024→2025
+0ceceb28f Todas las actualizaciones de caché ahora se ejecutan en transacciones o contextos aislados
+1b50060c3 BaseDao renombrado: get→find, save→insert, getList→select, load→select
+87aaf6a5a BaseDao refactorizado (métodos internal* renombrados)
+4c04cfd65 IMPORTANTE: Migración de IDs enteros a IDs Long (incluyendo cascadas FK)
+b6092df09 Derechos de autor 2023 → 2024
+ab45d51fa Derechos de autor 2001-2022 → 2001-2023
+cf80afb28 Funcionalidad de tenencia eliminada (probada en sistema)
+c0f2b9de0 Funcionalidad de inquilinos eliminada en todas partes
+b209e00ba PFDay/PFDateTime.from → from, fromOrNow, fromOrNull
+24019a0f5 Eliminadas ocurrencias de DateHolder
+bfa336a64 BirthdayCache ahora actualizado por SystemService.refreshCaches(), ignora usuarios eliminados
+76a8fb69d Hibernate.Restrictions → PF.QueryFilter
+140cb4c40 WIP: Caché de cumpleaños (implementación inicial)
+615c248f4 Corrección de rendimiento: PersonalAddressDao.getList causaba ralentizaciones; se introdujo BirthdayCache y PersonalAddressDao.getIdList
+</pre>
+</div>
+
+<h2>Explicación de confirmaciones clave</h2>
+<div class="c">
+<strong><code>615c248f4</code> (más antigua) — Corrección de rendimiento:</strong> La caché se creó para resolver un problema crítico de rendimiento. <code>PersonalAddressDao.getList</code> tardaba segundos en ejecutarse, y mostrar cumpleaños en la vista del calendario causaba latencia notable. La caché eliminó el escaneo de la tabla de direcciones por solicitud.<br><br>
+<strong><code>0ceceb28f</code> — Transacciones aisladas:</strong> Las operaciones de actualización se movieron de la transacción de solicitud a <code>runIsolatedReadOnly</code>. Esto solucionó una clase de errores donde una actualización de larga duración dentro de una transacción de solicitud podía causar tiempos de espera de la sesión de Hibernate o problemas de visibilidad de datos obsoletos.<br><br>
+<strong><code>4c04cfd65</code> — Migración int→Long:</strong> Todos los tipos de ID cambiaron de <code>Integer</code> a <code>Long</code>, afectando al parámetro <code>favorites: List&lt;Long&gt;</code> y a las comparaciones de <code>address.id</code> en toda la lógica de filtrado.<br><br>
+<strong><code>cf80afb28</code> — Eliminación de tenencia:</strong> La función multiinquilino se eliminó, simplificando la caché (no se necesita aislamiento de inquilino).<br><br>
+<strong><code>bfa336a64</code> — Corrección de usuario eliminado:</strong> Se agregó la verificación explícita para el cumpleaños de usuarios eliminados, asegurando que no aparezcan en los widgets del panel de control.
+</div>
+
+<h2>Características de rendimiento</h2>
+<table>
+<tr><th>Operación</th><th>Complejidad temporal</th><th>Notas</th></tr>
+<tr><td>Actualizar (carga de caché)</td><td>O(n) donde n = direcciones con cumpleaños</td><td>Consulta SQL única, se ejecuta en transacción aislada</td></tr>
+<tr><td>getBirthdays() (rango de fechas)</td><td>O(n) escaneo de la lista en caché</td><td>En memoria; típicamente n &lt; 500 para PYME</td></tr>
+<tr><td>getBirthdays() (solo favoritos)</td><td>O(n) escaneo con <code>favorites.contains()</code> = O(1) por elemento</td><td>Lista de favoritos pasada como parámetro (ya cargada)</td></tr>
+<tr><td>Verificación de acceso por entrada</td><td>O(1) por entrada (membresías de grupo en caché)</td><td><code>AddressDao.hasLoggedInUserSelectAccess</code></td></tr>
+</table>
+<div class="c">
+El escaneo lineal es aceptable porque la caché solo contiene direcciones con cumpleaños (no la libreta de direcciones completa), y el filtrado de acceso/favoritos evita costosas búsquedas en BD por entrada al trabajar completamente en memoria con datos de seguridad precargados.
+</div>
+
+<div class="warn"><strong>Advertencia — Omisión de control de acceso en actualización:</strong> La consulta de actualización utiliza <code>checkAccess = false</code> para cargar TODAS las direcciones. El control de acceso se aplica más tarde en <code>getBirthdays()</code> por consulta. Esto significa que la caché en sí contiene datos que el usuario actual podría no tener permiso para ver. Cada llamada a <code>getBirthdays()</code> reevalúa el acceso basado en el usuario <em>actual</em> que ha iniciado sesión, haciendo que la caché sea independiente del usuario en el momento del almacenamiento, pero consciente del usuario en el momento de la consulta. Si se revoca el acceso de un usuario, la próxima consulta de cumpleaños (no la próxima actualización de la caché) excluirá sus entradas.</div>
+
+</body>
+</html>

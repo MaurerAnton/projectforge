@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>92: DataTransferAuditPageRest.kt [ES]</title>
+<style>
+body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}
+h1{border-bottom:2px solid #333;padding-bottom:.3em}
+h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}
+h3{margin-top:1.5em;color:#444;font-size:1em}
+a{color:#0366d6}
+.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}
+.nav{font-size:.9em;color:#888;margin-bottom:1em}
+.lang{font-size:.85em;color:#888;float:right}
+.lang a{color:#888;text-decoration:none;padding:0 .3em}
+.lang a.active{color:#0366d6;font-weight:600;text-decoration:underline}
+.meta{font-size:.9em;margin:1em 0;color:#555}
+code{background:#f0f0f0;padding:0 .2em;font-size:.93em}
+pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}
+table{border-collapse:collapse;width:100%;margin:1em 0}
+th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}
+th{background:#f5f5f5;font-weight:600}
+.hist{font-size:.85em;color:#555}
+pre.diff{background:#fff;font-size:.82em;max-height:300px;overflow-y:auto}
+</style>
+</head>
+<body>
+<div class="lang"><a href="92.html">EN</a> · <a href="92_de.html">DE</a> · <a href="92_ru.html">RU</a> · <a href="92_fr.html">FR</a> · <a href="92_es.html" class="active">ES</a></div>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Índice</a> · <a href="file-index.html">← Índice de archivos</a> · <a href="460.html">← Anterior</a> · <a href="2731.html">Siguiente →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/plugins/org.projectforge.plugins.datatransfer/src/main/kotlin/org/projectforge/plugins/datatransfer/rest/DataTransferAuditPageRest.kt" target="_blank" title="Ver fuente en GitHub">📄 fuente</a></div>
+<h1>#92: <code>DataTransferAuditPageRest.kt</code></h1>
+<div class="meta"><code>plugins/org.projectforge.plugins.datatransfer/src/main/kotlin/org/projectforge/plugins/datatransfer/rest/DataTransferAuditPageRest.kt</code> Clase Kotlin, <code>plugins/org.projectforge.plugins.datatransfer/src/main/kotlin/org/projectforge/plugins/datatransfer/rest/DataTransferAuditPageRest.kt</code> <span style="color:#888">134 líneas · 101 código · 26 comentarios · 7 en blanco</span></div>
+<div class="c"><strong>Propósito:</strong> Archivo fuente: plugins/datatransfer/rest/DataTransferAuditPageRest.kt. DataTransferAuditPageRest.kt es parte de la aplicación de gestión de proyectos de código abierto ProjectForge.</div>
+<h2>Fuente (primeras 100 líneas)</h2>
+<pre>/////////////////////////////////////////////////////////////////////////////
+//
+// Proyecto ProjectForge Community Edition
+//         www.projectforge.org
+//
+// Copyright (C) 2001-2026 Micromata GmbH, Alemania (www.micromata.com)
+//
+// ProjectForge tiene doble licencia.
+//
+// Esta edición comunitaria es software libre; puedes redistribuirla y/o
+// modificarla bajo los términos de la Licencia Pública General GNU publicada
+// por la Free Software Foundation; versión 3 de la Licencia.
+//
+// Esta edición comunitaria se distribuye con la esperanza de que sea útil,
+// pero SIN NINGUNA GARANTÍA; sin siquiera la garantía implícita de
+// COMERCIABILIDAD o IDONEIDAD PARA UN PROPÓSITO PARTICULAR. Consulte la
+// Licencia Pública General GNU para más detalles.
+//
+// Deberías haber recibido una copia de la Licencia Pública General GNU junto
+// con este programa; si no, visita http://www.gnu.org/licenses/.
+//
+/////////////////////////////////////////////////////////////////////////////
+
+package org.projectforge.plugins.datatransfer.rest
+
+import org.projectforge.framework.i18n.translate
+import org.projectforge.framework.persistence.user.api.ThreadLocalUserContext
+import org.projectforge.framework.utils.NumberHelper
+import org.projectforge.plugins.datatransfer.DataTransferAreaDao
+import org.projectforge.plugins.datatransfer.DataTransferAuditDO
+import org.projectforge.plugins.datatransfer.DataTransferAuditDao
+import org.projectforge.rest.config.Rest
+import org.projectforge.rest.core.AbstractDynamicPageRest
+import org.projectforge.rest.dto.FormLayoutData
+import org.projectforge.ui.*
+import org.springframework.beans.factory.annotation.Autowired
+import org.springframework.web.bind.annotation.GetMapping
+import org.springframework.web.bind.annotation.RequestMapping
+import org.springframework.web.bind.annotation.RequestParam
+import org.springframework.web.bind.annotation.RestController
+import jakarta.servlet.http.HttpServletRequest
+
+/**
+ * Página del área de transferencia de datos con lista de archivos adjuntos (incluyendo carga/descarga y edición).
+ */
+@RestController
+@RequestMapping("${Rest.URL}/datatransferaudit")
+class DataTransferAuditPageRest : AbstractDynamicPageRest() {
+  @Autowired
+  private lateinit var dataTransferAreaDao: DataTransferAreaDao
+
+  @Autowired
+  private lateinit var dataTransferAuditDao: DataTransferAuditDao
+
+  class AreaAuditData(
+    var area: DataTransferArea? = null,
+    val auditEntries: List&lt;DataTransferAuditDO&gt;? = null,
+    val downloadAuditEntries: List&lt;DataTransferAuditDO&gt;? = null,
+  )
+
+  @GetMapping("dynamic")
+  fun getForm(request: HttpServletRequest, @RequestParam("id") idString: String?): FormLayoutData {
+    var id = NumberHelper.parseLong(idString)
+    if (id == -1L) {
+      // se solicita la caja personal del usuario conectado:
+      id = dataTransferAreaDao.ensurePersonalBox(ThreadLocalUserContext.loggedInUserId!!)?.id
+    }
+    id ?: throw IllegalAccessException("El parámetro id no es un entero o no se encontró ninguna caja personal.")
+    val areaDO = dataTransferAreaDao.find(id)!!
+    val area = DataTransferArea()
+    area.copyFrom(areaDO)
+    val areaId = area.id
+    requireNotNull(areaId)
+    val layout = UILayout("plugins.datatransfer.audit")
+    val events = dataTransferAuditDao.getEntriesByAreaId(areaId)
+    val formData =
+      AreaAuditData(
+        area,
+        events?.filter { !DataTransferAuditDao.downloadEventTypes.contains(it.eventType) },
+        events?.filter { DataTransferAuditDao.downloadEventTypes.contains(it.eventType) },
+      )
+    UIFieldset(12, "plugins.datatransfer.audit.events").let { fieldset -&gt;
+      layout.add(fieldset)
+      val grid = UIAgGrid("auditEntries")
+      initAGGrid(grid)
+      fieldset.add(grid)
+    }
+    UIFieldset(12, "plugins.datatransfer.audit.downloadEvents").let { fieldset -&gt;
+      layout.add(fieldset)
+      val grid = UIAgGrid("downloadAuditEntries")
+      initAGGrid(grid, false)
+      fieldset.add(grid)
+    }
+    LayoutUtils.process(layout)
+    return FormLayoutData(formData, layout, createServerData(request))
+  }
+
+  private fun initAGGrid(agGrid: UIAgGrid, editAction: Boolean = true) {
+    agGrid.add(
+      UIAgGridColumnDef(</pre>
+<h2>Historial Git</h2>
+<div class="hist">
+<pre>868d6abb7 2025 -> 2026
+63081666f Encabezados de archivos fuente: 2024 -> 2025.
+1b50060c3 BaseDao: renombrado: get -> find, save -> insert, getList -> select, load -> select
+67805f2fc ThreadLocalUserContext.user -> ThreadLocalUserContext.loggedInUser (renombrado para evitar malentendidos en el código).
+4c04cfd65 CAMBIO IMPORTANTE: Migración de IDs enteros a IDs Long (incluyendo claves foráneas, etc.)</pre>
+<h3>868d6abb7</h3><div class="c"><strong>2025 -> 2026</strong><pre class="diff">868d6abb75cd191a892911ac8e45058932cf9074
+diff --git a/plugins/org.projectforge.plugins.datatransfer/src/main/kotlin/org/projectforge/plugins/datatransfer/rest/DataTransferAuditPageRest.kt b/plugins/org.projectforge.plugins.datatransfer/src/main/kotlin/org/projectforge/plugins/datatransfer/rest/DataTransferAuditPageRest.kt
+index 3db14500c..9ca87ba84 100644
+--- a/plugins/org.projectforge.plugins.datatransfer/src/main/kotlin/org/projectforge/plugins/datatransfer/rest/DataTransferAuditPageRest.kt
++++ b/plugins/org.projectforge.plugins.datatransfer/src/main/kotlin/org/projectforge/plugins/datatransfer/rest/DataTransferAuditPageRest.kt
+@@ -3,7 +3,7 @@
+ // Project ProjectForge Community Edition
+ //         www.projectforge.org
+ //
+-// Copyright (C) 2001-2025 Micromata GmbH, Germany (www.micromata.com)
++// Copyright (C) 2001-2026 Micromata GmbH, Germany (www.micromata.com)
+ //
+ // ProjectForge is dual-licensed.
+ //</pre></div><h3>63081666f</h3><div class="c"><strong>Encabezados de archivos fuente: 2024 -> 2025.</strong><pre class="diff">63081666f620fb87315f01b817e560e0b2f6a33a
+diff --git a/plugins/org.projectforge.plugins.datatransfer/src/main/kotlin/org/projectforge/plugins/datatransfer/rest/DataTransferAuditPageRest.kt b/plugins/org.projectforge.plugins.datatransfer/src/main/kotlin/org/projectforge/plugins/datatransfer/rest/DataTransferAuditPageRest.kt
+index 8a862e14d..3db14500c 100644
+--- a/plugins/org.projectforge.plugins.datatransfer/src/main/kotlin/org/projectforge/plugins/datatransfer/rest/DataTransferAuditPageRest.kt
++++ b/plugins/org.projectforge.plugins.datatransfer/src/main/kotlin/org/projectforge/plugins/datatransfer/rest/DataTransferAuditPageRest.kt
+@@ -3,7 +3,7 @@
+ // Project ProjectForge Community Edition
+ //         www.projectforge.org
+ //
+-// Copyright (C) 2001-2024 Micromata GmbH, Germany (www.micromata.com)
++// Copyright (C) 2001-2025 Micromata GmbH, Germany (www.micromata.com)
+ //
+ // ProjectForge is dual-licensed.
+ //</pre></div><h3>1b50060c3</h3><div class="c"><strong>BaseDao: renombrado: get -> find, save -> insert, getList -> select, load -> select</strong><pre class="diff">1b50060c3a4b099ec07fd85d28f514b101da4d29
+diff --git a/plugins/org.projectforge.plugins.datatransfer/src/main/kotlin/org/projectforge/plugins/datatransfer/rest/DataTransferAuditPageRest.kt b/plugins/org.projectforge.plugins.datatransfer/src/main/kotlin/org/projectforge/plugins/datatransfer/rest/DataTransferAuditPageRest.kt
+index e6c740406..8a862e14d 100644
+--- a/plugins/org.projectforge.plugins.datatransfer/src/main/kotlin/org/projectforge/plugins/datatransfer/rest/DataTransferAuditPageRest.kt
++++ b/plugins/org.projectforge.plugins.datatransfer/src/main/kotlin/org/projectforge/plugins/datatransfer/rest/DataTransferAuditPageRest.kt
+@@ -66,7 +66,7 @@ class DataTransferAuditPageRest : AbstractDynamicPageRest() {
+       id = dataTransferAreaDao.ensurePersonalBox(ThreadLocalUserContext.loggedInUserId!!)?.id
+     }
+     id ?: throw IllegalAccessException("Parameter id not an int or no personal box found.")
+-    val areaDO = dataTransferAreaDao.getById(id)!!
++    val areaDO = dataTransferAreaDao.find(id)!!
+     val area = DataTransferArea()
+     area.copyFrom(areaDO)
+     val areaId = area.id</pre></div><h3>67805f2fc</h3><div class="c"><strong>ThreadLocalUserContext.user -> ThreadLocalUserContext.loggedInUser (renombrado para evitar malentendidos en el código).</strong><pre class="diff">67805f2fc1f3e6a6393accb4a757a8f4049b001c
+diff --git a/plugins/org.projectforge.plugins.datatransfer/src/main/kotlin/org/projectforge/plugins/datatransfer/rest/DataTransferAuditPageRest.kt b/plugins/org.projectforge.plugins.datatransfer/src/main/kotlin/org/projectforge/plugins/datatransfer/rest/DataTransferAuditPageRest.kt
+index 616a0a91d..e6c740406 100644
+--- a/plugins/org.projectforge.plugins.datatransfer/src/main/kotlin/org/projectforge/plugins/datatransfer/rest/DataTransferAuditPageRest.kt
++++ b/plugins/org.projectforge.plugins.datatransfer/src/main/kotlin/org/projectforge/plugins/datatransfer/rest/DataTransferAuditPageRest.kt
+@@ -63,7 +63,7 @@ class DataTransferAuditPageRest : AbstractDynamicPageRest() {
+     var id = NumberHelper.parseLong(idString)
+     if (id == -1L) {
+       // personal box of logged-in user is requested:
+-      id = dataTransferAreaDao.ensurePersonalBox(ThreadLocalUserContext.userId!!)?.id
++      id = dataTransferAreaDao.ensurePersonalBox(ThreadLocalUserContext.loggedInUserId!!)?.id
+     }
+     id ?: throw IllegalAccessException("Parameter id not an int or no personal box found.")
+     val areaDO = dataTransferAreaDao.getById(id)!!</pre></div><h3>4c04cfd65</h3><div class="c"><strong>CAMBIO IMPORTANTE: Migración de IDs enteros a IDs Long (incluyendo claves foráneas, etc.)</strong><pre class="diff">4c04cfd652210afe373d55f53a5300c85997b109
+diff --git a/plugins/org.projectforge.plugins.datatransfer/src/main/kotlin/org/projectforge/plugins/datatransfer/rest/DataTransferAuditPageRest.kt b/plugins/org.projectforge.plugins.datatransfer/src/main/kotlin/org/projectforge/plugins/datatransfer/rest/DataTransferAuditPageRest.kt
+index 1cf26da13..616a0a91d 100644
+--- a/plugins/org.projectforge.plugins.datatransfer/src/main/kotlin/org/projectforge/plugins/datatransfer/rest/DataTransferAuditPageRest.kt
++++ b/plugins/org.projectforge.plugins.datatransfer/src/main/kotlin/org/projectforge/plugins/datatransfer/rest/DataTransferAuditPageRest.kt
+@@ -60,8 +60,8 @@ class DataTransferAuditPageRest : AbstractDynamicPageRest() {
+ 
+   @GetMapping("dynamic")
+   fun getForm(request: HttpServletRequest, @RequestParam("id") idString: String?): FormLayoutData {
+-    var id = NumberHelper.parseInteger(idString)
+-    if (id == -1) {
++    var id = NumberHelper.parseLong(idString)
++    if (id == -1L) {
+       // personal box of logged-in user is requested:
+       id = dataTransferAreaDao.ensurePersonalBox(ThreadLocalUserContext.userId!!)?.id
+     }</pre></div>
+</div>
+</body></html>

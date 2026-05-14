@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>#886: AuftragFakturiertFilter.kt</title>
+<title>#886: AbstractRechnungCache.kt</title>
 <style>
 body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}
 h1{border-bottom:2px solid #333;padding-bottom:.3em}
@@ -22,51 +22,103 @@ th{background:#f5f5f5;font-weight:600}
 </style>
 </head>
 <body>
-<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="885.html">← Prev</a> · <a href="887.html">Next →</a></div>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="885.html">← Prev</a> · <a href="887.html">Next →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/kotlin/org/projectforge/business/fibu/AbstractRechnungCache.kt" target="_blank" title="View source on GitHub">📄 source</a></div>
 
-<h1>#886: <code>AuftragFakturiertFilter.kt</code></h1>
+<h1>#886: <code>AbstractRechnungCache.kt</code></h1>
 
-<div class="meta">
-<p><strong>Type:</strong> Custom result filter class</p>
-<p><strong>Package:</strong> <code>org.projectforge.business.fibu</code></p>
-<p><strong>Full path:</strong> <code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/AuftragFakturiertFilter.kt</code></p>
-</div>
+<div class="meta"><code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/AbstractRechnungCache.kt</code> 
+<p><strong>Type:</strong> Kotlin abstract class extending <code>AbstractCache</code> — Cache layer for invoice calculations</p>
+<p><strong>Purpose:</strong> Caches pre-calculated invoice totals (<code>RechnungInfo</code>) and position calculations (<code>RechnungPosInfo</code>) to avoid redundant recalculation. Supports both outgoing invoices (<code>RechnungDO</code>) and incoming invoices (<code>EingangsrechnungDO</code>) through its generic type parameter.</p>
+<p><strong>Source path:</strong> <code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/AbstractRechnungCache.kt</code></p>
+ <span style="color:#888">136 lines · 79 code · 44 comments · 13 blank</span></div>
 
 <div class="c">
-<p>A <code>CustomResultFilter&lt;AuftragDO&gt;</code> that filters orders based on their invoicing status. Uses <code>AuftragFakturiertFilterStatus</code> enum values to determine which orders pass the filter. Currently returns <code>true</code> for all non-excluded statuses with a warning log that full implementation is not yet complete.</p>
+<p>An <strong>in-memory performance cache</strong> layer on top of the <code>AbstractCache</code> framework. Invoice calculations (net/gross totals, VAT breakdown, cost assignments) are expensive because they require traversing the entire position tree with cost allocation lookups. This cache stores pre-computed <code>RechnungInfo</code> and <code>RechnungPosInfo</code> objects keyed by entity ID, with automatic refresh via the <code>CacheHelper</code> scheduling mechanism. The cache was refactored from <code>synchronized</code> blocks to <code>ConcurrentHashMap</code> to eliminate a deadlock.</p>
 </div>
 
-<h2>Class Definition</h2>
-<pre>class AuftragFakturiertFilter(val values: List&lt;AuftragFakturiertFilterStatus&gt;) : CustomResultFilter&lt;AuftragDO&gt;</pre>
+<h2>Type Parameters &amp; Constructor</h2>
+<pre>abstract class AbstractRechnungCache(
+    val entityClass: KClass&lt;out AbstractRechnungDO&gt;,
+    protected val rechnungJdbcService: RechnungJdbcService,
+) : AbstractCache()</pre>
 
-<h2>Match Logic</h2>
-<p>The <code>match(list, element)</code> method returns <code>true</code> if:</p>
+<table>
+<tr><th>Parameter</th><th>Description</th></tr>
+<tr><td><code>entityClass</code></td><td>The Kotlin class reference for the invoice entity type (<code>RechnungDO::class</code> or <code>EingangsrechnungDO::class</code>) — used for JDBC queries and logging</td></tr>
+<tr><td><code>rechnungJdbcService</code></td><td>JDBC service for efficient bulk-loading of invoice info from the database (bypasses Hibernate for performance)</td></tr>
+</table>
+
+<h2>Internal State</h2>
+<table>
+<tr><th>Field</th><th>Type</th><th>Description</th></tr>
+<tr><td><code>invoiceInfoMap</code></td><td><code>ConcurrentHashMap&lt;Long, RechnungInfo&gt;</code></td><td>Primary cache: invoice ID → aggregated invoice calculations</td></tr>
+<tr><td><code>invoicePosInfoMap</code></td><td><code>ConcurrentHashMap&lt;Long, RechnungPosInfo&gt;</code></td><td>Secondary cache: position ID → position-level calculations</td></tr>
+</table>
+
+<p>Both maps use <code>ConcurrentHashMap</code> (not synchronized blocks) — this change was made in commit <code>85d8930b3</code> to fix a deadlock that occurred when cache operations interacted with each other under synchronization.</p>
+
+<h2>Public API</h2>
+
+<h3><code>update(invoice: AbstractRechnungDO)</code></h3>
+<p>Forces recalculation of a single invoice and stores the result in the cache. Called when an invoice is modified (inserted, updated, or deleted through the DAO layer). Uses <code>RechnungCalculator.calculate(invoice)</code> to compute fresh values.</p>
+
+<h3><code>ensureRechnungInfo(rechnung: AbstractRechnungDO): RechnungInfo</code></h3>
+<p>Guarantees a <code>RechnungInfo</code> exists for the given invoice. If already cached, returns the cached version (and sets <code>rechnung.info</code>). Otherwise calculates it via <code>RechnungCalculator</code>, stores in the cache, and returns. This is the preferred accessor — it works even if the position tree hasn't been lazy-loaded yet.</p>
+
+<h3><code>getRechnungInfo(rechnungId: Long?): RechnungInfo?</code></h3>
+<p>Returns cached invoice info by ID (null-safe for the ID parameter). Calls <code>checkRefresh()</code> which ensures the cache is not stale.</p>
+
+<h3><code>getRechnungInfo(rechnung: AbstractRechnungDO?): RechnungInfo?</code></h3>
+<p>Overload that extracts the ID from the entity. Null-safe.</p>
+
+<h3><code>ensureRechnungPosInfo(pos: AbstractRechnungsPositionDO): RechnungPosInfo</code></h3>
+<p>Analogous to <code>ensureRechnungInfo</code> but for individual positions. Ensures the parent invoice's <code>RechnungInfo</code> exists first (needed as context), then calculates position-specific info via <code>RechnungCalculator.calculate(posInfo, pos)</code>.</p>
+
+<h3><code>getRechnungPosInfo(rechnungPosId: Long?): RechnungPosInfo?</code></h3>
+<p>Returns cached position info by ID. Null-safe.</p>
+
+<h2>Cache Refresh (<code>override fun refresh()</code>)</h2>
+<p>Called automatically by the <code>CacheHelper</code> framework on a timer and during the <code>checkRefresh()</code> guard. The refresh strategy uses <strong>copy-and-swap</strong> for thread safety:</p>
+<ol>
+<li>Creates new <code>ConcurrentHashMap</code> instances (<code>nInvoiceInfoMap</code>, <code>nInvoicePosInfoMap</code>)</li>
+<li>Bulk-loads all invoice info via <code>rechnungJdbcService.selectRechnungInfos(entityClass)</code> — this uses JDBC directly for performance, bypassing Hibernate</li>
+<li>Populates both maps from the JDBC result set</li>
+<li>Atomically swaps the new maps in place of the old ones</li>
+</ol>
+<p>This approach means the cache is <strong>never stale for longer than one refresh cycle</strong>, and reads never block on the refresh operation.</p>
+
+<h2>Architecture Notes</h2>
 <ul>
-<li><code>values</code> is empty, or</li>
-<li><code>values</code> contains <code>AuftragFakturiertFilterStatus.ALL</code></li>
+<li>Concrete subclasses: <code>RechnungCache</code> (for <code>RechnungDO</code>) and <code>EingangsrechnungCache</code> (for <code>EingangsrechnungDO</code>), each providing only the <code>entityClass</code> parameter</li>
+<li>Uses Kotlin's <code>kotlin.reflect.KClass</code> instead of Java's <code>Class</code> for type safety</li>
+<li>The <code>@Transient lateinit var info</code> on <code>AbstractRechnungDO</code> is the companion field that this cache populates</li>
+<li>During refresh, positions without IDs are logged as errors — this can happen with cloned invoices where position IDs haven't been assigned yet</li>
+<li>The <code>LogDuration</code> utility tracks refresh performance in the logs</li>
 </ul>
-<p>Otherwise, it logs an error that the filter is "Not yet implemented" and still returns <code>true</code>. The actual invoicing-status filtering is handled separately in <code>AuftragFilter.filterFakturiert()</code>.</p>
-
-<h2>Companion Object Factory</h2>
-<p><code>create(valuesAsStrings: Array&lt;String&gt;)</code> converts an array of string representations into an <code>AuftragFakturiertFilter</code> instance by parsing each string as an <code>AuftragFakturiertFilterStatus</code> enum value. Invalid values are logged as errors and silently ignored.</p>
 
 <h2>Git History</h2>
 <div class="hist"><pre>868d6abb7 2025 -> 2026
+85d8930b3 AbstractRechnungCache: Deadlock removed by replacing sync blocks through ConcurrentHashMaps
 63081666f Source file headers: 2024-> 2025.
-0d183e5df Migration stuff in progress...
-923f5c64b Migration stuff in progress...
-b6092df09 Copyright 2023 -> 2024
-ab45d51fa Copyright 2001-2022 -> 2001-2023.
-5f7ef41b8 Copyright 2021 -> 2022
-ceb63e8a1 Source code header: (C) 2001-2021.
-33aac841b WIP: Auftrag -> React (AuftragDao modified).
-d5bfcff96 VacationPeriodFilter added.
-031853218 VacationYearFilter added.
-bc0a52bc7 Vacation stuff...
-b2657ec3a Vacation list, MagicFilterProcessor supports now I18nEnum values.
-7c79f1922 Copyright of source header -> 2020.
-dd5ca38ac CopyRight of all java file-header updated or created.
-2d86a8cd6 PROJECTFORGE-2306 Refactorings for keeping access check at update time
-9ebb88522 Initial commit</pre></div>
+2d324f2bb Finance: incoming invoices fixed.
+12610fee2 Migration stuff in progress... (all tests of all packages: OK).
+ff2cc4cfa Migration stuff in progress... (all tests of all packages: OK).
+190c0aea1 Migration stuff in progress... (all tests of all packages: OK).
+2e9839891 Migration stuff in progress...
+ba2479571 Migration stuff in progress...
+b3293f0cc PersistenceService/Context: stats handling improved.
+b47c21af6 Refactored caching and calculations with invoices (not yet finished)
+ccb7ca64d Migration stuff in progress...
+41b5c2645 Migration stuff in progress...
+87dd5b87c AuftragsCache refactored, migration stuff... (all tests OK)
+9408b59d7 Migration stuff in progress...
+85b4e1175 PfPersistenceService and PfPersistenceContext: query renamed to executeQuery.
+4c04cfd65 MAJOR-CHANGE! Migration of integer id's to Long id's (including fk's etc.)
+2863b30b9 Migration stuff in progress...
+067a4cbb1 Migration stuff in progress...
+9d8b94352 Migration stuff in progress...
+67ce75fe9 Migration stuff in progress...
+e33c8b9c2 Migration stuff in progress...
+</pre></div>
 </body>
 </html>

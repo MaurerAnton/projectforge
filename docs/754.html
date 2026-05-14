@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>#754: XmlObject</title>
+<title>#754: XmlField</title>
 <style>
   body { font-family: system-ui, sans-serif; max-width: 960px; margin: 2em auto; padding: 0 1em; background: #fafafa; color: #222; line-height: 1.6; }
   h1 { border-bottom: 2px solid #333; padding-bottom: 0.3em; }
@@ -24,50 +24,65 @@
 </style>
 </head>
 <body>
-<div class="lang"><a href="754.html" class="active">EN</a> · <a href="754_de.html">DE</a> · <a href="754_ru.html">RU</a> · <a href="754_fr.html">FR</a> · <a href="754_es.html">ES</a></div>
-<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="753.html">← Prev</a> · <a href="755.html">Next →</a></div>
+<div class="lang"><a href="752.html" class="active">EN</a> · <a href="752_de.html">DE</a> · <a href="752_ru.html">RU</a> · <a href="752_fr.html">FR</a> · <a href="752_es.html">ES</a></div>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="753.html">← Prev</a> · <a href="755.html">Next →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/java/org/projectforge/framework/xmlstream/XmlField.java" target="_blank" title="View source on GitHub">📄 source</a></div>
 
-<h1>#754: <code>XmlObject.java</code></h1>
-<div class="meta"><strong>Java annotation</strong> — class-level marker for XmlStream serialization. 44 lines. @Target(TYPE), @Retention(RUNTIME). Source: <code>projectforge-business/src/main/java/org/projectforge/framework/xmlstream/XmlObject.java</code></div>
-
-<div class="c">
-<strong>Purpose:</strong> A <strong>class-level annotation</strong> — marks a class as serializable/deserializable by the XmlStream framework. 44 lines. This is the equivalent of JAXB's <code>@XmlRootElement</code> and XStream's implicit convention (any class can be serialized). Unlike them, XmlStream <strong>requires</strong> explicit annotation — classes without <code>@XmlObject</code> will not be processed by either <code>XmlObjectReader</code> or <code>XmlObjectWriter</code>. This is a security measure: only explicitly permitted classes participate in serialization.
-</div>
-
-<h2>Sole Parameter: <code>alias()</code></h2>
+<h1>#754: <code>XmlField.java</code></h1>
+<div class="meta"><code>projectforge-business/src/main/java/org/projectforge/framework/xmlstream/XmlField.java</code> <strong>Java annotation</strong> — central field-level annotation of the XmlStream framework. 92 lines. @Target(FIELD), @Retention(RUNTIME). Source: <code>projectforge-business/src/main/java/org/projectforge/framework/xmlstream/XmlField.java</code> <span style="color:#888">92 lines · 17 code · 63 comments · 12 blank</span></div>
 
 <div class="c">
-<p>Overrides the root XML element name. By default (empty string), the fully-qualified class name is used: <code>org.projectforge.business.user.PFUserDO</code> → <code>&lt;org.projectforge.business.user.PFUserDO&gt;</code>. With alias: <code>@XmlObject(alias="user")</code> → <code>&lt;user&gt;</code>. Aliases are registered in <code>AliasMap</code> (<a href="758.html">#758</a>) during <code>XmlRegistry</code> initialization.</p>
-
-<p><strong>Difference from <code>@XmlField(alias)</code>:</strong> <code>@XmlObject.alias</code> sets the <strong>root element</strong> name (the tag wrapping the entire object), while <code>@XmlField.alias</code> sets a <strong>child element or attribute</strong> name (a specific field).</p>
+<strong>Purpose:</strong> The central annotation of the XmlStream framework — equivalent to JAXB's <code>@XmlElement</code>, <code>@XmlAttribute</code>, XStream's <code>@XStreamAlias</code> and <code>@XStreamAsAttribute</code>, all combined into one annotation. Marks a Java field as serializable to XML and controls exactly <em>how</em> it is written. Applied at the field level (<code>@Target(FIELD)</code>) and available at runtime via reflection (<code>@Retention(RUNTIME)</code>) — this is how <code>XmlObjectWriter</code> and <code>XmlObjectReader</code> discover serializable fields.
 </div>
 
-<h2>Runtime Usage</h2>
+<h2>8 Annotation Attributes</h2>
+
+<div class="c">
+<h3><code>alias()</code> — XML element/attribute name</h3>
+<p>Overrides the field name during serialization. Without alias: <code>private String firstName</code> → tag <code>&lt;firstName&gt;</code>. With alias: <code>@XmlField(alias="first-name")</code> → tag <code>&lt;first-name&gt;</code>. Useful when the XML format must conform to an external schema or when a Java field name conflicts with an XML reserved word.</p>
+
+<h3><code>asAttribute()</code> and <code>asElement()</code> — attribute vs. element</h3>
+<p>Controls whether the value is serialized as an XML attribute (compact) or an element (structured):</p>
+<pre>&lt;!-- As attribute: --&gt;
+&lt;user id="42" name="John"/&gt;
+
+&lt;!-- As element: --&gt;
+&lt;user&gt;&lt;id&gt;42&lt;/id&gt;&lt;name&gt;John&lt;/name&gt;&lt;/user&gt;</pre>
+<p>Critical nuance from Javadoc: <em>"asAttribute=false has no effect (please use asElement=true instead)"</em> and vice versa. This means <code>false</code> is not a negation — it's "leave to default," which may be overridden by global settings in <code>XmlObjectWriter.asAttributeAsDefault()</code>. To <em>guarantee</em> attribute serialization, use <code>asAttribute=true</code>. To guarantee element, use <code>asElement=true</code>.</p>
+
+<h3><code>defaultDoubleValue</code> / <code>defaultIntValue</code> / <code>defaultStringValue</code> / <code>defaultBooleanValue</code> — XML compression</h3>
+<p>If the field value equals the declared default, it is NOT serialized to XML. This is a compression mechanism: typical default values don't occupy space in the output. During deserialization, absent tags receive the default value. The magic numbers from <code>XmlConstants</code> (<a href="751.html">#751</a>) serve as the "unset" sentinel for int and string defaults. For boolean, the default is <code>false</code> (the most common value). For double, the default is <code>NaN</code> ("not set").</p>
+
+<h3><code>asCDATA()</code> — special character protection</h3>
+<p>If <code>true</code>, the string value is wrapped in an XML <code>&lt;![CDATA[...]]&gt;</code> block. Needed for fields that may contain <code>&lt;</code>, <code>&gt;</code>, <code>&amp;</code> characters — e.g., HTML in description fields or SQL in logs. Without CDATA, these characters would need escaping as <code>&amp;lt;</code>, <code>&amp;gt;</code>, <code>&amp;amp;</code>, making the XML unreadable.</p>
+</div>
+
+<h2>Runtime Consumption</h2>
 
 <div class="c">
 <ol>
-<li><code>XmlRegistry</code> at startup scans the classpath (or config) and finds all <code>@XmlObject</code>-annotated classes</li>
-<li>For each class, registers it in <code>AliasMap</code>: <code>Class → alias</code> and <code>alias → Class</code></li>
-<li><code>XmlObjectReader.newInstance()</code> upon encountering an XML element looks up the corresponding class via <code>AliasMap.getClassForAlias(tagName)</code></li>
-<li>If found — creates an instance via <code>BeanHelper.newInstance()</code> and recursively populates fields (using <code>@XmlField</code>)</li>
-<li>If not found — returns <code>Status.IGNORE</code> (<a href="760.html">#760</a>)</li>
+<li><code>XmlObjectWriter</code> iterates all fields of an object via reflection during serialization</li>
+<li>For each field, checks for <code>@XmlField</code> (and absence of <code>@XmlOmitField</code>)</li>
+<li>If present, reads parameters: alias (tag name), asAttribute (format), default* (skip logic), asCDATA (format)</li>
+<li>Calls the appropriate <code>Converter</code> to transform the field value to a string</li>
+<li><code>XmlObjectReader</code> does the reverse: reads tag/attribute from XML, finds the matching field by name or alias, calls Converter for reverse transformation</li>
 </ol>
 </div>
 
-<h2>XmlObject vs. XStream @XStreamAlias</h2>
-
-<div class="c">
-Key difference: <code>@XmlObject</code> is not just an alias — it's an <strong>explicit permission</strong> for serialization. A class without <code>@XmlObject</code> is entirely excluded from the process. XStream by default serializes any class — creating a risk of accidental data leakage (e.g., serializing a Hibernate proxy with passwords). XmlStream is safer but requires more manual annotation work.
-</div>
-
-<h2>XmlStream Annotation Trio</h2>
+<h2>Comparison with XStream and JAXB</h2>
 
 <table>
-<tr><th>Annotation</th><th>File</th><th>Role</th></tr>
-<tr><td><code>@XmlField</code></td><td><a href="752.html">#752</a></td><td>Configure field serialization (name, type, defaults, format)</td></tr>
-<tr><td><code>@XmlObject</code></td><td><strong>#754</strong></td><td>Enable class for serialization with alias</td></tr>
-<tr><td><code>@XmlOmitField</code></td><td><a href="757.html">#757</a></td><td>Exclude a field from serialization entirely</td></tr>
+<tr><th>Capability</th><th>XmlField</th><th>XStream</th><th>JAXB</th></tr>
+<tr><td>Field alias</td><td><code>alias="name"</code></td><td><code>@XStreamAlias("name")</code></td><td><code>@XmlElement(name="name")</code></td></tr>
+<tr><td>Attribute vs element</td><td><code>asAttribute=true</code></td><td><code>@XStreamAsAttribute</code></td><td><code>@XmlAttribute</code></td></tr>
+<tr><td>Field exclusion</td><td><code>@XmlOmitField</code></td><td><code>@XStreamOmitField</code></td><td><code>@XmlTransient</code></td></tr>
+<tr><td>Default value</td><td><code>defaultIntValue=0</code></td><td>❌ none</td><td>❌ none</td></tr>
+<tr><td>CDATA</td><td><code>asCDATA=true</code></td><td>❌ none</td><td>❌ none</td></tr>
+<tr><td>Format versioning</td><td>✅ via XmlObject</td><td>❌ none</td><td>❌ none</td></tr>
 </table>
+
+<div class="c">
+XmlField + XmlStream provide more control over XML format than XStream, but require manual annotation. XStream "just works" without annotations but generates less controlled XML. The choice of XmlStream for data export was driven specifically by the need for format control and versioning.
+</div>
 
 <h2>Git History</h2>
 <div class="hist">
@@ -76,7 +91,7 @@ Key difference: <code>@XmlObject</code> is not just an alias — it's an <strong
 b6092df09 Copyright 2023 → 2024
 ab45d51fa Copyright 2001-2022 → 2001-2023
 5f7ef41b8 Copyright 2021 → 2022
-cd27dd997 package xstream → xmlstream
+cd27dd997 package xstream → xmlstream (renamed to avoid XStream library confusion)
 ceb63e8a1 Source code header: (C) 2001-2021
 7c79f1922 Copyright of source header → 2020
 32f634b88 Optimize imports
@@ -85,7 +100,7 @@ dd5ca38ac CopyRight of all java file-header updated or created
 </div>
 
 <div class="c">
-The annotation has one attribute (<code>alias</code>) and has not changed since the initial commit beyond copyright updates and the <code>xstream → xmlstream</code> package rename. The simplicity is intentional — this is a permission gate, not a configuration surface.
+The annotation attributes have been stable since initial commit. Only copyright headers, import optimization (<code>32f634b88</code>), and the package rename touched this file. The commented-out <code>implementationClass()</code> attribute suggests the author considered interface-to-implementation mapping at the field level but chose to handle it in <code>XmlObjectReader.addImplementationMapping()</code> instead.
 </div>
 
 </body>

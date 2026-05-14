@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>#125 [DE]</title>
+<style>
+body {
+  font-family: system-ui, sans-serif;
+  max-width: 960px;
+  margin: 2em auto;
+  padding: 0 1em;
+  background: #fafafa;
+  color: #222;
+  line-height: 1.6;
+}
+h1 {
+  border-bottom: 2px solid #333;
+}
+a {
+  color: #0366d6;
+}
+.meta {
+  font-size: .9em;
+  margin: 1em 0;
+}
+.nav {
+  font-size: .9em;
+  color: #888;
+  margin-bottom: 1em;
+}
+.commentary {
+  border-left: 3px solid #ddd;
+  padding: 1em;
+  margin: 1em 0;
+  background: #fff;
+}
+code {
+  background: #f0f0f0;
+  padding: 0 .2em;
+  border-radius: 2px;
+}
+</style>
+</head>
+<body>
+
+<div class="nav">
+  <a href="https://maureranton.github.io/projectforge/">← Index</a> ·
+  <a href="file-index.html">← Datei-Index</a> ·
+  <a href="124.html">← Vorherige</a> ·
+  <a href="126.html">Nächste →</a> ·
+  <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/plugins/org.projectforge.plugins.ihk/src/main/java/org/projectforge/plugins/ihk/IHKExporter.java" target="_blank" title="Quellcode auf GitHub ansehen">📄 Quelle</a>
+</div>
+
+<h1>#125: <code>IHKExporter.java</code></h1>
+
+<div class="meta">
+  <code>plugins/org.projectforge.plugins.ihk/src/main/java/org/projectforge/plugins/ihk/IHKExporter.java</code>
+  <strong>Pfad:</strong> <code>plugins/...ihk/src/main/java/.../IHKExporter.java</code> ·
+  <strong>Zeilen:</strong> 292 ·
+  <strong>Typ:</strong> Java-Excel-Export-Engine
+  <span style="color:#888">292 Zeilen · 201 Code · 39 Kommentare · 52 Leerzeilen</span>
+</div>
+
+<div class="commentary">
+  <p><strong>Excel-Berichtsgenerator für IHK-Ausbildungswochenberichte.</strong> Die Kernlogik des Plugins – nimmt die Stundenzettel einer Woche, die Konfiguration des Auszubildenden (<a href="123.html">IHKCommentObject</a>) und eine <a href="https://github.com/micromata/merlin">Merlin</a>-Excel-Vorlage und erzeugt eine formatierte IHK-konforme <code>.xlsx</code>-Datei. 292 Zeilen Java.</p>
+
+  <h3>Architektur</h3>
+  <p>Verwendet <strong>Merlin</strong> (Micromatas Excel-Templating-Engine, siehe <a href="221.html">#221+</a>) – lädt eine <code>.xlsx</code>-Vorlage aus dem Klassenpfad (<code>ClassPathResource("merlin/ihk/ihk.xlsx")</code>), füllt Daten programmatisch ein und gibt einen <code>ByteArrayOutputStream</code> zum Herunterladen zurück.</p>
+
+  <h3>Wichtige Datenflüsse</h3>
+  <ol>
+    <li><strong>Berechnung des Ausbildungsjahres:</strong> <code>Period.between(ausbildungsbeginn, now).getYears()</code> → berechnet automatisch das Ausbildungsjahr, sofern <code>ausbildungsjahr</code> nicht manuell gesetzt ist</li>
+    <li><strong>Stundenzettelfilterung:</strong> Fragt <code>TimesheetDO</code> nach den Einträgen des Auszubildenden in der ausgewählten Woche ab, gruppiert nach Tag</li>
+    <li><strong>Stundenaggregation:</strong> Summiert die Arbeitsstunden pro Tag, formatiert mit <code>DecimalFormat("0.00")</code></li>
+    <li><strong>Excel-Befüllung via Merlin:</strong>
+      <ul>
+        <li>Liest die Vorlagenarbeitsmappe aus <code>merlin/ihk/ihk.xlsx</code></li>
+        <li>Füllt Kopfzeile: Name des Auszubildenden, Abteilung (<code>teamname</code>), Ausbildungsjahr, Kalenderwoche, Datumsbereich</li>
+        <li>Füllt tägliche Zeilen: Wochentag, Datum, Themen-/Aktivitätsbeschreibung aus dem Stundenzettel, gearbeitete Stunden, Platzhalter für Unterschriften</li>
+        <li>Wendet Zellenformatierung an: Rahmen, Schriftgrößen, verbundene Zellen für den Kopfblock</li>
+      </ul>
+    </li>
+    <li><strong>Ausgabe:</strong> Schreibt die befüllte Arbeitsmappe in einen <code>ByteArrayOutputStream</code>, gibt das Byte-Array für den HTTP-Download mit Dateinamen <code>Berichtsheft_KW{week}_{name}.xlsx</code> zurück</li>
+  </ol>
+
+  <h3>Excel-Vorlagenstruktur</h3>
+  <p>Die IHK schreibt ein bestimmtes Berichtsformat vor, das Folgendes enthält:</p>
+  <ul>
+    <li>Kopfzeile: Firmenname, Name des Auszubildenden, Ausbildungsjahr, Kalenderwoche, Datumsbereich</li>
+    <li>Abteilungs-/Betreuerbereich</li>
+    <li>Tägliche Zeilen: durchgeführte Themen/Aktivitäten, Arbeitsstunden, Unterschriftenfelder</li>
+    <li>Wöchentliche Zusammenfassungszeile mit Gesamtstunden</li>
+    <li>Unterschriftenbereiche für Auszubildenden und Betreuer</li>
+  </ul>
+  <p>Die Merlin-Vorlage (<code>ihk.xlsx</code>) enthält diese Strukturelemente; der Exporteur füllt die dynamischen Daten ein.</p>
+
+  <h3>Abhängigkeiten</h3>
+  <ul>
+    <li><code>de.micromata.merlin.excel.*</code> – Merlin-Excel-API für vorlagenbasierte Excel-Generierung</li>
+    <li><code>TimesheetDO</code> – Stundenzetteleinträge mit Beschreibung, Start-/Endzeit, Datum</li>
+    <li><code>PFDateTime</code>, <code>PFDay</code>, <code>LocalDate</code> – Datums-/Zeitverarbeitung für Wochenbegrenzungen</li>
+    <li><code>JsonUtils</code> – Deserialisiert <a href="123.html">IHKCommentObject</a> aus Adresskommentar</li>
+    <li><code>AddressDO</code> / <code>ThreadLocalUserContext.getLoggedInUser()</code> – Ruft Kontaktdaten des Auszubildenden für die Konfiguration ab</li>
+  </ul>
+</div>
+
+</body>
+</html>

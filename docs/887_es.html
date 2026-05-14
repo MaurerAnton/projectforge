@@ -1,0 +1,220 @@
+Here's the complete HTML translated to Spanish, with `lang="es"`, ES active in the language switcher, and `[ES]` added to the title:
+
+```html
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>#887: AbstractRechnungDO.kt [ES]</title>
+<style>
+body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}
+h1{border-bottom:2px solid #333;padding-bottom:.3em}
+h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}
+h3{margin-top:2em;color:#444}
+a{color:#0366d6}
+.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}
+.nav{font-size:.9em;color:#888;margin-bottom:1em}
+.meta{font-size:.9em;margin:1em 0;color:#555}
+code{background:#f0f0f0;padding:0 .2em;font-size:.93em}
+pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}
+table{border-collapse:collapse;width:100%;margin:1em 0}
+th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}
+th{background:#f5f5f5;font-weight:600}
+.hist{font-size:.85em;color:#555}
+</style>
+</head>
+<body>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Índice</a> · <a href="file-index.html">← Índice de archivos</a> · <a href="886.html">← Anterior</a> · <a href="888.html">Siguiente →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/kotlin/org/projectforge/business/fibu/AbstractRechnungDO.kt" target="_blank" title="Ver fuente en GitHub">📄 fuente</a></div>
+
+<h1>#887: <code>AbstractRechnungDO.kt</code></h1>
+
+<div class="meta"><code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/AbstractRechnungDO.kt</code> 
+<p><strong>Tipo:</strong> Entidad JPA abstracta <code>@MappedSuperclass</code> de Kotlin — Clase base para todos los objetos de dominio de facturas</p>
+<p><strong>Propósito:</strong> Define el esquema de base de datos compartido y la lógica de negocio tanto para facturas de clientes salientes (<code>RechnungDO</code>) como para facturas de acreedores entrantes (<code>EingangsrechnungDO</code>), proporcionando campos comunes, indexación de Hibernate Search, propiedades calculadas y gestión de posiciones.</p>
+<p><strong>Ruta de origen:</strong> <code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/AbstractRechnungDO.kt</code></p>
+ <span style="color:#888">227 líneas · 138 código · 59 comentarios · 30 en blanco</span></div>
+
+<div class="c">
+<p>El <strong>fundamento del modelo de datos compartido</strong> para todos los tipos de facturas en ProjectForge. Extiende <code>DefaultBaseDO</code> (la entidad base del framework con campos de auditoría como <code>created</code>, <code>lastUpdate</code>, <code>deleted</code>) e implementa <code>IRechnung</code> (interfaz de factura compartida) y <code>DisplayNameCapable</code> (para renderizado de UI). Utiliza JPA <code>@MappedSuperclass</code> para que sus campos sean heredados por las tablas de entidades concretas sin crear una tabla separada. Todas las propiedades se declaran <code>open</code> para soportar el mecanismo de proxy de carga diferida de Hibernate.</p>
+</div>
+
+<h2>Jerarquía de Clases</h2>
+<pre>
+DefaultBaseDO &lt;- AbstractRechnungDO &lt;- RechnungDO
+                                    &lt;- EingangsrechnungDO
+IRechnung, DisplayNameCapable (interfaces implementadas por AbstractRechnungDO)
+</pre>
+
+<h2>Campos de Base de Datos</h2>
+
+<h3>Campos Principales de Factura</h3>
+<table>
+<tr><th>Propiedad</th><th>Columna BD</th><th>Tipo</th><th>Restricciones / Anotaciones</th></tr>
+<tr><td><code>datum</code></td><td>—</td><td><code>LocalDate?</code></td><td><code>@Column(nullable = false)</code>, <code>@GenericField</code> (Hibernate Search)</td></tr>
+<tr><td><code>betreff</code></td><td>—</td><td><code>String?</code></td><td><code>@Column(length = 4000)</code>, <code>@FullTextField</code></td></tr>
+<tr><td><code>bemerkung</code></td><td>—</td><td><code>String?</code></td><td><code>@Column(length = 4000)</code>, <code>@FullTextField</code></td></tr>
+<tr><td><code>besonderheiten</code></td><td>—</td><td><code>String?</code></td><td><code>@Column(length = 4000)</code>, <code>@FullTextField</code></td></tr>
+<tr><td><code>faelligkeit</code></td><td>—</td><td><code>LocalDate?</code></td><td><code>@GenericField</code></td></tr>
+<tr><td><code>bezahlDatum</code></td><td><code>bezahl_datum</code></td><td><code>LocalDate?</code></td><td><code>@GenericField</code></td></tr>
+<tr><td><code>zahlBetrag</code></td><td><code>zahl_betrag</code></td><td><code>BigDecimal?</code></td><td><code>scale = 2, precision = 12</code>; monto bruto real pagado</td></tr>
+<tr><td><code>currency</code></td><td>—</td><td><code>String?</code></td><td><code>@Column(length = 10)</code>, <code>@FullTextField</code></td></tr>
+</table>
+
+<h3>Relación con Konto (Cuenta)</h3>
+<table>
+<tr><th>Propiedad</th><th>Tipo</th><th>Anotaciones</th></tr>
+<tr><td><code>konto</code></td><td><code>KontoDO?</code></td><td><code>@ManyToOne(fetch = LAZY)</code>, <code>@JoinColumn(name = "konto_id")</code>, <code>@IndexedEmbedded(includeDepth = 1)</code>, <code>@JsonSerialize(using = IdOnlySerializer::class)</code>, <code>@IndexingDependency(reindexOnUpdate = SHALLOW)</code></td></tr>
+</table>
+<p>La cuenta DATEV asociada con esta factura. Para facturas salientes, por defecto es la cuenta asignada al cliente o proyecto. Para facturas entrantes, representa la entrada del plan de cuentas del acreedor.</p>
+
+<h3>Campos de Descuento / Skonto</h3>
+<table>
+<tr><th>Propiedad</th><th>Tipo</th><th>Descripción</th></tr>
+<tr><td><code>discountPercent</code></td><td><code>BigDecimal?</code></td><td>Porcentaje de descuento por pago anticipado (ej., 2 para 2%)</td></tr>
+<tr><td><code>discountMaturity</code></td><td><code>LocalDate?</code></td><td>Fecha hasta la cual aplica el descuento</td></tr>
+</table>
+
+<h2>Campos Transitorios / Calculados</h2>
+
+<h3>Año</h3>
+<pre>open val year: Int
+    get() = datum?.year ?: 0</pre>
+<p>Derivado de <code>datum</code>. Indexado mediante <code>@GenericField</code> + <code>@IndexingDependency(derivedFrom = ...)</code> para permitir consultas de Hibernate Search por año sin almacenarlo en la base de datos.</p>
+
+<h3>Términos de Pago (Calculados)</h3>
+<table>
+<tr><th>Propiedad</th><th>Tipo</th><th>Descripción</th></tr>
+<tr><td><code>zahlungsZielInTagen</code></td><td><code>Int?</code></td><td>Días entre la fecha de factura y la fecha de vencimiento</td></tr>
+<tr><td><code>discountZahlungsZielInTagen</code></td><td><code>Int?</code></td><td>Días entre la fecha de factura y el vencimiento del descuento</td></tr>
+</table>
+<p>Ambos son calculados por <code>recalculate()</code> usando <code>PFDateTime.daysBetween()</code>. Son <code>@Transient</code> (no persistidos).</p>
+
+<h3><code>uiStatus</code> / <code>uiStatusAsXml</code></h3>
+<p>El estado de la interfaz de usuario se persiste como XML en <code>uiStatusAsXml</code> (<code>@Column(length = 10000)</code>) y se deserializa de forma diferida a una instancia de <code>RechnungUIStatus</code> mediante <code>XmlObjectReader</code>. El getter almacena en caché el objeto deserializado. Anotado con <code>@NoHistory</code> para excluirlo del seguimiento de historial.</p>
+
+<h3><code>info</code> (<code>RechnungInfo</code>)</h3>
+<pre>@Transient @CandHIgnore lateinit var info: RechnungInfo</pre>
+<p>El resumen calculado de la factura (totales neto/bruto, desglose de IVA, asignaciones de costos). Inicializado por <code>RechnungCalculator</code> y almacenado en caché por <code>AbstractRechnungCache</code>. Marcado <code>@CandHIgnore</code> para evitar el procesamiento de historial/auditoría. La verificación <code>isInfoInitialized</code> evita la reinicialización.</p>
+
+<h3><code>ensuredInfo</code></h3>
+<pre>val ensuredInfo: RechnungInfo
+    get() {
+        if (!isInfoInitialized) { RechnungCalculator.calculate(this) }
+        return info
+    }</pre>
+<p>Acceso garantizado — si <code>info</code> aún no se ha calculado (ej., después de la deserialización o cuando la caché no lo precargó), fuerza el cálculo bajo demanda.</p>
+
+<h2>Hibernate Search / Estrategia de Indexación</h2>
+<table>
+<tr><th>Anotación</th><th>Uso</th></tr>
+<tr><td><code>@GenericField</code></td><td>Campos de fecha y numéricos — filtrado exacto, no analizado para texto completo</td></tr>
+<tr><td><code>@FullTextField</code></td><td>Campos de texto (<code>betreff</code>, <code>bemerkung</code>, <code>besonderheiten</code>, <code>currency</code>) — búsqueda de texto completo analizada</td></tr>
+<tr><td><code>@IndexedEmbedded(includeDepth = 1)</code></td><td><code>konto</code> — indexación de entidades anidadas con profundidad limitada</td></tr>
+<tr><td><code>@IndexingDependency(reindexOnUpdate = SHALLOW)</code></td><td><code>konto</code> — solo reindexar cuando el konto mismo cambia (no sus hijos anidados)</td></tr>
+<tr><td><code>@IndexingDependency(derivedFrom = ...)</code></td><td><code>year</code> — derivado transparentemente del campo <code>datum</code></td></tr>
+</table>
+
+<h2>Métodos Abstractos (Implementados por Subclases)</h2>
+<table>
+<tr><th>Método</th><th>Descripción</th></tr>
+<tr><td><code>abstractPositionen: List&lt;AbstractRechnungsPositionDO&gt;?</code></td><td>Devuelve la colección de posiciones/partidas para esta factura</td></tr>
+<tr><td><code>isValid: Boolean</code></td><td>Verdadero si la factura está emitida, no cancelada, no eliminada y no solo planificada</td></tr>
+<tr><td><code>addPositionWithoutCheck(position)</code></td><td>Añade una posición a la colección interna sin validación</td></tr>
+<tr><td><code>setAbstractRechnung(position)</code></td><td>Establece la referencia inversa desde la posición a esta factura</td></tr>
+<tr><td><code>ensureAndGetPositionen()</code></td><td>Inicializa de forma diferida y devuelve la colección de posiciones</td></tr>
+</table>
+
+<h2>Métodos Clave de Negocio</h2>
+
+<h3><code>recalculate()</code></h3>
+<p>Calcula <code>zahlungsZielInTagen</code> y <code>discountZahlungsZielInTagen</code> a partir de <code>datum</code>, <code>faelligkeit</code> y <code>discountMaturity</code>. Si <code>datum</code> es nulo, establece ambos en nulo.</p>
+
+<h3><code>addPosition(position: AbstractRechnungsPositionDO)</code></h3>
+<p>Añade una nueva partida a la factura con asignación automática de número:
+<ol>
+<li>Se asegura de que la lista de posiciones exista</li>
+<li>Encuentra el número máximo de posición existente y lo incrementa en 1 (o usa 1 para la primera posición)</li>
+<li>Establece la referencia inversa mediante <code>setAbstractRechnung()</code></li>
+<li>Añade a la colección interna mediante <code>addPositionWithoutCheck()</code></li>
+</ol></p>
+
+<h3><code>hasKostZuweisungen(): Boolean</code></h3>
+<p>Devuelve <code>true</code> si alguna posición en esta factura tiene asignaciones de costos (<code>kostZuweisungen</code>).</p>
+
+<h3><code>getAbstractPosition(idx: Int): AbstractRechnungsPositionDO?</code></h3>
+<p>Devuelve la posición en el índice dado basado en 0, o nulo si está fuera de rango.</p>
+
+<h2>Notas de Arquitectura</h2>
+<ul>
+<li><strong>Todas las propiedades y métodos son <code>open</code></strong> — esto es crítico para el mecanismo de proxy CGLIB de Hibernate y la interoperabilidad Kotlin-JPA. El commit <code>8675a1dbe</code> identificó esto como un problema importante de rendimiento donde las propiedades de Kotlin no abiertas impedían la carga diferida, causando miles de consultas SQL innecesarias</li>
+<li><strong>Serialización JSON solo con ID:</strong> La relación <code>konto</code> usa <code>@JsonSerialize(using = IdOnlySerializer::class)</code> para evitar la serialización profunda de entidades anidadas en respuestas REST</li>
+<li><strong>Exclusión de historial:</strong> <code>uiStatusAsXml</code> está anotado con <code>@NoHistory</code> porque los cambios de estado de la UI no deben rastrearse en el registro de auditoría</li>
+<li><strong>Exclusión de CanH:</strong> <code>info</code> es <code>@CandHIgnore</code> porque es un valor de caché calculado que puede no estar inicializado aún</li>
+<li>Las anotaciones <code>@PropertyInfo</code> proporcionan claves de i18n y metadatos de tipo para formularios de UI generados automáticamente</li>
+<li>Migrado de Java a Kotlin en etapas — ver historial abajo</li>
+</ul>
+
+<h2>Historial Git</h2>
+<div class="hist"><pre>868d6abb7 2025 -> 2026
+5d8d7db72 WIP: moneda en facturas entrantes.
+8c2bf04f0 WIP: conversión de moneda con Claude Code.
+16b87b4ce WIP: Importación de facturas de acreedores
+175d72c14 WIP: Importación de facturas de acreedores
+4d4c6b449 Campo de moneda añadido a facturas (entrantes y salientes)
+aa20b7708 NewGroupSelectPanel corregido (usado en wizard). (Eingangs)RechnungsPositionDO: @get:JoinColumn -> mappedBy.
+1e0e7225b KostzuweisungsExport de facturas ignora ahora facturas inválidas y posiciones 0.00.
+63081666f Encabezados de archivos fuente: 2024-> 2025.
+b3782c8a8 Trabajo de migración en progreso...
+b810d1c78 Trabajo de migración en progreso... (todas las pruebas de todos los paquetes: OK).
+ba2479571 Trabajo de migración en progreso...
+b47c21af6 Refactorización de caché y cálculos con facturas (aún no terminado)
+ccb7ca64d Trabajo de migración en progreso...
+67a66479e Trabajo de migración en progreso...
+4c04cfd65 CAMBIO-MAYOR! Migración de ids enteros a ids Long (incluyendo fk's etc.)
+ad9ac6b63 Trabajo de migración en progreso...
+f5c09f87f Trabajo de migración en progreso...
+c04fb0d51 Trabajo de migración en progreso...
+06828f490 Trabajo de migración en progreso...
+b6092df09 Copyright 2023 -> 2024
+ab45d51fa Copyright 2001-2022 -> 2001-2023.
+6307a3dbe *RechnungPagesRest: mostrar kost incluyendo tooltip.
+2dc192b7a AG grid: auto-formato de moneda, Formatter funciona ahora también con AG grid (calificaciones, fechas, timestamps). Renderizado de moneda por cliente (Formatter.jsx) añadido.
+68402a26b Eingangsrechnungsliste: Fecha de descuento de usuario y fecha de vencimiento.
+a286007ee Actualización masiva de facturas de acreedores: implementación del manejo de descuentos.
+5f7ef41b8 Copyright 2021 -> 2022
+a7fceb731 Algunas advertencias del compilador corregidas.
+cd27dd997 package xstream -> xmlstream. (debería ser reemplazado por xstream más tarde).
+ceb63e8a1 Encabezado de código fuente: (C) 2001-2021.
+07cb34acb IRechnung, IRechnungsPosition introducidos. DTOs para Eingangsrechnung{sPosition}DO añadidos.
+552603f75 Renombrar métodos setter en RechnungDO para evitar conflictos con Jackson
+92112cdb1 Añadir InvoicePositionComponent
+5064afcec LocalDate Bridge para hibernate search corregido.
+b209e00ba PFDay.from -> from, fromOrNow, fromOrNull, PFDateTime.from -> from, fromOrNow, fromOrNull
+7c1c48782 Reemplazando más instancias de java.sql.Date con java.time.LocalDate Reemplazando instancias de java.sql.Timestamp con java.util.Date
+78b436d9e Reemplazar instancias de java.util.date y java.sql.Date con java.time.LocalDate
+7c79f1922 Copyright del encabezado fuente -> 2020.
+13cfb0330 WIP: Migración a PFDate y PFDateTime.
+24019a0f5 Eliminar ocurrencias de DateHolder
+1dc951c03 Eliminar instancias de DayHolder
+e4cdd8d4b Revertir "Más reemplazos de Holder"
+f604a1afe Más reemplazos de Holder
+19b97fcc3 DateBridge: encoding = EncodingType.STRING para todos los DateBridges en todos los DO's.
+fbe4381e7 DateBridge: string encoding eliminado de nuevo.
+76c5c6955 WIP: MultiFieldQueryParser
+8675a1dbe Encontrado gran problema de rendimiento: Declaradas todas las entidades JPA de Kotlin y sus propiedades como open. La carga diferida no era soportada por Hibernate y resultaba en miles de consultas JPA...
+d36fe6ad9 Heavy WIP: refactorización
+a55ef0c14 Heavy WIP: refactorización de (Eingangs)Rechnung*. ¡Encontrado un gran asesino de rendimiento!
+812b5b751 Heavy WIP: refactorización de (Eingangs)Rechnung*. ¡Encontrado un gran asesino de rendimiento!
+39cdd224c Hibernate search: DateBridge...
+339e017b4 ElementRegistry: @PropertyInfo ahora también soportado para métodos getter de vals de solo lectura.
+f2b55f6aa RechnungsPositionDO.java - RechnungsPositionDO.kt EingangsrechnungsPositionDO.java -> EingangsrechnungsPositionDO.kt AbstractRechnungsPositionDO.java -> AbstractRechnungsPositionDO.kt
+050a5ccd7 @NoHistory necesario como anotación de campo: @field:NoHistory.
+05244ff19 CopyRight de todos los encabezados de archivo Kotlin actualizados o creados.
+f55615812 Migración a Kotlin de {Abstract|Eingangs}RechnungDO...
+39a2bd24f AbstractRechnungDO: Más atributos open
+bd9803e81 AbstractRechnungDO: Añadir open a atributos previamente protegidos.
+103e4f592 AbstractRechnungDO.java -> AbstractRechnungDO.kt
+</pre></div>
+</body>
+</html>

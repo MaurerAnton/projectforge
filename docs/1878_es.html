@@ -1,0 +1,69 @@
+Here's the complete HTML translated to Spanish, with `lang="es"`, the ES link active in the switcher, and `[ES]` appended to the title:
+
+```html
+<!DOCTYPE html><html lang="es"><head><meta charset="utf-8"><title>#1878: CanonicalFileUtils.java [ES]</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:2em;color:#444}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.lang{font-size:.85em;color:#888;float:right}.lang a{color:#888;text-decoration:none;padding:0 .3em}.lang a.active{color:#0366d6;font-weight:600;text-decoration:underline}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}.warn{background:#fff3cd;border-left:3px solid #ffc107;padding:.5em 1em;margin:1em 0}.tip{background:#d4edda;border-left:3px solid #28a745;padding:.5em 1em;margin:1em 0}</style></head>
+<body><div class="lang"><a href="1878.html">EN</a> · <a href="1878_de.html">DE</a> · <a href="1878_ru.html">RU</a> · <a href="1878_fr.html">FR</a> · <a href="1878_es.html" class="active">ES</a></div>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Índice</a> · <a href="file-index.html">← Índice de archivos</a> · <a href="1877.html">← Anterior</a> · <a href="1879.html">Siguiente →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-common/src/main/java/org/projectforge/common/CanonicalFileUtils.java" target="_blank" title="Ver fuente en GitHub">📄 fuente</a></div>
+<h1>#1878: <code>CanonicalFileUtils.java</code></h1>
+<div class="meta"><code>projectforge-common/src/main/java/org/projectforge/common/CanonicalFileUtils.java</code> Clase de utilidad — paquete org.projectforge.common, projectforge-common/src/main/java/org/projectforge/common/CanonicalFileUtils.java <span style="color:#888">67 líneas · 34 código · 27 comentarios · 6 en blanco</span></div>
+<div class="c">Utilidad de normalización de rutas de archivo que resuelve enlaces simbólicos, elimina componentes de ruta <code>..</code> y <code>.</code>, y normaliza separadores de ruta mediante <code>File.getCanonicalPath()</code>. Maneja errores de E/S de forma elegante recurriendo a <code>getAbsolutePath()</code>. Proporciona sobrecargas basadas en cadenas y en objetos File para la resolución de rutas. Se utiliza en ProjectForge siempre que es necesario comparar rutas de archivo o garantizar una representación de ruta consistente.</div>
+<h2>Arquitectura</h2>
+<div class="c">
+<h3>Importaciones</h3>
+<ul>
+<li><code>java.io.File</code> — Abstracción de archivos JDK</li>
+<li><code>java.io.IOException</code> — Excepción verificada de <code>getCanonicalPath()</code></li>
+<li><code>org.slf4j.Logger</code> — Registro de errores para fallos de E/S</li>
+</ul>
+
+<h3>Operaciones principales</h3>
+
+<h4>1. absolutePath(File file) → String</h4>
+<p>Devuelve la ruta canónica de un archivo como cadena. Si <code>getCanonicalPath()</code> lanza <code>IOException</code> (por ejemplo, el archivo no existe y el sistema de archivos no puede resolver su forma canónica), recurre a <code>getAbsolutePath()</code> y registra el error.</p>
+
+<h4>2. absolute(File file) → File</h4>
+<p>Misma lógica pero devuelve un objeto <code>File</code> mediante <code>getCanonicalFile()</code> / <code>getAbsoluteFile()</code>.</p>
+
+<h4>3. absolute(String path) → File</h4>
+<p>Sobrecarga de conveniencia que envuelve una ruta de cadena en <code>new File(path)</code> y delega en <code>absolute(File)</code>.</p>
+
+<h3>¿Por qué ruta canónica?</h3>
+<p>El método <code>File.getCanonicalPath()</code> de Java proporciona varias garantías que <code>getAbsolutePath()</code> no ofrece:</p>
+<ul>
+<li><strong>Resolución de enlaces simbólicos</strong>: En sistemas Unix, los enlaces simbólicos se resuelven a sus destinos</li>
+<li><strong>Normalización</strong>: Se resuelven <code>.</code> (directorio actual) y <code>..</code> (directorio padre)</li>
+<li><strong>Normalización de mayúsculas/minúsculas del sistema de archivos</strong>: En sistemas de archivos que no distinguen mayúsculas/minúsculas (Windows, macOS), las mayúsculas/minúsculas de la ruta coinciden con la entrada real del sistema de archivos</li>
+<li><strong>Eliminación de separadores redundantes</strong>: Se colapsa <code>//</code></li>
+</ul>
+<p>Esto es crítico para operaciones sensibles a la seguridad donde las rutas de entrada del usuario deben compararse con rutas permitidas — dos representaciones de cadena diferentes podrían referirse al mismo archivo (por ejemplo, <code>/home/usuario/../usuario/archivo</code> y <code>/home/usuario/archivo</code>).</p>
+
+<h3>Estrategia de manejo de errores</h3>
+<p>La clase utiliza un patrón de <strong>degradación gradual</strong>: si la resolución canónica falla (IOException), recurre a la ruta absoluta y registra el error. Esto es importante porque <code>getCanonicalPath()</code> puede lanzar IOException por razones fuera del control de la aplicación (por ejemplo, permisos del sistema de archivos, problemas de montaje NFS o que el archivo no exista). La alternativa garantiza que la aplicación continúe funcionando, aunque con una ruta potencialmente no normalizada.</p>
+
+<h3>Manejo de nulos</h3>
+<p>Todos los métodos manejan la entrada <code>null</code> de forma elegante — devolviendo <code>null</code> sin lanzar NullPointerException. Esto simplifica el código del llamante al eliminar la necesidad de comprobaciones de nulos antes de llamar a la utilidad.</p>
+
+<h3>Contexto de uso en ProjectForge</h3>
+<p>CanonicalFileUtils se utiliza en escenarios como:</p>
+<ul>
+<li><strong>Carga/descarga de archivos</strong>: Normalización de rutas de archivo especificadas por el usuario para almacenamiento</li>
+<li><strong>Carga de archivos de configuración</strong>: Resolución de rutas de archivos de configuración que pueden contener referencias relativas</li>
+<li><strong>Comparación de rutas</strong>: Determinación de si dos rutas se refieren al mismo archivo (por ejemplo, detección de cargas de archivos duplicadas)</li>
+<li><strong>Comprobaciones de seguridad</strong>: Asegurar que una ruta de archivo solicitada no escape de un directorio base mediante un recorrido <code>..</code></li>
+<li><strong>Asistente de configuración</strong>: Resolución de directorios seleccionados por el usuario (la clase aparece en el historial de git relacionado con el asistente de configuración)</li>
+</ul>
+
+<div class="warn">El mensaje de registro "<code>Error interno al intentar obtener la ruta canónica</code>" es ligeramente engañoso — una IOException de <code>getCanonicalPath()</code> no es necesariamente un "error interno" sino a menudo una condición ambiental (archivo faltante, permiso denegado). La alternativa a <code>getAbsolutePath()</code> acepta silenciosamente una ruta potencialmente no normalizada.</div>
+
+<div class="tip">La clase es intencionalmente mínima (3 métodos, ~30 líneas de lógica). Extrae una preocupación muy específica — normalización de rutas con alternativa gradual — de la clase más amplia <code>FileHelper</code>. Esto sigue el Principio de Responsabilidad Única, manteniendo las utilidades enfocadas y comprobables.</div>
+</div>
+<h2>Historial de Git</h2><div class="hist"><pre>868d6abb7 2025 -> 2026
+63081666f Encabezados de archivos fuente: 2024 -> 2025.
+b6092df09 Derechos de autor 2023 -> 2024
+ab45d51fa Derechos de autor 2001-2022 -> 2001-2023.
+5f7ef41b8 Derechos de autor 2021 -> 2022
+ceb63e8a1 Encabezado de código fuente: (C) 2001-2021.
+7c79f1922 Derechos de autor del encabezado fuente -> 2020.
+bd25a85fb WIP: Asistente de configuración (Swing y Lanterna)</pre></div>
+</body></html>

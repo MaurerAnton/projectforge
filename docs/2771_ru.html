@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>#2771: LessWicketApplicationInstantiator.java [RU]</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:2em;color:#444}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.lang{font-size:.85em;color:#888;float:right}.lang a{color:#888;text-decoration:none;padding:0 .3em}.lang a.active{color:#0366d6;font-weight:600;text-decoration:underline}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}</style>
+</head>
+<body>
+<div class="lang"><a href="2771.html">EN</a> · <a href="2771_de.html">DE</a> · <a href="2771_ru.html" class="active">RU</a> · <a href="2771_fr.html">FR</a> · <a href="2771_es.html">ES</a></div>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Индекс</a> · <a href="file-index.html">← Индекс файлов</a> · <a href="2770.html">← Пред.</a> · <a href="2772.html">След. →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-wicket/src/main/java/de/micromata/less/LessWicketApplicationInstantiator.java" target="_blank" title="Просмотреть исходник на GitHub">📄 исходник</a></div>
+<h1>#2771: <code>LessWicketApplicationInstantiator.java</code></h1>
+<div class="meta"><code>projectforge-wicket/src/main/java/de/micromata/less/LessWicketApplicationInstantiator.java</code> Движок компиляции LESS CSS (интеграция с Wicket) · <code>projectforge-wicket/src/main/java/de/micromata/less/LessWicketApplicationInstantiator.java</code> <span style="color:#888">206 строк · 116 кода · 62 комментария · 28 пустых</span></div>
+<div class="c">Основной оркестратор компиляции LESS в CSS для веб-слоя Wicket в ProjectForge. Этот класс-одиночка интегрирует компилятор <code>lesscss-java</code> в жизненный цикл приложения Wicket: он находит исходные файлы <code>.less</code> в classpath, компилирует их в CSS в файловой системе, монтирует скомпилированный CSS как версионированный ресурс Wicket (с помощью <code>LessResourceReference</code>) и — в режиме разработки — регистрирует наблюдатели файловой системы, которые автоматически перекомпилируют файлы при изменении любого исходного файла <code>.less</code>. Имя скомпилированного CSS-файла включает временную метку запуска сервера в качестве маркера версии для сброса кэша (<code>projectforge-version-{timestamp}.css</code>).</div>
+<h2>Архитектура</h2>
+<h3>Интеграция с жизненным циклом приложения</h3>
+<p>Класс реализует <code>Serializable</code> и поддерживает статическое поле <code>instance</code>. Во время запуска приложения Wicket создаётся экземпляр с указанием исходного пути <code>.less</code>, целевого пути <code>.css</code> и базовой директории файловой системы <code>baseDir</code>. Вызывается метод <code>instantiate()</code>, который:</p>
+<ol>
+<li>Находит исходный файл LESS в classpath через Spring'овский <code>ClassPathResource</code></li>
+<li>Опционально компилирует LESS в CSS (управляется флагом <code>compileCss</code> — полезно для продакшена, где CSS должен быть предварительно скомпилирован)</li>
+<li>Создаёт <code>LessResourceReference</code> для скомпилированного вывода</li>
+<li>Монтирует ресурс в реестр ресурсов Wicket с версионированным путём</li>
+<li>В режиме разработки прикрепляет наблюдатели за изменениями файловой системы ко всем импортированным LESS-файлам</li>
+</ol>
+<h3>Наблюдатели в режиме разработки</h3>
+<p>Когда <code>WebConfiguration.isDevelopmentMode()</code> возвращает true, класс использует встроенную инфраструктуру <code>IModificationWatcher</code> Wicket для мониторинга основного LESS-источника и всех его зависимостей <code>@import</code>. При изменении любого файла наблюдатель запускает перекомпиляцию — разработчики видят изменения CSS немедленно, без перезапуска сервера. Наблюдатель охватывает весь транзитивный граф импортов через <code>mainLessSource.getImports().values()</code>.</p>
+<h3>Стратегия сброса кэша</h3>
+<p>Метод <code>encodePathWithCachingStrategy</code> заменяет <code>.css</code> на <code>-version-{startTime}.css</code> в пути ресурса. Временная метка (<code>WicketApplication.getStartTime()</code>) меняется при каждом перезапуске сервера, эффективно сбрасывая кэш браузера после развёртывания. Префикс <code>-version-</code> намеренно отличается от стандартного <code>-ver-</code> Wicket, чтобы избежать коллизий с внутренним версионированием ресурсов Wicket.</p>
+<h3>Статический помощник рендеринга</h3>
+<p>Статический метод <code>renderCompiledCssResource(IHeaderResponse)</code> — это точка входа, вызываемая шаблонами страниц для включения скомпилированного CSS в заголовки HTML. Он рендерит <code>CssReferenceHeaderItem</code>, указывающий на смонтированный ресурс. Если инициализатор не был инициализирован (статический <code>instance</code> равен null), он логирует ошибку — это защитный механизм для страниц, отображаемых до завершения компиляции LESS.</p>
+<h2>История Git</h2>
+<div class="hist"><table>
+<tr><th>Коммит</th><th>Что изменилось</th></tr>
+<tr><td><code>868d6abb7</code> по <code>4a6390e11</code></td><td>Шесть коммитов, охватывающих обновления года авторских прав (2021→2026) и слияние миграции на Wicket 8 (<code>4548710df</code>). Обновления авторских прав следуют шаблону ежегодной замены заголовков. Коммит миграции на Wicket 8 (<code>4a6390e11</code>) является слиянием из <code>feature/wicket8</code> в <code>develop</code> — хотя сам diff слияния может не показывать изменений в этом конкретном файле, ветка принесла значительные изменения API в модуле wicket. Логика самого класса оставалась стабильной; все записи в истории относятся к инфраструктурным изменениям, а не к модификациям функциональности.</td></tr>
+</table></div>
+</body>
+</html>

@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>#733 [RU]</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333}h2{margin-top:1.5em}a{color:#0366d6}.meta{font-size:.9em;margin:1em 0}.nav{font-size:.9em;color:#888;margin-bottom:1em}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}code{background:#f0f0f0;padding:0 .2em}</style>
+</head>
+<body>
+
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Индекс</a> · <a href="file-index.html">← Индекс файлов</a> · <a href="732.html">← Предыдущий</a> · <a href="734.html">Следующий →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/java/org/projectforge/framework/utils/GZIPHelper.java" target="_blank" title="Просмотреть исходный код на GitHub">📄 исходник</a></div>
+
+<h1>#733: <code>GZIPHelper.java</code></h1>
+<div class="meta"><code>projectforge-business/src/main/java/org/projectforge/framework/utils/GZIPHelper.java</code> <strong>Строк:</strong> 81 · <strong>Тип:</strong> Утилита Java — <code>org.projectforge.framework.utils</code> <span style="color:#888">81 строка · 45 кода · 30 комментариев · 6 пустых</span></div>
+
+<div class="c"><h2>Назначение</h2>
+<p>Сжимает и распаковывает строки с использованием <strong>GZIP + кодировки Base64</strong>. Решает две проблемы: (1) некоторые поля базы данных имеют ограниченную длину символов (например, <code>VARCHAR(4000)</code>), и (2) хранение больших JSON-блобов в столбцах базы данных расходует место. Эта утилита сжимает строку с помощью GZIP, затем <strong>кодирует в Base64</strong> двоичный результат, чтобы его можно было хранить как обычную строку в столбце базы данных <code>VARCHAR</code> или <code>TEXT</code>. Распаковка выполняет обратный процесс: декодирование Base64 → распаковка GZIP → исходная строка.</p>
+<p><strong>Зачем Base64 после GZIP?</strong> GZIP создает двоичные байты — они небезопасны для хранения в текстовых столбцах базы данных (которые используют кодировки символов, такие как UTF-8, которые могут интерпретировать некоторые значения байтов как управляющие символы). Base64 преобразует двоичные данные в чистую ASCII-строку (используя 64 безопасных символа: A-Z, a-z, 0-9, +, /) — гарантированно безопасно для любого текстового хранения.</p></div>
+
+<div class="c"><h2>API — два метода</h2>
+<h3><code>compress(String str) → String</code></h3>
+<p>Принимает любую строку (безопасен для null — возвращает null для пустого ввода/null). Оборачивает XML пользовательских настроек, JSON-конфигурации и большие текстовые поля для хранения в базе данных. Алгоритм:
+<ol><li><code>str.getBytes()</code> — преобразует в байты кодировки платформы по умолчанию. <strong>Предупреждение:</strong> использует кодировку JVM по умолчанию (обычно UTF-8 в современных системах, но может отличаться в устаревших). Если исходная строка содержит не-ASCII символы, разные JVM могут дать разные сжатые результаты</li>
+<li>Оборачивает в <code>GZIPOutputStream</code> — реализация GZIP стандартной библиотеки Java (RFC 1952)</li>
+<li>Закрывает поток GZIP — это <strong>сбрасывает</strong> сжатые данные в нижележащий <code>ByteArrayOutputStream</code></li>
+<li>Кодирует сжатые байты в строку Base64 через <a href="724.html">Base64Helper.encodeObject()</a> — возвращает строку Base64</li></ol>
+<strong>Обработка ошибок:</strong> При IOException логирует ошибку на уровне ERROR и возвращает <code>null</code>. Вызывающий код должен обрабатывать null — большинство вызывающих кодов обрабатывают null так же, как пустую строку.</p>
+
+<h3><code>uncompress(String base64ByteArray) → String</code></h3>
+<p>Обратная операция для <code>compress()</code>. Принимает сжатую строку в кодировке Base64, возвращает исходную. Алгоритм:
+<ol><li><code>Base64Helper.decodeObject(base64ByteArray)</code> — декодирует Base64 в сырые байты (<strong>приведение от Object к byte[]</strong> — обратите внимание на непроверяемое приведение. Метод <code>decodeObject</code> возвращает <code>Object</code> для обратной совместимости с XStream)</li>
+<li>Оборачивает в <code>GZIPInputStream</code> — распаковывает данные GZIP</li>
+<li>Использует <code>IOUtils.copy(gzip, out)</code> (Apache Commons IO) для потокового копирования распакованных данных в <code>ByteArrayOutputStream</code></li>
+<li><code>out.toString()</code> — преобразует байты обратно в строку, используя кодировку платформы по умолчанию (та же кодировка, что и в compress)</li></ol>
+<strong>Обработка ошибок:</strong> Перехватывает как <code>IOException</code>, так и <code>ClassNotFoundException</code> (последнее из <code>Base64Helper.decodeObject()</code>, который под капотом использует десериализацию объектов Java — <strong>потенциальная проблема безопасности</strong>, если переданы вредоносные данные Base64). Возвращает <code>null</code> при любой ошибке.</p></div>
+
+<div class="c"><h2>Использование в ProjectForge</h2>
+<p>Используется двумя ключевыми компонентами:</p>
+<ul>
+<li><strong>Пользовательские настройки (<a href="606.html">UserXmlPreferencesService</a>):</strong> XML пользовательских настроек может быть довольно большим (особенно конфигурации календаря с несколькими календарями, пользовательскими цветами и сохраненными фильтрами). Перед сохранением в базе данных XML сжимается через <code>GZIPHelper.compress()</code> и сохраняется как строка Base64 в сущности <code>UserPrefDO</code>. При загрузке <code>uncompress()</code> восстанавливает исходный XML</li>
+<li><strong>Журнал аудита / событий:</strong> Столбец <code>external_access_logs</code> в <code>t_plugin_datatransfer_area</code> (см. <a href="105.html">#105</a>) хранит JSON-сериализованный список событий доступа. При частом внешнем доступе эта строка может превысить лимит <code>VARCHAR(10000)</code> — сжатие GZIP значительно уменьшает ее размер</li>
+</ul>
+<p>Примечательно, что это <strong>не</strong> используется для хранения BLOB лицензионных ключей (<a href="144.html">LicenseDO</a>) — двоичные файлы используют прямые столбцы JDBC <code>BLOB</code>, а не сжатие текста.</p></div>
+
+<div class="c"><h2>Ключевые проектные решения и подводные камни</h2>
+<ul>
+<li><strong>Кодировка платформы по умолчанию:</strong> Оба метода используют <code>str.getBytes()</code> и <code>out.toString()</code> без указания кодировки. Это означает, что цикл сжатия гарантирован только если compress и uncompress выполняются на <strong>одной и той же JVM</strong>. Если сжатые данные переносятся на другой сервер с другой кодировкой по умолчанию, распакованная строка может быть повреждена. На практике все современные JVM по умолчанию используют UTF-8 (начиная с Java 18), поэтому в продакшене это редко является проблемой</li>
+<li><strong>Накладные расходы Base64:</strong> GZIP обычно сжимает текст до 20-30% от исходного размера, но кодирование Base64 добавляет ~33% накладных расходов (3 двоичных байта → 4 символа Base64). Чистый результат: сжатый+Base64 обычно составляет 25-40% от исходного размера. Это означает, что утилита полезна для строк размером более ~2 КБ, где сжатие преобладает над накладными расходами Base64</li>
+<li><strong>Обработка null:</strong> Оба метода возвращают <code>null</code> для null-ввода — вызывающему коду не нужно предварительно проверять. Но вызывающий код <strong>должен</strong> обрабатывать возврат null (когда сжатие/распаковка не удается) — обычно null обрабатывается как пустая строка</li>
+<li><strong>Отсутствие проблем с потокобезопасностью:</strong> Весь ввод/вывод осуществляется через локальные объекты <code>ByteArrayInputStream/OutputStream</code> — нет общего состояния, полностью потокобезопасно</li>
+<li><strong>ClassNotFoundException в uncompress:</strong> Это <strong>признак проблемного кода</strong> — <code>Base64Helper.decodeObject()</code> использует Java <code>ObjectInputStream</code>, который может десериализовать произвольные объекты Java (<a href="https://owasp.org/www-community/vulnerabilities/Deserialization_of_untrusted_data">известная уязвимость безопасности</a>). Если злоумышленник может внедрить данные Base64, которые передаются в <code>uncompress()</code>, он потенциально может выполнить произвольный код. На практике данные поступают только из базы данных и генерируются <code>compress()</code>, поэтому поверхность атаки ограничена сценариями компрометации базы данных</li></ul></div>
+
+</body>
+</html>

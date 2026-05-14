@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>#1208 [ES]</title>
+<style>
+body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}
+h1{border-bottom:2px solid #333;padding-bottom:.3em}
+h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}
+h3{margin-top:2em;color:#444}
+a{color:#0366d6}
+.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}
+.nav{font-size:.9em;color:#888;margin-bottom:1em}
+.meta{font-size:.9em;margin:1em 0;color:#555}
+code{background:#f0f0f0;padding:0 .2em;font-size:.93em}
+pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}
+table{border-collapse:collapse;width:100%;margin:1em 0}
+th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}
+th{background:#f5f5f5;font-weight:600}
+.hist{font-size:.85em;color:#555}
+</style>
+</head>
+<body>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">&#8592; Índice</a> &#183; <a href="file-index.html">&#8592; Índice de archivos</a> &#183; <a href="1201.html">&#8592; Anterior</a> &#183; <a href="1203.html">Siguiente &#8594;</a></div>
+<h1>#1208: <code>JobHandler.kt</code></h1>
+<div class="meta"><code>projectforge-business/src/main/kotlin/org/projectforge/framework/jobs/JobHandler.kt</code> Servicio Spring, projectforge-business/src/main/kotlin/org/projectforge/framework/jobs/JobHandler.kt <span style="color:#888">290 líneas · 228 código · 40 comentarios · 22 en blanco</span></div>
+<div class="c">Planificador central de trabajos y gestor del ciclo de vida para <code>AbstractJob</code>. Gestiona el registro de trabajos, la evaluación de la estrategia de cola, la ejecución basada en corrutinas, la aplicación de tiempos de espera, la limpieza de trabajos terminados y la monitorización del estado mediante alertas por correo electrónico. Implementa <code>ShutdownListener</code> para cancelar trabajos en ejecución de forma ordenada al apagar la aplicación.</div>
+
+<h2>Arquitectura</h2>
+<h3>Resumen de la clase</h3>
+<ul>
+  <li><strong>@Service</strong> — Singleton gestionado por Spring</li>
+  <li><strong>ShutdownListener</strong> — registrado a través de <code>ShutdownService</code> en <code>@PostConstruct</code></li>
+  <li>Mantiene una <code>List&lt;AbstractJob&gt;</code> como registro de trabajos</li>
+</ul>
+
+<h3>Gestión del ciclo de vida del trabajo</h3>
+<table>
+  <tr><th>Método</th><th>Descripción</th></tr>
+  <tr><td><code>addJob(trabajo)</code></td><td>Registra el trabajo, lanza una corrutina mediante <code>runBlocking { launch { ... } }</code> que espera a que la cola se despeje y luego llama a <code>trabajo.start()</code></td></tr>
+  <tr><td><code>tidyUp()</code></td><td>Se ejecuta cada minuto mediante <code>JobHandlerScheduler</code>; cancela trabajos con tiempo de espera agotado, elimina trabajos terminados antiguos</td></tr>
+  <tr><td><code>cancelJob(trabajo)</code></td><td>Cancela el trabajo si el usuario tiene acceso de escritura; llama a <code>trabajo.cancel()</code></td></tr>
+  <tr><td><code>shutdown()</code></td><td>Cancela y espera a todos los trabajos en ejecución al apagar la aplicación</td></tr>
+</table>
+
+<h3>Evaluación de la estrategia de cola</h3>
+<p>El método <code>addJob</code> lanza una corrutina que:</p>
+<ol>
+  <>Itera hasta 10.000 veces (contador de paranoia, máximo 10.000 segundos de espera)</li>
+  <li>Comprueba todos los trabajos existentes para ver si bloquean mediante <code>otro.isBlocking(trabajo)</code></li>
+  <li>Si está bloqueado con estrategia REFUSE, marca el trabajo como RECHAZADO (código de error: REFUSED_BY_ANOTHER_RUNNING_JOB)</li>
+  <li>Si está bloqueado con estrategia PER_QUEUE, establece el estado como WAITING y retrasa 1000ms</li>
+  <li>Si no se encuentran bloqueos, establece el estado como RUNNING e inicia la ejecución</li>
+  <li>Si el bucle se agota, marca el trabajo como FALLIDO (código de error: TIMEOUT_WHILE_WAITING)</li>
+</ol>
+
+<h3>Monitorización del estado</h3>
+<ul>
+  <li><code>checkStatus()</code> — verifica que <code>tidyUp()</code> se haya llamado en los últimos 5 minutos</li>
+  <li><code>reportErrorMail(mensaje)</code> — envía un correo electrónico a la dirección de soporte mediante <code>SendMail</code> usando la plantilla Groovy <code>mail/feedback.txt</code></li>
+</ul>
+
+<h3>Propagación del contexto de corrutina</h3>
+<p>Al lanzar la corrutina del trabajo, se propagan los siguientes contextos:</p>
+<ul>
+  <li><strong>userContext</strong> — <code>ThreadLocalUserContext.userContextAsContextElement</code> (preserva el usuario conectado)</li>
+  <li><strong>localeContext</strong> — <code>ThreadLocalUserContext.localeAsContextElement</code> (preserva la configuración regional para i18n)</li>
+  <li><strong>mdcContext</strong> — <code>MDCContext()</code> (preserva el MDC de SLF4J para el registro)</li>
+</ul>
+
+<h3>Constantes de limpieza</h3>
+<ul>
+  <li><code>KEEP_TERMINATED_JOBS_INTERVALL_MS</code> = 1 hora (<code>Constants.MILLIS_PER_HOUR</code>)</li>
+</ul>
+
+<h2>Historial de Git</h2><div class="hist"><pre>
+868d6abb7 2025 -> 2026
+00ec94e68 Nueva versión de fr-opensagres-xdocreport-poi-xwpf-converter-pdf, DataTransferBridge, ThreadLocalUserContext para corrutinas.
+63081666f Encabezados de archivos fuente: 2024 -> 2025.
+5f9fbbbd3 Corrección de errores tipográficos en el directorio projectforge-business
+f8961fd66 Mejora en el manejo de apagado: ShutdownService apaga algunos servicios antes que la base de datos.
+67805f2fc ThreadLocalUserContext.user -> ThreadLocalUserContext.loggedInUser
+77bade6df javax.* -> jakarta.*
+b6092df09 Copyright 2023 -> 2024
+a060d94b0 JobHandler no estaba programado. Corregido.
+bdcc7ed73 Reportar fallo del programador Spring como correo (por probar).
+ab45d51fa Copyright 2001-2022 -> 2001-2023.
+163492453 WIP: Trabajos y registros de cuentas bancarias.
+9f6ae7a0f WIP: Trabajos.
+232a91c5a BaseUserGroupRightUtils implementado. WIP BankingPlugin y manejo de trabajos.
+7bc51ed17 WIP: Trabajos.
+38bec971a ThreadLocal -> Kotlin
+f99714d0a Corrección de importación de registro incorrecta.
+fcc4c67f6 WIP: Jobmonitor.
+d93f61491 WIP: Plugin bancario (y nuevo módulo de importación).
+cd69cc40f WIP: Plugin bancario (y nuevo módulo de importación).
+67eed70e4 WIP: Plugin bancario (y nuevo módulo de importación). Inicio de JobHandler/monitor.
+</pre></div>
+</body>
+</html>

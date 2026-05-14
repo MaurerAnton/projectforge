@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>#832: AddressbookDO.kt +[ES]</title>
+<style>
+body { font-family: system-ui, sans-serif; max-width: 960px; margin: 2em auto; padding: 0 1em; background: #fafafa; color: #222; line-height: 1.6; }
+h1 { border-bottom: 2px solid #333; padding-bottom: 0.3em; }
+h2 { margin-top: 2.5em; border-bottom: 1px solid #ddd; padding-bottom: 0.2em; color: #333; }
+h3 { margin-top: 2em; color: #444; }
+a { color: #0366d6; }
+.c { border-left: 3px solid #ddd; padding: .5em 1em; margin: 1em 0; background: #fff; }
+.nav { font-size: .9em; color: #888; margin-bottom: 1em; }
+.meta { font-size: .9em; margin: 1em 0; color: #555; }
+code { background: #f0f0f0; padding: 0 .2em; font-size: .93em; }
+pre { background: #f5f5f5; padding: .8em 1em; border: 1px solid #ddd; border-radius: 4px; overflow-x: auto; font-size: .88em; line-height: 1.4; }
+table { border-collapse: collapse; width: 100%; margin: 1em 0; }
+th, td { border: 1px solid #ddd; padding: .5em .8em; text-align: left; font-size: .9em; }
+th { background: #f5f5f5; font-weight: 600; }
+.hist { font-size: .85em; color: #555; }
+</style>
+</head>
+<body>
+
+<div class="nav">
+  <a href="https://maureranton.github.io/projectforge/">← Índice</a> ·
+  <a href="file-index.html">← Índice de archivos</a> ·
+  <a href="831.html">← Anterior</a> ·
+  <a href="833.html">Siguiente →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/kotlin/org/projectforge/business/address/AddressbookDO.kt" target="_blank" title="Ver fuente en GitHub">📄 fuente</a></div>
+
+<h1>#832: <code>AddressbookDO.kt</code></h1>
+
+<div class="meta"><code>projectforge-business/src/main/kotlin/org/projectforge/business/address/AddressbookDO.kt</code> 
+  <strong>Tipo:</strong> Entidad JPA (Objeto de dominio)<br>
+  <strong>Propósito:</strong> Modelo de dominio persistente para libretas de direcciones, con derechos de acceso de usuario/grupo y soporte de búsqueda de texto completo<br>
+  <strong>Ubicación:</strong> <code>projectforge-business/src/main/kotlin/org/projectforge/business/address/AddressbookDO.kt</code><br>
+  <strong>Tabla:</strong> <code>T_ADDRESSBOOK</code>
+ <span style="color:#888">91 líneas · 52 código · 29 comentarios · 10 en blanco</span></div>
+
+<div class="c">
+  <strong>Resumen:</strong> <code>AddressbookDO</code> representa una colección nombrada de direcciones — una libreta de direcciones propiedad de un usuario o grupo. Extiende <code>BaseUserGroupRightsDO</code> para heredar un modelo de propiedad y permisos de grupo, implementa <code>DisplayNameCapable</code> para etiquetas de interfaz de usuario consistentes, y lleva anotaciones de Hibernate Search (<code>@Indexed</code>, <code>@FullTextField</code>) para que las libretas de direcciones puedan localizarse mediante el motor de búsqueda de texto completo de la aplicación. Los campos están anotados con <code>@PropertyInfo</code> para impulsar la generación automática de formularios de interfaz de usuario.
+</div>
+
+<h2>Arquitectura y posición en el sistema</h2>
+
+<h3>Jerarquía de clases</h3>
+<pre>BaseDO
+ └─ DefaultBaseDO
+     └─ BaseUserGroupRightsDO        ← proporciona campos de propietario, derechos de usuario, derechos de grupo
+         └─ AddressbookDO             ← esta clase
+             también implementa DisplayNameCapable</pre>
+
+<p><code>BaseUserGroupRightsDO</code> es el padre crítico: añade columnas para <code>owner</code> (una referencia a <code>PFUserDO</code>), junto con los campos de asignación de derechos que permiten compartir una libreta de direcciones con usuarios individuales o grupos enteros. Este diseño de clase padre significa que cada libreta de direcciones participa automáticamente en el modelo de visibilidad multiinquilino de ProjectForge.</p>
+
+<h3>Mapeo JPA</h3>
+<table>
+  <tr><th>Anotación</th><th>Efecto</th></tr>
+  <tr><td><code>@Entity</code></td><td>Marca esta clase como una clase persistente gestionada por Hibernate.</td></tr>
+  <tr><td><code>@Table(name = "T_ADDRESSBOOK")</code></td><td>Mapea a la tabla de base de datos <code>T_ADDRESSBOOK</code>. El prefijo <code>T_</code> es una convención de ProjectForge para todos los nombres de tablas.</td></tr>
+  <tr><td><code>@Indexed</code></td><td>Registra esta entidad con Hibernate Search (backend Lucene). Habilita consultas de texto completo.</td></tr>
+</table>
+
+<h3>Campos</h3>
+<table>
+  <tr><th>Campo</th><th>Tipo</th><th>Columna BD</th><th>Anotaciones</th><th>Notas</th></tr>
+  <tr>
+    <td><code>title</code></td>
+    <td><code>String?</code></td>
+    <td>(mapeado)</td>
+    <td><code>@PropertyInfo(i18nKey="addressbook.title", required=true)</code>, <code>@FullTextField</code>, <code>@Column(length=LENGTH_TITLE)</code></td>
+    <td>El nombre para mostrar requerido. Indexado en texto completo. Longitud limitada a <code>Constants.LENGTH_TITLE</code> (probablemente 255).</td>
+  </tr>
+  <tr>
+    <td><code>owner</code></td>
+    <td><code>PFUserDO?</code></td>
+    <td><code>owner_fk</code></td>
+    <td><code>@ManyToOne(fetch=EAGER)</code>, <code>@JoinColumn(name="owner_fk")</code>, <code>@IndexedEmbedded(includeDepth=1)</code>, <code>@JsonSerialize(using=IdOnlySerializer)</code></td>
+    <td>Cargado ansiosamente para evitar LazyInitializationException en la representación de la interfaz de usuario. Incrustado un nivel de profundidad en el índice de Hibernate Search. Serializado a JSON solo como ID numérico para evitar referencias circulares.</td>
+  </tr>
+  <tr>
+    <td><code>description</code></td>
+    <td><code>String?</code></td>
+    <td>(mapeado)</td>
+    <td><code>@FullTextField</code>, <code>@Column(length=LENGTH_TEXT)</code></td>
+    <td>Descripción de texto libre opcional. Indexado en texto completo. Longitud limitada a <code>Constants.LENGTH_TEXT</code> (probablemente 4000).</td>
+  </tr>
+</table>
+
+<h3>Campos heredados (de <code>BaseUserGroupRightsDO</code>)</h3>
+<p>Estos campos están definidos en la clase padre y se heredan automáticamente; no se redeclaran en <code>AddressbookDO</code> pero están presentes en la tabla de base de datos:</p>
+<ul>
+  <li><code>owner</code> — realmente sobrescrito aquí (ver arriba)</li>
+  <li>Colección de derechos de usuario: qué usuarios individuales tienen acceso de lectura/escritura</li>
+  <li>Colección de derechos de grupo: qué grupos tienen acceso de lectura/escritura</li>
+  <li>Campos estándar de <code>BaseDO</code>: <code>id</code>, <code>created</code>, <code>lastUpdate</code>, <code>deleted</code></li>
+</ul>
+
+<h3>Integración con Hibernate Search</h3>
+<p>El marcador <code>@Indexed</code>, combinado con <code>@FullTextField</code> en <code>title</code> y <code>description</code>, hace que esta entidad sea descubrible a través de Hibernate Search. El <code>HibernateSearchUsersGroupsTypeBinder</code> (referenciado en la fuente pero no mostrado en el contenido resumido) puentea los derechos de usuario/grupo en el índice Lucene para que los resultados de búsqueda respeten las mismas restricciones de visibilidad que las consultas de base de datos — un usuario que busca libretas de direcciones solo verá resultados a los que tenga permiso de acceso.</p>
+
+<h3><code>DisplayNameCapable</code> e integración con la interfaz de usuario</h3>
+<p>La propiedad <code>displayName</code> devuelve <code>"$title"</code>, proporcionando una etiqueta consistente para menús desplegables, migas de pan y entradas de historial. Las anotaciones <code>@PropertyInfo</code> alimentan el sistema de representación automática de formularios de ProjectForge, que genera campos de entrada, mensajes de validación (ej. "El título es obligatorio") y encabezados de columna a partir de las búsquedas de <code>i18nKey</code>.</p>
+
+<h3>Semántica de igualdad</h3>
+<p>La clase define métodos personalizados <code>hashCode()</code> y <code>equals()</code>. Cuando la entidad ha sido persistida (el ID no es nulo), la igualdad se basa en el ID de base de datos — dos instancias de <code>AddressbookDO</code> con el mismo ID se consideran iguales. Cuando el ID es nulo (un objeto transitorio, aún no guardado), la igualdad recurre a la identidad del objeto (<code>===</code>). Este es el patrón estándar recomendado por Hibernate que evita problemas con objetos proxy y colecciones.</p>
+
+<h2>Historial de Git</h2>
+<div class="hist">
+  <table>
+    <tr><th>Commit</th><th>Descripción</th></tr>
+    <tr><td><code>868d6abb7</code></td><td>Incremento de año de copyright: 2025 → 2026</td></tr>
+    <tr><td><code>63081666f</code></td><td>Encabezados de archivos fuente: 2024 → 2025</td></tr>
+    <tr><td><code>4c04cfd65</code></td><td>MAYOR: Migración de IDs enteros a Long (cambió campos de ID <code>Integer</code> a <code>Long</code> en todo el código)</td></tr>
+    <tr><td><code>b6092df09</code></td><td>Copyright 2023 → 2024</td></tr>
+    <tr><td><code>ab45d51fa</code></td><td>Copyright 2001-2022 → 2001-2023</td></tr>
+    <tr><td><code>b131193e7</code></td><td>Variables miembro refactorizadas usando <code>by lazy {}</code> (inicialización diferida para colecciones y dependencias pesadas)</td></tr>
+    <tr><td><code>5f7ef41b8</code></td><td>Copyright 2021 → 2022</td></tr>
+    <tr><td><code>ceb63e8a1</code></td><td>Encabezado de código fuente: (C) 2001-2021</td></tr>
+    <tr><td><code>7c79f1922</code></td><td>Copyright del encabezado fuente → 2020</td></tr>
+    <tr><td><code>dd5ca38ac</code></td><td>CopyRight de todos los encabezados de archivos java actualizados o creados</td></tr>
+    <tr><td><code>9ebb88522</code></td><td>Commit inicial — presente desde el origen del proyecto</td></tr>
+  </table>
+</div>
+
+<h2>Justificación del diseño</h2>
+
+<h3>¿Por qué extender <code>BaseUserGroupRightsDO</code>?</h3>
+<p>Las libretas de direcciones son recursos compartidos — un usuario crea una y puede conceder acceso de lectura o escritura a otros usuarios o grupos. La superclase <code>BaseUserGroupRightsDO</code> proporciona un modelo de derechos uniforme (propietario + concesiones por usuario + concesiones por grupo) que se reutiliza en muchos tipos de entidades de ProjectForge (libretas de direcciones, calendarios, listas de tareas, etc.). Esto evita duplicar el mismo esquema de control de acceso en cada entidad y garantiza un comportamiento consistente en las capas DAO y de interfaz de usuario.</p>
+
+<h3>¿Por qué cargar ansiosamente <code>owner</code>?</h3>
+<p>Las libretas de direcciones casi siempre se muestran con el nombre de su propietario. Si <code>owner</code> se cargara perezosamente, cada página de lista provocaría N+1 consultas adicionales. La carga ansiosa es una compensación de rendimiento deliberada: añade un JOIN a cada consulta de libreta de direcciones pero elimina el problema N+1 en el caso común. La anotación <code>@JsonSerialize(using = IdOnlySerializer::class)</code> asegura que cuando la entidad se serializa a JSON (ej. para APIs REST), solo se emite el ID numérico del propietario, evitando la serialización profunda del grafo de objetos y referencias circulares.</p>
+
+<h3>¿Por qué la indexación de Hibernate Search?</h3>
+<p>ProjectForge proporciona una función de búsqueda global que abarca múltiples tipos de entidades. Al anotar <code>AddressbookDO</code> con <code>@Indexed</code> y <code>@FullTextField</code>, el índice Lucene se mantiene sincronizado con la base de datos mediante la indexación automática de Hibernate Search al guardar/actualizar/eliminar. El <code>HibernateSearchUsersGroupsTypeBinder</code> asegura además que los metadatos de control de acceso se incrusten en el índice de búsqueda, de modo que el mismo usuario que no puede ver una libreta de direcciones en una vista de lista tampoco pueda encontrarla mediante búsqueda de texto completo — una propiedad de seguridad crítica.</p>
+
+<h3>¿Por qué implementar <code>DisplayNameCapable</code>?</h3>
+<p>Esta interfaz (que proporciona <code>displayName: String</code>) es una convención de ProjectForge utilizada por el registro de auditoría/historial, las migas de pan de la interfaz de usuario y los menús desplegables de selección. Al implementarla, <code>AddressbookDO</code> se conecta a estos subsistemas sin que cada consumidor necesite saber que el nombre para mostrar es simplemente el campo <code>title</code>.</p>
+
+<h3>¿Por qué <code>Constants.LENGTH_TITLE</code> en lugar de longitudes codificadas?</h3>
+<p>ProjectForge utiliza una clase <code>Constants</code> compartida para definir longitudes de columna estándar. Esto asegura que todas las entidades que utilizan campos "title" o "description" tengan tamaños de columna de base de datos consistentes, simplificando la gestión del esquema y evitando errores sutiles donde el título de una entidad tiene 255 caracteres pero el de otra tiene 1000.</p>
+
+</body>
+</html>

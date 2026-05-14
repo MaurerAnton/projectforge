@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>#886: AbstractRechnungCache.kt [RU]</title>
+<style>
+body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}
+h1{border-bottom:2px solid #333;padding-bottom:.3em}
+h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}
+h3{margin-top:2em;color:#444}
+a{color:#0366d6}
+.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}
+.nav{font-size:.9em;color:#888;margin-bottom:1em}
+.meta{font-size:.9em;margin:1em 0;color:#555}
+code{background:#f0f0f0;padding:0 .2em;font-size:.93em}
+pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}
+table{border-collapse:collapse;width:100%;margin:1em 0}
+th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}
+th{background:#f5f5f5;font-weight:600}
+.hist{font-size:.85em;color:#555}
+</style>
+</head>
+<body>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Индекс</a> · <a href="file-index.html">← Индекс файлов</a> · <a href="885.html">← Назад</a> · <a href="887.html">Вперёд →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/kotlin/org/projectforge/business/fibu/AbstractRechnungCache.kt" target="_blank" title="Просмотреть исходник на GitHub">📄 исходник</a></div>
+
+<h1>#886: <code>AbstractRechnungCache.kt</code></h1>
+
+<div class="meta"><code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/AbstractRechnungCache.kt</code> 
+<p><strong>Тип:</strong> Абстрактный класс Kotlin, расширяющий <code>AbstractCache</code> — кэш-слой для расчётов счетов</p>
+<p><strong>Назначение:</strong> Кэширует предварительно рассчитанные итоги по счетам (<code>RechnungInfo</code>) и расчёты по позициям (<code>RechnungPosInfo</code>), чтобы избежать избыточных пересчётов. Поддерживает как исходящие счета (<code>RechnungDO</code>), так и входящие счета (<code>EingangsrechnungDO</code>) через параметр обобщённого типа.</p>
+<p><strong>Путь к исходнику:</strong> <code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/AbstractRechnungCache.kt</code></p>
+ <span style="color:#888">136 строк · 79 кода · 44 комментария · 13 пустых</span></div>
+
+<div class="c">
+<p><strong>Кэш производительности в памяти</strong> поверх фреймворка <code>AbstractCache</code>. Расчёты по счетам (итоги нетто/брутто, разбивка НДС, распределение затрат) являются дорогостоящими, поскольку требуют обхода всего дерева позиций с поиском распределения затрат. Этот кэш хранит предварительно вычисленные объекты <code>RechnungInfo</code> и <code>RechnungPosInfo</code>, ключом к которым является ID сущности, с автоматическим обновлением через механизм планирования <code>CacheHelper</code>. Кэш был рефакторизован с блоков <code>synchronized</code> на <code>ConcurrentHashMap</code> для устранения взаимоблокировки.</p>
+</div>
+
+<h2>Параметры типа и конструктор</h2>
+<pre>abstract class AbstractRechnungCache(
+    val entityClass: KClass&lt;out AbstractRechnungDO&gt;,
+    protected val rechnungJdbcService: RechnungJdbcService,
+) : AbstractCache()</pre>
+
+<table>
+<tr><th>Параметр</th><th>Описание</th></tr>
+<tr><td><code>entityClass</code></td><td>Ссылка на класс Kotlin для типа сущности счёта (<code>RechnungDO::class</code> или <code>EingangsrechnungDO::class</code>) — используется для JDBC-запросов и логирования</td></tr>
+<tr><td><code>rechnungJdbcService</code></td><td>JDBC-сервис для эффективной массовой загрузки информации о счетах из базы данных (обходит Hibernate для повышения производительности)</td></tr>
+</table>
+
+<h2>Внутреннее состояние</h2>
+<table>
+<tr><th>Поле</th><th>Тип</th><th>Описание</th></tr>
+<tr><td><code>invoiceInfoMap</code></td><td><code>ConcurrentHashMap&lt;Long, RechnungInfo&gt;</code></td><td>Основной кэш: ID счёта → агрегированные расчёты по счету</td></tr>
+<tr><td><code>invoicePosInfoMap</code></td><td><code>ConcurrentHashMap&lt;Long, RechnungPosInfo&gt;</code></td><td>Вторичный кэш: ID позиции → расчёты на уровне позиции</td></tr>
+</table>
+
+<p>Обе карты используют <code>ConcurrentHashMap</code> (не синхронизированные блоки) — это изменение было сделано в коммите <code>85d8930b3</code> для исправления взаимоблокировки, которая возникала при взаимодействии операций кэша друг с другом в условиях синхронизации.</p>
+
+<h2>Публичный API</h2>
+
+<h3><code>update(invoice: AbstractRechnungDO)</code></h3>
+<p>Принудительно пересчитывает один счёт и сохраняет результат в кэше. Вызывается при изменении счёта (вставка, обновление или удаление через уровень DAO). Использует <code>RechnungCalculator.calculate(invoice)</code> для вычисления актуальных значений.</p>
+
+<h3><code>ensureRechnungInfo(rechnung: AbstractRechnungDO): RechnungInfo</code></h3>
+<p>Гарантирует существование <code>RechnungInfo</code> для указанного счёта. Если уже кэширован, возвращает кэшированную версию (и устанавливает <code>rechnung.info</code>). В противном случае вычисляет его через <code>RechnungCalculator</code>, сохраняет в кэше и возвращает. Это предпочтительный метод доступа — он работает даже если дерево позиций ещё не было лениво загружено.</p>
+
+<h3><code>getRechnungInfo(rechnungId: Long?): RechnungInfo?</code></h3>
+<p>Возвращает кэшированную информацию о счете по ID (безопасен для null-параметра ID). Вызывает <code>checkRefresh()</code>, который гарантирует, что кэш не устарел.</p>
+
+<h3><code>getRechnungInfo(rechnung: AbstractRechnungDO?): RechnungInfo?</code></h3>
+<p>Перегрузка, извлекающая ID из сущности. Безопасна для null.</p>
+
+<h3><code>ensureRechnungPosInfo(pos: AbstractRechnungsPositionDO): RechnungPosInfo</code></h3>
+<p>Аналог <code>ensureRechnungInfo</code>, но для отдельных позиций. Сначала гарантирует существование <code>RechnungInfo</code> родительского счёта (необходимо как контекст), затем вычисляет информацию, специфичную для позиции, через <code>RechnungCalculator.calculate(posInfo, pos)</code>.</p>
+
+<h3><code>getRechnungPosInfo(rechnungPosId: Long?): RechnungPosInfo?</code></h3>
+<p>Возвращает кэшированную информацию о позиции по ID. Безопасен для null.</p>
+
+<h2>Обновление кэша (<code>override fun refresh()</code>)</h2>
+<p>Автоматически вызывается фреймворком <code>CacheHelper</code> по таймеру и во время проверки <code>checkRefresh()</code>. Стратегия обновления использует <strong>копирование-и-замену</strong> для потокобезопасности:</p>
+<ol>
+<li>Создаёт новые экземпляры <code>ConcurrentHashMap</code> (<code>nInvoiceInfoMap</code>, <code>nInvoicePosInfoMap</code>)</li>
+<li>Массово загружает всю информацию о счетах через <code>rechnungJdbcService.selectRechnungInfos(entityClass)</code> — использует JDBC напрямую для производительности, обходя Hibernate</li>
+<li>Заполняет обе карты из набора результатов JDBC</li>
+<li>Атомарно заменяет старые карты новыми</li>
+</ol>
+<p>Этот подход означает, что кэш <strong>никогда не устаревает более чем на один цикл обновления</strong>, и операции чтения никогда не блокируются операцией обновления.</p>
+
+<h2>Архитектурные заметки</h2>
+<ul>
+<li>Конкретные подклассы: <code>RechnungCache</code> (для <code>RechnungDO</code>) и <code>EingangsrechnungCache</code> (для <code>EingangsrechnungDO</code>), каждый предоставляет только параметр <code>entityClass</code></li>
+<li>Использует <code>kotlin.reflect.KClass</code> из Kotlin вместо Java <code>Class</code> для типобезопасности</li>
+<li>Поле <code>@Transient lateinit var info</code> в <code>AbstractRechnungDO</code> — это сопутствующее поле, которое заполняет данный кэш</li>
+<li>Во время обновления позиции без ID логируются как ошибки — это может происходить с клонированными счетами, где ID позиций ещё не назначены</li>
+<li>Утилита <code>LogDuration</code> отслеживает производительность обновления в логах</li>
+</ul>
+
+<h2>История Git</h2>
+<div class="hist"><pre>868d6abb7 2025 -> 2026
+85d8930b3 AbstractRechnungCache: Устранена взаимоблокировка заменой синхронизированных блоков на ConcurrentHashMaps
+63081666f Заголовки исходных файлов: 2024 -> 2025.
+2d324f2bb Финансы: исправлены входящие счета.
+12610fee2 Миграция в процессе... (все тесты всех пакетов: OK).
+ff2cc4cfa Миграция в процессе... (все тесты всех пакетов: OK).
+190c0aea1 Миграция в процессе... (все тесты всех пакетов: OK).
+2e9839891 Миграция в процессе...
+ba2479571 Миграция в процессе...
+b3293f0cc PersistenceService/Context: улучшена обработка статистики.
+b47c21af6 Рефакторинг кэширования и расчётов по счетам (ещё не завершено)
+ccb7ca64d Миграция в процессе...
+41b5c2645 Миграция в процессе...
+87dd5b87c Рефакторинг AuftragsCache, миграция... (все тесты OK)
+9408b59d7 Миграция в процессе...
+85b4e1175 PfPersistenceService и PfPersistenceContext: query переименован в executeQuery.
+4c04cfd65 MAJOR-CHANGE! Миграция целочисленных id на Long id (включая внешние ключи и т.д.)
+2863b30b9 Миграция в процессе...
+067a4cbb1 Миграция в процессе...
+9d8b94352 Миграция в процессе...
+67ce75fe9 Миграция в процессе...
+e33c8b9c2 Миграция в процессе...
+</pre></div>
+</body>
+</html>

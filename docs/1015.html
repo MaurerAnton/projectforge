@@ -1,38 +1,52 @@
-<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>1015</title>
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>#1015</title>
 <style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:2em;color:#444}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}</style></head>
-<body><div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="1014.html">← Prev</a> · <a href="1016.html">Next →</a></div>
-<h1>1015: <code>LoginProtection.kt</code></h1>
-<div class="meta">Brute-Force Protection (Singleton), projectforge-business/src/main/kotlin/org/projectforge/business/login/LoginProtection.kt</div>
-<div class="c">Singleton implementing escalating time penalties for failed login attempts, preventing brute-force attacks. Tracks failures separately by user ID (string-based) and client IP address, with configurable thresholds before penalty increments.</div>
+<body><div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="1014.html">← Prev</a> · <a href="1016.html">Next →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/kotlin/org/projectforge/business/humanresources/HRPlanningEntryDO.kt" target="_blank" title="View source on GitHub">📄 source</a></div>
+<h1>#1015: <code>HRPlanningEntryDO.kt</code></h1>
+<div class="meta"><code>projectforge-business/src/main/kotlin/org/projectforge/business/humanresources/HRPlanningEntryDO.kt</code> JPA Entity (HR Planning Entry), projectforge-business/src/main/kotlin/org/projectforge/business/humanresources/HRPlanningEntryDO.kt <span style="color:#888">326 lines · 252 code · 45 comments · 29 blank</span></div>
+<div class="c">Child entity of <code>HRPlanningDO</code> representing a single project assignment or status entry within a planned week. Stores hours per day of week (Mon-Fri + weekend), project reference, status, priority, and probability.</div>
 
-<h2>Architecture</h2>
-<h3>Dual-Map Penalty System</h3>
-<p>Maintains two instance of <code>LoginProtectionMap</code>: one keyed by user string (<code>username</code> or <code>authType:username</code>), one by IP address. On each failed login, the corresponding maps are incremented. The larger penalty offset between user and IP is returned.</p>
-
-<h3>Authentication Type Separation</h3>
-<p>Penalties are separated by authentication type (DAV, REST_CLIENT, or null for normal login) using the convention <code>"authenticationType:userId"</code>. This prevents failed DAV login attempts from blocking the user's web login.</p>
-
-<h3>Thresholds</h3>
+<h2>Entity Design</h2>
+<p>Maps to <code>T_HR_PLANNING_ENTRY</code> with indexes on <code>planning_fk</code> and <code>projekt_fk</code>. Key fields:</p>
 <ul>
-<li><strong>User penalty threshold:</strong> 1 failed attempt before incrementing (immediate penalty for targeted attacks).</li>
-<li><strong>IP penalty threshold:</strong> 1000 failed attempts before incrementing (avoids penalizing large NAT networks).</li>
+<li><code>planning</code> (HRPlanningDO): Parent week reference, non-null.</li>
+<li><code>projekt</code> (ProjektDO): Optional project this entry relates to.</li>
+<li><code>status</code> (HRPlanningEntryStatus): Alternative to project for non-project time (e.g., vacation, illness).</li>
+<li><code>priority</code>, <code>probability</code>: Planning metadata for project pipeline forecasting.</li>
+<li>Seven <code>BigDecimal</code> hour fields: <code>unassignedHours</code>, <code>mondayHours</code> through <code>fridayHours</code>, <code>weekendHours</code>.</li>
+<li><code>description</code>: Free-text field, indexed with <code>jiraPreservingAnalyzer</code> for preserving issue key patterns.</li>
 </ul>
 
-<h3>Singleton Access</h3>
-<p>Accessed via static <code>LoginProtection.instance()</code>. The private constructor configures the two protection maps with different thresholds.</p>
+<h3>Computed Properties</h3>
+<p><code>totalHours</code> sums all seven hour fields. <code>projektNameOrStatus</code> returns localized status label or project name. <code>projektKundeAsString</code> delegates to <code>ProjektFormatter</code>.</p>
+
+<h3>Equality</h3>
+<p>Custom <code>equals</code>/<code>hashCode</code> based on entity ID when persisted, or field-by-field comparison (<code>hasNoFieldChanges</code>) for transient entries. The <code>isEmpty</code> check uses <code>ObjectHelper.isEmpty</code> across all editable fields.</p>
+
+<h3>Key Decisions</h3>
+<ul>
+<li><strong>JiraPreservingAnalyzer:</strong> Custom Lucene analyzer that preserves patterns like ACME-12345 during full-text search on description.</li>
+<li><strong>clone:</strong> <code>newClone()</code> method copies all values except <code>id</code> for duplicating entries.</li>
+</ul>
 
 <h2>Git History</h2><div class="hist"><pre>
 868d6abb7 2025 -> 2026
+9c40a8d53 Claude-Code: jiraPreservingAnalyzer for Lucene for preserving ACME-12345
 63081666f Source file headers: 2024-> 2025.
-cc10c2553 Minor improvement LoginProtection.
+0237d5eba Json serialization refactored: IdOnlySerializer and IdsOnlySerializer introduced.
+eafcb33e5 Migration stuff in progress...
+c8f8ed935 Declared all entities as FetchType.LAZY (was EAGER).
 4c04cfd65 MAJOR-CHANGE! Migration of integer id's to Long id's (including fk's etc.)
 b6092df09 Copyright 2023 -> 2024
 ab45d51fa Copyright 2001-2022 -> 2001-2023.
 5f7ef41b8 Copyright 2021 -> 2022
+c0f2b9de0 Tenants functionality removed everywhere (untested).
 ceb63e8a1 Source code header: (C) 2001-2021.
-09f6c19dd LoginProtect, Filter etc.: log.debug added.
-f6e1ee41e Nothing (java doc).
-2ca451654 LoginProtection: bug fix for userStrings without userId/username.
-37a2a01cb WIP: LoginProtection, rest authentication...
+b78b870bd ShortDisplayNameCapable -> DisplayNameCapable.
+7c79f1922 Copyright of source header -> 2020.
+8241700f0 ShortDisplayNameCapable converted to Kotlin.
+e92b3afd0 Jackson: JsonBackReference/JsonManagedReference -> JsonIdentityInfo
+8675a1dbe Found big performance issue: Declared all Kotlin JPA entities and their properties as open.
+29e3c0399 GanttChartDO, HRPlanningDO: PropertyInfos added
+3223972db HRPlanningDO.java -> HRPlanningDO.kt
 </pre></div>
 </body></html>

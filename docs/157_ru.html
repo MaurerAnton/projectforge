@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>#157: LiquidityEntryDao.java [RU]</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:2em;color:#444}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.lang{font-size:.85em;color:#888;float:right}.lang a{color:#888;text-decoration:none;padding:0 .3em}.lang a.active{color:#0366d6;font-weight:600;text-decoration:underline}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}</style>
+</head>
+<body>
+<div class="lang"><a href="157.html">EN</a> · <a href="157_de.html">DE</a> · <a href="157_ru.html" class="active">RU</a> · <a href="157_fr.html">FR</a> · <a href="157_es.html">ES</a></div>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Индекс</a> · <a href="file-index.html">← Индекс файлов</a> · <a href="653.html">← Назад</a> · <a href="2672.html">Вперёд →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/plugins/org.projectforge.plugins.liquidityplanning/src/main/java/org/projectforge/plugins/liquidityplanning/LiquidityEntryDao.java" target="_blank" title="Просмотреть исходник на GitHub">📄 исходник</a></div>
+<h1>#157: <code>LiquidityEntryDao.java</code></h1>
+<div class="meta"><code>plugins/org.projectforge.plugins.liquidityplanning/src/main/java/org/projectforge/plugins/liquidityplanning/LiquidityEntryDao.java</code> Тип: Java · Роль: Объект доступа к данным · Источник: plugins/org.projectforge.plugins.liquidityplanning/src/main/java/org/projectforge/plugins/liquidityplanning/LiquidityEntryDao.java <span style="color:#888">111 строк · 76 кода · 28 комментариев · 7 пустых</span></div>
+<div class="c">Объект доступа к данным для сущностей LiquidityEntry. Расширяет BaseDao, предоставляя CRUD-операции, запросы Hibernate Search и доступ к данным на уровне бизнес-логики.</div>
+<h2>Структура кода</h2>
+<p>Пакет: <code>org.projectforge.plugins.liquidityplanning</code></p>
+<p>Классы: <code>LiquidityEntryDao</code></p>
+<p>Расширяет: <code>BaseDao</code></p>
+<p>Методы (3): <code>buildStatistics</code>, <code>select</code>, <code>newInstance</code></p>
+<p>Импорты: 10 пакетов</p>
+<h2>Исходный код (сокращён)</h2>
+<pre>
+package org.projectforge.plugins.liquidityplanning;
+
+import org.projectforge.business.fibu.AmountType;
+import org.projectforge.business.fibu.PaymentStatus;
+import org.projectforge.framework.persistence.api.BaseDao;
+import org.projectforge.framework.persistence.api.BaseSearchFilter;
+import org.projectforge.framework.persistence.api.QueryFilter;
+import org.projectforge.framework.time.PFDay;
+import org.springframework.stereotype.Service;
+
+import java.time.LocalDate;
+import java.util.ArrayList;
+import java.util.List;
+
+/**
+ * @author Kai Reinhard (k.reinhard@micromata.de)
+ */
+@Service
+public class LiquidityEntryDao extends BaseDao&lt;LiquidityEntryDO&gt; {
+  public LiquidityEntryDao() {
+    super(LiquidityEntryDO.class);
+    userRightId = LiquidityplanningPluginUserRightId.PLUGIN_LIQUIDITY_PLANNING;
+  }
+
+  public LiquidityEntriesStatistics buildStatistics(final List&lt;LiquidityEntryDO&gt; list) {
+    final LiquidityEntriesStatistics stats = new LiquidityEntriesStatistics();
+    if (list == null) {
+      return stats;
+    }
+    for (final LiquidityEntryDO entry : list) {
+      stats.add(entry);
+    }
+    return stats;
+  }
+
+  @Override
+  public List&lt;LiquidityEntryDO&gt; select(final BaseSearchFilter filter) {
+    final LiquidityFilter myFilter;
+    if (filter instanceof LiquidityFilter) {
+      myFilter = (LiquidityFilter) filter;
+    } else {
+      myFilter = new LiquidityFilter(filter);
+    }
+    final QueryFilter queryFilter = new QueryFilter(myFilter);
+    final List&lt;LiquidityEntryDO&gt; list = select(queryFilter);
+    if (myFilter.getPaymentStatus() == PaymentStatus.ALL
+            &amp;&amp; myFilter.getAmountType() == AmountType.ALL
+            &amp;&amp; myFilter.getNextDays() &lt;= 0
+            || myFilter.getDeleted()) {
+      return list;
+    }
+    final List&lt;LiquidityEntryDO&gt; result = new ArrayList&lt;&gt;();
+    final PFDay baseDate = PFDay.fromOrNow(myFilter.getBaseDate());
+    for (final LiquidityEntryDO entry : list) {
+      if (myFilter.getPaymentStatus() == PaymentStatus.PAID &amp;&amp; !entry.getPaid()) {
+        continue;
+      }
+      if (myFilter.getPaymentStatus() == PaymentStatus.UNPAID &amp;&amp; entry.getPaid()) {
+        continue;
+      }
+      if (myFilter.getNextDays() &gt; 0) {
+        LocalDate dateOfPayment = entry.getDateOfPayment();
+        if (dateOfPayment == null) {
+          dateOfPayment = baseDate.getLocalDate();
+        }
+        if (dateOfPayment.isBefore(baseDate.getLocalDate())) {
+          // Запись до сегодняшнего дня:
+          if (myFilter.getPaymentStatus() == PaymentStatus.PAID || entry.getPaid()) {
+            // Игнорируем записи из прошлого, если они оплачены. Также игнорируем неоплаченные записи из прошлого, если пользователь хочет отфильтровать только оплаченные.
+            continue;
+          }
+        } else {
+          if (baseDate.daysBetween(entry.getDateOfPayment()) &gt; myFilter.getNextDays()) {
+            continue;
+          }
+        }
+      }
+      result.add(entry);
+    }
+    return result;
+  }
+
+  @Override
+  public LiquidityEntryDO newInstance() {
+    return new LiquidityEntryDO();
+  }
+}</pre>
+
+<h2>История Git</h2><div class="hist"><pre>868d6abb7 2025 → 2026
+63081666f Заголовки исходных файлов: 2024 → 2025.
+b71b5073d Миграция в процессе... (все тесты всех пакетов: OK).
+1b50060c3 BaseDao: переименовано: get → find, save → insert, getList → select, load → select
+5bafe7941 @Repository → @Service. @Transactional-аннотации удалены.</pre></div>
+</body>
+</html>

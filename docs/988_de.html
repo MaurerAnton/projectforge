@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>#988: EmployeeSalaryImportService.kt [DE]</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:2em;color:#444}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}</style>
+</head>
+<body>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← Datei-Index</a> · <a href="987.html">← Zurück</a> · <a href="989.html">Weiter →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/kotlin/org/projectforge/business/fibu/datev/EmployeeSalaryImportService.kt" target="_blank" title="Quellcode auf GitHub anzeigen">📄 Quelle</a></div>
+
+<h1>#988: <code>EmployeeSalaryImportService.kt</code></h1>
+
+<div class="meta"><code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/datev/EmployeeSalaryImportService.kt</code> 
+  <strong>Typ:</strong> Spring Service (Import-Orchestrierung)<br>
+  <strong>Paket:</strong> <code>org.projectforge.business.fibu.datev</code><br>
+  <strong>Tatsächlicher Pfad:</strong> <code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/datev/EmployeeSalaryImportService.kt</code><br>
+  <strong>Hinweis:</strong> Die Datei existiert <strong>nicht</strong> unter dem angeforderten Pfad (<code>.../excelimport/...</code>). Sie befindet sich im Unterpaket <code>datev</code>. Die nachfolgende Dokumentation spiegelt die tatsächliche Quelle wider.
+ <span style="color:#888">139 Zeilen · 101 Code · 25 Kommentare · 13 leer</span></div>
+
+<div class="c">
+  <p>Orchestrierungsservice für die <strong>Mitarbeitergehaltsimport</strong>-Pipeline. Folgt dem gleichen Drei-Phasen-Importlebenszyklus (Import → Abgleich → Commit), der von <code>DatevImportService</code> etabliert wurde. Koordiniert zwischen <code>EmployeeSalaryExcelImporter</code> (Parsing), <code>EmployeeSalaryDao</code> (Persistenz) und <code>EmployeeSalaryService</code> (Nachschlagefunktion).</p>
+</div>
+
+<h2>Architektur</h2>
+
+<h3>Abhängigkeiten</h3>
+<table>
+  <tr><th>Abhängigkeit</th><th>Rolle</th></tr>
+  <tr><td><code>EmployeeSalaryExcelImporter</code></td><td>Parst die Excel-Arbeitsmappe in <code>ImportStorage&lt;EmployeeSalaryDO&gt;</code></td></tr>
+  <tr><td><code>EmployeeSalaryService</code></td><td>Nachschlagen vorhandener Gehälter nach Monat für den Abgleich</td></tr>
+  <tr><td><code>EmployeeSalaryDao</code></td><td>Massen-Commit und Zugriffskontrolle</td></tr>
+</table>
+
+<h2>Import-Lebenszyklus</h2>
+
+<h3>Phase 1: Import</h3>
+<p><code>importData(inputStream, filename, year, month)</code> — öffnet eine <code>ExcelWorkbook</code>, erstellt einen <code>ImportStorage</code>, delegiert an <code>EmployeeSalaryExcelImporter.doImport()</code>. Gibt den befüllten Speicher zurück.</p>
+
+<h3>Phase 2: Abgleich</h3>
+<p><code>reconcile(storage, sheetName, year, month)</code> — sucht vorhandene Gehälter für das angegebene Jahr/den Monat über <code>employeeSalaryService.selectByMonth()</code>, gleicht dann jedes importierte Element mit einem vorhandenen DB-Datensatz anhand der Mitarbeiter-ID ab. Setzt <code>oldValue</code>, <code>id</code> und <code>created</code>-Zeitstempel auf das Element für die Commit-Phase. Setzt den Status auf <code>RECONCILED</code>.</p>
+
+<h3>Phase 3: Commit</h3>
+<p><code>commit(storage, sheetName)</code> — erfordert den Status <code>RECONCILED</code>. Sammelt ausgewählte Elemente, kopiert die vorhandene <code>id</code> aus <code>oldValue</code> für Aktualisierungen und führt einen Massen-Commit über <code>employeeSalaryDao.insertOrUpdate()</code> in Blöcken von 50 durch. Setzt den Status auf <code>IMPORTED</code>.</p>
+
+<h2>Zugriffskontrolle</h2>
+<p><code>checkLoggedinUserRight()</code> delegiert an <code>employeeSalaryDao.checkLoggedInUserInsertAccess()</code>, das überprüft, ob der Benutzer das Einfüge-Recht für Mitarbeitergehälter besitzt.</p>
+
+<h2>Einfüge-Blockgröße</h2>
+<p><code>SALARY_INSERT_BLOCK_SIZE = 50</code> — steuert die Batch-Größe für Persistenzoperationen.</p>
+
+<h2>Git-Verlauf</h2>
+<div class="hist"><pre>
+868d6abb7 2025 -> 2026
+63081666f Quellcode-Dateiköpfe: 2024 -> 2025.
+1012e347a Migration stuff in progress... (alle Tests aller Pakete: OK).
+</pre></div>
+
+</body>
+</html>

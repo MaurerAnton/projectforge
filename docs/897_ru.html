@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>#897: AuftragsCache.kt [RU]</title>
+<style>
+body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}
+h1{border-bottom:2px solid #333;padding-bottom:.3em}
+h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}
+h3{margin-top:2em;color:#444}
+a{color:#0366d6}
+.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}
+.nav{font-size:.9em;color:#888;margin-bottom:1em}
+.meta{font-size:.9em;margin:1em 0;color:#555}
+code{background:#f0f0f0;padding:0 .2em;font-size:.93em}
+pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}
+table{border-collapse:collapse;width:100%;margin:1em 0}
+th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}
+th{background:#f5f5f5;font-weight:600}
+.hist{font-size:.85em;color:#555}
+</style>
+</head>
+<body>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Индекс</a> · <a href="file-index.html">← Индекс файлов</a> · <a href="896.html">← Пред.</a> · <a href="898.html">След. →</a> · <a href="https://github.com/MaurerAnton/projectforge/blob/fix/vite-eslint-upgrade/projectforge-business/src/main/kotlin/org/projectforge/business/fibu/AuftragsCache.kt" target="_blank" title="Просмотреть исходник на GitHub">📄 исходник</a></div>
+
+<h1>#897: <code>AuftragsCache.kt</code></h1>
+
+<div class="meta"><code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/AuftragsCache.kt</code> 
+<p><strong>Тип:</strong> Spring <code>@Service</code> — кэш с таймером (<code>AbstractCache</code>)</p>
+<p><strong>Пакет:</strong> <code>org.projectforge.business.fibu</code></p>
+<p><strong>Полный путь:</strong> <code>projectforge-business/src/main/kotlin/org/projectforge/business/fibu/AuftragsCache.kt</code></p>
+ <span style="color:#888">252 строки · 174 кода · 48 комментариев · 30 пустых</span></div>
+
+<div class="c">
+<p>Производительный кэш с таймером, который предварительно загружает и поддерживает всю информацию о заказах (<em>Auftrag</em>) для книги заказов. Расширяет <code>AbstractCache</code> с циклом обновления 8 часов. Загружает все неудалённые заказы, их позиции и графики платежей в карты памяти, чтобы избежать повторных запросов к базе данных. Вычисляет суммы по счетам, статус полной выписки счетов, флаги «подлежит выставлению счёта» и отслеживает количество заказов, требующих выставления счёта. Слушает изменения через хуки <code>BaseDOModifiedListener</code> как для <code>AuftragDO</code>, так и для <code>RechnungDO</code>, чтобы аннулировать кэшированные данные. Обрабатывает циклическую зависимость с <code>AuftragDao</code> через пост-конструкционное связывание.</p>
+</div>
+
+<h2>Определение класса</h2>
+<pre>@Service
+class AuftragsCache : AbstractCache(8 * TICKS_PER_HOUR)</pre>
+
+<h2>Зависимости</h2>
+<table>
+<tr><th>Зависимость</th><th>Тип</th><th>Примечания</th></tr>
+<tr><td><code>auftragsCacheService</code></td><td><code>@Autowired AuftragsCacheService</code></td><td>Предоставляет массовые SELECT-запросы для заказов, позиций и графиков платежей</td></tr>
+<tr><td><code>rechnungDao</code></td><td><code>@Autowired RechnungDao</code></td><td>Отслеживает изменения счетов, которые аннулируют данные заказов</td></tr>
+<tr><td><code>auftragDao</code></td><td><code>@Autowired AuftragDao</code></td><td>Связан обратно с <code>AuftragDao.auftragsCache</code> через <code>init()</code>; отслеживает изменения заказов</td></tr>
+</table>
+
+<h2>Внутренние структуры данных</h2>
+<table>
+<tr><th>Карта</th><th>Ключ</th><th>Значение</th><th>Описание</th></tr>
+<tr><td><code>orderInfoMap</code></td><td><code>Long</code> (ID заказа)</td><td><code>OrderInfo</code></td><td>Вся кэшированная информация о заказе по ID заказа</td></tr>
+<tr><td><code>orderPositionMapByPosId</code></td><td><code>Long</code> (ID позиции)</td><td><code>OrderPositionInfo</code></td><td>Вся кэшированная информация о позиции по ID позиции</td></tr>
+<tr><td><code>toBeInvoicedCounter</code></td><td>—</td><td><code>Int?</code></td><td>Кэшированное количество заказов с <code>toBeInvoiced == true</code> (вычисляется лениво)</td></tr>
+</table>
+
+<h2>Инициализация (<code>@PostConstruct init()</code>)</h2>
+<p>Устанавливает синглтон <code>instance</code>, связывает <code>this</code> с <code>auftragDao.auftragsCache</code> и регистрирует два слушателя изменений:</p>
+<ul>
+<li><strong>Слушатель счетов:</strong> Любая вставка/изменение в <code>RechnungDO</code> вызывает <code>setExpired()</code> для аннулирования всего кэша (поскольку счета влияют на суммы по позициям заказов)</li>
+<li><strong>Слушатель заказов:</strong> Любая вставка/изменение в <code>AuftragDO</code> вызывает <code>setExpired()</code></li>
+</ul>
+
+<h2>Публичные методы поиска</h2>
+<table>
+<tr><th>Метод</th><th>Возвращает</th><th>Описание</th></tr>
+<tr><td><code>getOrderInfo(orderId)</code></td><td><code>OrderInfo?</code></td><td>Получить кэшированную информацию по ID заказа</td></tr>
+<tr><td><code>getOrderInfo(order)</code></td><td><code>OrderInfo</code></td><td>Получить кэшированную информацию для объекта заказа (возвращает пустой <code>OrderInfo</code>, если не найдено)</td></tr>
+<tr><td><code>findOrderInfoByNumber(orderNumber)</code></td><td><code>OrderInfo?</code></td><td>Поиск по <code>AuftragDO.nummer</code></td></tr>
+<tr><td><code>getOrderInfoByPositionId(positionInfoId)</code></td><td><code>OrderInfo?</code></td><td>Получить информацию о родительском заказе для данного ID позиции</td></tr>
+<tr><td><code>getOrderPositionInfo(positionId)</code></td><td><code>OrderPositionInfo?</code></td><td>Получить кэшированную информацию о позиции по ID позиции</td></tr>
+<tr><td><code>getOrderPositionInfosByAuftragId(auftragId)</code></td><td><code>Collection&lt;OrderPositionInfo&gt;?</code></td><td>Получить все информации о позициях для заказа</td></tr>
+<tr><td><code>setOrderInfo(order)</code></td><td><code>Unit</code></td><td>Заполняет <code>order.info</code> кэшированными вычисленными данными</td></tr>
+<tr><td><code>getFakturiertSum(order)</code></td><td><code>BigDecimal</code></td><td>Удобный метод для <code>getOrderInfo(order).invoicedSum</code></td></tr>
+<tr><td><code>isVollstaendigFakturiert(order)</code></td><td><code>Boolean</code></td><td>Удобный метод для <code>getOrderInfo(order).isVollstaendigFakturiert</code></td></tr>
+<tr><td><code>isPositionAbgeschlossenUndNichtVollstaendigFakturiert(order)</code></td><td><code>Boolean</code></td><td>Удобный метод поиска</td></tr>
+<tr><td><code>isPaymentSchedulesReached(order)</code></td><td><code>Boolean</code></td><td>Удобный метод поиска</td></tr>
+<tr><td><code>getToBeInvoicedCounter()</code></td><td><code>Int</code></td><td>Лениво подсчитывает заказы с <code>toBeInvoiced == true</code></td></tr>
+</table>
+
+<h2>Аннулирование кэша</h2>
+<ul>
+<li><code>setExpired()</code> — Переопределяет <code>AbstractCache.setExpired()</code>, чтобы также сбросить <code>toBeInvoicedCounter</code> в null, принуждая к пересчёту при следующем доступе</li>
+<li><code>setExpired(order)</code> — То же, что и выше (ранее обновлял отдельные записи; теперь аннулирует весь кэш)</li>
+<li>Обе реализации слушателей (<code>auftragListener</code>, <code>rechnungListener</code>) вызывают <code>setExpired()</code> при любом изменении</li>
+</ul>
+
+<h2>Логика обновления (<code>refresh()</code>)</h2>
+<p>Вызывается, когда истекает TTL кэша (каждые 8 часов) или при ручном аннулировании:</p>
+<ol>
+<li>Логирует начало обновления с таймером <code>LogDuration</code></li>
+<li>Загружает все неудалённые позиции заказов через <code>auftragsCacheService.selectNonDeletedAuftragsPositions()</code>, группирует по <code>auftrag.id</code></li>
+<li>Загружает все заказы через <code>auftragsCacheService.selectAuftragsList()</code></li>
+<li>Загружает все неудалённые графики платежей через <code>auftragsCacheService.selectNonDeletedPaymentSchedules()</code>, группирует по <code>auftrag.id</code></li>
+<li>Инициализирует объекты <code>OrderInfo</code> для каждого заказа (вызывая <code>updateFields(order)</code> для копирования базовых данных)</li>
+<li>Создаёт объекты <code>OrderPositionInfo</code> для каждой позиции (примечание: конструктор использует <code>AuftragsRechnungCache</code>, который в свою очередь использует <code>AuftragsCache</code> — циклическая зависимость решается запуском кэшей дважды при инициализации)</li>
+<li>Назначает позиции и графики платежей каждому заказу, вызывая <code>order.info.calculateAll(order, positions, paymentSchedules)</code></li>
+<li>Атомарно заменяет неизменяемые карты</li>
+<li>Сбрасывает <code>toBeInvoicedCounter</code> в null</li>
+<li>Логирует время завершения</li>
+</ol>
+
+<h2>Потокобезопасность</h2>
+<p>Карты (<code>orderInfoMap</code>, <code>orderPositionMapByPosId</code>) атомарно заменяются новыми неизменяемыми картами во время обновления. Комментарий «Нет синхронизации, неизменяемая карта» во всех операциях чтения указывает на шаблон снимка только для чтения: при каждом вызове <code>checkRefresh()</code> кэш может перестроить новую карту и заменить ссылку.</p>
+
+<h2>Замечания по дизайну</h2>
+<ul>
+<li>Параметр <code>checkRefresh</code> в <code>getOrderInfo(order, checkRefresh)</code> существует для предотвращения взаимоблокировок во время инициализации кэша — когда кэш уже обновляется, рекурсивные вызовы пропускают обновление</li>
+<li>Циклическая зависимость между <code>AuftragsCache</code>, <code>AuftragsRechnungCache</code> и <code>OrderPositionInfo</code> задокументирована в коммите <code>51d352133</code> — решена запуском кэшей дважды при инициализации</li>
+<li><code>toBeInvoicedCounter</code> использует шаблон ленивого вычисления с отладочным логированием того, какие номера заказов учитываются</li>
+<li>Все удобные методы-геттеры вызывают <code>checkRefresh()</code> перед доступом для обеспечения свежести данных</li>
+</ul>
+
+<h2>История Git</h2>
+<div class="hist"><pre>868d6abb7 2025 -> 2026
+51d352133 Рефакторинг обработки AuftragsCache / AuftragsRechnungsCache (циклическое использование решено запуском кэшей дважды при инициализации)
+0043cbdb5 WIP Прогноз
+63081666f Заголовки исходных файлов: 2024-> 2025.
+ae2c04ee0 Миграция в процессе... (все тесты всех пакетов: OK).
+9aff90908 Миграция в процессе... (все тесты всех пакетов: OK).
+89ea9a532 Миграция в процессе... (все тесты всех пакетов: OK).
+d02c8a770 Миграция в процессе...
+3159cfa6c Миграция в процессе... (все тесты всех пакетов: OK).
+ff2cc4cfa Миграция в процессе... (все тесты всех пакетов: OK).
+714452019 Миграция в процессе... (все тесты всех пакетов: OK).
+567ca70cd Миграция в процессе... spring.datasource.hikari.auto-commit=false
+(40+ коммитов, охватывающих миграцию, рефакторинг, конвертацию java.time, миграцию Jakarta и т.д.)</pre></div>
+</body>
+</html>

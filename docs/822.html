@@ -1,3 +1,67 @@
-<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>#822</title><style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333}a{color:#0366d6}</style></head><body><div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="821.html">← Prev</a> · <a href="823.html">Next →</a></div>
-<h1>#822: <code>AddressDao.kt</code></h1><p>Kotlin DAO для AddressDO. Поиск по имени/организации/email, фильтрация по статусу и группе.</p>
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>#822: AddressDao — Address Data Access Object</title>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;background:#fafafa;color:#222;line-height:1.6}h1{border-bottom:2px solid #333;padding-bottom:.3em}h2{margin-top:2.5em;border-bottom:1px solid #ddd;padding-bottom:.2em;color:#333}h3{margin-top:2em;color:#444}a{color:#0366d6}.c{border-left:3px solid #ddd;padding:.5em 1em;margin:1em 0;background:#fff}.nav{font-size:.9em;color:#888;margin-bottom:1em}.lang{font-size:.85em;color:#888;float:right}.lang a{color:#888;text-decoration:none;padding:0 .3em}.lang a.active{color:#0366d6;font-weight:600;text-decoration:underline}.meta{font-size:.9em;margin:1em 0;color:#555}code{background:#f0f0f0;padding:0 .2em;font-size:.93em}pre{background:#f5f5f5;padding:.8em 1em;border:1px solid #ddd;border-radius:4px;overflow-x:auto;font-size:.88em;line-height:1.4}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:.5em .8em;text-align:left;font-size:.9em}th{background:#f5f5f5;font-weight:600}.hist{font-size:.85em;color:#555}</style></head>
+<body><div class="lang"><a href="822.html" class="active">EN</a> · <a href="822_de.html">DE</a> · <a href="822_ru.html">RU</a> · <a href="822_fr.html">FR</a> · <a href="822_es.html">ES</a></div>
+<div class="nav"><a href="https://maureranton.github.io/projectforge/">← Index</a> · <a href="file-index.html">← File index</a> · <a href="821.html">← Prev</a> · <a href="823.html">Next →</a></div>
+<h1>#822: <code>AddressDao.kt</code></h1>
+<div class="meta">@Service — DAO layer, <code>projectforge-business/src/main/kotlin/org/projectforge/business/address/AddressDao.kt</code></div>
+<div class="c">Primary data access service for <code>AddressDO</code> entities. Extends <code>BaseDao&lt;AddressDO&gt;</code> and manages the full lifecycle: querying, filtering, access control, vCard export, phone lookup, duplicate detection, birthdays, and cascade deletion.</div>
+
+<h2>Architecture</h2>
+
+<h3>Dependencies</h3>
+<ul>
+  <li><code>AddressbookDao</code> / <code>AddressbookCache</code> — Address book management and caching.</li>
+  <li><code>AddressImageDao</code> — Lazy-initialized via <code>ApplicationContext</code> to avoid circular dependency (AddressImageDao depends on AddressDao).</li>
+  <li><code>PersonalAddressDao</code> — Personal address book entries (favorites, vCard).</li>
+  <li><code>SipgateDeleteContactService</code> — SIP telephony contact cleanup on deletion.</li>
+  <li><code>TeamEventDao</code> — Removes address-based attendees from events on deletion.</li>
+  <li><code>BirthdayCache</code> — Cached birthday queries built in <code>@PostConstruct</code>.</li>
+  <li><code>AddressbookRight</code> — Per-addressbook access control rules.</li>
+</ul>
+<h3>Querying & Filtering</h3>
+<p>The <code>select(BaseSearchFilter)</code> override is the main entry point. It instantiates or reuses an <code>AddressFilter</code> and applies filter criteria:</p>
+<ul>
+  <li><strong>Newest</strong> — Quick path via <code>getNewest()</code> returning records ordered by creation time descending.</li>
+  <li><strong>Favorites</strong> — Quick path returning only the current user's personally bookmarked addresses.</li>
+  <li><strong>Search string</strong> — Wildcard-padded numeric searches.</li>
+  <li><strong>Contact status</strong> — Multi-select filter: ACTIVE, NON_ACTIVE, UNINTERESTING, DEPARTED, PERSONA_INGRATA.</li>
+  <li><strong>Address status</strong> — Multi-select filter: UPTODATE, OUTDATED, LEAVED.</li>
+  <li><strong>Address book restriction</strong> — Joins <code>addressbookList</code> and limits to books the user has SELECT access to (including the global address book).</li>
+  <li><strong>Doublets</strong> — Post-query filtering by normalized full name.</li>
+</ul>
+
+<h3>Access Control</h3>
+<p><code>hasAccess()</code> iterates over address books linked to the address. For SELECT operations, any book with SELECT access grants the right. For other operations (INSERT, UPDATE, DELETE), full access to at least one linked book is required. Throws <code>AccessException</code> on denial.</p>
+<p><code>beforeInsertOrModify()</code> ensures new addresses default to the global address book and prevents users from removing address books they lack access to.</p>
+
+<h3>Deletion Cascade</h3>
+<p><code>onDelete()</code> runs in a single transaction and performs:
+  1. Deletes all <code>PersonalAddressDO</code> references via <code>personalAddressDao.internalDeleteAll()</code>.
+  2. Removes the address as attendee from all <code>TeamEventDO</code> entries.
+  3. Deletes the SIP telephony contact via <code>sipgateDeleteContactService</code>.
+  4. Bulk-deletes all images via named query <code>DELETE_ALL_IMAGES_BY_ADDRESS_ID</code>.
+  5. Notifies registered <code>AddressDeletionListener</code> instances.</p>
+
+<h3>vCard Export</h3>
+<p><code>exportFavoriteVCards()</code> writes vCard 3.0 strings for all favorited entries. <code>exportVCard()</code> handles single-address export, automatically fetching and embedding the address image via <code>AddressImageDao</code>. <code>VCardUtils.buildVCardString()</code> performs the actual formatting.</p>
+
+<h3>Additional Capabilities</h3>
+<ul>
+  <li><code>getBirthdays(fromDate, toDate, all)</code> — Delegates to <code>BirthdayCache</code> for optimized date-range queries.</li>
+  <li><code>findByUid(uid)</code> — Lookup by vCard UID for import deduplication.</li>
+  <li><code>internalPhoneLookUp(number)</code> — Searches for a phone number match, returning the newest entry's full name and organization.</li>
+  <li><code>findByNameAndFirstName(name, firstName)</code> — Exact (case-insensitive) duplicate search for new address validation.</li>
+  <li><code>getUsedCommunicationLanguages()</code> — JPQL distinct query returning all Locales in use.</li>
+</ul>
+
+<h2>Git History</h2><div class="hist"><pre>868d6abb7 2025 -> 2026
+2aff80bc4 Fix VCard image export and add type-safe transient image access
+7ff207016 AddressPagesRest: Warning of duplicate entries on adding new addresses.
+b7861b2ff Addresses: forced deletion fixed
+6b1aed301 Access to addresses and address campaigns only for marketing users
+63081666f Source file headers: 2024-> 2025.
+943947aaa Addresses: support of gif and jpeg
+04c38072b AddressDao: select optimized, WIP: pagination.
+0ceceb28f All cache refreshs are now running in isolated transactions
+5989b32fd BaseDao: mechanism of onChangeLister refactored.</pre></div>
 </body></html>
